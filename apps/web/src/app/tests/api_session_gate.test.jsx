@@ -18,6 +18,9 @@ describe('ApiSessionGate', () => {
   it('logs in, loads the register into the store, then renders the app', async () => {
     const fetch = vi.fn((url) => {
       if (url.endsWith('/api/auth/login')) return json(200, { token: 't1', user });
+      if (url.endsWith('/api/users')) return json(200, { users: [user] });
+      if (url.endsWith('/api/approval-matrix')) return json(200, { matrix: [{ doc_type: 'SOP', required_reviewer_level: 4 }] });
+      if (url.endsWith('/api/dars')) return json(200, { dars: [] });
       return json(200, { documents: url.endsWith('EFFECTIVE') ? [doc] : [] });
     });
     vi.stubGlobal('fetch', fetch);
@@ -31,6 +34,8 @@ describe('ApiSessionGate', () => {
     expect(getToken()).toBe('t1');
     expect(fetch.mock.calls.at(-1)[1].headers.Authorization).toBe('Bearer t1');
     expect(useStore.getState().currentUser).toMatchObject({ id: 'u1', primary_department: 'QA', level: 4 });
+    expect(useStore.getState().masterUsers).toEqual([expect.objectContaining({ id: 'u1', status: 'ACTIVE' })]);
+    expect(useStore.getState().approvalMatrix[0].doc_type).toBe('SOP');
     expect(useStore.getState().documents[0]).toMatchObject({ document_code: 'SOP-QA-001', is_active: true, access_control: { scope: 'DEPT_ONLY' }, apiFilePath: '/api/documents/d1/file' });
   });
 

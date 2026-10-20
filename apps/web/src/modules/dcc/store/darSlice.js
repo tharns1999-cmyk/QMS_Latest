@@ -23,6 +23,7 @@ import { cleanupDccTasks, buildControlledCopyId, sanitizeControlledCopies, resol
 import { generateDynamicWorkflow } from '../utils/workflowEngine';
 import { addYears, getReviewCycleYears } from '../utils/documentUtils';
 import { resolveDccAdminUserId } from './externalDocSlice';
+import { isApiMode } from '../../../api/client';
 
 // Re-export helper
 export { generateInternalDarNumber };
@@ -720,6 +721,10 @@ export const createDarSlice = (set, get) => ({
 },
 
   submitDar: async (dar, rawFile) => {
+    if (isApiMode) {
+      const { submitDarToApi } = await import('../../../api/dars');
+      return submitDarToApi(dar, rawFile || dar.file);
+    }
     const finalDar = { ...dar, isDraft: false };
     const darId = finalDar.darNumber || finalDar.id || `DAR-${new Date().getFullYear()}-${String(get().dars.length + 1).padStart(3, '0')}`;
     const fileId = finalDar.fileId || `file-${darId}-${Date.now()}`;

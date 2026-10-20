@@ -40,6 +40,12 @@ describe('DAR workflow API', () => {
 
   afterAll(() => proxy?.dispose());
 
+  it('lists active users for routing without credentials', async () => {
+    const { users } = (await get('/api/users', 'R-REQ')).body;
+    expect(users.find((u) => u.id === 'R-REV')).toMatchObject({ approval_level: 4, department: 'PD' });
+    expect(JSON.stringify(users)).not.toMatch(/password|failed_logins/);
+  });
+
   it('refuses a DAR routed to an ineligible reviewer or approver', async () => {
     expect((await post('/api/dars', 'R-REQ', newDar({ reviewer_id: 'R-LOW' }))).body.error).toMatch('L4');
     expect((await post('/api/dars', 'R-REQ', newDar({ reviewer_id: 'R-REQ' }))).body.error).toMatch('ผู้ขอ');

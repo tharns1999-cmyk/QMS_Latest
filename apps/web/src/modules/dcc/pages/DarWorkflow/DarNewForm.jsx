@@ -396,7 +396,8 @@ const DarNewForm = () => {
     
     // ส่งทั้ง metadata และ File Object ตัวจริง
     const result = await submitDar(newDar, activeFile);
-    
+    if (!result) return; // API mode: the server refused and the reason was shown
+
     if (result) {
       const allocatedId = result.id || result.darNumber || result.darNo;
       if (allocatedId) {

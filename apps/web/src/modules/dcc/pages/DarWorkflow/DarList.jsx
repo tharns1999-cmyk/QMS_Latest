@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import useStore from '../../../../store/useStore';
 import { FilePlus, Edit, Trash2, ClipboardCheck, Eye, Search, X, FileText, ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react';
@@ -6,6 +6,8 @@ import { TablePagination } from '../../../../shared/components/common/TablePagin
 import { useTablePagination } from '../../../../shared/hooks/useTablePagination';
 import { isDarDraft, isDarRequester, formatDarDocumentDisplay } from '../../utils/darHelper';
 import { DarStatusBadge } from '../../components/ui/StatusBadge';
+import { isApiMode } from '../../../../api/client';
+import { loadDars } from '../../../../api/dars';
 
 const DarList = () => {
   const navigate = useNavigate();
@@ -13,6 +15,11 @@ const DarList = () => {
   
   const [searchTerm, setSearchTerm] = useState('');
   const [sortConfig, setSortConfig] = useState({ key: 'date', direction: 'desc' });
+
+  // API mode: reviewers and DCC move DARs along, so read the current list on open.
+  useEffect(() => {
+    if (isApiMode) loadDars().catch(() => {});
+  }, []);
 
   const isAdmin = Boolean(currentUser?.isDcc || currentUser?.role === 'DCC_ADMIN' || currentUser?.isDccAdmin);
   
