@@ -22,7 +22,7 @@ export function PendingReviewPanel({ schedule, canApprove, taskId, navigate, han
             <div className="flex items-start gap-3">
               <ShieldCheck className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
               <div className="flex-1">
-                <h4 className="text-xs font-bold text-slate-900">การอนุมัติสำหรับหัวหน้าแผนก / ผู้จัดการ (L5+)</h4>
+                <h4 className="text-xs font-bold text-slate-900">การอนุมัติสำหรับหัวหน้าแผนก / ผู้จัดการ (ตาม Approval Matrix)</h4>
                 <p className="text-[11px] text-slate-600 mt-0.5">
                   คุณมีสิทธิ์พิจารณาอนุมัติผลการทบทวนเอกสารนี้เพื่อขยายรอบการทบทวน 1 ปี
                 </p>

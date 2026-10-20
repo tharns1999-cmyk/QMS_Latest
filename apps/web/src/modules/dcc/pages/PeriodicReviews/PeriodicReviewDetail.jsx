@@ -22,6 +22,7 @@ const PeriodicReviewDetail = () => {
   const periodicReviewSchedules = useStore(state => state.periodicReviewSchedules);
   const tasks = useStore(state => state.tasks);
   const documents = useStore(state => state.documents);
+  const approvalMatrix = useStore(state => state.approvalMatrix);
   const externalDocuments = useStore(state => state.externalDocuments);
   const dars = useStore(state => state.dars);
   const currentUser = useStore(state => state.currentUser);
@@ -92,7 +93,7 @@ const PeriodicReviewDetail = () => {
   );
 
   const docDept = getCleanDept(schedule?.ownerDepartmentId || targetDoc, 'DC');
-  const isFastTrack = canFastTrackReview(currentUser, docDept);
+  const isFastTrack = canFastTrackReview(currentUser, docDept, effectiveDocCode, approvalMatrix);
 
   const userPositionLevel = getPositionLevelForDepartment(normalizedUser, docDept) || Number(currentUser?.level || currentUser?.approval_level || 0);
   const isDeptManagerOrSupervisor = 
@@ -101,9 +102,11 @@ const PeriodicReviewDetail = () => {
     Boolean(currentUser?.is_hod || currentUser?.is_manager || currentUser?.isDeptHead || currentUser?.isDcc || currentUser?.is_dcc);
 
   const canPerform = canPerformPeriodicReview(normalizedUser, schedule, targetDoc) || isDeptManagerOrSupervisor;
-  // Same rule the store enforces on approve: L5+ of the owner dept (or DCC/QMR), never the submitter.
+  // Same rule the store enforces on approve: approval-matrix level of the owner dept (or DCC/QMR), never the submitter.
   const submitterId = schedule?.pendingReview?.reviewer_id || doc?.pending_periodic_review?.reviewer_id;
-  const canApproveReview = (isExternal ? canFastTrackExternalReview : canFastTrackReview)(currentUser, docDept) &&
+  const canApproveReview = (isExternal
+    ? canFastTrackExternalReview(currentUser, docDept, 'ED', approvalMatrix)
+    : canFastTrackReview(currentUser, docDept, effectiveDocCode, approvalMatrix)) &&
     !(submitterId && String(submitterId) === String(currentUser?.id));
 
   const effectiveOutcome = schedule?.outcome || schedule?.pendingReview?.outcome || doc?.pending_periodic_review?.outcome || schedule?.reviewDetails?.outcome || '';

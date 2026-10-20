@@ -116,6 +116,11 @@ export const canViewPeriodicReview = (user, review, document) => {
   return isMemberOfOwnerDepartment(user, ownerDept);
 };
 
+// QA L4+ may record a review on behalf of another owner department; owner-dept L4+ members are not proxies
+export const isQaProxyReviewer = (user, ownerDept) =>
+  Boolean(user && ownerDept && !isSameDepartment(ownerDept, 'QA') &&
+    getPositionLevelForDepartment(user, ownerDept) < 4 && getPositionLevelForDepartment(user, 'QA') >= 4);
+
 export const canPerformPeriodicReview = (user, review, document) => {
   if (!user) return false;
 
@@ -129,6 +134,9 @@ export const canPerformPeriodicReview = (user, review, document) => {
   if (positionLevel >= 4) {
     return true;
   }
+
+  // 2b. QA proxy review (stamped reviewed_by_proxy on submit)
+  if (isQaProxyReviewer(user, ownerDept)) return true;
 
   // 3. Privileged roles: DCC, QMR, Admin, or Wildcard Manager
   if (user.isDcc || user.role === 'DCC' || user.role === 'ADMIN' || user.role === 'SUPER_ADMIN' || user.role === 'QMR') {

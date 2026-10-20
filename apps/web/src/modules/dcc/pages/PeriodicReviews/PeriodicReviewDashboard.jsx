@@ -32,7 +32,7 @@ import { isSameDepartment } from '../../utils/taskFilter';
 import { extractDeptCode } from '../../services/darService';
 import { PeriodicReviewAuditCard } from '../../components/workflow/PeriodicReviewHistoryTab';
 import PeriodicReviewApprovalModal from '../Tasks/PeriodicReviewApprovalModal';
-import { canFastTrackExternalReview } from '../../store/periodicReviewSlice';
+import { canFastTrackExternalReview, minReviewApproverLevel } from '../../store/periodicReviewSlice';
 
 // KPI bucket by due date: pending/awaiting rows of this cycle still count as DUE_SOON/OVERDUE so the cards add up to the total
 const getKpiBucket = (r, today) => {
@@ -289,7 +289,7 @@ const UnifiedWorkspaceView = ({
   isManagementOrDcc = false
 }) => {
   const navigate = useNavigate();
-  const { currentUser, simulatedSystemDate, getEffectiveToday, tasks } = useStore();
+  const { currentUser, simulatedSystemDate, getEffectiveToday, tasks, approvalMatrix } = useStore();
   const effectiveToday = useMemo(() => {
     return propEffectiveToday || (getEffectiveToday ? getEffectiveToday() : (simulatedSystemDate ? new Date(simulatedSystemDate) : new Date()));
   }, [propEffectiveToday, getEffectiveToday, simulatedSystemDate]);
@@ -561,7 +561,7 @@ const UnifiedWorkspaceView = ({
       doc?.pending_periodic_review?.reviewer_id || rec?.pendingReview?.reviewer_id;
     if (reviewerId && String(reviewerId) === String(currentUser.id)) return false;
     if (rec?.documentCategory === 'EXTERNAL' || rec?.isExternal || rec?.externalDocumentId) {
-      return canFastTrackExternalReview(currentUser, rec?.ownerDepartmentId || doc?.department || doc?.dept || 'DC');
+      return canFastTrackExternalReview(currentUser, rec?.ownerDepartmentId || doc?.department || doc?.dept || 'DC', 'ED', approvalMatrix);
     }
     if (
       currentUser.isDcc ||
@@ -584,7 +584,7 @@ const UnifiedWorkspaceView = ({
     const deptLevel = getPositionLevelForDepartment(currentUser, docDept);
     const userLevel = Number(currentUser.level || currentUser.approval_level || 0);
     const effectiveLevel = Math.max(deptLevel, userLevel);
-    const isHodOrManager = effectiveLevel >= 5;
+    const isHodOrManager = effectiveLevel >= minReviewApproverLevel(rec?.documentNumber || doc?.doc_code || doc?.type, approvalMatrix);
 
     const userDeptList = [
       currentUser.department,

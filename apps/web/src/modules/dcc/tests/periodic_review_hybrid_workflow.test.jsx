@@ -22,8 +22,9 @@ describe('Hybrid 2-Step Periodic Review Workflow (Staff -> HOD Approval with 1-C
     id: 'U-HOD-01',
     name: 'Somkiat Manager',
     role: 'HOD',
-    level: 4,
-    approval_level: 4,
+    // SOP approver level per the approval matrix
+    level: 6,
+    approval_level: 6,
     department: 'PRD',
     primary_department: 'PRD',
     is_manager: true,
@@ -402,6 +403,17 @@ describe('Hybrid 2-Step Periodic Review Workflow (Staff -> HOD Approval with 1-C
       secondaryDepartments: ['QC']
     };
 
+    // ED approver level per the approval matrix is L6
+    const mockQcManagerL6 = { ...mockKalyaneeL5, id: 'U010', name: 'QC Manager', level: 6, approval_level: 6 };
+
+    it('approval follows the approval matrix level per doc type, not a fixed L5', () => {
+      expect(canFastTrackReview(mockKalyaneeL5, 'QC', 'WI-QC-001')).toBe(true);
+      expect(canFastTrackReview(mockKalyaneeL5, 'QC', 'SOP-QC-001')).toBe(false);
+      expect(canFastTrackReview(mockQcManagerL6, 'QC', 'SOP-QC-001')).toBe(true);
+      expect(canFastTrackExternalReview(mockKalyaneeL5, 'QC')).toBe(false);
+      expect(canFastTrackExternalReview(mockQcManagerL6, 'QC')).toBe(true);
+    });
+
     it('evaluates Beam (L4 QAQC Supervisor) as strictly NOT eligible for Fast-Track', () => {
       expect(canFastTrackReview(mockBeamL4, 'QC')).toBe(false);
       expect(canFastTrackExternalReview(mockBeamL4, 'QC')).toBe(false);
@@ -411,10 +423,10 @@ describe('Hybrid 2-Step Periodic Review Workflow (Staff -> HOD Approval with 1-C
       expect(canFastTrackReview(mockKalyaneeL5, 'QC')).toBe(true);
     });
 
-    it('creates PERIODIC_REVIEW_APPROVAL task with target_level: 5 when Beam submits review', () => {
+    it('creates PERIODIC_REVIEW_APPROVAL task with target_level: 5 when Beam submits a WI review (WI matrix level)', () => {
       const qcDoc = {
         id: 'DOC-QC-001',
-        code: 'SOP-QC-001',
+        code: 'WI-QC-001',
         title: 'QC Test Standard',
         department: 'QC',
         next_review_date: '2026-10-15',
@@ -423,7 +435,7 @@ describe('Hybrid 2-Step Periodic Review Workflow (Staff -> HOD Approval with 1-C
       const qcSchedule = {
         id: 'SCH-QC-001',
         documentId: 'DOC-QC-001',
-        documentNumber: 'SOP-QC-001',
+        documentNumber: 'WI-QC-001',
         documentName: 'QC Test Standard',
         ownerDepartmentId: 'QC',
         status: 'ACTION_REQUIRED',
@@ -459,7 +471,7 @@ describe('Hybrid 2-Step Periodic Review Workflow (Staff -> HOD Approval with 1-C
       expect(isActionableTask(approvalTask, mockKalyaneeL5)).toBe(true);
     });
 
-    it('routes an external review from Beam L4 to the other QC L5 approver without rolling its due date', () => {
+    it('routes an external review from Beam L4 to the QC L6 approver (ED matrix level) without rolling its due date', () => {
       const extDoc = {
         id: 'ED-QC-001',
         edCode: 'ED-QC-001',
@@ -480,8 +492,8 @@ describe('Hybrid 2-Step Periodic Review Workflow (Staff -> HOD Approval with 1-C
         nextReviewDate: '2026-10-15'
       };
       useStore.setState({
-        users: [mockBeamL4, mockKalyaneeL5],
-        masterUsers: [mockBeamL4, mockKalyaneeL5],
+        users: [mockBeamL4, mockKalyaneeL5, mockQcManagerL6],
+        masterUsers: [mockBeamL4, mockKalyaneeL5, mockQcManagerL6],
         externalDocuments: [extDoc],
         periodicReviewSchedules: [extSchedule],
         tasks: [],
@@ -502,8 +514,8 @@ describe('Hybrid 2-Step Periodic Review Workflow (Staff -> HOD Approval with 1-C
       const store = useStore.getState();
       const task = store.tasks.find(t => t.type === 'PERIODIC_REVIEW_APPROVAL');
       expect(task).toMatchObject({
-        assigneeId: mockKalyaneeL5.id,
-        assignee_id: mockKalyaneeL5.id,
+        assigneeId: mockQcManagerL6.id,
+        assignee_id: mockQcManagerL6.id,
         actionRequired: true,
         status: 'PENDING',
         is_completed: false,
@@ -513,7 +525,7 @@ describe('Hybrid 2-Step Periodic Review Workflow (Staff -> HOD Approval with 1-C
         target_department: 'QC',
         owner_dept: 'QC'
       });
-      expect(store.notifications.some(n => n.userId === mockKalyaneeL5.id && n.taskId === task.id)).toBe(true);
+      expect(store.notifications.some(n => n.userId === mockQcManagerL6.id && n.taskId === task.id)).toBe(true);
       expect(store.externalDocuments[0].nextReviewDate).toBe('2026-10-15');
       expect(store.externalDocuments[0].next_review_date).toBe('2026-10-15');
       expect(store.externalDocuments[0].review_status).toBe('PENDING_APPROVAL');
@@ -522,7 +534,7 @@ describe('Hybrid 2-Step Periodic Review Workflow (Staff -> HOD Approval with 1-C
         status: 'PENDING_APPROVAL'
       });
 
-      useStore.getState().rejectPeriodicReview(task.id, mockKalyaneeL5, 'กรุณาตรวจสอบฉบับอ้างอิงอีกครั้ง');
+      useStore.getState().rejectPeriodicReview(task.id, mockQcManagerL6, 'กรุณาตรวจสอบฉบับอ้างอิงอีกครั้ง');
       const rejectedStore = useStore.getState();
       expect(rejectedStore.externalDocuments[0]).toMatchObject({
         review_status: 'ACTION_REQUIRED',
