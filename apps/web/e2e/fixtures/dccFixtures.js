@@ -26,9 +26,6 @@ export const TEST_PERSONAS = {
 };
 
 const setupTestState = async (page, user) => {
-  // Clear any existing session
-  await page.evaluate(() => localStorage.clear());
-  
   // Create deterministic store data
   const storeData = {
     state: {
@@ -70,15 +67,19 @@ const setupTestState = async (page, user) => {
       ],
       dars: [],
       documents: [
-        { id: 'DOC-1', title: 'DOC-PD-001', name: 'Test Document PD', department: 'PD', ownerId: 'T_U002', status: 'EFFECTIVE' },
-        { id: 'DOC-2', title: 'DOC-MKT-001', name: 'Test Document MKT', department: 'MKT', ownerId: 'T_U008', status: 'EFFECTIVE' }
+        { id: 'DOC-1', doc_code: 'DOC-PD-001', title: 'DOC-PD-001', name: 'Test Document PD', department: 'PD', ownerId: 'T_U002', status: 'EFFECTIVE' },
+        { id: 'DOC-2', doc_code: 'DOC-MKT-001', title: 'DOC-MKT-001', name: 'Test Document MKT', department: 'MKT', ownerId: 'T_U008', status: 'EFFECTIVE' }
       ]
     },
-    version: 0
+    version: 5
   };
 
-  await page.evaluate((data) => {
-    localStorage.setItem('qms-storage-uat-v6', JSON.stringify(data));
+  // Seed before app scripts run (a live store could persist over it), once per tab so later navigations keep test changes.
+  await page.addInitScript((data) => {
+    if (sessionStorage.getItem('__e2e_seeded')) return;
+    localStorage.clear();
+    localStorage.setItem('qms-enterprise-storage', JSON.stringify(data));
+    sessionStorage.setItem('__e2e_seeded', '1');
   }, storeData);
 };
 
@@ -91,9 +92,8 @@ export const test = base.extend({
   },
   setupSession: async ({ page }, use) => {
     await use(async (user) => {
-      await page.goto('/dcc'); // Ensure domain is loaded to allow localStorage access
       await setupTestState(page, user);
-      await page.reload(); // Reload to hydrate store
+      await page.goto('/dcc');
     });
   }
 });
