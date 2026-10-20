@@ -5,6 +5,8 @@ import useStore from '../store/useStore';
 import Layout from './layout/Layout';
 import SLAEngine from '../modules/dcc/components/SLAEngine';
 import ProtectedRoute from './auth/ProtectedRoute';
+import ApiSessionGate from './auth/ApiSessionGate';
+import { isApiMode } from '../api/client';
 
 // [Safe Cache Maintenance: รันตอน Boot เพื่อเคลียร์ Temporary Cache ที่บวมเกิน 1.5MB โดยไม่แตะต้อง Vault หลัก]
 (() => {
@@ -115,7 +117,7 @@ function App() {
     useStore.getState().syncPeriodicReviewSchedulesAndTasks?.();
   }, [hydrateMasterData, initializePeriodicReviews, checkScheduledEffectiveDocs]);
 
-  return (
+  const app = (
     <BrowserRouter>
 
       <Toaster position="top-right" />
@@ -256,6 +258,7 @@ function App() {
       </Routes>
     </BrowserRouter>
   );
+  return isApiMode ? <ApiSessionGate>{app}</ApiSessionGate> : app;
 }
 
 export default App;

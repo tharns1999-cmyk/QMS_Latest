@@ -1,4 +1,5 @@
 import { createJSONStorage } from 'zustand/middleware';
+import { isApiMode } from '../../api/client';
 import toast from 'react-hot-toast';
 import { MASTER_DATA_USER } from '../fixtures/seedData';
 import { MASTER_DEPARTMENTS } from '../../modules/dcc/config/qmsRegistry';
@@ -255,7 +256,8 @@ runSinglePassStorageSelfHealing();
  * Persistence configuration for Zustand persist middleware
  */
 export const persistConfig = {
-  name: 'qms-enterprise-storage',
+  // A separate key keeps API-mode state from mixing with the demo data in the same browser.
+  name: isApiMode ? 'qms-api-mode-storage' : 'qms-enterprise-storage',
   version: 5,
   migrate: (persistedState, version) => {
     if (!version || version < 5) {

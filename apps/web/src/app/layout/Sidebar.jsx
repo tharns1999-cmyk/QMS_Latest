@@ -26,6 +26,8 @@ import { isActionableTask, isDccAdmin as checkDccAdmin, isSameDepartment } from 
 import { evaluateDocumentReviewStatus } from '../../modules/dcc/utils/documentUtils';
 import { extractDeptCode } from '../../modules/dcc/services/darService';
 import SystemTimeSimulatorWidget from '../../modules/dcc/components/common/SystemTimeSimulatorWidget';
+import { isApiMode } from '../../api/client';
+import { logout } from '../../api/session';
 
 const Sidebar = () => {
   const navigate = useNavigate();
@@ -482,8 +484,14 @@ const Sidebar = () => {
             </div>
           </div>
 
+          {isApiMode ? (
+            <button type="button" onClick={logout}
+              className="w-full h-8 px-2.5 text-xs font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 cursor-pointer">
+              ออกจากระบบ
+            </button>
+          ) : (
           <div className="relative">
-            <select 
+            <select
               className="w-full h-8 px-2.5 text-xs font-medium text-slate-800 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all cursor-pointer leading-normal shadow-none"
               value={currentUser?.id || ''}
               onChange={(e) => {
@@ -499,6 +507,7 @@ const Sidebar = () => {
               ))}
             </select>
           </div>
+          )}
         </div>
       </div>
 
