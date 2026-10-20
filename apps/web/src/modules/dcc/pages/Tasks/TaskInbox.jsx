@@ -1084,7 +1084,7 @@ const TaskInbox = () => {
 
   const handleTaskClick = (task) => {
     const normType = (task.type || task.taskType || '').toUpperCase();
-    const isReceipt =
+    const isReceipt = task.referenceType !== 'INTERNAL_DAR' && (
       normType === 'DEPT_CONFIRM_HARDCOPY_RECEIPT' ||
       task.taskType === 'DEPT_CONFIRM_HARDCOPY_RECEIPT' ||
       normType === 'CONFIRM_RECEIPT' ||
@@ -1094,7 +1094,7 @@ const TaskInbox = () => {
       task.id?.includes('task-receipt-') ||
       task.title?.includes('ตรวจรับเล่ม') ||
       task.title?.includes('ตรวจรับสำเนา') ||
-      task.title?.includes('ตรวจรับเอกสาร');
+      task.title?.includes('ตรวจรับเอกสาร'));
 
     if (isReceipt) {
       setSelectedReceiptTask(task);
@@ -1154,6 +1154,11 @@ const TaskInbox = () => {
         }
       }
       setSelectedExtTask(task);
+      return;
+    }
+    // API mode: DCC publishes from the DAR page.
+    if (normType === 'DCC_PUBLISH') {
+      navigate(`/dar/${task.darId}`);
       return;
     }
     if (normType === 'CC_REPLACEMENT_APPROVAL') {

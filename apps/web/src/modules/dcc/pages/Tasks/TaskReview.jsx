@@ -17,6 +17,7 @@ import {
   resolveSubmissionDate 
 } from '../../utils/pdfStamper';
 import { resolveFileBlob } from '../../utils/fileStorage';
+import { isApiMode, apiBlob } from '../../../../api/client';
 import { generateQmsDownloadName, triggerBrowserDownload, formatDarHeaderTitle } from '../../utils/documentNamingHelper';
 
 const getSystemSampleDocumentBlob = (docCode = 'SOP-QC-002', docTitle = 'Standard Operating Procedure for Quality Control') => {
@@ -406,6 +407,12 @@ const TaskReview = () => {
         }
 
         let rawBlob = null;
+        // API mode: show only the server's copy, never a cached or sample stand-in, so the signer sees what they sign.
+        if (isApiMode) {
+          const source = isObsoleteRequest ? (documents || []).find(d => d.doc_code === dar.doc_code && d.status === 'EFFECTIVE') : dar;
+          if (!source?.apiFilePath) throw new Error('ยังไม่มีไฟล์ PDF ของคำขอนี้บนเซิร์ฟเวอร์');
+          rawBlob = await apiBlob(source.apiFilePath);
+        }
         const allKeys = Array.from(new Set([
           primaryKey,
           activeMasterDoc?.fileId,
@@ -717,9 +724,9 @@ const TaskReview = () => {
     setShowConfirm(true);
   };
 
-  const executeAction = () => {
+  const executeAction = async () => {
     try {
-      processWorkflow(task?.id, pendingAction, pendingComment);
+      await processWorkflow(task?.id, pendingAction, pendingComment);
       toast.success(`ดำเนินการ ${pendingAction === 'APPROVE' ? 'ผ่านการทบทวน' : 'ส่งกลับแก้ไข'} สำเร็จ`);
       setShowConfirm(false);
       navigate('/tasks');
