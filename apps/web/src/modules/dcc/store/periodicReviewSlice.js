@@ -1895,6 +1895,9 @@ export const createPeriodicReviewSlice = (set, get) => ({
         return {
           ...s,
           status: is_external ? 'COMPLETED' : 'UPCOMING',
+          // submit left PENDING_APPROVAL on these; evaluateDocumentReviewStatus reads them before is_reviewed_this_cycle
+          review_status: is_external ? 'COMPLETED' : 'UPCOMING',
+          pending_periodic_review: false,
           dueState: 'NOT_YET_DUE',
           outcome: 'NO_CHANGE',
           lastReviewedDate: now,
@@ -2211,6 +2214,8 @@ export const createPeriodicReviewSlice = (set, get) => ({
           return {
             ...s,
             status: 'COMPLETED',
+            review_status: 'COMPLETED',
+            pending_periodic_review: false,
             dueState: 'NOT_YET_DUE',
             outcome: 'NO_CHANGE',
             lastReviewedDate: now,
@@ -2377,6 +2382,8 @@ export const createPeriodicReviewSlice = (set, get) => ({
         return {
           ...s,
           status: 'ACTION_REQUIRED',
+          review_status: 'ACTION_REQUIRED',
+          pending_periodic_review: false,
           dueState: 'DUE',
           pendingApprovalTaskId: null,
           pendingReview: null,

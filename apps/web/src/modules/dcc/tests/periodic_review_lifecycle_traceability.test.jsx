@@ -49,9 +49,9 @@ describe('Periodic Review History Display, 1-Level Approval & Lifecycle Traceabi
 
       // Verify 1-Level Sign-off Footer
       expect(screen.getByText(/สมชาย ผู้ทบทวน/)).toBeDefined();
-      expect(screen.getByText(/QA Staff/)).toBeDefined();
+      expect(screen.queryByText(/QA Staff/)).toBeNull(); // role codes are not shown, only the person
       expect(screen.getByText(/สมศักดิ์ หัวหน้าแผนก/)).toBeDefined();
-      expect(screen.getByText(/QA Manager/)).toBeDefined();
+      expect(screen.queryByText(/QA Manager/)).toBeNull();
     });
 
     it('renders pending approval badge and placeholder for HOD approval when PENDING_APPROVAL', () => {

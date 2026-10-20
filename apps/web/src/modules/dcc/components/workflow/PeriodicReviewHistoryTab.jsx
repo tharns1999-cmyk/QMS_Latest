@@ -18,11 +18,9 @@ export const PeriodicReviewAuditCard = ({ item, index = 0 }) => {
   const isApproved = approvalStatus === 'APPROVED';
 
   const reviewerName = item.reviewer_name || item.reviewer || item.reviewerName || '-';
-  const reviewerRole = item.reviewer_role || item.reviewerRole || 'Staff';
   const reviewedAt = item.reviewed_at || item.reviewed_date || item.reviewDate || item.date || item.reviewedAt;
 
   const approverName = item.approver_name || item.approver || item.approverName || null;
-  const approverRole = item.approver_role || item.approverRole || (approverName ? 'HOD' : null);
   const approvedAt = item.approved_at || item.approvedAt || (isApproved ? reviewedAt : null);
 
   const reason = item.reason || item.remarks || item.comment || '-';
@@ -133,7 +131,7 @@ export const PeriodicReviewAuditCard = ({ item, index = 0 }) => {
           </div>
           <div className="min-w-0">
             <p className="text-slate-700 font-semibold truncate">
-              {reviewerName} <span className="text-slate-400 font-normal">({reviewerRole})</span>
+              {reviewerName}
             </p>
             <p className="text-slate-400 text-[11px] font-mono">
               ยื่นเรื่อง: {formatQmsDisplayDate(reviewedAt)}
@@ -150,7 +148,7 @@ export const PeriodicReviewAuditCard = ({ item, index = 0 }) => {
             {approverName ? (
               <>
                 <p className="text-slate-700 font-semibold truncate">
-                  {approverName} <span className="text-slate-400 font-normal">({approverRole || 'HOD'})</span>
+                  {approverName}
                 </p>
                 <p className="text-slate-400 text-[11px] font-mono">
                   อนุมัติ: {formatQmsDisplayDate(approvedAt)}
