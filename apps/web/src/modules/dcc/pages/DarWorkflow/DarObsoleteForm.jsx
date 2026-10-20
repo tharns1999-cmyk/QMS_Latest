@@ -521,7 +521,7 @@ const DarObsoleteForm = () => {
                   </div>
                 ) : lockedSource ? (
                   <div className="h-10.5 px-3 bg-amber-50 border border-amber-200 rounded-lg text-xs font-mono font-bold text-amber-900 flex items-center justify-between truncate">
-                    <span className="truncate">[{lockedSource.documentCode}] {lockedSource.documentTitle}</span>
+                    <span className="truncate">[{lockedSource.documentNo}] {lockedSource.documentTitle}</span>
                   </div>
                 ) : selectedDoc ? (
                   /* Selected State Box - สไตล์เดียวกับ Revision Form */
@@ -646,17 +646,20 @@ const DarObsoleteForm = () => {
                 )}
                 {errors.docId && <p className="text-rose-500 text-xs mt-1">{errors.docId}</p>}
 
-                {/* Accessible programmatic select fallback */}
-                <select
-                  value={formData.docId}
-                  onChange={handleDocChange}
-                  className="sr-only"
-                >
-                  <option value="">-- เลือกเอกสารที่ต้องการยกเลิก --</option>
-                  {effectiveDocs.map(d => (
-                    <option key={d.id} value={d.id}>[{resolveDocCode(d)}] {resolveDocTitle(d)} (Rev. {d.rev})</option>
-                  ))}
-                </select>
+                {/* Accessible programmatic select fallback; hidden when the source is locked so it cannot bypass the lock */}
+                {!lockedSource && (
+                  <select
+                    aria-label="เลือกเอกสารที่ต้องการยกเลิก"
+                    value={formData.docId}
+                    onChange={handleDocChange}
+                    className="sr-only"
+                  >
+                    <option value="">-- เลือกเอกสารที่ต้องการยกเลิก --</option>
+                    {effectiveDocs.map(d => (
+                      <option key={d.id} value={d.id}>[{resolveDocCode(d)}] {resolveDocTitle(d)} (Rev. {d.rev})</option>
+                    ))}
+                  </select>
+                )}
               </div>
 
               {/* 2. วันที่ต้องการให้มีผลยกเลิก (ขวา 35% / 4 Cols) */}

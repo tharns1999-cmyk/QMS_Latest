@@ -67,6 +67,15 @@ describe('PeriodicReviewDarLinkService', () => {
       expect(draft.sourceSnapshot.documentNo).toBe('DOC-001');
     });
 
+    it('should snapshot doc_code (seed/live shape) as the document number', () => {
+      useStore.setState(state => ({
+        documents: [{ ...state.documents[0], code: undefined, doc_code: 'SOP-QA-009' }, ...state.documents.slice(1)]
+      }));
+      const schedule = useStore.getState().periodicReviewSchedules.find(s => s.id === 'PR01');
+      const id = createOrGetLinkedDarDraft(schedule, 'REVISION_REQUIRED', { type: 'REVISION' }, useStore.getState);
+      expect(useStore.getState().dars.find(d => d.id === id).sourceSnapshot.documentNo).toBe('SOP-QA-009');
+    });
+
     it('should reject external document linkage', () => {
       const state = useStore.getState();
       const schedule = state.periodicReviewSchedules.find(s => s.id === 'PR03'); // PR03 is EXTERNAL

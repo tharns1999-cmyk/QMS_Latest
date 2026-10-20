@@ -68,7 +68,7 @@ export const createOrGetLinkedDarDraft = (schedule, outcome, darPayload, storeGe
     targetDocumentId: doc.id,
     idempotencyKey,
     sourceSnapshot: {
-      documentNo: doc.code || doc.documentNumber,
+      documentNo: doc.doc_code || doc.code || doc.documentNumber,
       documentTitle: doc.name || doc.title,
       currentRevision: doc.rev,
       documentType: doc.type,
@@ -93,7 +93,7 @@ export const resolveLockedSourceDocument = (draft, storeGet) => {
   if (!doc) return null;
 
   return {
-    documentNo: doc.code || doc.documentNumber || draft.sourceSnapshot?.documentNo,
+    documentNo: doc.doc_code || doc.code || doc.documentNumber || draft.sourceSnapshot?.documentNo,
     documentTitle: doc.name || doc.title || draft.sourceSnapshot?.documentTitle,
     currentRevision: doc.rev || draft.sourceSnapshot?.currentRevision,
     documentType: doc.type || draft.sourceSnapshot?.documentType,
