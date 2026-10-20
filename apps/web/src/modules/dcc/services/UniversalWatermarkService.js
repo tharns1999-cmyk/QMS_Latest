@@ -28,6 +28,7 @@ import {
 import { resolveFileBlob } from '../utils/fileStorage';
 import { generateQmsDownloadName } from '../utils/documentNamingHelper';
 import { cleanLocationName } from './MasterDataService';
+import { isDccUser } from '../utils/taskFilter';
 import { drawStandardIsoWatermark, generateWatermarkCanvas, applyCanvasWatermarkToPdf, getSignatoryTableDimensions, WATERMARK_FONT_FAMILY } from './watermarkEngine';
 
 export {
@@ -298,6 +299,23 @@ export const prepareMasterPdfForDownload = async ({
   return pdfBytes;
 };
 
+// The record's lifecycle decides the stamp: callers cannot download a superseded/obsolete record as clean, controlled or uncontrolled
+const lifecycleWatermarkType = (doc = {}) => {
+  const status = String(doc.status || '').toUpperCase();
+  if (status.startsWith('OBSOLETE') || doc.is_obsolete || doc.isObsolete) return WATERMARK_TYPES.OBSOLETE;
+  if (status.startsWith('SUPERSEDED') || doc.is_superseded || doc.isSuperseded) return WATERMARK_TYPES.SUPERSEDED;
+  return null;
+};
+
+// Clean (unwatermarked) masters are DCC custody only; checked against the signed-in user, not caller-supplied meta
+const assertCleanMasterAccess = async () => {
+  const { default: useStore } = await import('../../../store/useStore');
+  if (!isDccUser(useStore.getState().currentUser)) {
+    throw new Error('สงวนสิทธิ์ดาวน์โหลดต้นฉบับไม่ติดลายน้ำเฉพาะ DCC เท่านั้น');
+  }
+  return useStore;
+};
+
 export class UniversalWatermarkService {
   static drawStandardIsoWatermark = drawStandardIsoWatermark;
   static generateWatermarkCanvas = generateWatermarkCanvas;
@@ -394,10 +412,11 @@ export class UniversalWatermarkService {
     // 2. Doc type / category is FM, FORM, TEMPLATE
     const isFormType = ['FM', 'FORM', 'TEMPLATE'].includes(docType) || docType.startsWith('FM-');
 
-    // Forms bypass watermarking unless they are obsolete
+    // Forms bypass watermarking only while current: obsolete or superseded forms must carry their stamp
     const isObsolete = status === 'OBSOLETE' || status === 'OBSOLETE_ARCHIVED' || Boolean(metadata.is_obsolete) || Boolean(metadata.isObsolete);
+    const isSuperseded = status.startsWith('SUPERSEDED') || Boolean(metadata.is_superseded) || Boolean(metadata.isSuperseded);
 
-    return (isFormCode || isFormType) && !isObsolete;
+    return (isFormCode || isFormType) && !isObsolete && !isSuperseded;
   }
 
   /**
@@ -1114,9 +1133,13 @@ export class UniversalWatermarkService {
    * Reserved for Active Forms / Templates (Bypass) and DCC Admin / Master Custodian (ISO 9001 Clause 7.5.3)
    */
   static async downloadCleanPdf(doc, meta = {}, openInTab = false) {
-    let rawPdfBytes = await this.resolveRawPdfBytes(doc, meta);
+    const lifecycleType = lifecycleWatermarkType(doc);
+    if (lifecycleType) return this.downloadWatermarkedPdf(doc, lifecycleType, { ...meta, isCleanMaster: false }, openInTab);
 
     const isForm = this.isBlankFormBypass({ ...doc, ...meta });
+    const store = isForm ? null : await assertCleanMasterAccess();
+    let rawPdfBytes = await this.resolveRawPdfBytes(doc, meta);
+
     const statusUpper = String(doc.status || meta.status || 'ACTIVE').toUpperCase();
     const isMasterDoc = statusUpper === 'ACTIVE' || statusUpper === 'EFFECTIVE' || statusUpper === 'APPROVED' || doc.stage === 'MASTER' || meta.stage === 'MASTER';
     const docCode = doc.document_code || doc.doc_code || doc.edCode || doc.title || meta.docCode || 'DOCUMENT';
@@ -1161,6 +1184,8 @@ export class UniversalWatermarkService {
       }
     }
 
+    store?.getState().logDocumentDownload?.(doc, 'CLEAN_MASTER', null);
+
     const blob = new Blob([rawPdfBytes], { type: 'application/pdf' });
     const url = window.URL.createObjectURL(blob);
 
@@ -1194,6 +1219,13 @@ export class UniversalWatermarkService {
    * Helper: Directly download watermarked PDF in browser or open in new tab
    */
   static async downloadWatermarkedPdf(doc, watermarkType = WATERMARK_TYPES.UNCONTROLLED_COPY, meta = {}, openInTab = false) {
+    const lifecycleType = lifecycleWatermarkType(doc);
+    if (lifecycleType && lifecycleType !== watermarkType) {
+      // Caller-supplied texts belong to the type it asked for, not the forced one
+      const { mainText: _m, subLines: _s, customColor: _c, ...rest } = meta;
+      watermarkType = lifecycleType;
+      meta = { ...rest, isCleanMaster: false, downloadMode: lifecycleType, isControlledPrint: false };
+    }
     const normWatermark = String(watermarkType || 'UNCONTROLLED').toUpperCase();
     const isCleanMode = Boolean(
       meta.isCleanMaster || 
@@ -1203,6 +1235,7 @@ export class UniversalWatermarkService {
     );
 
     const isFormBypass = this.isBlankFormBypass({ ...doc, ...meta });
+    if (isCleanMode && !isFormBypass) await assertCleanMasterAccess();
     if (isFormBypass && watermarkType !== WATERMARK_TYPES.OBSOLETE && watermarkType !== 'OBSOLETE' && !isCleanMode) {
       return await this.downloadCleanPdf(doc, { ...doc, ...meta }, openInTab);
     }

@@ -62,7 +62,8 @@ export const generateSchedules = (internalDocs, externalDocs, existingSchedules 
     if (statusUpper !== 'EFFECTIVE' && statusUpper !== 'ACTIVE') return;
 
     // Check if schedule already exists
-    const exists = newSchedules.find(s => s.documentId === doc.id && s.documentCategory === 'INTERNAL' && s.isActive);
+    // Legacy schedules may lack isActive/documentCategory: only an explicitly retired one frees the record
+    const exists = newSchedules.find(s => s.documentId === doc.id && s.documentCategory !== 'EXTERNAL' && !s.externalDocumentId && s.isActive !== false);
     if (exists) return;
 
     // Determine review cycle years based on document type:
@@ -114,7 +115,7 @@ export const generateSchedules = (internalDocs, externalDocs, existingSchedules 
     const statusUpper = (doc.status || '').toUpperCase();
     if (statusUpper !== 'ACTIVE' && statusUpper !== 'EFFECTIVE') return;
 
-    const exists = newSchedules.find(s => s.externalDocumentId === doc.id && s.documentCategory === 'EXTERNAL' && s.isActive);
+    const exists = newSchedules.find(s => s.externalDocumentId === doc.id && s.isActive !== false);
     if (exists) return;
 
     // Verification frequency: from verification_frequency / reviewCycleMonths field or defaults to 1 year
