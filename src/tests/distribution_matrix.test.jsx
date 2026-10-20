@@ -23,7 +23,7 @@ describe('Hierarchical Distribution Matrix & Copy Numbering Engine Tests', () =>
       const pdStations = getDepartmentStations('PD');
       const names = pdStations.map(s => s.name);
       
-      expect(names).toContain('PD Head Office (จุดคุมงานหลัก Master)');
+      expect(names).toContain('PD Head Office');
       expect(names).toContain('Line 1 - Mixing (ห้องผสม)');
       expect(names).toContain('Line 2 - Baking (เตาอบ)');
       expect(names).toContain('Line 3 - Fruit Line (ไลน์แต่งหน้า)');
@@ -38,7 +38,7 @@ describe('Hierarchical Distribution Matrix & Copy Numbering Engine Tests', () =>
       const qaStations = getDepartmentStations('QA/QC');
       const names = qaStations.map(s => s.name);
 
-      expect(names).toContain('QA Head Office (Master)');
+      expect(names).toContain('QC Office (สำนักงานประกันและควบคุมคุณภาพ)');
       expect(names).toContain('QC Chemistry Lab (ห้องปฏิบัติการเคมี)');
       expect(names).toContain('QC Micro Lab (ห้องปฏิบัติการจุลชีววิทยา)');
       expect(names).toContain('Retain Sample Room (ห้องเก็บตัวอย่าง)');
@@ -134,7 +134,7 @@ describe('Hierarchical Distribution Matrix & Copy Numbering Engine Tests', () =>
     it('Fallback Rule: If department is passed without sub-location, defaults to Office Master station', () => {
       const masterStation = getMasterStationForDept('WH');
       expect(masterStation.id).toBe('WH-MASTER');
-      expect(masterStation.name).toBe('WH Office (Master)');
+      expect(masterStation.name).toBe('WH Office');
 
       // If user selected WH without specific sub-location
       const selected = [
@@ -158,7 +158,7 @@ describe('Hierarchical Distribution Matrix & Copy Numbering Engine Tests', () =>
       expect(ackRequirement).toBe('NOT_REQUIRED');
     });
 
-    it('DistributionSetup renders Form Distribution View and bypasses Tier 2 station matrix for FM documentType', () => {
+    it('DistributionSetup renders FM access-scope notice and bypasses Tier 2 station matrix for FM documentType', () => {
       const { unmount } = render(
         <DistributionSetup
           ownerDept="PD"
@@ -168,40 +168,13 @@ describe('Hierarchical Distribution Matrix & Copy Numbering Engine Tests', () =>
         />
       );
 
-      // Form header and badge
-      expect(screen.getByText(/พร้อมใช้งานใน Library ทันที/i)).toBeInTheDocument();
-      expect(screen.getByText(/Bypass การตรวจรับ PIN และคิวพิมพ์/i)).toBeInTheDocument();
-
-      // Form Mode Options
-      expect(screen.getByText(/^ทุกแผนก$/)).toBeInTheDocument();
-      expect(screen.getByText(/^เลือกเฉพาะแผนกที่เกี่ยวข้อง$/)).toBeInTheDocument();
+      // FM notice: download follows Access Scope (no station matrix)
+      expect(screen.getByText(/ดาวน์โหลดตามสิทธิ์การเข้าถึง/)).toBeInTheDocument();
 
       // Does NOT show Copy 01 Strict Lock or Copy Counter
       expect(screen.queryByText(/Copy 01 \(Strict Lock\)/i)).not.toBeInTheDocument();
       expect(screen.queryByText(/รวมจำนวนสำเนา/i)).not.toBeInTheDocument();
       unmount();
-    });
-
-    it('Switching to Targeted Departments in DistributionSetup renders Tier 1 Department grid and updates payload', () => {
-      render(
-        <DistributionSetup
-          ownerDept="PD"
-          distributions={[]}
-          onChange={() => {}}
-          documentType="FM"
-        />
-      );
-
-      // Click Targeted Departments mode
-      const targetedBtn = screen.getByText(/^เลือกเฉพาะแผนกที่เกี่ยวข้อง$/);
-      fireEvent.click(targetedBtn);
-
-      // Check that department checkboxes appear
-      expect(screen.getByText(/เลือกแผนกที่ได้รับสิทธิ์ใช้งานแบบฟอร์ม/i)).toBeInTheDocument();
-
-      // Click QA/QC department to toggle
-      const qaDept = screen.getByText(/ฝ่ายประกันและควบคุมคุณภาพ \(QA\/QC\)/i);
-      expect(qaDept).toBeInTheDocument();
     });
   });
 });

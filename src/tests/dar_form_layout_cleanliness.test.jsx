@@ -23,7 +23,7 @@ describe('Layout Cleanliness & Ghost Container Elimination Tests', () => {
     });
   });
 
-  it('renders standard Distribution Matrix (DistributionSetup) when docType is SOP and does not render FormDistributionSetup', () => {
+  it('renders standard Distribution Matrix (DistributionSetup) when docType is SOP and not the FM notice', () => {
     render(
       <MemoryRouter initialEntries={['/dar/new/create']}>
         <Routes>
@@ -38,11 +38,11 @@ describe('Layout Cleanliness & Ghost Container Elimination Tests', () => {
 
     // Expect Controlled Copy Matrix header (Master Copy 01 ล็อกถาวร) to be in the document
     expect(screen.getByText(/Master Copy 01 ล็อกถาวร/i)).toBeInTheDocument();
-    // Expect Digital Form Distribution header to NOT be in the document
-    expect(screen.queryByText(/ระบบแจกจ่ายแบบฟอร์มบันทึกข้อมูล \(Digital Form Distribution\)/i)).not.toBeInTheDocument();
+    // Expect FM notice to NOT be in the document
+    expect(screen.queryByText(/ดาวน์โหลดตามสิทธิ์การเข้าถึง/)).not.toBeInTheDocument();
   });
 
-  it('renders FormDistributionSetup when docType is FM and does not render Controlled Copy Matrix', () => {
+  it('renders the FM access-scope notice when docType is FM and does not render Controlled Copy Matrix', () => {
     render(
       <MemoryRouter initialEntries={['/dar/new/create']}>
         <Routes>
@@ -55,8 +55,8 @@ describe('Layout Cleanliness & Ghost Container Elimination Tests', () => {
     const selectDocType = screen.getAllByRole('combobox')[0];
     fireEvent.change(selectDocType, { target: { value: 'FM' } });
 
-    // Expect Digital Form Distribution header to be in the document
-    expect(screen.getByText(/ระบบแจกจ่ายแบบฟอร์มบันทึกข้อมูล \(Digital Form Distribution\)/i)).toBeInTheDocument();
+    // FM bypasses physical copies; download follows Access Scope
+    expect(screen.getByText(/ดาวน์โหลดตามสิทธิ์การเข้าถึง/)).toBeInTheDocument();
     // Expect Controlled Copy Matrix header to NOT be in the document
     expect(screen.queryByText(/Master Copy 01 ล็อกถาวร/i)).not.toBeInTheDocument();
   });

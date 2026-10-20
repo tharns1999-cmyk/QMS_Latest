@@ -368,7 +368,7 @@ export const createExternalDocSlice = (set, get) => ({
       department: dept,
       status: initialStatus,
       ownerId: state.currentUser ? state.currentUser.id : (doc.ownerId || ''),
-      rev: originRev,
+      rev: doc.rev || '00', // internal sequence (00, 01, ...); edition text lives in sourceVersion
       source: issuerValue,
       issuer: issuerValue,
       officialIssuer: issuerValue,
@@ -417,7 +417,7 @@ export const createExternalDocSlice = (set, get) => ({
       officialIssuer: issuerValue,
       sourceVersion: doc.sourceVersion || doc.edition || '',
       requestType: 'NEW',
-      rev: originRev,
+      rev: doc.rev || '00',
       effectiveDate: effectiveDate,
       nextReviewDate: nextReviewDate,
       reviewCycleMonths: reviewCycleMonths,
@@ -591,6 +591,7 @@ export const createExternalDocSlice = (set, get) => ({
       edCode,
       doc_code: edCode,
       docNo: edCode,
+      rev: newRevStr,
       edition: newEditionValue,
       sourceVersion: newEditionValue,
       source: issuerValue,
@@ -2155,10 +2156,13 @@ export const createExternalDocSlice = (set, get) => ({
           const targetDocNo = String(doc.edCode || doc.doc_code || doc.docNo || resolvedRequest?.edCode || task.docCode || '').trim();
           const newEdition = String(resolvedRequest?.sourceVersion || resolvedRequest?.edition || doc.sourceVersion || doc.edition || 'ฉบับใหม่').trim();
           const priorDocId = String(resolvedRequest?.previousDocId || doc.previousDocId || doc.previousRevDocId || '');
-          const priorDoc = (state.externalDocuments || []).find(d =>
-            (priorDocId && String(d.id) === priorDocId) ||
-            (targetDocNo && (String(d.edCode || d.doc_code || d.docNo || '').trim() === targetDocNo))
-          );
+          // Exclude the pending draft itself: it shares edCode and sits first in the list,
+          // otherwise it is mistaken for the prior edition and left behind as an orphan record.
+          const priorDoc = (state.externalDocuments || []).find(d => priorDocId && String(d.id) === priorDocId) ||
+            (state.externalDocuments || []).find(d =>
+              String(d.id) !== String(doc.id) &&
+              targetDocNo && (String(d.edCode || d.doc_code || d.docNo || '').trim() === targetDocNo)
+            );
           const finalPrevDocId = priorDoc ? String(priorDoc.id) : priorDocId;
           const supersededSnapshotInUpdated = updatedDocs.find(d => 
             (targetDocNo && String(d.edCode || d.doc_code || d.docNo || '').trim() === targetDocNo) &&

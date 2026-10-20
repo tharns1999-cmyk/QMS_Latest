@@ -57,19 +57,11 @@ describe('External Documents Management Module (ED-Control) Tests', () => {
 
       const selects = screen.getAllByRole('combobox');
       const docTypeSelect = selects[0];
-      const options = Array.from(docTypeSelect.querySelectorAll('option')).map(o => o.textContent);
+      const codes = Array.from(docTypeSelect.querySelectorAll('option')).map(o => o.value).filter(Boolean);
 
-      // All 6 internal types present
-      expect(options.some(o => o.includes('คู่มือคุณภาพ (QM)'))).toBe(true);
-      expect(options.some(o => o.includes('ระเบียบปฏิบัติงาน (SOP)'))).toBe(true);
-      expect(options.some(o => o.includes('คู่มือการปฏิบัติงาน (WI)'))).toBe(true);
-      expect(options.some(o => o.includes('แบบฟอร์มบันทึกข้อมูล (FM)'))).toBe(true);
-      expect(options.some(o => o.includes('เอกสารสนับสนุน (SD)'))).toBe(true);
-      expect(options.some(o => o.includes('ข้อกำหนดและสเปกมาตรฐาน (SPEC)'))).toBe(true);
-
-      // Zero ED in DAR New Form
-      expect(options.some(o => o.includes('(ED)'))).toBe(false);
-      expect(options.some(o => o.includes('เอกสารภายนอก'))).toBe(false);
+      // All 6 internal types present, zero ED in DAR New Form
+      expect(codes).toEqual(expect.arrayContaining(['QM', 'SOP', 'WI', 'FM', 'SD', 'SPEC']));
+      expect(codes).not.toContain('ED');
     });
 
     it('auto-generates sequential ED code with 2-digit base (01-99 ➔ 100+) per department upon registration', () => {
@@ -91,7 +83,7 @@ describe('External Documents Management Module (ED-Control) Tests', () => {
       const docsAfterFirst = useStore.getState().externalDocuments;
       expect(docsAfterFirst).toHaveLength(1);
       expect(docsAfterFirst[0].edCode).toBe('ED-QA-01');
-      expect(docsAfterFirst[0].rev).toBe('01');
+      expect(docsAfterFirst[0].rev).toBe('00'); // internal sequence starts at 00 (edition text lives in sourceVersion)
       expect(docsAfterFirst[0].status).toBe('PENDING_EXT_REVIEW');
 
       // Register second QA external document -> ED-QA-02
@@ -244,8 +236,11 @@ describe('External Documents Management Module (ED-Control) Tests', () => {
         });
       });
       rerender(<MemoryRouter><ExternalDocsList /></MemoryRouter>);
-      expect(screen.getByText('ED-QA-01')).toBeDefined();
       expect(screen.getByText('ED-PD-01')).toBeDefined();
+      expect(screen.queryByText('ED-EXEC-01')).toBeNull();
+      // Another dept's General doc lives in the General tab, not My Dept
+      fireEvent.click(screen.getByRole('button', { name: /เอกสารทั่วไป/ }));
+      expect(screen.getByText('ED-QA-01')).toBeDefined();
       expect(screen.queryByText('ED-EXEC-01')).toBeNull();
     });
   });
@@ -290,16 +285,16 @@ describe('External Documents Management Module (ED-Control) Tests', () => {
 
       // Check Task created for Reviewer U005
       const tasks = useStore.getState().tasks;
-      expect(tasks.some(t => t.referenceId === newRev.id && t.type === 'EXT_REVIEW')).toBe(true);
+      expect(tasks.some(t => t.referenceId === newRev.id && /^EXT(ERNAL)?_REVIEW$/.test(t.type))).toBe(true);
 
       // Approve task through processExternalTask
-      const reviewTask = tasks.find(t => t.referenceId === newRev.id && t.type === 'EXT_REVIEW');
+      const reviewTask = tasks.find(t => t.referenceId === newRev.id && /^EXT(ERNAL)?_REVIEW$/.test(t.type));
       act(() => {
         useStore.getState().processExternalTask(reviewTask.id, 'APPROVE', 'ตรวจสอบผ่านแล้ว');
       });
 
       // Now pending approval
-      const appTask = useStore.getState().tasks.find(t => t.referenceId === newRev.id && t.type === 'EXT_APPROVAL');
+      const appTask = useStore.getState().tasks.find(t => t.referenceId === newRev.id && /^EXT(ERNAL)?_APPROVAL$/.test(t.type));
       expect(appTask).toBeDefined();
 
       // Final approve by Approver U004
@@ -312,7 +307,7 @@ describe('External Documents Management Module (ED-Control) Tests', () => {
       const oldRev1 = finalDocs.find(d => d.rev === '01');
 
       expect(activeRev2.status).toBe('ACTIVE');
-      expect(oldRev1.status).toBe('OBSOLETE_ARCHIVED');
+      expect(oldRev1.status).toBe('SUPERSEDED');
     });
 
     it('sets document to OBSOLETE when obsoleteExternalDoc is approved', () => {
@@ -340,15 +335,17 @@ describe('External Documents Management Module (ED-Control) Tests', () => {
         });
       });
 
+      // Stays officially ACTIVE until the obsolete request is approved
       const doc = useStore.getState().externalDocuments.find(d => d.id === 'EXT-OBS-TEST');
-      expect(doc.status).toBe('PENDING_EXT_REVIEW');
+      expect(doc.status).toBe('ACTIVE');
+      expect(doc.pendingObsolete).toBe(true);
 
-      const reviewTask = useStore.getState().tasks.find(t => t.referenceId === 'EXT-OBS-TEST' && t.type === 'EXT_REVIEW');
+      const reviewTask = useStore.getState().tasks.find(t => t.referenceId === 'EXT-OBS-TEST' && /^EXT(ERNAL)?_REVIEW$/.test(t.type));
       act(() => {
         useStore.getState().processExternalTask(reviewTask.id, 'APPROVE', 'เห็นชอบให้ยกเลิก');
       });
 
-      const appTask = useStore.getState().tasks.find(t => t.referenceId === 'EXT-OBS-TEST' && t.type === 'EXT_APPROVAL');
+      const appTask = useStore.getState().tasks.find(t => t.referenceId === 'EXT-OBS-TEST' && /^EXT(ERNAL)?_APPROVAL$/.test(t.type));
       act(() => {
         useStore.getState().processExternalTask(appTask.id, 'APPROVE', 'อนุมัติการยกเลิก');
       });
@@ -391,6 +388,7 @@ describe('External Documents Management Module (ED-Control) Tests', () => {
       renderWithRouter(<ExternalDocsList />);
 
       const downloadButtons = screen.getAllByTitle('ดาวน์โหลด PDF พร้อมลายน้ำ (Watermarked PDF)');
+      expect(downloadButtons).toHaveLength(1); // Active tab shows only the active doc
       
       // Download active doc
       await act(async () => {
@@ -399,18 +397,15 @@ describe('External Documents Management Module (ED-Control) Tests', () => {
       expect(spyWatermark).toHaveBeenCalledWith(
         expect.objectContaining({ title: 'ED-QA-01' }),
         WATERMARK_TYPES.UNCONTROLLED_COPY,
-        expect.anything()
+        expect.anything(),
+        false
       );
 
-      // Download obsolete doc
-      await act(async () => {
-        fireEvent.click(downloadButtons[1]);
-      });
-      expect(spyWatermark).toHaveBeenCalledWith(
-        expect.objectContaining({ title: 'ED-QA-02' }),
-        WATERMARK_TYPES.OBSOLETE,
-        expect.anything()
-      );
+      // Obsolete tab lists the retired doc but offers no row download (prevents unintended use, ISO 7.5.3)
+      fireEvent.click(screen.getByRole('button', { name: /ยกเลิกถาวร/ }));
+      expect(screen.getByText('ED-QA-02')).toBeInTheDocument();
+      expect(screen.queryByTitle('ดาวน์โหลด PDF พร้อมลายน้ำ (Watermarked PDF)')).not.toBeInTheDocument();
+      expect(spyWatermark).toHaveBeenCalledTimes(1);
 
       spyWatermark.mockRestore();
     });
@@ -441,13 +436,13 @@ describe('External Documents Management Module (ED-Control) Tests', () => {
       expect(registeredDoc.distributions).toHaveLength(2);
 
       // Reviewer approves
-      const reviewTask = useStore.getState().tasks.find(t => t.referenceId === registeredDoc.id && t.type === 'EXT_REVIEW');
+      const reviewTask = useStore.getState().tasks.find(t => t.referenceId === registeredDoc.id && /^EXT(ERNAL)?_REVIEW$/.test(t.type));
       act(() => {
         useStore.getState().processExternalTask(reviewTask.id, 'APPROVE', 'Review passed');
       });
 
       // Approver approves -> Doc becomes ACTIVE
-      const appTask = useStore.getState().tasks.find(t => t.referenceId === registeredDoc.id && t.type === 'EXT_APPROVAL');
+      const appTask = useStore.getState().tasks.find(t => t.referenceId === registeredDoc.id && /^EXT(ERNAL)?_APPROVAL$/.test(t.type));
       act(() => {
         useStore.getState().processExternalTask(appTask.id, 'APPROVE', 'Approval granted');
       });
@@ -529,12 +524,12 @@ describe('External Documents Management Module (ED-Control) Tests', () => {
       expect(v2Doc.rev).toBe('02');
 
       // Review & Approve V2
-      const revTask = useStore.getState().tasks.find(t => t.referenceId === v2Doc.id && t.type === 'EXT_REVIEW');
+      const revTask = useStore.getState().tasks.find(t => t.referenceId === v2Doc.id && /^EXT(ERNAL)?_REVIEW$/.test(t.type));
       act(() => {
         useStore.getState().processExternalTask(revTask.id, 'APPROVE', 'Review passed');
       });
 
-      const appTask = useStore.getState().tasks.find(t => t.referenceId === v2Doc.id && t.type === 'EXT_APPROVAL');
+      const appTask = useStore.getState().tasks.find(t => t.referenceId === v2Doc.id && /^EXT(ERNAL)?_APPROVAL$/.test(t.type));
       act(() => {
         useStore.getState().processExternalTask(appTask.id, 'APPROVE', 'Approve V2');
       });
@@ -551,7 +546,7 @@ describe('External Documents Management Module (ED-Control) Tests', () => {
       expect(newV2Copy.doc_version).toBe('02');
 
       // Recall checklist task generated for DCC
-      const recallTask = useStore.getState().tasks.find(t => t.taskType === 'DCC_RECALL_WITH_CHECKLIST' && t.externalDocId === 'EXT-V1-TEST');
+      const recallTask = useStore.getState().tasks.find(t => t.taskType === 'DCC_RECALL_WITH_CHECKLIST' && t.docCode === 'ED-QA-05'); // task points at the immutable SUPERSEDED snapshot id
       expect(recallTask).toBeDefined();
       expect(recallTask.title).toContain('ED-QA-05');
     });
@@ -612,6 +607,7 @@ describe('External Documents Management Module (ED-Control) Tests', () => {
 
       renderWithRouter(<ExternalDocsList />);
 
+      fireEvent.click(screen.getByTitle('เมนูการจัดการเพิ่มเติม (Row-Level Actions)'));
       const copyBtn = screen.getByTitle('ขอสำเนาควบคุมหน้างาน (Request Physical Copy)');
       expect(copyBtn).toBeDefined();
 

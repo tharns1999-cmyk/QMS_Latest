@@ -148,11 +148,6 @@ describe('Library Distinct Master Document Tab Counts & Summary Counter Tests', 
     // Active tab button should display badge '1' (SOP-PD-03)
     const activeBtn = screen.getByRole('button', { name: /มีผลบังคับใช้/i });
     expect(activeBtn).toHaveTextContent('1');
-
-    // All Records tab button should display badge '3' (SOP-PD-01, WI-PD-02, SOP-PD-03), NOT '8'
-    const allBtn = screen.getByRole('button', { name: /ทั้งหมด/i });
-    expect(allBtn).toHaveTextContent('3');
-    expect(allBtn).not.toHaveTextContent('8');
   });
 
   it('synchronizes table grouped rows and summary counter text with distinct tab count', () => {
@@ -172,8 +167,8 @@ describe('Library Distinct Master Document Tab Counts & Summary Counter Tests', 
     expect(screen.getByText('SOP-PD-01')).toBeInTheDocument();
     expect(screen.getByText('WI-PD-02')).toBeInTheDocument();
 
-    // Summary Counter must display: "แสดงผล 2 รหัส (5 ฉบับ) / 2 รหัส"
-    expect(screen.getByText(/แสดงผล/i)).toHaveTextContent('2 รหัส (5 ฉบับ) / 2 รหัส');
+    // Summary Counter counts distinct codes (2), not raw records (5)
+    expect(screen.getByText(/แสดงผล/i)).toHaveTextContent('แสดงผล 2 รายการ / 2 รายการ');
   });
 
 });

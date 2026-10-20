@@ -548,7 +548,7 @@ const DarObsoleteForm = () => {
                   <div className="relative" ref={searchContainerRef}>
                     <div className="flex gap-2">
                       <select
-                        role="none"
+                        aria-label="กรองประเภทเอกสาร"
                         value={selectedType}
                         onChange={(e) => setSelectedType(e.target.value)}
                         className="select-primary text-xs w-28 sm:w-44 h-10.5 px-2 bg-white border border-[#CBD5E1] rounded-lg text-[#1E293B] focus:outline-none focus:border-[#0D99FF]"

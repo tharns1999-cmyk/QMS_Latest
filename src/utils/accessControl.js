@@ -200,7 +200,8 @@ export const hasDocumentAccess = (doc, user) => {
       const userLevel = Number(user.level) || 0;
 
       const isNamedUser = authUsers.includes(user.id);
-      const isLevelQualified = minLevel > 0 && userLevel >= minLevel;
+      // WHITELIST mode = named individuals only; the stored min level must not widen access
+      const isLevelQualified = accessControl.restricted_mode !== 'WHITELIST' && minLevel > 0 && userLevel >= minLevel;
 
       return isNamedUser || isLevelQualified;
     }

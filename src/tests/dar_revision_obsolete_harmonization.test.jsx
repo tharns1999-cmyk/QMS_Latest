@@ -111,9 +111,8 @@ describe('Enterprise Form Layout Harmonization Tests (DAR Revision & Obsolete)',
       expect(screen.getAllByText('Rev.01').length).toBeGreaterThanOrEqual(1);
 
       // Fill Change Reason & Change Summary
-      const comboboxes = screen.getAllByRole('combobox');
-      const reasonSelect = comboboxes.find(s => s.querySelector('option[value="PROCESS_CHANGE"]'));
-      fireEvent.change(reasonSelect, { target: { value: 'PROCESS_CHANGE' } });
+      const reasonInput = screen.getByPlaceholderText(/ระบุวัตถุประสงค์และเหตุผลในการขอดำเนินการ/);
+      fireEvent.change(reasonInput, { target: { value: 'ปรับปรุงกระบวนการผลิต (Process Change)' } });
 
       const changeSummary = screen.getByPlaceholderText(/ระบุข้อความ หัวข้อ หรือขั้นตอนที่ทำการแก้ไข/i);
       fireEvent.change(changeSummary, { target: { value: 'ปรับปรุงขั้นตอนการตรวจสอบคุณภาพก่อนบรรจุ' } });
@@ -167,15 +166,15 @@ describe('Enterprise Form Layout Harmonization Tests (DAR Revision & Obsolete)',
       const { container } = renderWithRouter(<DarObsoleteForm />);
 
       // Select SOP-PD-01 (which has 3 controlled copies)
-      const docSelect = screen.getAllByRole('combobox')[0];
+      const docSelect = screen.getByDisplayValue('-- เลือกเอกสารที่ต้องการยกเลิก --');
       fireEvent.change(docSelect, { target: { value: 'doc-pd-01' } });
 
       // Notice controlled copy warning
       expect(screen.getAllByText(/3 ฉบับ/i).length).toBeGreaterThan(0);
 
       // Fill Reason & Detail
-      const reasonSelect = screen.getAllByRole('combobox')[1];
-      fireEvent.change(reasonSelect, { target: { value: 'PROCESS_REMOVED' } });
+      const reasonInput = screen.getByPlaceholderText(/ระบุวัตถุประสงค์และเหตุผลในการขอดำเนินการ/);
+      fireEvent.change(reasonInput, { target: { value: 'ยกเลิกกระบวนการ (Process Removed)' } });
 
       const detailInput = screen.getByPlaceholderText(/อธิบายเหตุผลและผลกระทบของการยกเลิกเอกสารนี้/i);
       fireEvent.change(detailInput, { target: { value: 'ยกเลิกสายการผลิต 1 เปลี่ยนเป็นระบบอัตโนมัติ' } });

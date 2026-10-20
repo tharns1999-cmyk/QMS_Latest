@@ -23,7 +23,7 @@ describe('Periodic Review DAR Idempotency and Linkage', () => {
     store.submitPeriodicReview('PR-TEST-1', 'REVISION_REQUIRED', 'Needs update', 'DAR-123', 'SUCCESS', 'PERIODIC_REVIEW_PR-TEST-1_REVISION');
     
     const updatedSchedule = useStore.getState().periodicReviewSchedules.find(s => s.id === 'PR-TEST-1');
-    expect(updatedSchedule.status).toBe('IN_PROGRESS');
+    expect(updatedSchedule.status).toBe('AWAITING_ACTION'); // revision outcome waits for the linked DAR
     expect(updatedSchedule.outcome).toBe('REVISION_REQUIRED');
     expect(updatedSchedule.linkedActionId).toBe('DAR-123');
     expect(updatedSchedule.linkageStatus).toBe('SUCCESS');

@@ -56,6 +56,7 @@ describe('Strict Separation Between "ในแผนกฉัน" and "เอก
     expect(myDeptBtn).toHaveTextContent('1');
 
     // Criteria 1: In General tab, own department document SOP-QC-01 MUST NOT appear
+    fireEvent.click(generalBtn);
     expect(screen.queryByText(/ระเบียบปฏิบัติงานการตรวจสอบคุณภาพ/i)).not.toBeInTheDocument();
     expect(screen.queryByText('SOP-QC-01')).not.toBeInTheDocument();
 
@@ -110,6 +111,7 @@ describe('Strict Separation Between "ในแผนกฉัน" and "เอก
     expect(myDeptBtn).toHaveTextContent('1');
 
     // In General tab: PD doc is visible, own QC doc is hidden
+    fireEvent.click(generalBtn);
     expect(screen.getByText('SOP-PD-01')).toBeInTheDocument();
     expect(screen.queryByText('SOP-QC-01')).not.toBeInTheDocument();
 

@@ -574,7 +574,7 @@ export const createDarSlice = (set, get) => ({
 
     // Generate Rule-Based Dynamic Workflow Steps (Step 1: Requester, Step 2: Reviewer, Step 3: Approver)
     const requesterUser = (state.masterUsers || []).find(u => (u.id === newDar.requesterId || u.userId === newDar.requesterId)) || state.currentUser;
-    const dynamicWorkflow = generateDynamicWorkflow(requesterUser, newDar.department, state.masterUsers || []);
+    const dynamicWorkflow = generateDynamicWorkflow(requesterUser, newDar.department, state.masterUsers || [], newDar.docType, state.approvalMatrix);
 
     newDar.workflowSteps = (Array.isArray(dar.workflowSteps) && dar.workflowSteps.length > 0)
       ? dar.workflowSteps

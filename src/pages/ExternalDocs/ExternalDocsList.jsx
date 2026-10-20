@@ -359,9 +359,11 @@ const ExternalDocsList = () => {
 
   const isOwnerDept = useCallback((doc) => {
     if (!doc) return false;
+    // DCC controls the whole register (ISO 7.5.3): every dept's non-general doc belongs in "My Dept"
+    if (isDccAdmin && !isGeneralDoc(doc)) return true;
     const docDept = doc.department || doc.dept || doc.owner_dept || extractDeptCode(getDocCode(doc));
     return userDepts.includes(docDept) || userDepts.some(ud => deptMatches(ud, docDept));
-  }, [userDepts, deptMatches]);
+  }, [userDepts, deptMatches, isDccAdmin]);
 
   const canManageDoc = (doc) => {
     if (!doc) return false;
@@ -741,8 +743,6 @@ const ExternalDocsList = () => {
         } else if (statusFilter === 'OBSOLETE') {
           // Obsolete tab shows stacks that are OBSOLETE
           if (stack.stackStatus !== 'OBSOLETE') return false;
-        } else if (statusFilter === 'ALL') {
-          // Keep all stacks
         }
       }
 
@@ -1086,13 +1086,13 @@ const ExternalDocsList = () => {
     try {
       await UniversalWatermarkService.downloadWatermarkedPdf(
         {
+          ...doc, // spread first so normalized code/status below win
           id: doc.id,
           title: docCode,
           name: doc.title,
           docTitle: doc.title,
           status: isObsolete ? 'OBSOLETE' : (isSuperseded ? 'SUPERSEDED' : (doc.status || 'ACTIVE')),
           isExternal: true,
-          ...doc
         },
         watermarkPreset,
         {
@@ -1485,7 +1485,6 @@ const ExternalDocsList = () => {
                     { id: 'ACTIVE', label: 'มีผลบังคับใช้ (Active)', count: statusCounts.active },
                     { id: 'SUPERSEDED', label: 'ฉบับตกรุ่น (Superseded)', count: statusCounts.superseded },
                     { id: 'OBSOLETE', label: 'ยกเลิกถาวร (Obsolete)', count: statusCounts.obsolete },
-                    { id: 'ALL', label: 'ทั้งหมด (All Records)', count: statusCounts.total },
                   ].map((tab) => {
                     const isSelected = statusFilter === tab.id;
                     return (

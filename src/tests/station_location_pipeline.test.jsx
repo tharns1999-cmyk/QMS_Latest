@@ -285,7 +285,7 @@ describe('Point-of-Use Location Data Pipeline & Watermark Synchronization Tests'
 
       renderWithRouter(<ControlledCopyRegister />, { route: '/controlled-copy?tab=PENDING_ISSUE' });
 
-      const printButtons = screen.getAllByText(/พิมพ์สำเนาเดี่ยว/i);
+      const printButtons = screen.getAllByText('พิมพ์สำเนา');
       fireEvent.click(printButtons[0]);
 
       await waitFor(() => {
@@ -358,7 +358,7 @@ describe('Point-of-Use Location Data Pipeline & Watermark Synchronization Tests'
 
       renderWithRouter(<ControlledCopyRegister />, { route: '/controlled-copy?tab=PENDING_ISSUE' });
 
-      const printBtn = screen.getByRole('button', { name: /พิมพ์สำเนาเดี่ยว/i });
+      const printBtn = screen.getByRole('button', { name: /^พิมพ์สำเนา$/ });
       fireEvent.click(printBtn);
 
       await waitFor(() => {

@@ -40,23 +40,11 @@ describe('Master Data Dynamic Synchronization & Hardcoded Elimination Tests', ()
 
       const selects = screen.getAllByRole('combobox');
       const docTypeSelect = selects[0];
-      const options = Array.from(docTypeSelect.querySelectorAll('option')).map(o => o.textContent);
+      const codes = Array.from(docTypeSelect.querySelectorAll('option')).map(o => o.value).filter(Boolean);
 
-      // Verify the 6 official document types are present
-      expect(options.some(o => o.includes('คู่มือคุณภาพ (QM)'))).toBe(true);
-      expect(options.some(o => o.includes('ระเบียบปฏิบัติงาน (SOP)'))).toBe(true);
-      expect(options.some(o => o.includes('คู่มือการปฏิบัติงาน (WI)'))).toBe(true);
-      expect(options.some(o => o.includes('แบบฟอร์มบันทึกข้อมูล (FM)'))).toBe(true);
-      expect(options.some(o => o.includes('เอกสารสนับสนุน (SD)'))).toBe(true);
-      expect(options.some(o => o.includes('ข้อกำหนดและสเปกมาตรฐาน (SPEC)'))).toBe(true);
-
-      // Verify zero legacy types
-      expect(options.some(o => o.includes('(HA)'))).toBe(false);
-      expect(options.some(o => o.includes('(HAP)'))).toBe(false);
-      expect(options.some(o => o.includes('(FSP)'))).toBe(false);
-      expect(options.some(o => o.includes('(QP)'))).toBe(false);
-      expect(options.some(o => o.includes('(PS)'))).toBe(false);
-      expect(options.some(o => o.includes('(VA)'))).toBe(false);
+      // Verify the 6 official document types are present and zero legacy types
+      expect(codes).toEqual(expect.arrayContaining(['QM', 'SOP', 'WI', 'FM', 'SD', 'SPEC']));
+      ['HA', 'HAP', 'FSP', 'QP', 'PS', 'VA'].forEach(legacy => expect(codes).not.toContain(legacy));
     });
 
     it('immediately reflects new document types added to Master Data Store in real-time', () => {
@@ -90,8 +78,8 @@ describe('Master Data Dynamic Synchronization & Hardcoded Elimination Tests', ()
       // Select FM (Form)
       fireEvent.change(docTypeSelect, { target: { value: 'FM' } });
 
-      // Code preview should start with FM-QA-
-      expect(screen.getByText(/FM-QA-/i)).toBeDefined();
+      // Code preview uses the standardized QA/QC code 'QC'
+      expect(screen.getAllByText(/FM-QC-/).length).toBeGreaterThan(0);
     });
   });
 
@@ -103,10 +91,9 @@ describe('Master Data Dynamic Synchronization & Hardcoded Elimination Tests', ()
       const typeFilterSelect = selects.find(s => s.className.includes('sm:w-44'));
       expect(typeFilterSelect).toBeDefined();
 
-      const options = Array.from(typeFilterSelect.querySelectorAll('option')).map(o => o.textContent);
-      expect(options.some(o => o.includes('คู่มือคุณภาพ (QM)'))).toBe(true);
-      expect(options.some(o => o.includes('ระเบียบปฏิบัติงาน (SOP)'))).toBe(true);
-      expect(options.some(o => o.includes('(HA)'))).toBe(false);
+      const codes = Array.from(typeFilterSelect.querySelectorAll('option')).map(o => o.value);
+      expect(codes).toEqual(expect.arrayContaining(['QM', 'SOP']));
+      expect(codes).not.toContain('HA');
     });
   });
 
@@ -131,7 +118,8 @@ describe('Master Data Dynamic Synchronization & Hardcoded Elimination Tests', ()
         />
       );
 
-      // Verify the new station is visible under PD
+      // Open PD in the department pane, then the new station is visible
+      fireEvent.click(screen.getByRole('button', { name: /^PD/ }));
       expect(screen.getByText(/Line 99 - Robotic Packing Cell/i)).toBeDefined();
     });
   });
@@ -167,7 +155,7 @@ describe('Master Data Dynamic Synchronization & Hardcoded Elimination Tests', ()
       );
 
       // Click QA/QC Department Tab
-      const qaBtn = screen.getByRole('button', { name: /QA\/QC/i });
+      const qaBtn = screen.getByRole('button', { name: /\(QC\)$/ }); // QA/QC is normalized to QC
       fireEvent.click(qaBtn);
 
       // Verify new station is available for selection
@@ -180,11 +168,9 @@ describe('Master Data Dynamic Synchronization & Hardcoded Elimination Tests', ()
       renderWithRouter(<Library />);
 
       const selects = screen.getAllByRole('combobox');
-      const typeSelect = selects[0];
-      const options = Array.from(typeSelect.querySelectorAll('option')).map(o => o.textContent);
-
-      expect(options.some(o => o.includes('คู่มือคุณภาพ (QM)'))).toBe(true);
-      expect(options.some(o => o.includes('ระเบียบปฏิบัติงาน (SOP)'))).toBe(true);
+      const typeSelect = selects.find(s => Array.from(s.options).some(o => o.textContent.includes('ทุกประเภท')));
+      const codes = Array.from(typeSelect.querySelectorAll('option')).map(o => o.value);
+      expect(codes).toEqual(expect.arrayContaining(['QM', 'SOP']));
     });
 
     it('renders master departments and dynamic types in MasterList filters', () => {

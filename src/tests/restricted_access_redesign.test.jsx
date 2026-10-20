@@ -56,11 +56,12 @@ describe('Restricted Document Access & Member Picker Redesign', () => {
     // Member picker header / search should NOT be in document
     expect(screen.queryByPlaceholderText(/ค้นหาด้วยชื่อ/i)).not.toBeInTheDocument();
 
-    // When changed to Level 4, banner disappears and member picker appears
+    // When switched to named-individual mode, banner disappears and member picker appears
     rerender(
       <DocumentAccessControlSelector
         value={{
           scope: 'RESTRICTED',
+          restricted_mode: 'WHITELIST',
           min_access_level: 4,
           authorized_users: []
         }}

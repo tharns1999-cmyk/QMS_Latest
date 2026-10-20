@@ -249,9 +249,15 @@ const Library = () => {
   };
 
   const isOwnerDept = useCallback((doc) => {
+    // DCC controls the whole register (ISO 7.5.3): every dept's non-general doc belongs in "My Dept"
+    if (isDccUser) {
+      const docScope = (doc.access_control?.scope || doc.access_scope || doc.scope || 'GENERAL').toUpperCase();
+      const isGeneralScope = docScope === 'GENERAL' || docScope === 'PUBLIC' || doc.access_level === 'PUBLIC' || doc.is_public === true || !doc.department;
+      if (!isGeneralScope) return true;
+    }
     const docDept = doc.owner_dept || doc.department || doc.dept_code || doc.dept || extractDeptCode(doc.code || doc.docNo || doc.doc_code || doc.document_code);
     return isSameDept(userDistinctDepts, docDept);
-  }, [userDistinctDepts]);
+  }, [userDistinctDepts, isDccUser]);
 
   const hasDistributedCopyToUserDept = useCallback((doc) => {
     // 🛡️ Strict Cross-Department Distribution Rule: Exclude own department documents
@@ -275,7 +281,8 @@ const Library = () => {
   // Status Normalization Helper for Universal Tab Filtering
   const matchesStatusTab = (docStatus, selectedTab, doc = null) => {
     const st = (docStatus || (doc && doc.status) || '').toUpperCase();
-    if (!selectedTab || selectedTab === 'ALL' || selectedTab === '') return true;
+    // ISO: ห้ามแสดงสถานะปนกัน - ไม่มีแท็บ All Records, ค่าว่างถือเป็น Active
+    if (!selectedTab || selectedTab === 'ALL') selectedTab = 'EFFECTIVE';
     
     // 1. แท็บ "มีผลบังคับใช้ (Active)": กรองเฉพาะ: doc.status === 'ACTIVE' && !doc.is_superseded && !doc.is_obsolete
     if (selectedTab === 'EFFECTIVE' || selectedTab === 'ACTIVE') {
@@ -445,8 +452,7 @@ const Library = () => {
     return {
       active: countDistinctDocuments(activeDocs),
       superseded: countDistinctDocuments(supersededDocs),
-      obsolete: countDistinctDocuments(obsoleteDocs),
-      all: countDistinctDocuments(statusScopeDocs)
+      obsolete: countDistinctDocuments(obsoleteDocs)
     };
   }, [statusScopeDocs, countDistinctDocuments]);
 
@@ -2106,9 +2112,8 @@ const Library = () => {
                     { id: 'ACTIVE', label: 'มีผลบังคับใช้ (Active)', count: tabCounts.active, ariaLabel: 'มีผลบังคับใช้ (Active)' },
                     { id: 'SUPERSEDED', label: 'ฉบับตกรุ่น (Superseded)', count: tabCounts.superseded, ariaLabel: 'ฉบับตกรุ่น (Superseded) ฉบับเดิมตกรุ่น ตกรุ่น' },
                     { id: 'OBSOLETE', label: 'ยกเลิกถาวร (Obsolete)', count: tabCounts.obsolete, ariaLabel: 'ยกเลิกถาวร (Obsolete) ยกเลิกการใช้งาน' },
-                    { id: 'ALL', label: 'ทั้งหมด (All Records)', count: tabCounts.all, ariaLabel: 'ทั้งหมด (All Records)' },
                   ].map((tab) => {
-                    const isSelected = (filterStatus === tab.id) || (tab.id === 'ACTIVE' && filterStatus === 'EFFECTIVE') || (tab.id === 'ALL' && (filterStatus === '' || filterStatus === 'ALL'));
+                    const isSelected = (filterStatus === tab.id) || (tab.id === 'ACTIVE' && filterStatus === 'EFFECTIVE');
                     return (
                       <button
                         key={tab.id}

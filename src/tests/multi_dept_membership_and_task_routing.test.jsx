@@ -197,13 +197,8 @@ describe('Multi-Department Membership & Cross-Department Task Routing Tests', ()
     it('routes tasks across all affiliated departments (PD and QA) while hiding non-affiliated (EN)', () => {
       renderWithRouter(<TaskInbox />);
 
-      // Default filter is user's primary department (PD)
-      expect(screen.getByText(/ตรวจรับ SOP-PD-001/i)).toBeInTheDocument();
-      expect(screen.queryByText(/ตรวจรับ SOP-QA-001/i)).not.toBeInTheDocument();
-
-      // Switch to "ทุกแผนกที่สังกัด" to view across all affiliated departments
-      const allDeptsPill = screen.getByRole('button', { name: /ทุกแผนกที่สังกัด/i });
-      fireEvent.click(allDeptsPill);
+      // Default filter is "ทุกแผนกที่สังกัด" (all affiliated departments)
+      expect(screen.getByRole('button', { name: /ทุกแผนกที่สังกัด/i })).toBeInTheDocument();
 
       // Should see PD and QA tasks
       expect(screen.getByText(/ตรวจรับ SOP-PD-001/i)).toBeInTheDocument();
@@ -226,9 +221,9 @@ describe('Multi-Department Membership & Cross-Department Task Routing Tests', ()
     it('filters tasks via the Department Filter Pill Bar', () => {
       renderWithRouter(<TaskInbox />);
 
-      // Initially on primary department (PD)
+      // Initially on all affiliated departments (PD + QA)
       expect(screen.getByText(/ตรวจรับ SOP-PD-001/i)).toBeInTheDocument();
-      expect(screen.queryByText(/ตรวจรับ SOP-QA-001/i)).not.toBeInTheDocument();
+      expect(screen.getByText(/ตรวจรับ SOP-QA-001/i)).toBeInTheDocument();
 
       // Click "เฉพาะงาน QA"
       const qaPill = screen.getByRole('button', { name: /เฉพาะงาน QA/i });

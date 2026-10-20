@@ -68,24 +68,18 @@ describe('ExternalDocsList Full-Width Layout & Component Structure Tests', () =>
     expect(outerWrapper).not.toHaveClass('max-w-5xl');
   });
 
-  it('2. Renders all 4 metric stats cards with correct numbers', () => {
+  it('2. Lists only official lifecycle records (pending requests stay out of the register)', () => {
     render(
       <MemoryRouter>
         <ExternalDocsList />
       </MemoryRouter>
     );
 
-    expect(screen.getByText('เอกสารทั้งหมด')).toBeInTheDocument();
-    expect(screen.getAllByText('ใช้งานอยู่').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText('รอทบทวน/อนุมัติ')).toBeInTheDocument();
-    expect(screen.getByText('ใกล้/เกินกำหนดทบทวน')).toBeInTheDocument();
-
-    // Total count is 2, active is 1, pending is 1
-    expect(screen.getAllByText('2').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText('1').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText('ED-QA-01')).toBeInTheDocument();
+    expect(screen.queryByText('ED-PD-01')).not.toBeInTheDocument(); // PENDING_EXT_REVIEW
   });
 
-  it('3. Renders full-width data table with search and filters', () => {
+  it('3. Renders full-width data table with search filter', () => {
     render(
       <MemoryRouter>
         <ExternalDocsList />
@@ -96,12 +90,13 @@ describe('ExternalDocsList Full-Width Layout & Component Structure Tests', () =>
     expect(screen.getByText('ED-QA-01')).toBeInTheDocument();
     expect(screen.getByText('ISO 9001:2015 Quality Management Systems')).toBeInTheDocument();
 
-    // Filter by search
+    // Filter by search: non-matching term hides the row
     const searchInput = screen.getByPlaceholderText(/ค้นหารหัส ED, ชื่อ, แหล่งที่มา/i);
     fireEvent.change(searchInput, { target: { value: 'FDA' } });
-
-    expect(screen.getByText('ED-PD-01')).toBeInTheDocument();
     expect(screen.queryByText('ED-QA-01')).not.toBeInTheDocument();
+
+    fireEvent.change(searchInput, { target: { value: 'ISO' } });
+    expect(screen.getByText('ED-QA-01')).toBeInTheDocument();
   });
 
   it('4. Header button "ลงทะเบียนเอกสารภายนอก" opens registration modal', () => {

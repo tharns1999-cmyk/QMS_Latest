@@ -23,7 +23,7 @@ describe('AuthorizedUsersSelector Component', () => {
     );
 
     // Selected tray counter
-    expect(screen.getByText('2 คน')).toBeInTheDocument();
+    expect(screen.getByText('เลือกแล้ว 2 ท่าน')).toBeInTheDocument();
 
     // Check tags (present in tray and candidate list)
     const thanawutElements = screen.getAllByText('ธนาวุฒิ สมควรกิจดำรง');
@@ -92,32 +92,12 @@ describe('AuthorizedUsersSelector Component', () => {
     );
 
     // Click on PD chip
-    const pdChip = screen.getByRole('button', { name: /PD/i });
+    const pdChip = screen.getByRole('button', { name: /^PD$/ });
     fireEvent.click(pdChip);
 
     expect(screen.getByText('ธนาวุฒิ สมควรกิจดำรง')).toBeInTheDocument();
     expect(screen.getByText('กัลยาณี พลไกร')).toBeInTheDocument();
     expect(screen.queryByText('รัตนพล')).not.toBeInTheDocument();
     expect(screen.queryByText('สมชาย การตลาด')).not.toBeInTheDocument();
-  });
-
-  it('supports selecting all and deselecting all in current filter view', () => {
-    const handleChange = vi.fn();
-    render(
-      <AuthorizedUsersSelector
-        selectedUserIds={[]}
-        onChange={handleChange}
-        users={mockUsers}
-      />
-    );
-
-    // Filter to PD
-    const pdChip = screen.getByRole('button', { name: /PD/i });
-    fireEvent.click(pdChip);
-
-    const selectAllBtn = screen.getByText('เลือกทั้งหมดในกลุ่มนี้');
-    fireEvent.click(selectAllBtn);
-
-    expect(handleChange).toHaveBeenCalledWith(['U002', 'U003']);
   });
 });

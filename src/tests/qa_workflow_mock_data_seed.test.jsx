@@ -10,11 +10,11 @@ describe('QA Comprehensive Workflow Mock Data Engine & State Seeding Tests', () 
   it('1. Verifies getMockQaSeedData generates complete, valid, schema-compliant objects', () => {
     const seed = getMockQaSeedData();
 
-    expect(seed.dars).toHaveLength(6);
-    expect(seed.externalDocuments).toHaveLength(3);
+    expect(seed.dars).toHaveLength(8);
+    expect(seed.externalDocuments).toHaveLength(9);
     expect(seed.documents).toHaveLength(2);
     expect(seed.controlledCopyInstances).toHaveLength(3);
-    expect(seed.tasks).toHaveLength(8);
+    expect(seed.tasks).toHaveLength(9);
     expect(seed.actionLog.length).toBeGreaterThanOrEqual(3);
     expect(seed.timeline.length).toBeGreaterThanOrEqual(2);
   });
@@ -23,11 +23,11 @@ describe('QA Comprehensive Workflow Mock Data Engine & State Seeding Tests', () 
     useStore.getState().seedComprehensiveQaMockData();
     const state = useStore.getState();
 
-    expect(state.dars).toHaveLength(6);
-    expect(state.externalDocuments).toHaveLength(3);
+    expect(state.dars).toHaveLength(8);
+    expect(state.externalDocuments).toHaveLength(9);
     expect(state.documents).toHaveLength(2);
     expect(state.controlledCopyInstances).toHaveLength(3);
-    expect(state.tasks).toHaveLength(8);
+    expect(state.tasks).toHaveLength(9);
   });
 
   it('3. User Persona Architecture: All DARs originate from QA Level 4 Supervisor (U005 - บีม)', () => {
@@ -103,19 +103,15 @@ describe('QA Comprehensive Workflow Mock Data Engine & State Seeding Tests', () 
     expect(dar6.status).toBe('PENDING_APPROVAL');
   });
 
-  it('5. External Documents Matrix: Seeds Review, Approve, and Active Due Soon documents', () => {
+  it('5. External Documents Matrix: Seeds Active, Superseded history, Obsolete and Due Soon documents', () => {
     useStore.getState().seedComprehensiveQaMockData();
     const { externalDocuments } = useStore.getState();
 
     const ed1 = externalDocuments.find(e => e.id === 'ED-QA-01');
-    expect(ed1.status).toBe('PENDING_EXT_REVIEW');
+    expect(ed1.status).toBe('ACTIVE');
     expect(ed1.accessScope).toBe('General');
-    expect(ed1.reviewerId).toBe('U003');
-
-    const ed2 = externalDocuments.find(e => e.id === 'ED-QA-02');
-    expect(ed2.status).toBe('PENDING_EXT_APPROVAL');
-    expect(ed2.accessScope).toBe('Department');
-    expect(ed2.approverId).toBe('U004');
+    expect(externalDocuments.find(e => e.id === 'ED-QA-01-R00').status).toBe('SUPERSEDED');
+    expect(externalDocuments.find(e => e.id === 'ED-QA-07').status).toBe('OBSOLETE');
 
     const ed3 = externalDocuments.find(e => e.id === 'ED-QA-03');
     expect(ed3.status).toBe('ACTIVE');

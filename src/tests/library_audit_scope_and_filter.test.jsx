@@ -247,7 +247,7 @@ describe('Library Universal Audit Scope, Status Normalization & Obsolete Form Sy
       );
 
       // Select the document with 2 active controlled copies
-      const docSelect = screen.getAllByRole('combobox')[0];
+      const docSelect = screen.getByDisplayValue('-- เลือกเอกสารที่ต้องการยกเลิก --');
       fireEvent.change(docSelect, { target: { value: 'doc-pd-01' } });
 
       // Notice controlled copy warning in Section 2

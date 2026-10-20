@@ -1,7 +1,8 @@
 import React from 'react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+import { PDFDocument } from 'pdf-lib';
 import Library from '../pages/Library/Library';
 import useStore from '../store/useStore';
 import { UniversalWatermarkService, WATERMARK_TYPES } from '../services/UniversalWatermarkService';
@@ -64,14 +65,26 @@ describe('Library PDF Download, Preview & Watermark Actions Tests', () => {
   });
 
   describe('1. UniversalWatermarkService Methods', () => {
-    it('generateStampingPDF returns stamped Uint8Array buffer', async () => {
+    it('generateStampingPDF stamps the real attached PDF bytes', async () => {
+      const source = await PDFDocument.create();
+      source.addPage();
+      const originalPdfBytes = await source.save();
+
       const pdfBytes = await UniversalWatermarkService.generateStampingPDF(
-        sampleDoc,
+        { ...sampleDoc, originalPdfBytes },
         WATERMARK_TYPES.UNCONTROLLED_COPY,
         { name: 'User 1', department: 'PD' }
       );
       expect(pdfBytes).toBeInstanceOf(Uint8Array);
       expect(pdfBytes.length).toBeGreaterThan(0);
+    });
+
+    it('fails closed when the original file is missing (never fabricates a placeholder PDF)', async () => {
+      await expect(UniversalWatermarkService.generateStampingPDF(
+        sampleDoc,
+        WATERMARK_TYPES.UNCONTROLLED_COPY,
+        { name: 'User 1', department: 'PD' }
+      )).rejects.toThrow(/Original file not found/);
     });
 
     it('downloadWatermarkedPdf resolves and downloads without throw', async () => {
@@ -91,6 +104,8 @@ describe('Library PDF Download, Preview & Watermark Actions Tests', () => {
           <Library />
         </MemoryRouter>
       );
+      // PD docs for a QA-based DCC user live in the General tab (default tab is My Dept)
+      fireEvent.click(screen.getByRole('button', { name: /เอกสารทั่วไป/ }));
 
       const downloadBtns = screen.getAllByTitle('ดาวน์โหลด Master Document (DCC)');
       expect(downloadBtns.length).toBeGreaterThan(0);
@@ -117,10 +132,13 @@ describe('Library PDF Download, Preview & Watermark Actions Tests', () => {
           <Library />
         </MemoryRouter>
       );
+      // PD docs for a QA-based DCC user live in the General tab (default tab is My Dept)
+      fireEvent.click(screen.getByRole('button', { name: /เอกสารทั่วไป/ }));
 
-      const shareBtns = screen.getAllByTitle('ดาวน์โหลดสำหรับแจกจ่ายภายนอก (External Release)');
-      expect(shareBtns.length).toBeGreaterThan(0);
-      fireEvent.click(shareBtns[0]);
+      // External Release lives in the row overflow menu
+      const sopRow = screen.getByText('SOP-PD-001').closest('tr');
+      fireEvent.click(within(sopRow).getByTitle('เมนูการจัดการเพิ่มเติม'));
+      fireEvent.click(within(sopRow).getByTitle('ดาวน์โหลดสำหรับแจกจ่ายภายนอก (External Release)'));
 
       await waitFor(() => {
         expect(toast.loading).toHaveBeenCalledWith('กำลังสร้าง External Release PDF...');
@@ -135,29 +153,31 @@ describe('Library PDF Download, Preview & Watermark Actions Tests', () => {
       });
     });
 
-    it('triggers handleDownloadUncontrolled and opens in new tab when Eye/OpenInTab button is clicked', async () => {
+    it('non-DCC user downloads an UNCONTROLLED COPY from the quick download button', async () => {
       const spyDownload = vi.spyOn(UniversalWatermarkService, 'downloadWatermarkedPdf').mockResolvedValue('blob:mock-url');
+      useStore.setState({ currentUser: { id: 'U-PD', name: 'PD Staff', role: 'GENERAL_USER', department: 'PD', level: 3 } });
 
       render(
         <MemoryRouter>
           <Library />
         </MemoryRouter>
       );
+      // PD docs for a QA-based DCC user live in the General tab (default tab is My Dept)
+      fireEvent.click(screen.getByRole('button', { name: /เอกสารทั่วไป/ }));
 
-      const openTabBtns = screen.getAllByTitle('เปิดดู PDF ตัวจริงในแท็บใหม่ (Open in New Tab)');
-      expect(openTabBtns.length).toBeGreaterThan(0);
-      fireEvent.click(openTabBtns[0]);
+      fireEvent.click(screen.getByRole('button', { name: /เอกสารในแผนกฉัน/ }));
+      fireEvent.click(screen.getByTitle('ดาวน์โหลดสำเนาไม่ควบคุม (UNCONTROLLED COPY)'));
 
       await waitFor(() => {
-        expect(toast.loading).toHaveBeenCalledWith('กำลังสร้างไฟล์ PDF และเตรียมเปิดพรีวิว...');
+        expect(toast.loading).toHaveBeenCalledWith('กำลังสร้างไฟล์ PDF และประทับลายน้ำ (UNCONTROLLED COPY)...');
         expect(spyDownload).toHaveBeenCalledWith(
           expect.objectContaining({ title: 'SOP-PD-001' }),
           WATERMARK_TYPES.UNCONTROLLED_COPY,
           expect.objectContaining({ reason: 'General Download / Print' }),
-          true
+          false
         );
         expect(toast.dismiss).toHaveBeenCalledWith('loading-toast-id');
-        expect(toast.success).toHaveBeenCalledWith(expect.stringContaining('เปิดเอกสาร'));
+        expect(toast.success).toHaveBeenCalledWith(expect.stringContaining('UNCONTROLLED COPY'));
       });
     });
 
@@ -169,6 +189,8 @@ describe('Library PDF Download, Preview & Watermark Actions Tests', () => {
           <Library />
         </MemoryRouter>
       );
+      // PD docs for a QA-based DCC user live in the General tab (default tab is My Dept)
+      fireEvent.click(screen.getByRole('button', { name: /เอกสารทั่วไป/ }));
 
       const downloadBtns = screen.getAllByTitle('ดาวน์โหลด Master Document (DCC)');
       fireEvent.click(downloadBtns[0]);

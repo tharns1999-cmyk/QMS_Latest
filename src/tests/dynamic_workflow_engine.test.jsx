@@ -147,6 +147,22 @@ describe('Rule-Based Dynamic Workflow Engine & Signatory Resolver', () => {
       expect(steps[2].userId).toBe('U009');
       expect(steps[2].userName).toBe('ณัฐวุฒิ วิเศษศักดิ์');
     });
+
+    it('never assigns the requester as their own reviewer or approver (segregation of duties)', () => {
+      const requester = mockMasterUsers.find(u => u.id === 'U003'); // QC L5 - previously picked as own reviewer
+      const steps = generateDynamicWorkflow(requester, 'QC', mockMasterUsers);
+      expect(steps[1].userId).not.toBe('U003');
+      expect(steps[2].userId).not.toBe('U003');
+      expect(steps[2].userId).not.toBe(steps[1].userId);
+    });
+
+    it('uses reviewer/approver levels from the Approval Matrix', () => {
+      const requester = mockMasterUsers.find(u => u.id === 'U006'); // EN L4
+      const matrix = [{ docType: 'SOP', requiredReviewerLevel: 6, requiredApproverLevel: 8 }];
+      const steps = generateDynamicWorkflow(requester, 'EN', mockMasterUsers, 'SOP', matrix);
+      expect(steps[1].userId).toBe('U004'); // EN L5 below threshold -> escalates to MGMT
+      expect(steps[2].userId).toBe('U009'); // only EXEC L8 meets approver level 8
+    });
   });
 
   describe('Dynamic Signatory Resolver (Criteria 1 & 3)', () => {

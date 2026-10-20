@@ -177,8 +177,8 @@ describe('DCC Control Portal & E-Signature Hardcopy Receipt Tests', () => {
       renderWithRouter(<ControlledCopyRegister />, { route: '/controlled-copy?tab=PENDING_ISSUE' });
 
       expect(screen.getByText('Line 1 Mixing Station')).toBeInTheDocument();
-      expect(screen.getByText(/พิมพ์สำเนาเดี่ยว/i)).toBeInTheDocument();
-      expect(screen.getByText(/บันทึกส่งมอบ \(Dispatch\)/i)).toBeInTheDocument();
+      expect(screen.getByText('พิมพ์สำเนา')).toBeInTheDocument();
+      expect(screen.getByText('บันทึกส่งมอบ')).toBeInTheDocument();
     });
 
     it('Tab 1: Invokes UniversalWatermarkService.downloadWatermarkedPdf with copy location on Single Print', async () => {
@@ -186,7 +186,7 @@ describe('DCC Control Portal & E-Signature Hardcopy Receipt Tests', () => {
 
       renderWithRouter(<ControlledCopyRegister />, { route: '/controlled-copy?tab=PENDING_ISSUE' });
 
-      const printBtn = screen.getByText(/พิมพ์สำเนาเดี่ยว/i);
+      const printBtn = screen.getByText('พิมพ์สำเนา');
       fireEvent.click(printBtn);
 
       await waitFor(() => {
@@ -207,8 +207,9 @@ describe('DCC Control Portal & E-Signature Hardcopy Receipt Tests', () => {
     it('Tab 1: Dispatches a copy and creates DEPT_CONFIRM_HARDCOPY_RECEIPT task', () => {
       renderWithRouter(<ControlledCopyRegister />, { route: '/controlled-copy?tab=PENDING_ISSUE' });
 
-      const dispatchBtn = screen.getByText(/บันทึกส่งมอบ \(Dispatch\)/i);
-      fireEvent.click(dispatchBtn);
+      fireEvent.click(screen.getByText('บันทึกส่งมอบ'));
+      // Unprinted copy triggers the poka-yoke guard; DCC confirms dispatch explicitly
+      fireEvent.click(screen.getByText('ยืนยันส่งมอบ (ข้ามการพิมพ์)'));
 
       const state = useStore.getState();
       const dispatched = state.controlledCopyInstances.find(c => c.id === 'cc-pending-1');

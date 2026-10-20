@@ -63,8 +63,9 @@ describe('Urgent Fix: White Screen of Death (WSOD) Prevention at Route /dcc/dar/
     const restrictedCard = screen.getByRole('button', { name: /ลับเฉพาะบุคคล\/ตำแหน่ง \(Restricted\)/i });
     fireEvent.click(restrictedCard);
 
-    // Should display Minimum Position Level Card & Whitelist Picker
+    // Default mode: Minimum Position Level; switching to named individuals shows the Whitelist Picker
     expect(screen.getByText(/ระดับตำแหน่งขั้นต่ำที่อนุญาต/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'ระบุรายชื่อเฉพาะบุคคล' }));
     expect(screen.getByText(/ระบุบุคคลที่ได้รับอนุญาตเพิ่มเติมเฉพาะบุคคล/i)).toBeInTheDocument();
     expect(screen.getByPlaceholderText(/ค้นหาด้วยชื่อ/i)).toBeInTheDocument();
   });

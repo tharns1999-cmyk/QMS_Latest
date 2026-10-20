@@ -38,14 +38,14 @@ describe('Master Data Management Hub (DCC Admin) Tests', () => {
       renderWithRouter(<MasterDataHub />);
 
       expect(screen.getByText(/การเข้าถึงถูกปฏิเสธ \(Access Denied\)/i)).toBeInTheDocument();
-      expect(screen.queryByText(/ศูนย์กลางจัดการข้อมูลหลัก/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/จัดการข้อมูลหลัก \(Master Data\)/i)).not.toBeInTheDocument();
     });
 
     it('grants access to DCC Admin and renders 5 balanced tabs', () => {
       setTestUser(dccUser);
       renderWithRouter(<MasterDataHub />);
 
-      expect(screen.getByText(/ศูนย์กลางจัดการข้อมูลหลัก \(Master Data Management Hub\)/i)).toBeInTheDocument();
+      expect(screen.getByText(/จัดการข้อมูลหลัก \(Master Data\)/i)).toBeInTheDocument();
       expect(screen.getByText(/1\. ผู้ใช้งานและสิทธิ์/i)).toBeInTheDocument();
       expect(screen.getByText(/2\. แผนกและโครงสร้าง/i)).toBeInTheDocument();
       expect(screen.getByText(/3\. ประเภทเอกสารและรหัส/i)).toBeInTheDocument();
@@ -59,7 +59,7 @@ describe('Master Data Management Hub (DCC Admin) Tests', () => {
     it('searches users by name or ID in real-time', () => {
       renderWithRouter(<MasterDataHub />);
 
-      const searchInput = screen.getByPlaceholderText(/ค้นหาชื่อ, รหัสพนักงาน, อีเมล, ตำแหน่ง/i);
+      const searchInput = screen.getByPlaceholderText(/ค้นหาชื่อ, รหัสพนักงาน, อีเมล/i);
       fireEvent.change(searchInput, { target: { value: 'ธนาวุฒิ' } });
 
       expect(screen.getByText(/ธนาวุฒิ สมควรกิจดำรง/i)).toBeInTheDocument();
@@ -153,7 +153,7 @@ describe('Master Data Management Hub (DCC Admin) Tests', () => {
       expect(screen.getByText('SOP')).toBeInTheDocument();
       expect(screen.getByText('WI')).toBeInTheDocument();
       expect(screen.getByText('FM')).toBeInTheDocument();
-      expect(screen.getByText('✅ Clean Bypass')).toBeInTheDocument();
+      expect(screen.getAllByText('✅ Bypass').length).toBeGreaterThan(0);
     });
 
     it('adds a new document type', () => {
@@ -289,7 +289,7 @@ describe('Master Data Management Hub (DCC Admin) Tests', () => {
       const slaTabBtn = screen.getByText(/5\. สายการอนุมัติและ SLAs/i);
       fireEvent.click(slaTabBtn);
 
-      expect(screen.getByText(/1\. ทบทวนคำขอ \(Review SLA\)/i)).toBeInTheDocument();
+      expect(screen.getByText(/1\. ทบทวนคำขอ \(Review\)/i)).toBeInTheDocument();
 
       useStore.getState().updateSlaSettings({ reviewSlaDays: 2, approvalSlaDays: 2 });
       expect(useStore.getState().slaSettings.reviewSlaDays).toBe(2);

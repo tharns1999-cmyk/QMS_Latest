@@ -19,8 +19,8 @@ describe('Smoke Tests for Main Pages', () => {
         <TaskInbox />
       </MemoryRouter>
     );
-    // Tab "Review" usually exists
-    const reviewTab = screen.getByText('Review');
+    // Review tab exists for workflow users
+    const reviewTab = screen.getByRole('button', { name: /^ทบทวน/ });
     expect(reviewTab).toBeInTheDocument();
     
     // Tab should be clickable

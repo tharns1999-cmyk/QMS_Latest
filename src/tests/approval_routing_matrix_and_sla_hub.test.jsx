@@ -34,14 +34,12 @@ describe('Approval Routing Matrix & SLA Management Hub (Tab 6) Tests', () => {
       expect(screen.getByText(/1\. ทบทวนคำขอ/i)).toBeInTheDocument();
       expect(screen.getByText(/2\. อนุมัติเอกสาร/i)).toBeInTheDocument();
       expect(screen.getByText(/3\. ตรวจรับเล่ม/i)).toBeInTheDocument();
-      expect(screen.getByText(/4\. เรียกคืนและทำลาย/i)).toBeInTheDocument();
+      expect(screen.getByText(/4\. เรียกคืนทำลาย/i)).toBeInTheDocument();
 
-      // Verify Section 2 Header & Matrix Table
-      expect(screen.getByText(/ส่วนที่ 2: ผังเมทริกซ์สายการอนุมัติตามประเภทเอกสาร/i)).toBeInTheDocument();
+      // Verify Section 2 Header & Matrix Table (single pipeline column: requester ➔ reviewer ➔ approver)
+      expect(screen.getByText(/ส่วนที่ 2: ผังเมทริกซ์สายการอนุมัติ \(Approval Matrix by Doc Type\)/i)).toBeInTheDocument();
       expect(screen.getByText(/ประเภทเอกสาร \(Doc Type\)/i)).toBeInTheDocument();
-      expect(screen.getByText(/ระดับผู้ยื่นขั้นต่ำ/i)).toBeInTheDocument();
-      expect(screen.getByText(/ระดับผู้ทบทวน \(Reviewer\)/i)).toBeInTheDocument();
-      expect(screen.getByText(/ระดับผู้อนุมัติ \(Approver\)/i)).toBeInTheDocument();
+      expect(screen.getByText(/สายการอนุมัติ \(Pipeline:/i)).toBeInTheDocument();
       expect(screen.getByText(/การรับทราบ \(Default Ack\)/i)).toBeInTheDocument();
 
       // Verify default document types in table
@@ -70,7 +68,7 @@ describe('Approval Routing Matrix & SLA Management Hub (Tab 6) Tests', () => {
       fireEvent.change(inputs[1], { target: { value: '4' } });
 
       // Click unified save button
-      const saveBtn = screen.getByRole('button', { name: /บันทึกการตั้งค่าสายการอนุมัติและ SLAs/i });
+      const saveBtn = screen.getByRole('button', { name: /^บันทึกการตั้งค่า$/ });
       fireEvent.click(saveBtn);
 
       // Verify store updated

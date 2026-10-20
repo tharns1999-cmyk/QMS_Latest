@@ -276,6 +276,7 @@ const AuthorizedUsersSelector = ({
         <div className="flex items-center gap-1 overflow-x-auto pb-0.5">
           <button
             type="button"
+            aria-pressed={activeDeptFilter === 'ALL'}
             onClick={() => setActiveDeptFilter('ALL')}
             className={`px-2 py-0.5 rounded text-[11px] font-medium whitespace-nowrap cursor-pointer transition-all ${
               activeDeptFilter === 'ALL'
@@ -291,6 +292,7 @@ const AuthorizedUsersSelector = ({
               <button
                 key={dept}
                 type="button"
+                aria-pressed={isSelected}
                 onClick={() => setActiveDeptFilter(dept)}
                 className={`px-2 py-0.5 rounded text-[11px] font-medium whitespace-nowrap cursor-pointer transition-all ${
                   isSelected
@@ -317,6 +319,8 @@ const AuthorizedUsersSelector = ({
                   key={user.id}
                   role="button"
                   tabIndex={0}
+                  aria-pressed={isSelected}
+                  aria-disabled={isWorkflowParticipant || undefined}
                   onClick={isWorkflowParticipant ? undefined : () => handleToggle(user.id)}
                   onKeyDown={isWorkflowParticipant ? undefined : (e) => {
                     if (e.key === 'Enter' || e.key === ' ') {

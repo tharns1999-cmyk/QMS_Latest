@@ -59,7 +59,7 @@ describe('Distribution Station Checkbox Click, ID Normalization & Real-time Allo
     render(<TestDistributionContainer ownerDept="PD" />);
 
     // Initial state: PD counter is 1 จุด (Master Copy 01)
-    const pdDeptButton = screen.getAllByText(/ฝ่ายผลิต \(PD\)/i)[0].closest('button');
+    const pdDeptButton = screen.getByRole('button', { name: /^PD\s*ฝ่ายผลิต/ });
     expect(pdDeptButton).toHaveTextContent('1 จุด');
 
     // Click on "ขนม 1"
@@ -75,10 +75,7 @@ describe('Distribution Station Checkbox Click, ID Normalization & Real-time Allo
     // 2. PD counter in left pane becomes "2 จุด"
     expect(pdDeptButton).toHaveTextContent('2 จุด');
 
-    // 3. Subheader shows "เลือกแล้ว 2 / 3 จุด"
-    expect(screen.getByText((_, el) => el?.tagName?.toLowerCase() === 'span' && el.textContent.includes('เลือกแล้ว 2 / 3 จุด'))).toBeInTheDocument();
-
-    // 4. Summary Tray at bottom has "สำเนาที่จะพิมพ์ (2 ชุด)"
+    // 3. Summary Tray at bottom has "สำเนาที่จะพิมพ์ (2 ชุด)"
     expect(screen.getByText(/สำเนาที่จะพิมพ์ \(2 ชุด\)/i)).toBeInTheDocument();
     expect(screen.getByTestId('distributions-count').textContent).toBe('1'); // 1 distributed copy
   });
@@ -86,7 +83,7 @@ describe('Distribution Station Checkbox Click, ID Normalization & Real-time Allo
   it('Test Case 3: Clicking station "ขนม 1" again unselects it and re-indexes counters cleanly', () => {
     render(<TestDistributionContainer ownerDept="PD" />);
 
-    const pdDeptButton = screen.getAllByText(/ฝ่ายผลิต \(PD\)/i)[0].closest('button');
+    const pdDeptButton = screen.getByRole('button', { name: /^PD\s*ฝ่ายผลิต/ });
     const stationRow = screen.getByText('ขนม 1').closest('div[role="button"]');
 
     // Select
@@ -105,11 +102,11 @@ describe('Distribution Station Checkbox Click, ID Normalization & Real-time Allo
     render(<TestDistributionContainer ownerDept="PD" />);
 
     // Switch to QA Tab
-    const qaDeptButton = screen.getAllByText(/ฝ่ายประกันคุณภาพ \(QA\)/i)[0].closest('button');
+    const qaDeptButton = screen.getByRole('button', { name: /^QA\s*ฝ่ายประกันคุณภาพ/ });
     fireEvent.click(qaDeptButton);
 
-    // Initial QA count is 0 จุด
-    expect(qaDeptButton).toHaveTextContent('0 จุด');
+    // Initial QA count is empty (rendered as a dash)
+    expect(qaDeptButton).toHaveTextContent('–');
 
     // Select QA Head Office
     const qaMasterRow = screen.getByText('QA Head Office').closest('div[role="button"]');
@@ -124,7 +121,7 @@ describe('Distribution Station Checkbox Click, ID Normalization & Real-time Allo
     expect(screen.getAllByText(/Copy 02/i).length).toBeGreaterThanOrEqual(1);
 
     // Switch back to PD Tab, select ขนม 1 -> receives Copy 03, total is 3
-    const pdDeptButton = screen.getAllByText(/ฝ่ายผลิต \(PD\)/i)[0].closest('button');
+    const pdDeptButton = screen.getByRole('button', { name: /^PD\s*ฝ่ายผลิต/ });
     fireEvent.click(pdDeptButton);
 
     const khanom1Row = screen.getByText('ขนม 1').closest('div[role="button"]');

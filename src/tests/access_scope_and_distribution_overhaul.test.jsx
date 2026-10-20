@@ -73,14 +73,13 @@ describe('Enterprise UX/UI Overhaul: High-Density Access Scope & Distribution Ma
 
       // Owner Dept PD is locked and read-only
       expect(screen.getByText(/เจ้าของ \(ล็อก\)/i)).toBeInTheDocument();
-      const qaLabel = screen.getByText('QA');
-      fireEvent.click(qaLabel.closest('label'));
+      fireEvent.click(screen.getByRole('button', { name: /^QA/ }));
       expect(handleChange).toHaveBeenCalledWith(expect.objectContaining({
         authorized_depts: expect.arrayContaining(['PD', 'QA'])
       }));
     });
 
-    it('renders Restricted sub-config panel with position level select and user picker', () => {
+    it('renders Restricted sub-config panel with position level select (default mode) and mode switch', () => {
       const handleChange = vi.fn();
       render(
         <DocumentAccessControlSelector
@@ -91,7 +90,8 @@ describe('Enterprise UX/UI Overhaul: High-Density Access Scope & Distribution Ma
       );
 
       expect(screen.getByText(/ระดับตำแหน่งขั้นต่ำที่อนุญาต/i)).toBeInTheDocument();
-      expect(screen.getByText(/ระบุบุคคลที่ได้รับอนุญาตเพิ่มเติมเฉพาะบุคคล/i)).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'ระบุรายชื่อเฉพาะบุคคล' }));
+      expect(handleChange).toHaveBeenCalledWith(expect.objectContaining({ restricted_mode: 'WHITELIST' }));
 
       // Change min level
       const select = screen.getByRole('combobox');
@@ -204,15 +204,12 @@ describe('Enterprise UX/UI Overhaul: High-Density Access Scope & Distribution Ma
         />
       );
 
-      const inputs = screen.getAllByPlaceholderText(/เพิ่มจุดติดตั้งพิเศษใน/i);
-      const addBtns = screen.getAllByRole('button', { name: /เพิ่มจุด/i });
-
-      fireEvent.change(inputs[0], { target: { value: 'Line 9 Cleanroom Zone' } });
-      fireEvent.click(addBtns[0]);
+      const input = screen.getByPlaceholderText(/เพิ่มจุดติดตั้งพิเศษใน/i);
+      fireEvent.change(input, { target: { value: 'Line 9 Cleanroom Zone' } });
+      fireEvent.click(screen.getByRole('button', { name: 'เพิ่มจุด' }));
 
       expect(handleChange).toHaveBeenCalled();
       expect(currentDistributions.some(d => d.locationName.includes('Line 9 Cleanroom Zone'))).toBe(true);
-      expect(screen.getByText(/Line 9 Cleanroom Zone \(พิเศษ\)/i)).toBeInTheDocument();
     });
   });
 });

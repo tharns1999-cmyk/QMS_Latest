@@ -66,6 +66,8 @@ describe('Library Figma UI3 Action Dock & Overflow Menu Tests', () => {
         <Library />
       </MemoryRouter>
     );
+    // QA GENERAL doc for a DC user lives in the General tab (default tab is My Dept)
+    fireEvent.click(screen.getByRole('button', { name: /เอกสารทั่วไป/ }));
 
     // Quick Action 1: Eye
     const eyeBtn = screen.getByTitle('ดูรายละเอียดเอกสาร');
@@ -86,6 +88,8 @@ describe('Library Figma UI3 Action Dock & Overflow Menu Tests', () => {
         <Library />
       </MemoryRouter>
     );
+    // QA GENERAL doc for a DC user lives in the General tab (default tab is My Dept)
+    fireEvent.click(screen.getByRole('button', { name: /เอกสารทั่วไป/ }));
 
     const moreBtn = screen.getByTitle('เมนูการจัดการเพิ่มเติม');
     fireEvent.click(moreBtn);
@@ -105,6 +109,8 @@ describe('Library Figma UI3 Action Dock & Overflow Menu Tests', () => {
         <Library />
       </MemoryRouter>
     );
+    // QA GENERAL doc for a DC user lives in the General tab (default tab is My Dept)
+    fireEvent.click(screen.getByRole('button', { name: /เอกสารทั่วไป/ }));
 
     const moreBtn = screen.getByTitle('เมนูการจัดการเพิ่มเติม');
     fireEvent.click(moreBtn);
@@ -123,6 +129,8 @@ describe('Library Figma UI3 Action Dock & Overflow Menu Tests', () => {
         <Library />
       </MemoryRouter>
     );
+    // QA GENERAL doc for a DC user lives in the General tab (default tab is My Dept)
+    fireEvent.click(screen.getByRole('button', { name: /เอกสารทั่วไป/ }));
 
     const moreBtn = screen.getByTitle('เมนูการจัดการเพิ่มเติม');
     fireEvent.click(moreBtn);

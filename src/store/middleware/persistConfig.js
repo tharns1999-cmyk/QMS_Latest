@@ -1,4 +1,5 @@
 import { createJSONStorage } from 'zustand/middleware';
+import toast from 'react-hot-toast';
 import { MASTER_DATA_USER } from '../fixtures/seedData';
 import { MASTER_DEPARTMENTS } from '../../config/qmsRegistry';
 import { isDccExclusiveTask, isDccOperationalTask, isReceiptTask } from '../../utils/taskFilter';
@@ -122,13 +123,10 @@ export const runSinglePassStorageSelfHealing = () => {
             ? ((targetDoc.revision && targetDoc.revision !== '00') 
                 ? targetDoc.revision 
                 : (targetDoc.rev || targetDoc.revision || '03'))
-            : ((dar.id === 'DAR-2026-005' || dar.dar_no === 'DAR-2026-005' || dar.darNo === 'DAR-2026-005') ? '03' : '01');
+            : '01';
           const cleanTargetRev = String(rawTargetRev).replace(/^Rev\.?/i, '').padStart(2, '0');
 
           if (
-            dar.id === 'DAR-2026-005' ||
-            dar.dar_no === 'DAR-2026-005' ||
-            dar.darNo === 'DAR-2026-005' ||
             dar.revision === '00' ||
             !dar.revision ||
             dar.targetRevision === '00' ||
@@ -148,57 +146,6 @@ export const runSinglePassStorageSelfHealing = () => {
       });
       if (obsoleteDarsMigrated) {
         state.darRequests = state.dars;
-        hasChanged = true;
-      }
-    }
-
-    // 4. Self-healing migration: Strict In-Flight DAR Deduplication (DAR-2026-004 vs DAR-2026-005)
-    if (Array.isArray(state.dars)) {
-      let duplicateDarsCleaned = false;
-      const darsList = state.dars;
-      const hasDar004 = darsList.some(d => (d?.id === 'DAR-2026-004' || d?.dar_no === 'DAR-2026-004' || d?.darNo === 'DAR-2026-004') && (d?.document_code === 'SOP-QC-01' || d?.doc_code === 'SOP-QC-01' || d?.title === 'SOP-QC-01' || d?.title === '[OBSOLETE] SOP-QC-01'));
-      const hasDar005 = darsList.some(d => (d?.id === 'DAR-2026-005' || d?.dar_no === 'DAR-2026-005' || d?.darNo === 'DAR-2026-005') && (d?.document_code === 'SOP-QC-01' || d?.doc_code === 'SOP-QC-01' || d?.title === 'SOP-QC-01' || d?.title === '[OBSOLETE] SOP-QC-01'));
-
-      if (hasDar004 && hasDar005) {
-        state.dars = darsList.map(d => {
-          if ((d?.id === 'DAR-2026-005' || d?.dar_no === 'DAR-2026-005' || d?.darNo === 'DAR-2026-005') &&
-              (d?.document_code === 'SOP-QC-01' || d?.doc_code === 'SOP-QC-01' || d?.title === 'SOP-QC-01' || d?.title === '[OBSOLETE] SOP-QC-01')) {
-            duplicateDarsCleaned = true;
-            return { ...d, status: 'CANCELLED' };
-          }
-          return d;
-        });
-      }
-
-      if (duplicateDarsCleaned) {
-        state.darRequests = state.dars;
-        hasChanged = true;
-      }
-    }
-
-    // 5. Self-healing migration: Sanitize SOP-QC-01 revision_history duplicates
-    if (Array.isArray(state.documents)) {
-      let historySanitized = false;
-      state.documents = state.documents.map(doc => {
-        if ((doc.title === 'SOP-QC-01' || doc.document_code === 'SOP-QC-01' || doc.doc_code === 'SOP-QC-01') && Array.isArray(doc.revision_history)) {
-          const uniqueRevs = new Set();
-          const cleanHistory = [];
-          doc.revision_history.forEach(hist => {
-            const rev = getCleanRev(hist);
-            if (!uniqueRevs.has(rev)) {
-              uniqueRevs.add(rev);
-              cleanHistory.push(hist);
-            }
-          });
-          if (cleanHistory.length !== doc.revision_history.length) {
-            historySanitized = true;
-            return { ...doc, revision_history: cleanHistory };
-          }
-        }
-        return doc;
-      });
-      if (historySanitized) {
-        state.masterDocuments = state.documents;
         hasChanged = true;
       }
     }
@@ -852,6 +799,7 @@ export const persistConfig = {
                 window.localStorage.setItem(name, value);
               } catch (innerErr) {
                 console.error('[Storage] LocalStorage quota exceeded even after cache purge; preserving in-memory state without overwriting:', innerErr);
+                toast.error('พื้นที่จัดเก็บในเบราว์เซอร์เต็ม: การเปลี่ยนแปลงล่าสุดยังไม่ถูกบันทึก กรุณาสำรองข้อมูลก่อนปิดหน้าเว็บ', { id: 'storage-quota-full', duration: 10000 });
               }
             } else {
               console.error('[Storage] LocalStorage error:', error);

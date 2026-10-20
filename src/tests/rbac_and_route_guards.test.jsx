@@ -142,8 +142,8 @@ describe('System-Wide RBAC, Route Guards & Dynamic User-Switching Tests', () => 
 
       expect(screen.getByText('ทะเบียนสำเนาควบคุม')).toBeInTheDocument();
       expect(screen.getByText('จัดการข้อมูลหลัก')).toBeInTheDocument();
-      expect(screen.getByText('ประวัติการทำงาน')).toBeInTheDocument();
-      expect(screen.getByText('ล้างข้อมูลจำลอง')).toBeInTheDocument();
+      expect(screen.getByText('บันทึกประวัติการทำงาน')).toBeInTheDocument();
+      expect(screen.getByTitle(/ล้างข้อมูลจำลอง/)).toBeInTheDocument();
     });
 
     it('hides DCC-exclusive menus when active user is a non-DCC department manager (e.g. Kalyanee L5)', () => {
@@ -166,8 +166,8 @@ describe('System-Wide RBAC, Route Guards & Dynamic User-Switching Tests', () => 
 
       expect(screen.queryByText('ทะเบียนสำเนาควบคุม')).not.toBeInTheDocument();
       expect(screen.queryByText('จัดการข้อมูลหลัก')).not.toBeInTheDocument();
-      expect(screen.queryByText('ประวัติการทำงาน')).not.toBeInTheDocument();
-      expect(screen.queryByText('ล้างข้อมูลจำลอง')).not.toBeInTheDocument();
+      expect(screen.queryByText('บันทึกประวัติการทำงาน')).not.toBeInTheDocument();
+      expect(screen.queryByTitle(/ล้างข้อมูลจำลอง/)).not.toBeInTheDocument();
       // Regular menus are still visible
       expect(screen.getByText('คลังเอกสารแม่บท')).toBeInTheDocument();
       expect(screen.getByText('เอกสารภายนอก')).toBeInTheDocument();

@@ -74,11 +74,11 @@ describe('Bug Fix: Newly Created Users Missing Sidebar Menus', () => {
       </MemoryRouter>
     );
 
-    // 1. สร้างคำร้อง DAR
-    expect(screen.getByText('สร้างคำร้อง DAR')).toBeInTheDocument();
+    // 1. ยื่นคำร้อง DAR
+    expect(screen.getByText('ยื่นคำร้อง DAR')).toBeInTheDocument();
 
-    // 2. คำร้อง DAR ของฉัน
-    expect(screen.getByText('คำร้อง DAR ของฉัน')).toBeInTheDocument();
+    // 2. ติดตามคำร้องของฉัน
+    expect(screen.getByText('ติดตามคำร้องของฉัน')).toBeInTheDocument();
 
     // 3. กล่องงานที่ต้องทำ
     expect(screen.getByText('กล่องงานที่ต้องทำ')).toBeInTheDocument();
@@ -104,8 +104,8 @@ describe('Bug Fix: Newly Created Users Missing Sidebar Menus', () => {
     );
 
     // Primary menus visible
-    expect(screen.getByText('สร้างคำร้อง DAR')).toBeInTheDocument();
-    expect(screen.getByText('คำร้อง DAR ของฉัน')).toBeInTheDocument();
+    expect(screen.getByText('ยื่นคำร้อง DAR')).toBeInTheDocument();
+    expect(screen.getByText('ติดตามคำร้องของฉัน')).toBeInTheDocument();
     expect(screen.getByText('กล่องงานที่ต้องทำ')).toBeInTheDocument();
     expect(screen.getByText('คลังเอกสารแม่บท')).toBeInTheDocument();
     expect(screen.queryByText('ทะเบียนเอกสารหลัก')).not.toBeInTheDocument();

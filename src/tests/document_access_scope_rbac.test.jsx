@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { BrowserRouter } from 'react-router-dom';
 import useStore from '../store/useStore';
@@ -103,6 +103,18 @@ describe('Document Confidentiality & Access Scope RBAC', () => {
       expect(hasDocumentAccess(restrictedDoc, directorUser)).toBe(true); // Level 7 >= 6
       expect(hasDocumentAccess(restrictedDoc, pdSupervisorUser)).toBe(false); // Level 4 < 6 and not named
     });
+
+    it('RESTRICTED WHITELIST mode: stored min level does not widen access beyond named users', () => {
+      const whitelistDoc = {
+        id: 'd5',
+        department: 'PD',
+        access_control: { scope: ACCESS_SCOPES.RESTRICTED, restricted_mode: 'WHITELIST', authorized_users: ['U010'], min_access_level: 4 }
+      };
+
+      expect(hasDocumentAccess(whitelistDoc, mktStaffUser)).toBe(true); // named
+      expect(hasDocumentAccess(whitelistDoc, directorUser)).toBe(false); // L7 but not named
+      expect(hasDocumentAccess(whitelistDoc, pdSupervisorUser)).toBe(false); // L4 but not named
+    });
   });
 
   describe('2. Library Invisible Filtering Integration', () => {
@@ -171,10 +183,13 @@ describe('Document Confidentiality & Access Scope RBAC', () => {
         </BrowserRouter>
       );
 
-      // DCC Admin sees all documents
-      expect(screen.getByText('SOP-MKT-001')).toBeInTheDocument();
+      // DCC Admin sees every dept's DEPT_ONLY/RESTRICTED doc in "My Dept"...
       expect(screen.getByText('WI-PD-999')).toBeInTheDocument();
       expect(screen.getByText('POL-EXEC-001')).toBeInTheDocument();
+      expect(screen.queryByText('SOP-MKT-001')).not.toBeInTheDocument();
+      // ...and other depts' GENERAL docs in the General tab (tabs stay mutually exclusive)
+      fireEvent.click(screen.getByRole('button', { name: /เอกสารทั่วไป/ }));
+      expect(screen.getByText('SOP-MKT-001')).toBeInTheDocument();
     });
   });
 });

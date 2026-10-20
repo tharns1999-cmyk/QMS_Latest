@@ -84,10 +84,10 @@ describe('MasterDataHub Tab 4: Searchable Department Autocomplete & Compact Tool
     renderTab4();
 
     // Verify unified toolbar elements
-    expect(screen.getByPlaceholderText(/ค้นหาชื่อจุดใช้งาน, รหัสสถานีปฏิบัติงาน/i)).toBeInTheDocument();
-    expect(screen.getByText(/ทุกแผนก \(All Departments\)/i)).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/ค้นหาชื่อจุดใช้งาน, รหัสสถานี/i)).toBeInTheDocument();
+    expect(screen.getByText('ทุกแผนก (All Depts)')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /เพิ่มจุดใช้งานใหม่/i })).toBeInTheDocument();
-    expect(screen.getByTestId('station-count-badge')).toHaveTextContent('พบ 4 จาก 4 จุด');
+    expect(screen.getByTestId('station-count-badge')).toHaveTextContent('พบ 4 / 4 จุด');
 
     // Verify all stations render in table
     expect(screen.getByText('Line 1 - Mixing (ห้องผสม)')).toBeInTheDocument();
@@ -97,13 +97,13 @@ describe('MasterDataHub Tab 4: Searchable Department Autocomplete & Compact Tool
   it('2. Free-text search filters stations in real-time and clear button resets query', () => {
     renderTab4();
 
-    const searchInput = screen.getByPlaceholderText(/ค้นหาชื่อจุดใช้งาน, รหัสสถานีปฏิบัติงาน/i);
+    const searchInput = screen.getByPlaceholderText(/ค้นหาชื่อจุดใช้งาน, รหัสสถานี/i);
     fireEvent.change(searchInput, { target: { value: 'Mixing' } });
 
     // Only PD-L1 Mixing is visible
     expect(screen.getByText('Line 1 - Mixing (ห้องผสม)')).toBeInTheDocument();
     expect(screen.queryByText('QA Head Office (จุดคุมงานหลัก Master)')).not.toBeInTheDocument();
-    expect(screen.getByTestId('station-count-badge')).toHaveTextContent('พบ 1 จาก 4 จุด');
+    expect(screen.getByTestId('station-count-badge')).toHaveTextContent('พบ 1 / 4 จุด');
 
     // Click clear search (X) button
     const clearBtn = screen.getByTitle('ล้างคำค้นหา');
@@ -111,13 +111,13 @@ describe('MasterDataHub Tab 4: Searchable Department Autocomplete & Compact Tool
 
     expect(searchInput.value).toBe('');
     expect(screen.getByText('QA Head Office (จุดคุมงานหลัก Master)')).toBeInTheDocument();
-    expect(screen.getByTestId('station-count-badge')).toHaveTextContent('พบ 4 จาก 4 จุด');
+    expect(screen.getByTestId('station-count-badge')).toHaveTextContent('พบ 4 / 4 จุด');
   });
 
   it('3. Department combobox opens autocomplete dropdown and filters departments', () => {
     renderTab4();
 
-    const deptTrigger = screen.getByText(/ทุกแผนก \(All Departments\)/i);
+    const deptTrigger = screen.getByText('ทุกแผนก (All Depts)');
     fireEvent.click(deptTrigger);
 
     // Dropdown is open with internal search field
@@ -137,7 +137,7 @@ describe('MasterDataHub Tab 4: Searchable Department Autocomplete & Compact Tool
     renderTab4();
 
     // Open combobox
-    const deptTrigger = screen.getByText(/ทุกแผนก \(All Departments\)/i);
+    const deptTrigger = screen.getByText('ทุกแผนก (All Depts)');
     fireEvent.click(deptTrigger);
 
     // Click QA option
@@ -147,7 +147,7 @@ describe('MasterDataHub Tab 4: Searchable Department Autocomplete & Compact Tool
     // Check table has only QA station
     expect(screen.getByText('QA Head Office (จุดคุมงานหลัก Master)')).toBeInTheDocument();
     expect(screen.queryByText('Line 1 - Mixing (ห้องผสม)')).not.toBeInTheDocument();
-    expect(screen.getByTestId('station-count-badge')).toHaveTextContent('พบ 1 จาก 4 จุด');
+    expect(screen.getByTestId('station-count-badge')).toHaveTextContent('พบ 1 / 4 จุด');
 
     // Clear filters button appears
     const clearFiltersBtn = screen.getByRole('button', { name: /ล้างตัวกรอง/i });
@@ -157,7 +157,7 @@ describe('MasterDataHub Tab 4: Searchable Department Autocomplete & Compact Tool
     fireEvent.click(clearFiltersBtn);
 
     // Back to ALL
-    expect(screen.getByText(/ทุกแผนก \(All Departments\)/i)).toBeInTheDocument();
+    expect(screen.getByText('ทุกแผนก (All Depts)')).toBeInTheDocument();
     expect(screen.getByText('Line 1 - Mixing (ห้องผสม)')).toBeInTheDocument();
     expect(screen.getByText('QA Head Office (จุดคุมงานหลัก Master)')).toBeInTheDocument();
   });
@@ -165,7 +165,7 @@ describe('MasterDataHub Tab 4: Searchable Department Autocomplete & Compact Tool
   it('5. Renders empty state when search finds no stations and offers quick reset button', () => {
     renderTab4();
 
-    const searchInput = screen.getByPlaceholderText(/ค้นหาชื่อจุดใช้งาน, รหัสสถานีปฏิบัติงาน/i);
+    const searchInput = screen.getByPlaceholderText(/ค้นหาชื่อจุดใช้งาน, รหัสสถานี/i);
     fireEvent.change(searchInput, { target: { value: 'Nonexistent Station 999' } });
 
     expect(screen.getByText('ไม่พบจุดใช้งานตรงตามเงื่อนไขที่ค้นหา')).toBeInTheDocument();

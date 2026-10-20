@@ -211,10 +211,8 @@ describe('Post-Dispatch Delivery Tracking & DCC Task Lifecycle Sync Tests', () =
     // Fast-track / Urgent action text "กรุณาพิมพ์และแจกจ่าย..." is NO LONGER displayed
     expect(screen.queryByText(/กรุณาพิมพ์และแจกจ่ายสำเนาควบคุม/i)).not.toBeInTheDocument();
 
-    // Instead, it reflects delivery tracking
-    expect(screen.getByText(/ติดตามการส่งมอบ \(รอปลายทางตรวจรับ\)/i)).toBeInTheDocument();
-    expect(screen.getByText(/DCC ได้บันทึกส่งมอบสำเนาครบทุกฉบับแล้ว/i)).toBeInTheDocument();
-    expect(screen.getAllByText(/รอปลายทางตรวจรับ/i).length).toBeGreaterThan(0);
+    // Completed distribution task leaves the pending inbox; tracking lives in ControlledCopyRegister (Tab 2)
+    expect(screen.queryByText(/ติดตามการส่งมอบ \(รอปลายทางตรวจรับ\)/i)).not.toBeInTheDocument();
   });
 
   it('4. Receipt tasks are generated and isolated for recipient departments (PD & QA/QC)', () => {

@@ -210,7 +210,7 @@ describe('Document Lifecycle Transition, Hardcopy Recall Tasks, and Watermark En
       (t.document_code === 'SOP-QA-01' || t.doc_code === 'SOP-QA-01' || (t.title && t.title.includes('SOP-QA-01')))
     );
     expect(recallTask).toBeDefined();
-    expect(recallTask.status).toBe('PENDING_RECALL');
+    expect(recallTask.status).toBe('PENDING'); // tasks use PENDING; copies carry PENDING_RECALL
     expect(recallTask.copies_to_recall.length).toBe(2);
   });
 
@@ -245,7 +245,7 @@ describe('Document Lifecycle Transition, Hardcopy Recall Tasks, and Watermark En
       (t.document_code === 'SOP-PD-02' || t.doc_code === 'SOP-PD-02' || (t.title && t.title.includes('SOP-PD-02')))
     );
     expect(recallTask).toBeDefined();
-    expect(recallTask.status).toBe('PENDING_RECALL');
+    expect(recallTask.status).toBe('PENDING'); // tasks use PENDING; copies carry PENDING_RECALL
   });
 
   // ───────────────────────────────────────────────────────────────────────────

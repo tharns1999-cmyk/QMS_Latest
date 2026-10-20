@@ -52,6 +52,7 @@ const DarNewForm = () => {
     masterDocuments,
     tasks,
     masterUsers, 
+    approvalMatrix,
     documentTypes, 
     departments, 
     masterDepartments, 
@@ -155,7 +156,7 @@ const DarNewForm = () => {
   // Auto-calculated Workflow Participants for Auto-Whitelisting
   const workflowParticipants = useMemo(() => {
     const targetDept = standardizeDepartmentCode(formData.department || currentUser?.department || 'PD');
-    const dynamicSteps = generateDynamicWorkflow(currentUser, targetDept, masterUsers || []);
+    const dynamicSteps = generateDynamicWorkflow(currentUser, targetDept, masterUsers || [], formData.docType, approvalMatrix);
     if (dynamicSteps && dynamicSteps.length > 0) {
       return dynamicSteps.map(step => ({
         id: step.userId,
@@ -167,7 +168,7 @@ const DarNewForm = () => {
       }));
     }
     return [];
-  }, [currentUser, formData.department, masterUsers]);
+  }, [currentUser, formData.department, formData.docType, masterUsers, approvalMatrix]);
 
   const getPreviewCode = () => {
     if (!formData?.docType) return '[กรุณาเลือกชนิดเอกสารเพื่อสร้างรหัส]';
@@ -343,7 +344,7 @@ const DarNewForm = () => {
     }
 
     const targetDept = standardizeDepartmentCode(formData.department || currentUser?.department || 'PD');
-    const dynamicSteps = generateDynamicWorkflow(currentUser, targetDept, masterUsers || []);
+    const dynamicSteps = generateDynamicWorkflow(currentUser, targetDept, masterUsers || [], formData.docType, approvalMatrix);
 
     const newDar = {
       type: 'NEW',
@@ -774,7 +775,7 @@ const DarNewForm = () => {
       {(() => {
         const selectedDocTypeObj = (documentTypes || []).find(t => (t.code || t.id) === formData.docType);
         const targetDept = formData.department || currentUser?.department || 'PD';
-        const dynamicSteps = generateDynamicWorkflow(currentUser, targetDept, masterUsers || []);
+        const dynamicSteps = generateDynamicWorkflow(currentUser, targetDept, masterUsers || [], formData.docType, approvalMatrix);
         const step2 = dynamicSteps.find(s => s.role === 'REVIEWER');
         const resolvedReviewerObj = (masterUsers || []).find(u => u && (u.id === step2?.userId || u.userId === step2?.userId));
 

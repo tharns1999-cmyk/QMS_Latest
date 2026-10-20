@@ -85,9 +85,9 @@ describe('Auto-Authorize Workflow Participants in Restricted Document Access', (
       expect(screen.getByText(/บุคคลในสายการจัดทำ ทบทวน และอนุมัติจะได้รับสิทธิ์เข้าถึงเอกสารนี้โดยอัตโนมัติ/i)).toBeInTheDocument();
 
       // Check locked chips role badges
-      expect(screen.getByText('ผู้จัดทำ (Requester)')).toBeInTheDocument();
-      expect(screen.getByText('ผู้ทบทวน (Reviewer)')).toBeInTheDocument();
-      expect(screen.getByText('ผู้อนุมัติ (Approver)')).toBeInTheDocument();
+      expect(screen.getByText(/ผู้จัดทำ \(Requester\)/)).toBeInTheDocument();
+      expect(screen.getByText(/ผู้ทบทวน \(Reviewer\)/)).toBeInTheDocument();
+      expect(screen.getByText(/ผู้อนุมัติ \(Approver\)/)).toBeInTheDocument();
     });
 
     it('renders "ผู้ร่วมสายงาน (Auto)" badge and locked disabled button for workflow participants in the directory grid', () => {
@@ -107,15 +107,15 @@ describe('Auto-Authorize Workflow Participants in Restricted Document Access', (
       expect(autoBadges.length).toBeGreaterThanOrEqual(3);
 
       // EMP-001 (Workflow participant) should have disabled action button with lock
-      const lockedButton = screen.getByLabelText(/ผู้ร่วมสายงาน \(Auto\) - ธนาวุฒิ สมควรกิจดำรง/i);
-      expect(lockedButton).toBeDisabled();
+      const lockedButton = screen.getByRole('button', { name: /ธนาวุฒิ สมควรกิจดำรง/ });
+      expect(lockedButton).toHaveAttribute('aria-disabled', 'true');
 
       // Clicking on the workflow participant card should not invoke toggle
       fireEvent.click(lockedButton);
       expect(handleToggle).not.toHaveBeenCalled();
 
       // Non-workflow participant (EMP-003: วิชัย สมบูรณ์ดี) should have normal toggle
-      const nonParticipantName = screen.getByText('วิชัย สมบูรณ์ดี');
+      const nonParticipantName = screen.getByRole('button', { name: /วิชัย สมบูรณ์ดี/ });
       fireEvent.click(nonParticipantName);
       expect(handleToggle).toHaveBeenCalledWith('EMP-003');
     });
@@ -125,6 +125,7 @@ describe('Auto-Authorize Workflow Participants in Restricted Document Access', (
         <DocumentAccessControlSelector
           value={{
             scope: 'RESTRICTED',
+            restricted_mode: 'WHITELIST',
             min_access_level: 4,
             authorized_users: []
           }}
@@ -134,9 +135,9 @@ describe('Auto-Authorize Workflow Participants in Restricted Document Access', (
         />
       );
 
-      // Strip should appear in DocumentAccessControlSelector under RESTRICTED scope
+      // Strip should appear in DocumentAccessControlSelector under RESTRICTED whitelist mode
       expect(screen.getByText(/สิทธิ์เข้าถึงอัตโนมัติตามสายอนุมัติ \(Auto-Authorized\):/i)).toBeInTheDocument();
-      expect(screen.getByText('ผู้ทบทวน (Reviewer)')).toBeInTheDocument();
+      expect(screen.getByText(/ผู้ทบทวน \(Reviewer\)/)).toBeInTheDocument();
     });
   });
 });

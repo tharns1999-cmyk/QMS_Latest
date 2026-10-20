@@ -29,7 +29,8 @@ const DocumentAccessControlSelector = ({
   const currentOwnerDept = ownerDept || 'QA';
 
   // Restricted sub-mode: 'MIN_LEVEL' = minimum position level, 'WHITELIST' = explicit person list
-  const restrictedMode = value?.restricted_mode || 'WHITELIST';
+  // Unset mode is evaluated as MIN_LEVEL by hasDocumentAccess, so display it the same way
+  const restrictedMode = value?.restricted_mode || 'MIN_LEVEL';
 
   const setRestrictedMode = (mode) => {
     onChange({
@@ -124,7 +125,8 @@ const DocumentAccessControlSelector = ({
       scope: newScope,
       authorized_depts: nextDepts,
       authorized_users: authorizedUsers,
-      min_access_level: minAccessLevel
+      min_access_level: minAccessLevel,
+      restricted_mode: restrictedMode
     });
   };
 
@@ -387,6 +389,7 @@ const DocumentAccessControlSelector = ({
                     key={deptId}
                     type="button"
                     title={`${deptId} - ${deptFullName}`}
+                    aria-pressed={isChecked}
                     onClick={() => toggleDept(deptId)}
                     className={`h-10 px-2.5 py-1.5 rounded-lg border transition-all flex items-center justify-between select-none cursor-pointer text-xs ${
                       isChecked
