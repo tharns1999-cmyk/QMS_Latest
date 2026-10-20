@@ -28,7 +28,8 @@ import {
   getDocCode, 
   getDocTitle, 
   getCleanRev, 
-  getCleanDept 
+  getCleanDept,
+  isActiveDoc
 } from '../utils/domainNormalizer';
 
 const PERIODIC_APPROVAL_DENIED_MSG = 'ไม่มีสิทธิ์อนุมัติ: ต้องเป็นระดับหัวหน้าแผนก (Level 5 ขึ้นไป) หรือ QMR และต้องไม่ใช่ผู้ส่งผลทบทวนเอง';
@@ -173,9 +174,11 @@ export const createPeriodicReviewSlice = (set, get) => ({
       const state = get();
       const effectiveToday = targetDate || state.getEffectiveToday();
 
-      let schedules = state.periodicReviewSchedules && state.periodicReviewSchedules.length > 0
-        ? [...state.periodicReviewSchedules]
-        : generateSchedules(state.documents || [], state.externalDocuments || [], []);
+      // Reconcile: retire schedules of superseded/obsolete records, then give every newly effective record (new DAR, revision) its own cycle
+      const retiredIds = new Set([...(state.documents || []), ...(state.externalDocuments || [])].filter(d => !isActiveDoc(d)).map(d => String(d.id)));
+      let schedules = generateSchedules(state.documents || [], state.externalDocuments || [], (state.periodicReviewSchedules || []).map(s =>
+        s.isActive !== false && retiredIds.has(String(s.externalDocumentId || s.documentId)) ? { ...s, isActive: false } : s
+      ));
 
       schedules = schedules.map(s => {
         const dueDate = s.nextReviewDate || s.currentScheduledReviewDate;
@@ -1723,9 +1726,10 @@ export const createPeriodicReviewSlice = (set, get) => ({
 
     const docDept = task.department || task.target_department || targetSchedule?.ownerDepartmentId || matchedExtDoc?.department || matchedIntDoc?.department || 'DC';
 
-    // RBAC Check for External Documents: Level 5+ (HOD/Manager/QMR), and never the reviewer approving their own submission
+    // RBAC: Level 5+ of the owner dept (or DCC/QMR) for both internal and external, and never the reviewer approving their own submission
     const isSelfApproval = Boolean(reviewer_id && approver?.id && String(approver.id) === String(reviewer_id));
-    if (isSelfApproval || (is_external && !canFastTrackExternalReview(approver, docDept))) {
+    const canApprove = is_external ? canFastTrackExternalReview(approver, docDept) : canFastTrackReview(approver, docDept);
+    if (isSelfApproval || !canApprove) {
       console.warn(`[RBAC] User ${approver?.name} is not authorized to approve periodic review for external doc ${doc_code || doc_id} in dept ${docDept}`);
       if (typeof toast !== 'undefined' && toast.error) {
         toast.error(PERIODIC_APPROVAL_DENIED_MSG);
@@ -2371,6 +2375,13 @@ export const createPeriodicReviewSlice = (set, get) => ({
         updatedExtDocs = [...state.externalDocuments];
         updatedExtDocs[docIdx] = doc;
       }
+    }
+
+    const submitterId = task.payload?.reviewer_id || task.reviewer_id;
+    const canReject = isExternal ? canFastTrackExternalReview(approver, docDept) : canFastTrackReview(approver, docDept);
+    if (!canReject || (submitterId && approver?.id && String(approver.id) === String(submitterId))) {
+      toast.error(PERIODIC_APPROVAL_DENIED_MSG);
+      return state;
     }
 
     const schedules = (state.periodicReviewSchedules || []).map(s => {

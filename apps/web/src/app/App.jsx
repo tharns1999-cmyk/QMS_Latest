@@ -112,6 +112,7 @@ function App() {
     hydrateMasterData?.();
     initializePeriodicReviews();
     checkScheduledEffectiveDocs?.();
+    useStore.getState().syncPeriodicReviewSchedulesAndTasks?.();
   }, [hydrateMasterData, initializePeriodicReviews, checkScheduledEffectiveDocs]);
 
   return (
