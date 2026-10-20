@@ -1,9 +1,9 @@
 import { INITIAL_NOTIFICATIONS } from '../fixtures/seedData';
-import { isActionableTask } from '../../utils/taskFilter';
-import { calculateTaskDueDate } from '../../utils/slaCalculator';
-import { calculateCopyAllocations, cleanLocationName } from '../../services/MasterDataService';
-import { resolveDccAdminUserId } from './externalDocSlice';
-import { buildControlledCopyId, cleanupDccTasks, sanitizeControlledCopies } from './controlledCopySlice';
+import { isActionableTask } from '../../modules/dcc/utils/taskFilter';
+import { calculateTaskDueDate } from '../../modules/dcc/utils/slaCalculator';
+import { calculateCopyAllocations, cleanLocationName } from '../../modules/dcc/services/MasterDataService';
+import { resolveDccAdminUserId } from '../../modules/dcc/store/externalDocSlice';
+import { buildControlledCopyId, cleanupDccTasks, sanitizeControlledCopies } from '../../modules/dcc/store/controlledCopySlice';
 
 /**
  * Normalizes user departments into an array of unique non-empty department strings.

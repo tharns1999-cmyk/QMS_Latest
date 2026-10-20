@@ -4,5 +4,25 @@
   "rules": {
     "react/rules-of-hooks": "error",
     "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
+  },
+  "overrides": [
+    {
+      "files": ["src/shared/**"],
+      "rules": {
+        "no-restricted-imports": ["error", { "patterns": [{ "group": ["**/app/**", "**/modules/**", "**/store/**"], "message": "shared/ must stay module-agnostic (no app, module or store imports)." }] }]
+      }
+    },
+    {
+      "files": ["src/modules/portal/**"],
+      "rules": {
+        "no-restricted-imports": ["error", { "patterns": [{ "group": ["**/modules/dcc/**", "../../dcc/**", "../dcc/**"], "message": "Modules must not import each other; move shared code to shared/." }] }]
+      }
+    },
+    {
+      "files": ["src/modules/dcc/**"],
+      "rules": {
+        "no-restricted-imports": ["error", { "patterns": [{ "group": ["**/modules/portal/**", "../../portal/**", "../portal/**", "**/app/**"], "message": "Modules must not import each other or app/; move shared code to shared/." }] }]
+      }
+    }
+  ]
 }

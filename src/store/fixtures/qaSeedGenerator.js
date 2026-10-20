@@ -2,7 +2,7 @@
  * Dynamic QA Seed Generator & Test Data Factory
  * Extracted from useStore.js (Phase 7 Refactor)
  */
-import { getMockQaSeedData } from '../../data/mockQaWorkflowSeed';
+import { getMockQaSeedData } from './mockQaWorkflowSeed';
 import {
   defaultSeedDocuments,
   defaultSeedDars,

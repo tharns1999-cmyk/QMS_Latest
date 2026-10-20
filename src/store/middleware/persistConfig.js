@@ -1,12 +1,12 @@
 import { createJSONStorage } from 'zustand/middleware';
 import toast from 'react-hot-toast';
 import { MASTER_DATA_USER } from '../fixtures/seedData';
-import { MASTER_DEPARTMENTS } from '../../config/qmsRegistry';
-import { isDccExclusiveTask, isDccOperationalTask, isReceiptTask } from '../../utils/taskFilter';
-import { resolveReceiptTaskDepartment, sanitizeControlledCopies } from '../slices/controlledCopySlice';
-import { syncCompletedDarToMasterDocuments } from '../slices/darSlice';
-import { sanitizeExternalDocReviewStatus } from '../slices/periodicReviewSlice';
-import { getDocCode, getCleanRev } from '../../utils/domainNormalizer';
+import { MASTER_DEPARTMENTS } from '../../modules/dcc/config/qmsRegistry';
+import { isDccExclusiveTask, isDccOperationalTask, isReceiptTask } from '../../modules/dcc/utils/taskFilter';
+import { resolveReceiptTaskDepartment, sanitizeControlledCopies } from '../../modules/dcc/store/controlledCopySlice';
+import { syncCompletedDarToMasterDocuments } from '../../modules/dcc/store/darSlice';
+import { sanitizeExternalDocReviewStatus } from '../../modules/dcc/store/periodicReviewSlice';
+import { getDocCode, getCleanRev } from '../../modules/dcc/utils/domainNormalizer';
 
 let _storeInstance = null;
 

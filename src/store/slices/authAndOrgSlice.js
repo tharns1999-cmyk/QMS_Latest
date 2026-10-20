@@ -14,10 +14,10 @@ import {
   DEFAULT_SIGNATURE_SETTINGS,
   DEFAULT_SLA_SETTINGS,
   DEFAULT_APPROVAL_MATRIX
-} from '../../config/qmsRegistry';
-import { STANDARD_STATIONS, cleanLocationName } from '../../services/MasterDataService';
-import { saveFile, resolveRawFileBlob } from '../../utils/fileStorage';
-import { isSameDepartment } from '../../utils/taskFilter';
+} from '../../modules/dcc/config/qmsRegistry';
+import { STANDARD_STATIONS, cleanLocationName } from '../../modules/dcc/services/MasterDataService';
+import { saveFile, resolveRawFileBlob } from '../../modules/dcc/utils/fileStorage';
+import { isSameDepartment } from '../../modules/dcc/utils/taskFilter';
 
 export const createAuthAndOrgSlice = (set, get) => ({
   // State

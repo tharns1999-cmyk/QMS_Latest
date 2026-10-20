@@ -7,12 +7,12 @@ import {
   canFastTrackReview,
   canFastTrackExternalReview,
   sanitizeExternalDocReviewStatus
-} from './slices/periodicReviewSlice';
+} from '../modules/dcc/store/periodicReviewSlice';
 import {
   createExternalDocSlice,
   resolveDccAdminUserId,
   generateNextEdrNumber
-} from './slices/externalDocSlice';
+} from '../modules/dcc/store/externalDocSlice';
 import {
   createControlledCopySlice,
   CONTROLLED_COPY_STATUS,
@@ -25,16 +25,16 @@ import {
   createReceiptTask,
   getActivePhysicalCopies,
   resolveDarDocumentCode
-} from './slices/controlledCopySlice';
+} from '../modules/dcc/store/controlledCopySlice';
 import {
   createDarSlice,
   syncCompletedDarToMasterDocuments,
   generateNextDarNumber
-} from './slices/darSlice';
+} from '../modules/dcc/store/darSlice';
 import {
   createMasterDocSlice,
   DEFAULT_DOCUMENT_CATEGORIES
-} from './slices/masterDocSlice';
+} from '../modules/dcc/store/masterDocSlice';
 import {
   createAuthAndOrgSlice
 } from './slices/authAndOrgSlice';
@@ -60,7 +60,7 @@ import {
 } from './middleware/persistConfig';
 
 // Fixtures, Config & Helpers
-import { STANDARD_STATIONS } from '../services/MasterDataService';
+import { STANDARD_STATIONS } from '../modules/dcc/services/MasterDataService';
 import {
   MASTER_DATA_USER,
   REQUEST_MASTER_DATA_USER,
@@ -87,10 +87,10 @@ import {
   initialControlledCopyInstances,
   initialNotifications
 } from './fixtures/seedData';
-import { IN_FLIGHT_DAR_STATUSES, getActiveDarForDocument } from '../utils/workflowHelpers';
-import { hasDocumentAccess, canUserAccessDocument, canManageControlledCopy } from '../utils/accessControl';
-import { calculateTaskDueDate } from '../utils/slaCalculator';
-import { generateInternalDarNumber } from '../utils/darNumberGenerator';
+import { IN_FLIGHT_DAR_STATUSES, getActiveDarForDocument } from '../modules/dcc/utils/workflowHelpers';
+import { hasDocumentAccess, canUserAccessDocument, canManageControlledCopy } from '../modules/dcc/utils/accessControl';
+import { calculateTaskDueDate } from '../modules/dcc/utils/slaCalculator';
+import { generateInternalDarNumber } from '../modules/dcc/utils/darNumberGenerator';
 import {
   isSameDepartment,
   userMatchesDepartment,
@@ -102,7 +102,7 @@ import {
   isLevel1To5,
   isReceiptTask,
   isActionableTask
-} from '../utils/taskFilter';
+} from '../modules/dcc/utils/taskFilter';
 import {
   MASTER_DEPARTMENTS,
   MASTER_DATA_DEPT,
@@ -112,7 +112,7 @@ import {
   DEFAULT_SIGNATURE_SETTINGS,
   DEFAULT_SLA_SETTINGS,
   DEFAULT_APPROVAL_MATRIX
-} from '../config/qmsRegistry';
+} from '../modules/dcc/config/qmsRegistry';
 
 // Re-exports for 100% Backward Compatibility
 export {
