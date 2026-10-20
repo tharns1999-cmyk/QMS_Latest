@@ -23,9 +23,7 @@ import {
   ChevronUp,
   RotateCw,
   Loader2,
-  Printer,
-  CheckCircle2,
-  Save
+  Printer
 } from 'lucide-react';
 import useStore from '../../../../store/useStore';
 import { normalizeDepartmentId, cleanLocationName } from '../../services/MasterDataService';
@@ -484,8 +482,7 @@ const DocumentDetailModal = ({
     masterUsers,
     reportCcDamagedLost,
     canDownloadDocument = () => true,
-    periodicReviewSchedules,
-    confirmPeriodicReviewNoChange
+    periodicReviewSchedules
   } = useStore();
 
   // Find all revisions for the current document code to enable switching
@@ -567,10 +564,7 @@ const DocumentDetailModal = ({
       }
     };
   }
-  const [showReviewForm, setShowReviewForm] = useState(false);
-  const [reviewAction, setReviewAction] = useState('NO_CHANGE');
-  const [reviewComment, setReviewComment] = useState('');
-
+  // Recording happens on the periodic review page: it enforces who may review, routes NO_CHANGE to approval and links any DAR to the cycle.
   const handleRecordReview = () => {
     if (!inputDoc) return;
     const matchingSchedule = (periodicReviewSchedules || []).find(
@@ -578,38 +572,11 @@ const DocumentDetailModal = ({
            (inputDoc.title && s.documentNumber === inputDoc.title) ||
            (inputDoc.doc_code && s.documentNumber === inputDoc.doc_code)
     );
-    if (reviewAction === 'NO_CHANGE') {
-      if (confirmPeriodicReviewNoChange) {
-        confirmPeriodicReviewNoChange({
-          scheduleId: matchingSchedule?.id || `SCH-${inputDoc.id}`,
-          comment: reviewComment || 'ทบทวนแล้ว ไม่มีการเปลี่ยนแปลง',
-          reviewer: currentUser?.name || 'Reviewer',
-          reviewDate: new Date().toISOString().split('T')[0]
-        });
-        toast.success('บันทึกผลทบทวน (No Change) และขยายเวลารอบถัดไปสำเร็จ');
-      } else {
-        toast.success('บันทึกผลทบทวนเรียบร้อย (จำลอง)');
-      }
-      setShowReviewForm(false);
-      setReviewComment('');
-    } else {
-      if (!reviewComment.trim()) {
-        toast.error('กรุณาระบุเหตุผลที่ต้องดำเนินการแก้ไขหรือยกเลิก');
-        return;
-      }
-      onClose();
-      navigate('/dcc/dar/new', {
-        state: {
-          prefillDocId: inputDoc.id,
-          prefillDocCode: inputDoc.docNo || inputDoc.document_code || inputDoc.doc_code || inputDoc.title,
-          prefillDocTitle: inputDoc.title || inputDoc.name,
-          darOrigin: 'PERIODIC_REVIEW',
-          dar_origin: 'PERIODIC_REVIEW',
-          reason: reviewComment,
-          type: reviewAction === 'OBSOLETE_REQUIRED' ? 'OBSOLETE' : 'REVISION'
-        }
-      });
-    }
+    const docCode = resolveDocCode(inputDoc);
+    const params = new URLSearchParams({ docId: String(inputDoc.id) });
+    if (docCode) params.set('docCode', docCode);
+    onClose();
+    navigate(`/dcc/periodic-reviews/${encodeURIComponent(matchingSchedule?.id || docCode || inputDoc.id)}?${params.toString()}`);
   };
 
   const isDccAdmin = Boolean(
@@ -2736,88 +2703,13 @@ const DocumentDetailModal = ({
                         )}
                         <button
                           type="button"
-                          onClick={() => setShowReviewForm(!showReviewForm)}
+                          onClick={handleRecordReview}
                           className="px-3 py-1.5 bg-[#0D99FF] text-white text-xs font-semibold rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-1.5"
                         >
                           <PlusCircle size={14} /> บันทึกผลทบทวน
                         </button>
                       </div>
                     </div>
-
-                    {showReviewForm && (
-                      <div className="bg-blue-50/50 border border-blue-100 rounded-xl p-4 mb-4">
-                        <h4 className="font-bold text-sm text-[#1E1E1E] mb-3 flex items-center gap-2">
-                          <CheckCircle2 size={16} className="text-[#0D99FF]" /> 
-                          แบบฟอร์มบันทึกผลการทบทวนเอกสารตามรอบ
-                        </h4>
-                        <div className="space-y-4">
-                          <div>
-                            <label className="block text-xs font-semibold text-[#1E1E1E] mb-1.5">
-                              ผลการพิจารณา <span className="text-red-500">*</span>
-                            </label>
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                              {[
-                                { id: 'NO_CHANGE', label: 'ใช้งานปกติ (No Change)', desc: 'เนื้อหาถูกต้องตามปัจจุบัน' },
-                                { id: 'REVISION_REQUIRED', label: 'ต้องแก้ไข (Revise)', desc: 'เนื้อหาบางส่วนไม่ทันสมัย' },
-                                { id: 'OBSOLETE_REQUIRED', label: 'ขอยกเลิก (Obsolete)', desc: 'เอกสารนี้ไม่มีการใช้งานแล้ว' }
-                              ].map(action => (
-                                <button
-                                  key={action.id}
-                                  type="button"
-                                  onClick={() => setReviewAction(action.id)}
-                                  className={`p-2.5 border rounded-lg text-left transition-all ${
-                                    reviewAction === action.id 
-                                      ? 'border-[#0D99FF] bg-white ring-1 ring-[#0D99FF]' 
-                                      : 'border-[#E5E5E5] bg-white/50 hover:bg-white hover:border-gray-300'
-                                  }`}
-                                >
-                                  <div className="flex items-center gap-2 mb-1">
-                                    <div className={`w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center ${
-                                      reviewAction === action.id ? 'border-[#0D99FF]' : 'border-gray-300'
-                                    }`}>
-                                      {reviewAction === action.id && <div className="w-1.5 h-1.5 rounded-full bg-[#0D99FF]" />}
-                                    </div>
-                                    <span className="font-semibold text-xs text-[#1E1E1E]">{action.label}</span>
-                                  </div>
-                                  <p className="text-[11px] text-[#666666] ml-5">{action.desc}</p>
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                          <div>
-                            <label className="block text-xs font-semibold text-[#1E1E1E] mb-1.5">
-                              ความเห็นผู้ทบทวน {reviewAction !== 'NO_CHANGE' && <span className="text-red-500">*</span>}
-                            </label>
-                            <textarea
-                              className="w-full text-sm border border-[#E5E5E5] rounded-lg p-3 bg-white focus:outline-none focus:border-[#0D99FF] focus:ring-1 focus:ring-[#0D99FF] min-h-[80px]"
-                              placeholder="ระบุเหตุผลประกอบการพิจารณา..."
-                              value={reviewComment}
-                              onChange={(e) => setReviewComment(e.target.value)}
-                            />
-                          </div>
-                          <div className="flex justify-end gap-2 pt-2">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setShowReviewForm(false);
-                                setReviewComment('');
-                              }}
-                              className="px-4 py-2 bg-white border border-[#E5E5E5] text-[#1E1E1E] text-xs font-semibold rounded-lg hover:bg-gray-50 transition-colors"
-                            >
-                              ยกเลิก
-                            </button>
-                            <button
-                              type="button"
-                              onClick={handleRecordReview}
-                              className="px-4 py-2 bg-[#0D99FF] text-white text-xs font-semibold rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-1.5 shadow-sm"
-                            >
-                              <Save size={14} /> 
-                              {reviewAction === 'NO_CHANGE' ? 'ยืนยันใช้งานต่อ' : 'เปิดคำร้อง DAR'}
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    )}
 
                     {/* Meta info row */}
                     {matchingSchedule && (

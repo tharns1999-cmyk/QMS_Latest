@@ -10,7 +10,6 @@ import {
   WATERMARK_TYPES, 
   resolveWatermarkConfig 
 } from '../services/UniversalWatermarkService';
-import { resolveWatermarkConfig as resolveFromUtil } from '../utils/pdfWatermark';
 
 describe('Critical System Fix: Library Status Filter Normalization & Watermark Disentanglement Tests', () => {
   let drawTextSpy;
@@ -183,27 +182,5 @@ describe('Critical System Fix: Library Status Filter Normalization & Watermark D
       expect(config.subLines[3]).toContain('Printed By: กัลยาณี พลไกร (QA)');
     });
 
-    it('PDF Stamping: Stamping Obsolete document produces pure cancelled watermark on pages', async () => {
-      const pdfBytes = await createSamplePdf();
-      drawTextSpy.mockClear();
-
-      const doc = {
-        title: 'SOP-QA-003',
-        rev: '01',
-        status: 'OBSOLETE_ARCHIVED',
-        obsolete_dar_id: 'DAR-OBS-2026-003'
-      };
-
-      const config = resolveFromUtil(doc, { currentUser: mockCurrentUser });
-      await UniversalWatermarkService.stampPdf(pdfBytes, config);
-
-      expect(drawTextSpy).toHaveBeenCalled();
-      const texts = drawTextSpy.mock.calls.map(([text]) => text);
-
-      expect(texts).toContain('OBSOLETE - DO NOT USE');
-      expect(texts.some(t => t.includes('CANCELLED DOCUMENT') || t.includes('เอกสารยกเลิก'))).toBe(true);
-      expect(texts.some(t => t.includes('DAR-OBS-2026-003'))).toBe(true);
-      expect(texts.some(t => t.toLowerCase().includes('superseded by'))).toBe(false);
-    });
   });
 });

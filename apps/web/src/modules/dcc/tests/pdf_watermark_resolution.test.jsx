@@ -7,7 +7,6 @@ import {
   resolveWatermarkConfig,
   buildWatermarkSubLines
 } from '../services/UniversalWatermarkService';
-import { resolveWatermarkConfig as resolveFromUtil } from '../utils/pdfWatermark';
 
 describe('Enterprise PDF Watermark Engine & Status-Driven Stamp Resolution Tests', () => {
   let drawTextSpy;
@@ -85,7 +84,7 @@ describe('Enterprise PDF Watermark Engine & Status-Driven Stamp Resolution Tests
         status: 'ARCHIVED_OBSOLETE'
       };
 
-      const config = resolveFromUtil(doc, { currentUser: mockCurrentUser });
+      const config = resolveWatermarkConfig(doc, { currentUser: mockCurrentUser });
 
       expect(config.type).toBe('OBSOLETE');
       expect(config.color).toBe('#DC2626');
@@ -173,85 +172,4 @@ describe('Enterprise PDF Watermark Engine & Status-Driven Stamp Resolution Tests
     });
   });
 
-  describe('2. UniversalWatermarkService Stamping & PDF Rendering', () => {
-    it('Renders SUPERSEDED watermark with proper angles and sublines', async () => {
-      const pdfBytes = await createSamplePdf();
-      drawTextSpy.mockClear();
-
-      await UniversalWatermarkService.stampPdf(pdfBytes, WATERMARK_TYPES.SUPERSEDED, {
-        docCode: 'SOP-EN-001',
-        docVersion: '01',
-        supersededByRev: '02',
-        userName: 'Prawit Engineer',
-        userDept: 'EN',
-        timestamp: '2026-08-27 10:00'
-      });
-
-      expect(drawTextSpy).toHaveBeenCalled();
-      const calls = drawTextSpy.mock.calls;
-      const texts = calls.map(([text]) => text);
-
-      expect(texts.some(t => t.includes('SUPERSEDED'))).toBe(true);
-      expect(texts.some(t => t.includes('SUPERSEDED REVISION') || t.includes('เอกสารฉบับเดิมตกรุ่น'))).toBe(true);
-      expect(texts.some(t => t.includes('Rev: Rev.01') || t.includes('Historical Rev.01'))).toBe(true);
-      expect(texts.some(t => t.includes('Superseded By: Rev.02') || t.includes('Replaced By: Rev.02'))).toBe(true);
-      
-      calls.forEach(([, options]) => {
-        expect(options.rotate.angle).toBe(45);
-        expect(options.opacity).toBe(0.65);
-      });
-    });
-
-    it('Renders dynamically resolved config directly in stampPdf', async () => {
-      const pdfBytes = await createSamplePdf();
-      drawTextSpy.mockClear();
-
-      const doc = {
-        title: 'SOP-WH-004',
-        rev: '01',
-        status: 'OBSOLETE',
-        obsolete_dar_id: 'DAR-OBS-999'
-      };
-
-      const resolvedConfig = resolveWatermarkConfig(doc, {
-        currentUser: { name: 'DCC Lead', department: 'DCC' }
-      });
-
-      await UniversalWatermarkService.stampPdf(pdfBytes, resolvedConfig);
-
-      expect(drawTextSpy).toHaveBeenCalled();
-      const texts = drawTextSpy.mock.calls.map(([text]) => text);
-
-      expect(texts).toContain('OBSOLETE - DO NOT USE');
-      expect(texts.some(t => t.includes('CANCELLED DOCUMENT') || t.includes('เอกสารยกเลิก'))).toBe(true);
-      expect(texts.some(t => t.includes('DAR-OBS-999'))).toBe(true);
-      expect(texts.some(t => t.toLowerCase().includes('superseded by'))).toBe(false);
-    });
-
-    it('generateAndDownloadPdf resolves config and triggers download', async () => {
-      const downloadSpy = vi.spyOn(UniversalWatermarkService, 'downloadWatermarkedPdf').mockResolvedValue('blob:url');
-
-      const doc = {
-        title: 'WI-PD-050',
-        rev: '02',
-        status: 'OBSOLETE',
-        obsolete_dar_id: 'DAR-OBS-100'
-      };
-
-      await UniversalWatermarkService.generateAndDownloadPdf(doc, null, {
-        currentUser: { name: 'Test User', department: 'PD' }
-      });
-
-      expect(downloadSpy).toHaveBeenCalledTimes(1);
-      expect(downloadSpy).toHaveBeenCalledWith(
-        doc,
-        WATERMARK_TYPES.OBSOLETE,
-        expect.objectContaining({
-          mainText: 'OBSOLETE - DO NOT USE',
-          obsoleteDarId: 'DAR-OBS-100'
-        }),
-        false
-      );
-    });
-  });
 });

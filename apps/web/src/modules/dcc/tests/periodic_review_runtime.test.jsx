@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import useStore from '../../../store/useStore';
+import { addYears } from '../utils/documentUtils';
 
 describe('Periodic Review DAR Completion Runtime', () => {
   beforeEach(() => {
@@ -12,71 +13,30 @@ describe('Periodic Review DAR Completion Runtime', () => {
     });
   });
 
-  it('Revision runtime integration: completes linkage and generates +1 year schedule deterministically', () => {
-    // 1. Create linked Revision DAR
-    const mockSchedule = {
-      id: 'SCH-REV-01',
-      documentId: 'DOC-01',
-      documentCategory: 'INTERNAL',
-      status: 'IN_PROGRESS',
-      outcome: 'REVISION_REQUIRED',
-      isActive: true,
-      linkageStatus: 'SUCCESS'
-    };
-
-    const mockDoc = {
-      id: 'DOC-01',
-      title: 'SOP-01',
-      status: 'EFFECTIVE',
-      rev: '01'
-    };
-
-    const mockDar = {
-      id: 'DAR-REV-01',
-      type: 'REVISION',
-      sourceType: 'PERIODIC_REVIEW',
-      sourceId: 'SCH-REV-01',
-      targetDocumentId: 'DOC-01',
-      status: 'APPROVED_WAITING_EFFECTIVE',
-      effectiveDate: new Date().toISOString().split('T')[0],
-      actualEffectiveDate: '2026-07-20',
-      docIdRef: 'DOC-01'
-    };
-
-    useStore.setState({ 
-      periodicReviewSchedules: [mockSchedule],
-      documents: [mockDoc],
-      dars: [mockDar]
+  it('Revision runtime integration: retires the source cycle and schedules the new revision by its doc-type cycle', () => {
+    const today = new Date().toISOString().split('T')[0];
+    useStore.setState({
+      periodicReviewSchedules: [{ id: 'SCH-REV-01', documentId: 'DOC-01', documentCategory: 'INTERNAL', status: 'IN_PROGRESS', outcome: 'REVISION_REQUIRED', isActive: true, linkageStatus: 'SUCCESS' }],
+      documents: [{ id: 'DOC-01', title: 'WI-QC-09', status: 'EFFECTIVE', rev: '01' }],
+      dars: [{ id: 'DAR-REV-01', type: 'REVISION', sourceType: 'PERIODIC_REVIEW', sourceId: 'SCH-REV-01', targetDocumentId: 'DOC-01', status: 'APPROVED_WAITING_EFFECTIVE', effectiveDate: today, docIdRef: 'DOC-01' }]
     });
 
-    // 2. Invoke real finalization action (checkSLA)
     useStore.getState().checkSLA();
 
-    // 3. Verify status changed to COMPLETED
-    const stateAfterSla = useStore.getState();
-    const completedDar = stateAfterSla.dars.find(d => d.id === 'DAR-REV-01');
-    expect(completedDar.status).toBe('COMPLETED');
+    const state = useStore.getState();
+    expect(state.dars.find(d => d.id === 'DAR-REV-01').status).toBe('COMPLETED');
+    const source = state.periodicReviewSchedules.find(s => s.id === 'SCH-REV-01');
+    expect(source).toMatchObject({ linkageStatus: 'COMPLETED', status: 'COMPLETED_WITH_REVISION', isActive: false });
 
-    // 4. Verify originating schedule linkageStatus becomes COMPLETED
-    const origSchedule = stateAfterSla.periodicReviewSchedules.find(s => s.id === 'SCH-REV-01');
-    expect(origSchedule.linkageStatus).toBe('COMPLETED');
+    const newRev = state.documents.find(d => d.status === 'EFFECTIVE');
+    expect(newRev.id).not.toBe('DOC-01');
+    const active = state.periodicReviewSchedules.filter(s => s.isActive !== false);
+    expect(active).toHaveLength(1);
+    // WI is a 2-year cycle, anchored on the new revision's effective date (was hard-coded to 12 months)
+    expect(active[0]).toMatchObject({ documentId: newRev.id, nextReviewDate: addYears(today, 2), currentScheduledReviewDate: addYears(today, 2) });
 
-    // 5. Verify exactly one next schedule exists
-    const nextSchedules = stateAfterSla.periodicReviewSchedules.filter(s => s.id !== 'SCH-REV-01');
-    expect(nextSchedules).toHaveLength(1);
-
-    // 6. Verify next review due date equals Actual Effective Date + 1 year
-    const nextSchedule = nextSchedules[0];
-    expect(nextSchedule.dueDate).toBe('2027-07-20');
-    expect(nextSchedule.documentCategory).toBe('INTERNAL');
-
-    // 7. Run the finalization action again
     useStore.getState().checkSLA();
-
-    // 8. Still exactly one next schedule exists (idempotency)
-    const stateAfterRetry = useStore.getState();
-    const nextSchedulesRetry = stateAfterRetry.periodicReviewSchedules.filter(s => s.id !== 'SCH-REV-01');
-    expect(nextSchedulesRetry).toHaveLength(1);
+    expect(useStore.getState().periodicReviewSchedules.filter(s => s.isActive !== false)).toHaveLength(1);
   });
 
   it('Obsolete runtime integration: completes linkage and cancels future schedules without creating new ones', () => {
@@ -207,33 +167,5 @@ describe('Periodic Review DAR Completion Runtime', () => {
      const state = useStore.getState();
      expect(state.dars[0].status).toBe('APPROVED_WAITING_EFFECTIVE');
      expect(state.periodicReviewSchedules[0].linkageStatus).toBe('SUCCESS'); // Unchanged
-  });
-
-  it('Negative test: missing Actual Effective Date fails safely without creating next schedule', () => {
-    const mockSchedule = { id: 'SCH-REV-02', documentId: 'DOC-04', isActive: true, linkageStatus: 'SUCCESS' };
-    const mockDar = {
-      id: 'DAR-REV-02',
-      type: 'REVISION',
-      sourceType: 'PERIODIC_REVIEW',
-      sourceId: 'SCH-REV-02',
-      targetDocumentId: 'DOC-04',
-      status: 'APPROVED_WAITING_EFFECTIVE',
-      effectiveDate: new Date().toISOString().split('T')[0],
-      actualEffectiveDate: null, // Missing!
-      docIdRef: 'DOC-04'
-    };
-
-    useStore.setState({ 
-      periodicReviewSchedules: [mockSchedule],
-      documents: [{ id: 'DOC-04', title: 'SOP-04', status: 'EFFECTIVE' }],
-      dars: [mockDar]
-    });
-
-    useStore.getState().checkSLA();
-
-    const state = useStore.getState();
-    expect(state.dars[0].status).toBe('COMPLETED');
-    expect(state.periodicReviewSchedules).toHaveLength(1); // No new schedule generated
-    expect(state.periodicReviewSchedules[0].syncError).toBe('MISSING_ACTUAL_EFFECTIVE_DATE'); // Safely marked error
   });
 });

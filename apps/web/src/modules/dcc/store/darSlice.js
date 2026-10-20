@@ -1625,6 +1625,8 @@ export const createDarSlice = (set, get) => ({
           store.publishNewDocumentDar(targetDarToPublish.id);
         }
       }
+      // The published record needs its own review cycle; the superseded one's schedule retires
+      store.syncPeriodicReviewSchedulesAndTasks?.();
       
       // Asynchronous Stamp Generation for Approved DAR
       const dType = String(targetDarToPublish.type || targetDarToPublish.requestType || '').toUpperCase();

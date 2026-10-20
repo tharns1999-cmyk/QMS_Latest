@@ -1,7 +1,7 @@
 import { AlertTriangle, Ban, CheckCircle, Clock, FileEdit, RotateCw, ShieldCheck } from 'lucide-react';
 import { getReviewOutcomeLabel } from '../../services/PeriodicReviewService';
 
-export function PendingReviewPanel({ schedule, isDeptManagerOrSupervisor, taskId, navigate, handleApproveReview, handleStartReReview }) {
+export function PendingReviewPanel({ schedule, canApprove, taskId, navigate, handleApproveReview, handleStartReReview }) {
   return (
     <div className="bg-white rounded-xl border border-slate-200/80 p-6 shadow-sm">
       <div className="bg-amber-50 border border-amber-200 rounded-xl p-8 text-center">
@@ -17,12 +17,12 @@ export function PendingReviewPanel({ schedule, isDeptManagerOrSupervisor, taskId
         )}
 
         {/* Supervisor/Manager Section vs Reviewer Notice */}
-        {isDeptManagerOrSupervisor ? (
+        {canApprove ? (
           <div className="mt-6 p-4 bg-white/95 border border-amber-300 rounded-xl text-left shadow-2xs max-w-lg mx-auto">
             <div className="flex items-start gap-3">
               <ShieldCheck className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
               <div className="flex-1">
-                <h4 className="text-xs font-bold text-slate-900">การอนุมัติสำหรับหัวหน้างาน / ผู้จัดการ (L4+)</h4>
+                <h4 className="text-xs font-bold text-slate-900">การอนุมัติสำหรับหัวหน้าแผนก / ผู้จัดการ (ตาม Approval Matrix)</h4>
                 <p className="text-[11px] text-slate-600 mt-0.5">
                   คุณมีสิทธิ์พิจารณาอนุมัติผลการทบทวนเอกสารนี้เพื่อขยายรอบการทบทวน 1 ปี
                 </p>
@@ -262,4 +262,4 @@ export function EvaluatedReviewPanel({ effectiveOutcome, schedule, isExternal, e
     </div>
   );
 }
-
+

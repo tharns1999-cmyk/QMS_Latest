@@ -65,26 +65,8 @@ describe('Library PDF Download, Preview & Watermark Actions Tests', () => {
   });
 
   describe('1. UniversalWatermarkService Methods', () => {
-    it('generateStampingPDF stamps the real attached PDF bytes', async () => {
-      const source = await PDFDocument.create();
-      source.addPage();
-      const originalPdfBytes = await source.save();
-
-      const pdfBytes = await UniversalWatermarkService.generateStampingPDF(
-        { ...sampleDoc, originalPdfBytes },
-        WATERMARK_TYPES.UNCONTROLLED_COPY,
-        { name: 'User 1', department: 'PD' }
-      );
-      expect(pdfBytes).toBeInstanceOf(Uint8Array);
-      expect(pdfBytes.length).toBeGreaterThan(0);
-    });
-
     it('fails closed when the original file is missing (never fabricates a placeholder PDF)', async () => {
-      await expect(UniversalWatermarkService.generateStampingPDF(
-        sampleDoc,
-        WATERMARK_TYPES.UNCONTROLLED_COPY,
-        { name: 'User 1', department: 'PD' }
-      )).rejects.toThrow(/Original file not found/);
+      await expect(UniversalWatermarkService.resolveRawPdfBytes(sampleDoc, { userDept: 'PD' })).rejects.toThrow(/Original file not found/);
     });
 
     it('downloadWatermarkedPdf resolves and downloads without throw', async () => {

@@ -64,7 +64,7 @@ export default function ExternalReviewHistoryTab({ doc }) {
                     <p className="flex items-center gap-1.5">
                       {fastTrack
                         ? <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] font-semibold text-indigo-700"><Zap className="h-3 w-3" aria-hidden="true" />Fast-Track</span>
-                        : <>ผู้อนุมัติ: <span className="font-medium text-slate-800">{approver?.name || '-'}</span>{approver?.role && <span className="text-slate-400">({approver.role})</span>}</>}
+                        : <>ผู้อนุมัติ: <span className="font-medium text-slate-800">{approver?.name || '-'}</span></>}
                     </p>
                   </div>
 

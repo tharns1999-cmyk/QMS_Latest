@@ -756,7 +756,7 @@ const DistributionSetup = ({
                 className="h-8 px-2.5 text-xs text-blue-600 bg-blue-50/60 hover:bg-blue-100/80 rounded-md font-medium flex items-center gap-1.5 cursor-pointer border border-blue-200/60 transition-colors shadow-2xs"
               >
                 <Plus size={13} strokeWidth={2.5} />
-                <span>+ เพิ่มจุดติดตั้งใหม่</span>
+                <span>เพิ่มจุดติดตั้งใหม่</span>
               </button>
             </div>
           </div>
@@ -784,7 +784,7 @@ const DistributionSetup = ({
                   className="h-8 px-3 text-xs text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg font-medium flex items-center gap-1.5 cursor-pointer border border-blue-200 transition-colors shadow-2xs"
                 >
                   <Plus size={13} strokeWidth={2.5} />
-                  <span>+ เพิ่มจุดติดตั้งใหม่</span>
+                  <span>เพิ่มจุดติดตั้งใหม่</span>
                 </button>
               </div>
             ) : (
