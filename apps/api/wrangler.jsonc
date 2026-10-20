@@ -1,0 +1,16 @@
+{
+  "name": "qms-api",
+  "main": "src/index.js",
+  "compatibility_date": "2026-10-01",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "qms",
+      // Replace with the id printed by `npx wrangler d1 create qms` before the first deploy.
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  // Comma-separated web origins allowed to call the API; JWT_SECRET is set with `npx wrangler secret put JWT_SECRET`.
+  "vars": { "ALLOWED_ORIGIN": "http://localhost:5173,http://localhost:4173" }
+}
