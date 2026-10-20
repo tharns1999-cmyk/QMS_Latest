@@ -18,6 +18,7 @@ import {
 } from '../../utils/darHelper';
 import { cleanLocationName, getMasterStationForDept, normalizeDepartmentId, calculateCopyAllocations } from '../../services/MasterDataService';
 import { resolveDocCode, resolveDocTitle } from '../../utils/documentUtils';
+import { isApiMode } from '../../../../api/client';
 import { saveFile } from '../../utils/fileStorage';
 
 const initialFormState = {
@@ -985,6 +986,7 @@ const DarRevisionForm = () => {
       } else {
         result = addDar(newDar);
       }
+      if (isApiMode && !result) return; // the server refused and the reason was shown
 
       if (result) {
         const allocatedId = result.id || result.darNumber || result.darNo;

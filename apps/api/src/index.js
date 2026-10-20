@@ -74,6 +74,12 @@ export const requireAuth = async (c, next) => {
 
 app.get('/api/auth/me', requireAuth, (c) => c.json({ user: c.get('user') }));
 
+// Directory for routing DARs and showing who signed: active users, no credentials.
+app.get('/api/users', requireAuth, async (c) => {
+  const { results } = await c.env.DB.prepare("SELECT * FROM users WHERE status = 'ACTIVE' ORDER BY name").all();
+  return c.json({ users: results.map(toPublicUser) });
+});
+
 app.get('/api/approval-matrix', requireAuth, async (c) => {
   const { results } = await c.env.DB.prepare('SELECT * FROM approval_matrix ORDER BY doc_type').all();
   return c.json({ matrix: results });
@@ -127,7 +133,7 @@ app.get('/api/documents/:id', requireAuth, async (c) => {
   return doc ? c.json({ document: doc }) : c.json({ error: 'ไม่พบเอกสาร' }, 404);
 });
 
-const MAX_PDF_BYTES = 20 * 1024 * 1024;
+const MAX_PDF_BYTES = 25 * 1024 * 1024; // matches the limit the upload forms state
 const servePdf = async (c, key, filename) => {
   const obj = key && await c.env.FILES.get(key);
   if (!obj) return c.json({ error: 'ไม่พบไฟล์' }, 404);
@@ -236,9 +242,9 @@ app.put('/api/dars/:id/file', requireAuth, async (c) => {
   if (dar.requester_id !== user.id) return c.json({ error: 'เฉพาะผู้ขอเท่านั้นที่แนบไฟล์ได้' }, 403);
   if (dar.type === 'OBSOLETE') return c.json({ error: 'คำขอยกเลิกเอกสารไม่ต้องแนบไฟล์' }, 400);
   if (dar.status !== 'PENDING_REVIEW') return c.json({ error: 'แนบไฟล์ได้เฉพาะก่อนการทบทวน' }, 409);
-  if (Number(c.req.header('content-length')) > MAX_PDF_BYTES) return c.json({ error: 'ไฟล์ต้องไม่เกิน 20 MB' }, 413);
+  if (Number(c.req.header('content-length')) > MAX_PDF_BYTES) return c.json({ error: 'ไฟล์ต้องไม่เกิน 25 MB' }, 413);
   const file = await c.req.arrayBuffer();
-  if (file.byteLength > MAX_PDF_BYTES) return c.json({ error: 'ไฟล์ต้องไม่เกิน 20 MB' }, 413);
+  if (file.byteLength > MAX_PDF_BYTES) return c.json({ error: 'ไฟล์ต้องไม่เกิน 25 MB' }, 413);
   if (new TextDecoder().decode(file.slice(0, 5)) !== '%PDF-') return c.json({ error: 'ไฟล์ต้องเป็น PDF' }, 400);
 
   // A fresh key per upload, so an object a reviewer may already have opened is never overwritten.

@@ -1,10 +1,12 @@
 import useStore from '../store/useStore';
 import { apiGet, apiPost, setToken, SESSION_EXPIRED_EVENT } from './client';
+import { loadDars } from './dars';
 
 // The pages were built on demo records with many alias fields; API rows get the aliases they read.
 export const toStoreUser = (u) => ({
   ...u,
   userId: u.id,
+  status: 'ACTIVE',
   primary_department: u.department,
   departments: u.depts,
   affiliated_departments: u.depts,
@@ -43,8 +45,19 @@ export const loadDocuments = async () => {
 };
 
 const start = async (user) => {
-  useStore.setState({ currentUser: toStoreUser(user) });
-  await loadDocuments();
+  const [{ users }, { matrix }] = await Promise.all([apiGet('/api/users'), apiGet('/api/approval-matrix')]);
+  const people = users.map(toStoreUser);
+  // Routing previews and pickers read these lists, so they must hold the real signers, not demo users.
+  useStore.setState({
+    currentUser: toStoreUser(user),
+    masterUsers: people,
+    requestUsers: people,
+    reviewUsers: people,
+    approveUsers: people,
+    approvalMatrix: matrix,
+    approval_matrix: matrix
+  });
+  await Promise.all([loadDocuments(), loadDars()]);
 };
 
 export const login = async (email, password) => {
@@ -58,7 +71,7 @@ export const restoreSession = async () => start((await apiGet('/api/auth/me')).u
 // Server data must not outlive the session in this browser.
 export const clearSession = () => {
   setToken(null);
-  useStore.setState({ documents: [] });
+  useStore.setState({ documents: [], dars: [], darRequests: [], timeline: [] });
 };
 
 export const logout = () => window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));

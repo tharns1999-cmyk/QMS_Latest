@@ -11,6 +11,7 @@ import { resolveReviewer } from '../../utils/workflowResolver';
 import { normalizeDraftToFormState } from '../../utils/draftNormalizer';
 import { isUserAuthorizedForDocDept, getActiveDarForDocument } from '../../utils/darHelper';
 import { resolveDocCode, resolveDocTitle } from '../../utils/documentUtils';
+import { isApiMode } from '../../../../api/client';
 
 const initialFormState = {
   docId: '',
@@ -39,8 +40,9 @@ const DarObsoleteForm = () => {
   const deepLinkDocId = searchParams.get('docId') || location.state?.selectedDocId || location.state?.docId || prefillDocId;
   const { 
     currentUser, 
-    addDar, 
-    saveDarDraft, 
+    addDar,
+    submitDar,
+    saveDarDraft,
     deleteDar, 
     masterUsers, 
     reviewUsers, 
@@ -424,10 +426,14 @@ const DarObsoleteForm = () => {
     }
   };
 
-  const executeSubmit = () => {
+  const executeSubmit = async () => {
     const newDar = buildPayload(false);
     if (targetDraftId && deleteDar) deleteDar(targetDraftId);
-    addDar(newDar);
+    if (isApiMode) {
+      if (!(await submitDar(newDar))) return; // the server refused and the reason was shown
+    } else {
+      addDar(newDar);
+    }
     isSubmittedRef.current = true;
     setShowConfirm(false);
     toast.success('ยื่นคำร้องขอยกเลิกเอกสาร (DAR Obsolete) สำเร็จเรียบร้อย');
