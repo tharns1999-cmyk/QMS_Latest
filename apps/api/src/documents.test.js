@@ -11,7 +11,8 @@ describe('documents API', () => {
     const res = await app.request(path, { headers: { Authorization: `Bearer ${token}` } }, env);
     return { status: res.status, body: await res.json() };
   };
-  const codes = (body) => body.documents.map((d) => `${d.doc_code}/${d.revision}`);
+  // Only this file's rows: other test files share the same local D1 and may run first.
+  const codes = (body) => body.documents.filter((d) => /^d\d$/.test(d.id)).map((d) => `${d.doc_code}/${d.revision}`);
 
   beforeAll(async () => {
     proxy = await getPlatformProxy({ persist: { path: '.wrangler/test/v3' } });
