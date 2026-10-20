@@ -27,6 +27,11 @@ test.describe('Periodic Review DAR Linkage Source Lock', () => {
 
     // 6. Verify no document selector exists
     await expect(page.locator('select').filter({ hasText: 'เลือกเอกสารที่ต้องการแก้ไข' })).not.toBeVisible();
+
+    // 7. Title comes from the locked source and cannot be renamed
+    const titleInput = page.locator('input[placeholder*="ชื่อเอกสาร"]');
+    await expect(titleInput).toHaveValue('Test Document PD');
+    await expect(titleInput).not.toBeEditable();
     
 
 
