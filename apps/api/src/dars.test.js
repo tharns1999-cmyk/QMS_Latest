@@ -17,6 +17,12 @@ describe('DAR workflow API', () => {
   };
   const get = (path, who) => request('GET', path, who);
   const post = (path, who, body = {}) => request('POST', path, who, body);
+  const PDF = new TextEncoder().encode('%PDF-1.4 test');
+  const upload = async (id, who, body = PDF) => {
+    const res = await app.request(`/api/dars/${id}/file`, { method: 'PUT', headers: { 'Content-Type': 'application/pdf', Authorization: `Bearer ${tokens[who]}` }, body }, env);
+    return { status: res.status, body: await res.json() };
+  };
+  const download = (path, who) => app.request(path, { headers: { Authorization: `Bearer ${tokens[who]}` } }, env);
   const newDar = (over) => ({ type: 'NEW', doc_code: 'WI-PD-100', doc_type: 'FM', department: 'PD', name: 'วิธีล้างเครื่อง', reason: 'เริ่มใช้', reviewer_id: 'R-REV', approver_id: 'R-APP', ...over });
 
   beforeAll(async () => {
@@ -50,6 +56,8 @@ describe('DAR workflow API', () => {
 
     expect((await post(`/api/dars/${id}/decision`, 'R-APP', { decision: 'APPROVE' })).status).toBe(403); // not the reviewer
     expect((await post(`/api/dars/${id}/publish`, 'R-DCC')).status).toBe(409);
+    expect((await post(`/api/dars/${id}/decision`, 'R-REV', { decision: 'APPROVE' })).status).toBe(409); // no PDF yet
+    expect((await upload(id, 'R-REQ')).status).toBe(200);
     expect((await post(`/api/dars/${id}/decision`, 'R-REV', { decision: 'APPROVE' })).body.dar.status).toBe('PENDING_APPROVAL');
     expect((await post(`/api/dars/${id}/decision`, 'R-REV', { decision: 'APPROVE' })).status).toBe(403);
     expect((await post(`/api/dars/${id}/decision`, 'R-APP', { decision: 'APPROVE' })).body.dar.status).toBe('PENDING_DCC');
@@ -60,12 +68,19 @@ describe('DAR workflow API', () => {
 
     const rev = (await post('/api/dars', 'R-REQ', { type: 'REVISION', doc_code: 'wi-pd-100', reason: 'ปรับขั้นตอน', reviewer_id: 'R-REV', approver_id: 'R-APP' })).body.dar;
     expect(rev).toMatchObject({ revision: '01', department: 'PD', doc_type: 'FM' });
+    await upload(rev.id, 'R-REQ');
     await post(`/api/dars/${rev.id}/decision`, 'R-REV', { decision: 'APPROVE' });
     await post(`/api/dars/${rev.id}/decision`, 'R-APP', { decision: 'APPROVE' });
     expect((await post(`/api/dars/${rev.id}/publish`, 'R-DCC')).status).toBe(200);
     const list = async (s) => (await get(`/api/documents?status=${s}`, 'R-REQ')).body.documents.filter((d) => d.doc_code === 'WI-PD-100').map((d) => d.revision);
     expect(await list('EFFECTIVE')).toEqual(['01']);
     expect(await list('SUPERSEDED')).toEqual(['00']);
+    const docId = async (s) => (await get(`/api/documents?status=${s}`, 'R-REQ')).body.documents.find((d) => d.doc_code === 'WI-PD-100').id;
+    const file = await download(`/api/documents/${await docId('EFFECTIVE')}/file`, 'R-REQ');
+    expect(file.headers.get('content-type')).toBe('application/pdf');
+    expect(await file.text()).toBe('%PDF-1.4 test');
+    expect((await download(`/api/documents/${await docId('SUPERSEDED')}/file`, 'R-REQ')).status).toBe(403);
+    expect((await download(`/api/documents/${await docId('SUPERSEDED')}/file`, 'R-DCC')).status).toBe(200);
 
     const obs = (await post('/api/dars', 'R-REQ', { type: 'OBSOLETE', doc_code: 'WI-PD-100', reason: 'เลิกใช้', reviewer_id: 'R-REV', approver_id: 'R-APP' })).body.dar;
     await post(`/api/dars/${obs.id}/decision`, 'R-REV', { decision: 'APPROVE' });
@@ -86,5 +101,19 @@ describe('DAR workflow API', () => {
     expect((await post('/api/dars', 'R-REQ', newDar({ doc_code: 'WI-PD-200' }))).status).toBe(201);
     expect((await get(`/api/dars/${dar.id}`, 'R-LOW')).status).toBe(404); // not named on the DAR
     expect((await get(`/api/dars/${dar.id}`, 'R-DCC')).status).toBe(200);
+  });
+
+  it('takes a PDF only from the requester and only before review', async () => {
+    const dar = (await post('/api/dars', 'R-REQ', newDar({ doc_code: 'WI-PD-300' }))).body.dar;
+    expect((await upload(dar.id, 'R-REV')).status).toBe(403);
+    expect((await upload(dar.id, 'R-REQ', new TextEncoder().encode('not a pdf'))).status).toBe(400);
+    const first = (await upload(dar.id, 'R-REQ')).body.dar.file_key;
+    const second = (await upload(dar.id, 'R-REQ')).body.dar.file_key;
+    expect(second).not.toBe(first);
+    expect(await env.FILES.get(first)).toBeNull(); // the unreviewed file it replaced is gone
+    expect((await download(`/api/dars/${dar.id}/file`, 'R-REV')).status).toBe(200);
+    expect((await download(`/api/dars/${dar.id}/file`, 'R-LOW')).status).toBe(404);
+    await post(`/api/dars/${dar.id}/decision`, 'R-REV', { decision: 'APPROVE' });
+    expect((await upload(dar.id, 'R-REQ')).status).toBe(409);
   });
 });

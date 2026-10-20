@@ -127,6 +127,24 @@ app.get('/api/documents/:id', requireAuth, async (c) => {
   return doc ? c.json({ document: doc }) : c.json({ error: 'ไม่พบเอกสาร' }, 404);
 });
 
+const MAX_PDF_BYTES = 20 * 1024 * 1024;
+const servePdf = async (c, key, filename) => {
+  const obj = key && await c.env.FILES.get(key);
+  if (!obj) return c.json({ error: 'ไม่พบไฟล์' }, 404);
+  return new Response(obj.body, {
+    headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': `inline; filename="${filename}.pdf"`, 'Cache-Control': 'private, no-store' }
+  });
+};
+
+app.get('/api/documents/:id/file', requireAuth, async (c) => {
+  const user = c.get('user');
+  const doc = await c.env.DB.prepare(`SELECT * FROM documents WHERE id = ? AND ${VISIBLE_TO}`).bind(c.req.param('id'), ...visibilityArgs(user)).first();
+  if (!doc) return c.json({ error: 'ไม่พบเอกสาร' }, 404);
+  // Superseded and obsolete copies stay with DCC/QMR so they cannot be used by mistake (ISO 9001 7.5.3).
+  if (doc.status !== 'EFFECTIVE' && !user.isDcc && !user.isQmr) return c.json({ error: 'เอกสารนี้ไม่มีผลบังคับใช้แล้ว' }, 403);
+  return servePdf(c, doc.file_key, `${doc.doc_code}_Rev${doc.revision}`);
+});
+
 const NOW = `strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`;
 const DAR_TYPES = ['NEW', 'REVISION', 'OBSOLETE'];
 const STAGE_BY_STATUS = { PENDING_REVIEW: 'REVIEW', PENDING_APPROVAL: 'APPROVE' };
@@ -203,6 +221,43 @@ app.get('/api/dars/:id', requireAuth, async (c) => {
   return dar ? c.json({ dar }) : c.json({ error: 'ไม่พบคำขอ' }, 404);
 });
 
+app.get('/api/dars/:id/file', requireAuth, async (c) => {
+  const dar = await c.env.DB.prepare(`SELECT * FROM dars WHERE id = ? AND ${DAR_VISIBLE_TO}`).bind(c.req.param('id'), ...darVisibilityArgs(c.get('user'))).first();
+  if (!dar) return c.json({ error: 'ไม่พบคำขอ' }, 404);
+  return servePdf(c, dar.file_key, `${dar.doc_code}_Rev${dar.revision}_DAR${dar.id}`);
+});
+
+// The requester attaches the PDF before review, so reviewer and approver sign off on this exact file.
+app.put('/api/dars/:id/file', requireAuth, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  const dar = await db.prepare('SELECT * FROM dars WHERE id = ?').bind(c.req.param('id')).first();
+  if (!dar) return c.json({ error: 'ไม่พบคำขอ' }, 404);
+  if (dar.requester_id !== user.id) return c.json({ error: 'เฉพาะผู้ขอเท่านั้นที่แนบไฟล์ได้' }, 403);
+  if (dar.type === 'OBSOLETE') return c.json({ error: 'คำขอยกเลิกเอกสารไม่ต้องแนบไฟล์' }, 400);
+  if (dar.status !== 'PENDING_REVIEW') return c.json({ error: 'แนบไฟล์ได้เฉพาะก่อนการทบทวน' }, 409);
+  if (Number(c.req.header('content-length')) > MAX_PDF_BYTES) return c.json({ error: 'ไฟล์ต้องไม่เกิน 20 MB' }, 413);
+  const file = await c.req.arrayBuffer();
+  if (file.byteLength > MAX_PDF_BYTES) return c.json({ error: 'ไฟล์ต้องไม่เกิน 20 MB' }, 413);
+  if (new TextDecoder().decode(file.slice(0, 5)) !== '%PDF-') return c.json({ error: 'ไฟล์ต้องเป็น PDF' }, 400);
+
+  // A fresh key per upload, so an object a reviewer may already have opened is never overwritten.
+  const key = `dars/${dar.id}/${crypto.randomUUID()}.pdf`;
+  await c.env.FILES.put(key, file, { httpMetadata: { contentType: 'application/pdf' } });
+  const [updated] = await db.batch([
+    db.prepare("UPDATE dars SET file_key = ? WHERE id = ? AND status = 'PENDING_REVIEW' RETURNING *").bind(key, dar.id),
+    db.prepare('INSERT INTO audit_log (actor_id, action, details) SELECT ?, ?, ? WHERE changes() > 0')
+      .bind(user.id, 'DAR_FILE_ATTACHED', JSON.stringify({ dar_id: dar.id, bytes: file.byteLength }))
+  ]);
+  if (!updated.results.length) {
+    await c.env.FILES.delete(key);
+    return c.json({ error: 'แนบไฟล์ได้เฉพาะก่อนการทบทวน' }, 409);
+  }
+  // The replaced file was never reviewed, so it is not a record worth keeping.
+  if (dar.file_key) await c.env.FILES.delete(dar.file_key);
+  return c.json({ dar: updated.results[0] });
+});
+
 app.post('/api/dars/:id/decision', requireAuth, async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
@@ -219,17 +274,19 @@ app.post('/api/dars/:id/decision', requireAuth, async (c) => {
   // Re-checked at decision time: the user's level or the matrix may have changed since submission.
   const problem = checkDecisionRights(user, { stage, department: dar.department, requesterId: dar.requester_id, reviewerId: dar.reviewer_id }, await getThresholds(db, dar.doc_type));
   if (problem) return c.json({ error: problem }, 403);
+  if (body.decision === 'APPROVE' && dar.type !== 'OBSOLETE' && !dar.file_key) return c.json({ error: 'ผู้ขอยังไม่ได้แนบไฟล์ PDF' }, 409);
 
   const next = body.decision === 'REJECT' ? 'REJECTED' : stage === 'REVIEW' ? 'PENDING_APPROVAL' : 'PENDING_DCC';
   const stamp = stage === 'REVIEW' ? 'reviewed_at' : 'approved_at';
-  // The status guard in WHERE makes a double click or a race a no-op instead of a second decision.
+  // The status guard in WHERE makes a double click or a race a no-op instead of a second decision;
+  // the file guard stops an approval landing on a PDF swapped in after it was read.
   const [updated] = await db.batch([
-    db.prepare(`UPDATE dars SET status = ?, ${stamp} = ${NOW}, reject_comment = ? WHERE id = ? AND status = ? RETURNING *`)
-      .bind(next, comment || null, dar.id, dar.status),
+    db.prepare(`UPDATE dars SET status = ?, ${stamp} = ${NOW}, reject_comment = ? WHERE id = ? AND status = ? AND file_key IS ? RETURNING *`)
+      .bind(next, comment || null, dar.id, dar.status, dar.file_key),
     db.prepare(`INSERT INTO audit_log (actor_id, action, details) SELECT ?, ?, ? WHERE changes() > 0`)
       .bind(user.id, body.decision === 'REJECT' ? 'DAR_REJECTED' : stage === 'REVIEW' ? 'DAR_REVIEWED' : 'DAR_APPROVED', JSON.stringify({ dar_id: dar.id, comment }))
   ]);
-  if (!updated.results.length) return c.json({ error: 'คำขอนี้ถูกพิจารณาไปแล้ว' }, 409);
+  if (!updated.results.length) return c.json({ error: 'คำขอนี้ถูกพิจารณาหรือเปลี่ยนไฟล์ไปแล้ว กรุณาโหลดใหม่' }, 409);
   return c.json({ dar: updated.results[0] });
 });
 
@@ -249,9 +306,9 @@ app.post('/api/dars/:id/publish', requireAuth, async (c) => {
   const retire = (status) => db.prepare("UPDATE documents SET status = ? WHERE doc_code = ? AND status = 'EFFECTIVE'").bind(status, dar.doc_code);
   const statements = dar.type === 'OBSOLETE' ? [retire('OBSOLETE')] : [
     ...(dar.type === 'REVISION' ? [retire('SUPERSEDED')] : []),
-    db.prepare(`INSERT INTO documents (id, doc_code, revision, name, doc_type, department, status, access_scope, owner_id, effective_date)
-      VALUES (?, ?, ?, ?, ?, ?, 'EFFECTIVE', ?, ?, date('now'))`)
-      .bind(documentId, dar.doc_code, dar.revision, dar.name, dar.doc_type, dar.department, dar.access_scope, dar.requester_id)
+    db.prepare(`INSERT INTO documents (id, doc_code, revision, name, doc_type, department, status, access_scope, owner_id, effective_date, file_key)
+      VALUES (?, ?, ?, ?, ?, ?, 'EFFECTIVE', ?, ?, date('now'), ?)`)
+      .bind(documentId, dar.doc_code, dar.revision, dar.name, dar.doc_type, dar.department, dar.access_scope, dar.requester_id, dar.file_key)
   ];
 
   try {
