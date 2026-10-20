@@ -113,7 +113,10 @@ describe('DAR workflow API', () => {
     expect(await env.FILES.get(first)).toBeNull(); // the unreviewed file it replaced is gone
     expect((await download(`/api/dars/${dar.id}/file`, 'R-REV')).status).toBe(200);
     expect((await download(`/api/dars/${dar.id}/file`, 'R-LOW')).status).toBe(404);
+    await env.FILES.put(`dars/${dar.id}/orphan.pdf`, PDF); // as left by a concurrent upload
     await post(`/api/dars/${dar.id}/decision`, 'R-REV', { decision: 'APPROVE' });
+    expect(await env.FILES.get(`dars/${dar.id}/orphan.pdf`)).toBeNull();
+    expect(await env.FILES.get(second)).not.toBeNull();
     expect((await upload(dar.id, 'R-REQ')).status).toBe(409);
   });
 });

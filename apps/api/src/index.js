@@ -287,6 +287,13 @@ app.post('/api/dars/:id/decision', requireAuth, async (c) => {
       .bind(user.id, body.decision === 'REJECT' ? 'DAR_REJECTED' : stage === 'REVIEW' ? 'DAR_REVIEWED' : 'DAR_APPROVED', JSON.stringify({ dar_id: dar.id, comment }))
   ]);
   if (!updated.results.length) return c.json({ error: 'คำขอนี้ถูกพิจารณาหรือเปลี่ยนไฟล์ไปแล้ว กรุณาโหลดใหม่' }, 409);
+  // Uploads stop once the DAR leaves PENDING_REVIEW (a late one deletes its own object), so any other
+  // object under this DAR is an orphan from concurrent uploads or a failed write: sweep it now.
+  if (stage === 'REVIEW') {
+    const { objects } = await c.env.FILES.list({ prefix: `dars/${dar.id}/` });
+    const orphans = objects.map((o) => o.key).filter((key) => key !== dar.file_key);
+    if (orphans.length) await c.env.FILES.delete(orphans);
+  }
   return c.json({ dar: updated.results[0] });
 });
 
