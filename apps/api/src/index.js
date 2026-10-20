@@ -105,4 +105,25 @@ app.put('/api/approval-matrix/:docType', requireAuth, async (c) => {
   return c.json({ entry: await db.prepare('SELECT * FROM approval_matrix WHERE doc_type = ?').bind(docType).first() });
 });
 
+const DOC_STATUSES = ['EFFECTIVE', 'SUPERSEDED', 'OBSOLETE'];
+// GENERAL documents are open to everyone; DEPT documents only to their department, DCC and QMR.
+const VISIBLE_TO = `(access_scope = 'GENERAL' OR department IN (SELECT value FROM json_each(?)) OR ?)`;
+const visibilityArgs = (user) => [JSON.stringify([...user.depts, user.department]), user.isDcc || user.isQmr ? 1 : 0];
+
+// One status per request: Active, Superseded and Obsolete lists are never mixed (ISO 9001 7.5.3).
+app.get('/api/documents', requireAuth, async (c) => {
+  const status = (c.req.query('status') || 'EFFECTIVE').toUpperCase();
+  if (!DOC_STATUSES.includes(status)) return c.json({ error: 'สถานะเอกสารไม่ถูกต้อง' }, 400);
+  const { results } = await c.env.DB.prepare(`SELECT * FROM documents WHERE status = ? AND ${VISIBLE_TO} ORDER BY doc_code, revision`)
+    .bind(status, ...visibilityArgs(c.get('user'))).all();
+  return c.json({ documents: results });
+});
+
+app.get('/api/documents/:id', requireAuth, async (c) => {
+  const doc = await c.env.DB.prepare(`SELECT * FROM documents WHERE id = ? AND ${VISIBLE_TO}`)
+    .bind(c.req.param('id'), ...visibilityArgs(c.get('user'))).first();
+  // 404 rather than 403 so a hidden document's existence is not revealed.
+  return doc ? c.json({ document: doc }) : c.json({ error: 'ไม่พบเอกสาร' }, 404);
+});
+
 export default app;
