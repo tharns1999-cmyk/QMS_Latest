@@ -4,6 +4,8 @@ export default defineConfig({
   test: {
     include: ['src/**/*.test.js'],
     globalSetup: './scripts/test-migrate.js',
-    testTimeout: 30000
+    testTimeout: 30000,
+    // All test files share one local D1 file, so run them one at a time.
+    fileParallelism: false
   }
 });
