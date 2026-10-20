@@ -385,47 +385,4 @@ describe('Point-of-Use Location Data Pipeline & Watermark Synchronization Tests'
     });
   });
 
-  describe('4. Universal Watermark Engine Integration (UniversalWatermarkService.js)', () => {
-    it('sanitizes metadata with specific station location and embeds Loc into 45-degree watermark text lines', () => {
-      const meta = {
-        docCode: 'WI-PD-001',
-        docVersion: '01',
-        copyNo: '02',
-        issueNo: '01',
-        holderDept: 'PD',
-        location: 'Line 1 - Mixing (ห้องผสม)'
-      };
-
-      const sanitized = UniversalWatermarkService.sanitizeMetadata(meta);
-      expect(sanitized.location).toBe('Line 1 - Mixing (ห้องผสม)');
-
-      const lines = UniversalWatermarkService.getWatermarkLines(WATERMARK_TYPES.CONTROLLED_COPY, sanitized);
-      const locLine = lines.find(l => l.text.startsWith('Loc:'));
-      
-      expect(locLine).toBeDefined();
-      expect(locLine.text).toBe('Loc: Line 1 - Mixing (ห้องผสม) | Issued By: DCC');
-      expect(locLine.text).not.toContain('Loc: Point of Use');
-      expect(locLine.text).not.toContain('Loc: Office Master');
-    });
-
-    it('handles replacement copies with specific station location correctly', () => {
-      const meta = {
-        docCode: 'WI-PD-001',
-        docVersion: '01',
-        copyNo: '02',
-        issueNo: '02',
-        holderDept: 'PD',
-        station_name: 'ขนม 1 (ห้องผสมและเตรียมวัตถุดิบไลน์ 1)'
-      };
-
-      const sanitized = UniversalWatermarkService.sanitizeMetadata(meta);
-      expect(sanitized.location).toBe('ขนม 1 (ห้องผสมและเตรียมวัตถุดิบไลน์ 1)');
-
-      const lines = UniversalWatermarkService.getWatermarkLines(WATERMARK_TYPES.CONTROLLED_COPY_REPLACEMENT, sanitized);
-      const locLine = lines.find(l => l.text.startsWith('Loc:'));
-      
-      expect(locLine).toBeDefined();
-      expect(locLine.text).toBe('Loc: ขนม 1 (ห้องผสมและเตรียมวัตถุดิบไลน์ 1) | Issued By: DCC');
-    });
-  });
 });

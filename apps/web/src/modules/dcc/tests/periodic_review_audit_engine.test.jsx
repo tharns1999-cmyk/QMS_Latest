@@ -236,7 +236,7 @@ describe('Periodic Review Engine & Routing Audit', () => {
         });
       }).toThrow('กรุณาระบุช่องทางการตรวจสอบและผลการตรวจสอบ');
 
-      // Execute: New Edition Found externally -> marks current doc as SUPERSEDED
+      // Execute: New Edition Found externally -> current doc stays ACTIVE until the new edition is approved
       const result = useStore.getState().verifyExternalDocument({
         scheduleId: 'SCH-EXT-01',
         docId: 'EXT-STD-01',
@@ -255,15 +255,16 @@ describe('Periodic Review Engine & Routing Audit', () => {
       const updatedSchedule = store.periodicReviewSchedules.find(s => s.id === 'SCH-EXT-01');
       const updatedTask = store.tasks.find(t => t.id === 'TASK-EXT-VER-01');
 
-      // Current document is marked SUPERSEDED
-      expect(updatedExtDoc.status).toBe('SUPERSEDED');
-      expect(updatedExtDoc.is_superseded).toBe(true);
-      expect(updatedExtDoc.superseded_date).toBe('2026-10-05');
-      expect(updatedExtDoc.superseded_reason).toContain('https://www.iso.org/standard/iso-14001');
+      // Current edition stays in force (no document void) and is flagged until the new edition is approved
+      expect(updatedExtDoc.status).toBe(extDoc.status);
+      expect(updatedExtDoc.is_superseded).not.toBe(true);
+      expect(updatedExtDoc.new_edition_pending.found_on).toBe('2026-10-05');
+      expect(updatedExtDoc.new_edition_pending.channel).toContain('https://www.iso.org/standard/iso-14001');
 
-      // Schedule is cancelled/deactivated
-      expect(updatedSchedule.isActive).toBe(false);
-      expect(updatedSchedule.status).toBe('CANCELLED_BY_DOCUMENT_STATUS');
+      // Schedule waits for the new edition without spawning another review task
+      expect(updatedSchedule.isActive).toBe(true);
+      expect(updatedSchedule.status).toBe('AWAITING_ACTION');
+      expect(updatedSchedule.linkageStatus).toBe('AWAITING_NEW_EDITION');
 
       // Task is completed
       expect(updatedTask.status).toBe('COMPLETED');

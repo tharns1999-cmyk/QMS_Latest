@@ -1,5 +1,3 @@
-import { calculateNextReviewDate } from './PeriodicReviewService';
-
 export const validateOutcomeAndDarType = (outcome, darType) => {
   if (outcome === 'REVISION_REQUIRED' && darType !== 'REVISION') return false;
   if (outcome === 'OBSOLETE_REQUIRED' && darType !== 'OBSOLETE') return false;
@@ -133,55 +131,12 @@ export const syncRevisionEffective = (dar, storeGet, storeSet) => {
   if (dar.sourceType !== 'PERIODIC_REVIEW' || dar.type !== 'REVISION') return;
   if (dar.status !== 'COMPLETED') return;
 
-  const actualDate = dar.actualEffectiveDate;
-
-  storeSet(state => {
-    let schedules = state.periodicReviewSchedules.map(s => {
-      if (s.id === dar.sourceId) {
-        return { ...s, linkageStatus: 'COMPLETED' };
-      }
-      return s;
-    });
-
-    if (!actualDate) {
-      schedules = schedules.map(s => {
-        if (s.id === dar.sourceId) {
-          return { ...s, syncError: 'MISSING_ACTUAL_EFFECTIVE_DATE' };
-        }
-        return s;
-      });
-      return { periodicReviewSchedules: schedules };
-    }
-
-    const nextRevision = dar.rev || 'XX';
-    const idempotencyKey = `PERIODIC_REVIEW_CYCLE:${dar.targetDocumentId}:${nextRevision}:${actualDate}`;
-    
-    const existing = schedules.find(s => s.idempotencyKey === idempotencyKey);
-    
-    if (!existing) {
-      // Create next schedule from Actual Effective Date (Internal = +1 year/12 months)
-      const newScheduleId = `PRS-INT-${dar.targetDocumentId}-${actualDate}-${nextRevision}`;
-      const nextDateStr = calculateNextReviewDate(actualDate, 12, null);
-      
-      schedules.push({
-        id: newScheduleId,
-        documentId: dar.targetDocumentId,
-        documentNumber: dar.sourceSnapshot?.documentNo,
-        documentName: dar.sourceSnapshot?.documentTitle,
-        ownerDepartmentId: dar.sourceSnapshot?.ownerDepartmentId,
-        documentCategory: 'INTERNAL',
-        status: 'PENDING',
-        outcome: null,
-        dueDate: nextDateStr,
-        dueState: 'NOT_YET_DUE',
-        assignedTo: null,
-        isActive: true,
-        idempotencyKey
-      });
-    }
-
-    return { periodicReviewSchedules: schedules };
-  });
+  // The next cycle is created by syncPeriodicReviewSchedulesAndTasks from the new revision's effective date and doc-type cycle
+  storeSet(state => ({
+    periodicReviewSchedules: state.periodicReviewSchedules.map(s =>
+      s.id === dar.sourceId ? { ...s, linkageStatus: 'COMPLETED', status: 'COMPLETED_WITH_REVISION', isActive: false } : s
+    )
+  }));
 };
 
 export const syncObsoleteCompleted = (dar, storeGet, storeSet) => {

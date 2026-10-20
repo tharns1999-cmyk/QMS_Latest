@@ -118,8 +118,9 @@ describe('QA/QC Canonical Normalization, RBAC & Document Prefix Extraction', () 
     expect(steps[2].userId).toBe('U-QMR');
 
     const qaqcManager = { id: 'U-QAQC-MGR', name: 'QA/QC Manager', department: 'QA/QC', level: 5, role: 'MANAGER', status: 'ACTIVE' };
-    const qcDoc = { id: 'DOC-QC-01', code: 'SOP-QC-01', title: 'SOP-QC-01', department: 'QC' };
-    const reviewForQcDoc = { id: 'PRS-QC-01', documentId: 'DOC-QC-01', documentNumber: 'SOP-QC-01', ownerDepartmentId: 'QC', status: 'ACTION_REQUIRED', documentCategory: 'INTERNAL' };
+    // WI: approval-matrix approver level is L5
+    const qcDoc = { id: 'DOC-QC-01', code: 'WI-QC-01', title: 'WI-QC-01', department: 'QC' };
+    const reviewForQcDoc = { id: 'PRS-QC-01', documentId: 'DOC-QC-01', documentNumber: 'WI-QC-01', ownerDepartmentId: 'QC', status: 'ACTION_REQUIRED', documentCategory: 'INTERNAL' };
 
     expect(canPerformPeriodicReview(qaManager, reviewForQcDoc, qcDoc)).toBe(true);
     expect(canPerformPeriodicReview(qaqcManager, reviewForQcDoc, qcDoc)).toBe(true);
@@ -136,7 +137,7 @@ describe('QA/QC Canonical Normalization, RBAC & Document Prefix Extraction', () 
     const res = useStore.getState().submitPeriodicReview({
       scheduleId: 'PRS-QC-01',
       docId: 'DOC-QC-01',
-      docCode: 'SOP-QC-01',
+      docCode: 'WI-QC-01',
       outcome: 'NO_CHANGE',
       currentUser: qaManager,
       reviewDetails: { reason: 'Annual QA/QC check passed' }
@@ -148,7 +149,7 @@ describe('QA/QC Canonical Normalization, RBAC & Document Prefix Extraction', () 
     expect(updatedSchedule.status).toBe('UPCOMING');
 
     // Also verify 2-step approval routing when QC Staff submits -> assigns to Level 5 QA Manager
-    const reviewForStaff = { id: 'PRS-QC-02', documentId: 'DOC-QC-01', documentNumber: 'SOP-QC-01', ownerDepartmentId: 'QC', status: 'ACTION_REQUIRED', documentCategory: 'INTERNAL' };
+    const reviewForStaff = { id: 'PRS-QC-02', documentId: 'DOC-QC-01', documentNumber: 'WI-QC-01', ownerDepartmentId: 'QC', status: 'ACTION_REQUIRED', documentCategory: 'INTERNAL' };
     useStore.setState({
       currentUser: requester,
       users: masterUsers,
@@ -162,7 +163,7 @@ describe('QA/QC Canonical Normalization, RBAC & Document Prefix Extraction', () 
     useStore.getState().submitPeriodicReview({
       scheduleId: 'PRS-QC-02',
       docId: 'DOC-QC-01',
-      docCode: 'SOP-QC-01',
+      docCode: 'WI-QC-01',
       outcome: 'NO_CHANGE',
       currentUser: requester,
       reviewDetails: { reason: 'Staff review' }
@@ -595,7 +596,7 @@ describe('QA/QC Canonical Normalization, RBAC & Document Prefix Extraction', () 
       id: 'U-QC-MGR',
       name: 'QC Manager',
       department: 'QC',
-      level: 5,
+      level: 6, // ED approver level per the approval matrix
       role: 'MANAGER',
       status: 'ACTIVE'
     };
@@ -814,7 +815,7 @@ describe('E2E Integration: Live Recalculation, Action Handoff Deep-Link & L4+ Ap
       id: 'U-QC-SUP',
       name: 'QC HOD',
       department: 'QC',
-      level: 5,
+      level: 6, // ED approver level per the approval matrix
       role: 'HOD'
     };
 
@@ -1113,7 +1114,7 @@ describe('5-Use-Case Periodic Review Two-Phase Commit & Rollback Lifecycle', () 
       id: 'U-QC-SUP-C2',
       name: 'QC Manager C2',
       department: 'QC',
-      level: 5,
+      level: 6, // ED approver level per the approval matrix
       role: 'MANAGER'
     };
 
@@ -1327,7 +1328,7 @@ describe('5-Use-Case Periodic Review Two-Phase Commit & Rollback Lifecycle', () 
       id: 'U-QC-SUP-C4',
       name: 'QC HOD C4',
       department: 'QC',
-      level: 5,
+      level: 6, // ED approver level per the approval matrix
       role: 'HOD'
     };
 

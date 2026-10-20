@@ -24,11 +24,14 @@ import {
   userMatchesDepartment, 
   getUserLevelNumber 
 } from '../utils/taskFilter';
+import { getApprovalThresholds } from '../utils/workflowResolver';
+import { isQaProxyReviewer } from '../services/PeriodicReviewAccessService';
 import { 
   getDocCode, 
   getDocTitle, 
   getCleanRev, 
-  getCleanDept 
+  getCleanDept,
+  isActiveDoc
 } from '../utils/domainNormalizer';
 
 const PERIODIC_APPROVAL_DENIED_MSG = 'ไม่มีสิทธิ์อนุมัติ: ต้องเป็นระดับหัวหน้าแผนก (Level 5 ขึ้นไป) หรือ QMR และต้องไม่ใช่ผู้ส่งผลทบทวนเอง';
@@ -59,15 +62,20 @@ const appendReviewHistory = (doc, legacy, { reviewer, approver, details = {}, ne
   }];
 };
 
+// Approver level comes from the approval matrix by doc type (a doc code like "SOP-QC-01" works too); unknown types fall back to L5
+export const minReviewApproverLevel = (docType, approvalMatrix) =>
+  getApprovalThresholds(String(docType || '').toUpperCase().split('-')[0], approvalMatrix).minApproverLevel;
+
 // Extracted Domain Helper Functions
-export const canFastTrackReview = (currentUser, docDepartment) => {
+export const canFastTrackReview = (currentUser, docDepartment, docType, approvalMatrix) => {
   if (!currentUser) return false;
+  const minLevel = minReviewApproverLevel(docType, approvalMatrix);
 
   // 1. ระดับสากล: DCC หรือ System Admin ทำ Fast-Track ได้เสมอ
   const isDccOrAdmin = ['DCC', 'ADMIN', 'DC', 'SUPER_ADMIN'].includes(currentUser.role) || currentUser.is_dcc || currentUser.isDcc;
   if (isDccOrAdmin) return true;
 
-  // 2. ตรวจสอบระดับ Level: ต้องเป็น L5 ขึ้นไปเท่านั้น (ตัด L4 Supervisor ออกเด็ดขาด)
+  // 2. ตรวจสอบระดับ Level ตาม Approval Matrix ของประเภทเอกสาร
   const userLevel = Number(
     currentUser.level || 
     currentUser.approval_level || 
@@ -81,16 +89,12 @@ export const canFastTrackReview = (currentUser, docDepartment) => {
                               String(currentUser.position || '').toLowerCase().includes('supervisor') ||
                               String(currentUser.position || '').toLowerCase().includes('staff') ||
                               String(currentUser.position || '').toLowerCase().includes('officer');
-  if (isSupervisorOrStaff && userLevel < 5) {
+  if (isSupervisorOrStaff && userLevel < minLevel) {
     return false;
   }
 
-  const isHodOrManager = userLevel >= 5 || 
-                         currentUser.role === 'HOD' || 
-                         currentUser.role === 'MANAGER' || 
-                         currentUser.is_hod === true ||
-                         currentUser.isDeptHead === true ||
-                         currentUser.is_manager === true;
+  // Matrix level is binding: a HOD/Manager flag never stands in for a missing level
+  const isHodOrManager = userLevel >= minLevel;
 
   // 3. ตรวจสอบขอบเขตแผนก: ต้องเป็น HOD/Manager ของแผนกเอกสารนั้น หรือดูแลข้ามแผนก ('*')
   const hasDeptScope = currentUser.managedDepartments?.includes('*') || 
@@ -98,11 +102,11 @@ export const canFastTrackReview = (currentUser, docDepartment) => {
                        userMatchesDepartment(currentUser, docDepartment) ||
                        (isHodOrManager && (currentUser.department === docDepartment || currentUser.primary_department === docDepartment));
 
-  // ต้องเป็น L5+ และมีสิทธิ์ในแผนกนั้นเท่านั้น ถึงจะได้ Fast-Track
+  // ต้องถึงระดับตาม Matrix และมีสิทธิ์ในแผนกนั้นเท่านั้น ถึงจะได้ Fast-Track
   return Boolean(isHodOrManager && hasDeptScope);
 };
 
-export const canFastTrackExternalReview = (currentUser, docDepartment) => {
+export const canFastTrackExternalReview = (currentUser, docDepartment, docType = 'ED', approvalMatrix) => {
   if (!currentUser) return false;
 
   // 1. ผู้มีอำนาจส่วนกลางต้องเป็น L5+ เช่นเดียวกับ HOD/Manager
@@ -120,9 +124,7 @@ export const canFastTrackExternalReview = (currentUser, docDepartment) => {
     getUserLevelNumber(currentUser)
   );
 
-  const isLevel5Plus = userLevel >= 5;
-
-  if (!isLevel5Plus) return false;
+  if (userLevel < minReviewApproverLevel(docType, approvalMatrix)) return false;
   if (isGlobalApprover) return true;
 
   // 3. ตรวจสอบขอบเขตแผนก: ต้องเป็น Level 5+ ในแผนกของเอกสารนั้น หรือมีสิทธิ์ข้ามแผนก ('*')
@@ -173,9 +175,11 @@ export const createPeriodicReviewSlice = (set, get) => ({
       const state = get();
       const effectiveToday = targetDate || state.getEffectiveToday();
 
-      let schedules = state.periodicReviewSchedules && state.periodicReviewSchedules.length > 0
-        ? [...state.periodicReviewSchedules]
-        : generateSchedules(state.documents || [], state.externalDocuments || [], []);
+      // Reconcile: retire schedules of superseded/obsolete records, then give every newly effective record (new DAR, revision) its own cycle
+      const retiredIds = new Set([...(state.documents || []), ...(state.externalDocuments || [])].filter(d => !isActiveDoc(d)).map(d => String(d.id)));
+      let schedules = generateSchedules(state.documents || [], state.externalDocuments || [], (state.periodicReviewSchedules || []).map(s =>
+        s.isActive !== false && retiredIds.has(String(s.externalDocumentId || s.documentId)) ? { ...s, isActive: false } : s
+      ));
 
       schedules = schedules.map(s => {
         const dueDate = s.nextReviewDate || s.currentScheduledReviewDate;
@@ -424,7 +428,9 @@ export const createPeriodicReviewSlice = (set, get) => ({
         }
       }
       const docDept = schedule.ownerDepartmentId || 'DC';
-      
+      // Audit trail: a QA reviewer acting for the owner department is recorded as a proxy
+      const proxyStamp = isQaProxyReviewer(activeUser, docDept) ? { reviewed_by_proxy: true, proxy_department: 'QA' } : {};
+
       // Find active review task
       const taskIndex = tasks.findIndex(t => t.scheduleId === schedule.id && t.status === 'ACTION_REQUIRED');
       if (taskIndex !== -1) {
@@ -472,8 +478,8 @@ export const createPeriodicReviewSlice = (set, get) => ({
 
       if (!requiresLinkedAction) {
         const isFastTrack = isExternalTarget
-          ? canFastTrackExternalReview(activeUser, docDept)
-          : canFastTrackReview(activeUser, docDept);
+          ? canFastTrackExternalReview(activeUser, docDept, 'ED', state.approvalMatrix)
+          : canFastTrackReview(activeUser, docDept, schedule.documentNumber, state.approvalMatrix);
 
         if (isFastTrack) {
           // === Flow 1: Fast-Track (1-Click Direct Approval by HOD/Manager/DCC/Admin) ===
@@ -550,7 +556,8 @@ export const createPeriodicReviewSlice = (set, get) => ({
             reviewer_id: activeUser?.id || null,
             reviewer_name: activeUser?.name || 'Reviewer',
             reviewer_role: activeUser?.role || 'Staff',
-            
+            ...proxyStamp,
+
             // ผู้อนุมัติ (Approver - 1 Level Fast-Track)
             approver_id: activeUser?.id || null,
             approver_name: activeUser?.name || 'HOD',
@@ -691,8 +698,8 @@ export const createPeriodicReviewSlice = (set, get) => ({
                 u.departments?.some(d => isSameDepartment(d, docDept))
               )
             );
-            const userLvl = getUserLevelNumber(u);
-            return isSameDept && userLvl >= 5;
+            // Route to the same matrix level approvePeriodicReview enforces, or the task could never be approved
+            return isSameDept && getUserLevelNumber(u) >= minReviewApproverLevel(isExternalTarget ? 'ED' : schedule.documentNumber, state.approvalMatrix);
           });
 
           // 2. Dynamic Fallback: หากไม่พบผู้อนุมัติในแผนก ให้ค้นหาผู้ใช้ที่เป็น DCC / QMR จาก Store
@@ -731,6 +738,7 @@ export const createPeriodicReviewSlice = (set, get) => ({
             reviewer_role: activeUser?.role || 'Staff',
             reviewer_position: activeUser?.position || activeUser?.role_name || (activeUser?.role !== 'DEPT_ADMIN' ? activeUser?.role : 'ผู้จัดทำ') || 'Staff',
             reviewer_department: activeUser?.department || activeUser?.dept || activeUser?.primary_department || docDept,
+            ...proxyStamp,
             submitted_at: new Date().toISOString(),
             details: reviewDetails || { comment }
           };
@@ -829,7 +837,7 @@ export const createPeriodicReviewSlice = (set, get) => ({
       }
 
       if (requiresLinkedAction) {
-        const isFastTrack = isExternalTarget ? canFastTrackExternalReview(activeUser, docDept) : canFastTrackReview(activeUser, docDept);
+        const isFastTrack = isExternalTarget ? canFastTrackExternalReview(activeUser, docDept, 'ED', state.approvalMatrix) : canFastTrackReview(activeUser, docDept, schedule.documentNumber, state.approvalMatrix);
         const linkedAuditEntry = {
           id: `REV-HIST-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
           round: 1,
@@ -851,6 +859,7 @@ export const createPeriodicReviewSlice = (set, get) => ({
           reviewer_id: activeUser?.id || null,
           reviewer_name: activeUser?.name || 'Reviewer',
           reviewer_role: activeUser?.role || 'Staff',
+          ...proxyStamp,
 
           // ผู้อนุมัติ (Approver - 1 Level)
           approver_id: isFastTrack ? activeUser?.id : null,
@@ -1723,9 +1732,12 @@ export const createPeriodicReviewSlice = (set, get) => ({
 
     const docDept = task.department || task.target_department || targetSchedule?.ownerDepartmentId || matchedExtDoc?.department || matchedIntDoc?.department || 'DC';
 
-    // RBAC Check for External Documents: Level 5+ (HOD/Manager/QMR), and never the reviewer approving their own submission
+    // RBAC: approval-matrix level of the owner dept (or DCC/QMR) for both internal and external, and never the reviewer approving their own submission
     const isSelfApproval = Boolean(reviewer_id && approver?.id && String(approver.id) === String(reviewer_id));
-    if (isSelfApproval || (is_external && !canFastTrackExternalReview(approver, docDept))) {
+    const canApprove = is_external
+      ? canFastTrackExternalReview(approver, docDept, 'ED', state.approvalMatrix)
+      : canFastTrackReview(approver, docDept, matchedIntDoc?.type || matchedIntDoc?.doc_code || targetSchedule?.documentNumber || doc_code, state.approvalMatrix);
+    if (isSelfApproval || !canApprove) {
       console.warn(`[RBAC] User ${approver?.name} is not authorized to approve periodic review for external doc ${doc_code || doc_id} in dept ${docDept}`);
       if (typeof toast !== 'undefined' && toast.error) {
         toast.error(PERIODIC_APPROVAL_DENIED_MSG);
@@ -1794,6 +1806,7 @@ export const createPeriodicReviewSlice = (set, get) => ({
       reviewer_id: reviewer_id || null,
       reviewer_name: reviewer_name || 'Staff',
       reviewer_role: reviewer_role || 'Staff',
+      ...(taskPayload.reviewed_by_proxy ? { reviewed_by_proxy: true, proxy_department: taskPayload.proxy_department } : {}),
 
       // ผู้อนุมัติ (Approver - 1 Level)
       approver_id: approver?.id || null,
@@ -1895,6 +1908,9 @@ export const createPeriodicReviewSlice = (set, get) => ({
         return {
           ...s,
           status: is_external ? 'COMPLETED' : 'UPCOMING',
+          // submit left PENDING_APPROVAL on these; evaluateDocumentReviewStatus reads them before is_reviewed_this_cycle
+          review_status: is_external ? 'COMPLETED' : 'UPCOMING',
+          pending_periodic_review: false,
           dueState: 'NOT_YET_DUE',
           outcome: 'NO_CHANGE',
           lastReviewedDate: now,
@@ -2058,10 +2074,10 @@ export const createPeriodicReviewSlice = (set, get) => ({
     const doc = state.externalDocuments[docIdx];
     const docDept = doc.department || doc.dept || 'DC';
 
-    // RBAC Check: Level 5+ (HOD/Manager/QMR), and never the reviewer approving their own submission
+    // RBAC Check: approval-matrix level for ED (HOD/Manager/QMR), and never the reviewer approving their own submission
     const pendingReviewerId = doc.pendingReview?.reviewer_id || doc.pending_review_details?.reviewer_id || doc.pending_periodic_review?.reviewer_id;
     const isSelfApproval = Boolean(pendingReviewerId && activeApprover?.id && String(activeApprover.id) === String(pendingReviewerId));
-    if (isSelfApproval || !canFastTrackExternalReview(activeApprover, docDept)) {
+    if (isSelfApproval || !canFastTrackExternalReview(activeApprover, docDept, 'ED', state.approvalMatrix)) {
       console.warn(`[RBAC] User ${activeApprover?.name} is not authorized to approve periodic review for external doc ${doc.edCode || doc.id} in dept ${docDept}`);
       if (typeof toast !== 'undefined' && toast.error) {
         toast.error(PERIODIC_APPROVAL_DENIED_MSG);
@@ -2211,6 +2227,8 @@ export const createPeriodicReviewSlice = (set, get) => ({
           return {
             ...s,
             status: 'COMPLETED',
+            review_status: 'COMPLETED',
+            pending_periodic_review: false,
             dueState: 'NOT_YET_DUE',
             outcome: 'NO_CHANGE',
             lastReviewedDate: now,
@@ -2368,6 +2386,15 @@ export const createPeriodicReviewSlice = (set, get) => ({
       }
     }
 
+    const submitterId = task.payload?.reviewer_id || task.reviewer_id;
+    const canReject = isExternal
+      ? canFastTrackExternalReview(approver, docDept, 'ED', state.approvalMatrix)
+      : canFastTrackReview(approver, docDept, targetDoc?.type || targetDoc?.doc_code || doc_code, state.approvalMatrix);
+    if (!canReject || (submitterId && approver?.id && String(approver.id) === String(submitterId))) {
+      toast.error(PERIODIC_APPROVAL_DENIED_MSG);
+      return state;
+    }
+
     const schedules = (state.periodicReviewSchedules || []).map(s => {
       if (
         (scheduleId && s.id === scheduleId) ||
@@ -2377,6 +2404,8 @@ export const createPeriodicReviewSlice = (set, get) => ({
         return {
           ...s,
           status: 'ACTION_REQUIRED',
+          review_status: 'ACTION_REQUIRED',
+          pending_periodic_review: false,
           dueState: 'DUE',
           pendingApprovalTaskId: null,
           pendingReview: null,
@@ -2507,15 +2536,14 @@ export const createPeriodicReviewSlice = (set, get) => ({
 
       let updatedExtDocs = [...(state.externalDocuments || [])];
       const docIdx = updatedExtDocs.findIndex(d => d.id === docId || (targetSchedule && d.id === targetSchedule.externalDocumentId));
-      let supersededDoc = null;
+      let flaggedDoc = null;
 
+      // The current edition stays in force (no document void) until the new edition is registered and approved;
+      // that approval supersedes it and recalls copies (externalDocSlice revision lifecycle).
       if (docIdx !== -1) {
-        supersededDoc = {
+        flaggedDoc = {
           ...updatedExtDocs[docIdx],
-          status: 'SUPERSEDED',
-          is_superseded: true,
-          superseded_date: now,
-          superseded_reason: `ตรวจพบฉบับใหม่จากแหล่งอ้างอิง (${verificationChannel}): ${comment || ''}`,
+          new_edition_pending: { found_on: now, channel: verificationChannel, comment: comment || '' },
           review_history: [
             ...(updatedExtDocs[docIdx].review_history || []),
             {
@@ -2529,12 +2557,13 @@ export const createPeriodicReviewSlice = (set, get) => ({
           ],
           updated_at: new Date().toISOString()
         };
-        updatedExtDocs[docIdx] = supersededDoc;
+        updatedExtDocs[docIdx] = flaggedDoc;
       }
 
       if (targetSchedule) {
-        targetSchedule.status = 'CANCELLED_BY_DOCUMENT_STATUS';
-        targetSchedule.isActive = false;
+        // Schedule is retired by the reconcile once the new edition supersedes this record
+        targetSchedule.status = 'AWAITING_ACTION';
+        targetSchedule.linkageStatus = 'AWAITING_NEW_EDITION';
         targetSchedule.updatedAt = new Date().toISOString();
         schedules[schIdx] = targetSchedule;
       }
@@ -2560,15 +2589,15 @@ export const createPeriodicReviewSlice = (set, get) => ({
         tasks: updatedTasks,
         actionLog: [{
           id: `LOG-${Date.now()}`,
-          actionType: 'EXTERNAL_DOC_SUPERSEDED_BY_VERIFICATION',
-          details: `เอกสารภายนอก ${supersededDoc?.edCode || docId} ตกรุ่น (ตรวจพบฉบับใหม่: ${verificationChannel})`,
+          actionType: 'EXTERNAL_DOC_NEW_EDITION_FOUND',
+          details: `เอกสารภายนอก ${flaggedDoc?.edCode || docId} ตรวจพบฉบับใหม่ (${verificationChannel}) — ฉบับเดิมยังใช้งานจนกว่าฉบับใหม่จะได้รับอนุมัติ`,
           actor: state.currentUser?.name,
           actorId: state.currentUser?.id,
           date: new Date().toISOString()
         }, ...(state.actionLog || [])]
       });
 
-      return { success: true, supersededDoc, shouldOpenRegister: true };
+      return { success: true, flaggedDoc, shouldOpenRegister: true };
     }
   },
 });

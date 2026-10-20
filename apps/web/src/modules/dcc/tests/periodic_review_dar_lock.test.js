@@ -127,26 +127,14 @@ describe('PeriodicReviewDarLinkService', () => {
   });
 
   describe('syncRevisionEffective', () => {
-    it('should sync EFFECTIVE state and create new schedule', () => {
-      const dar = {
-        sourceType: 'PERIODIC_REVIEW',
-        type: 'REVISION',
-        sourceId: 'PR01',
-        targetDocumentId: 'DOC01',
-        actualEffectiveDate: '2025-01-01',
-        rev: '02',
-        status: 'COMPLETED'
-      };
+    it('closes the source cycle; the next one comes from schedule reconcile', () => {
+      const dar = { sourceType: 'PERIODIC_REVIEW', type: 'REVISION', sourceId: 'PR01', targetDocumentId: 'DOC01', rev: '02', status: 'COMPLETED' };
 
       syncRevisionEffective(dar, useStore.getState, useStore.setState);
-      
-      const schedules = useStore.getState().periodicReviewSchedules;
-      const updatedPr = schedules.find(s => s.id === 'PR01');
-      expect(updatedPr.linkageStatus).toBe('COMPLETED');
 
-      const nextSchedule = schedules.find(s => s.idempotencyKey === 'PERIODIC_REVIEW_CYCLE:DOC01:02:2025-01-01');
-      expect(nextSchedule).toBeDefined();
-      expect(nextSchedule.dueDate).toBe('2026-01-01');
+      const schedules = useStore.getState().periodicReviewSchedules;
+      expect(schedules.find(s => s.id === 'PR01')).toMatchObject({ linkageStatus: 'COMPLETED', status: 'COMPLETED_WITH_REVISION', isActive: false });
+      expect(schedules).toHaveLength(3);
     });
   });
 

@@ -1186,6 +1186,7 @@ export const createSystemAndTaskSlice = (set, get) => ({
       });
     }
     get().checkScheduledEffectiveDocs?.();
+    get().syncPeriodicReviewSchedulesAndTasks?.();
   }
 });
 
