@@ -1,0 +1,64 @@
+import useStore from '../store/useStore';
+import { apiGet, apiPost, setToken, SESSION_EXPIRED_EVENT } from './client';
+
+// The pages were built on demo records with many alias fields; API rows get the aliases they read.
+export const toStoreUser = (u) => ({
+  ...u,
+  userId: u.id,
+  primary_department: u.department,
+  departments: u.depts,
+  affiliated_departments: u.depts,
+  affiliatedDepartments: u.depts,
+  level: u.approval_level
+});
+
+export const toStoreDocument = (d) => ({
+  ...d,
+  code: d.doc_code,
+  docNo: d.doc_code,
+  document_code: d.doc_code,
+  title: d.doc_code,
+  docTitle: d.doc_code,
+  document_title: d.name,
+  docName: d.name,
+  docType: d.doc_type,
+  type: d.doc_type,
+  rev: d.revision,
+  doc_version: d.revision,
+  dept: d.department,
+  ownerId: d.owner_id,
+  effectiveDate: d.effective_date,
+  is_active: d.status === 'EFFECTIVE',
+  is_superseded: d.status === 'SUPERSEDED',
+  is_obsolete: d.status === 'OBSOLETE',
+  access_control: { scope: d.access_scope === 'DEPT' ? 'DEPT_ONLY' : d.access_scope, authorized_depts: [], authorized_users: [], min_access_level: 1 },
+  distributions: [],
+  // Read by resolveFileBlob, so every viewer and download path fetches the controlled PDF from the API.
+  apiFilePath: d.file_key ? `/api/documents/${d.id}/file` : null
+});
+
+export const loadDocuments = async () => {
+  const lists = await Promise.all(['EFFECTIVE', 'SUPERSEDED', 'OBSOLETE'].map((s) => apiGet(`/api/documents?status=${s}`)));
+  useStore.setState({ documents: lists.flatMap((l) => l.documents).map(toStoreDocument) });
+};
+
+const start = async (user) => {
+  useStore.setState({ currentUser: toStoreUser(user) });
+  await loadDocuments();
+};
+
+export const login = async (email, password) => {
+  const { token, user } = await apiPost('/api/auth/login', { email, password });
+  setToken(token);
+  await start(user);
+};
+
+export const restoreSession = async () => start((await apiGet('/api/auth/me')).user);
+
+// Server data must not outlive the session in this browser.
+export const clearSession = () => {
+  setToken(null);
+  useStore.setState({ documents: [] });
+};
+
+export const logout = () => window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
