@@ -1096,7 +1096,7 @@ const DarRevisionForm = () => {
                   </div>
                 ) : lockedSource ? (
                   <div className="h-10.5 px-3 bg-[#E5F4FF]/70 border border-indigo-200 rounded-lg text-xs font-mono font-bold text-[#007BE5] flex items-center justify-between truncate">
-                    <span className="truncate">[{lockedSource.documentCode}] {lockedSource.documentTitle}</span>
+                    <span className="truncate">[{lockedSource.documentNo}] {lockedSource.documentTitle}</span>
                   </div>
                 ) : selectedDoc ? (
                   <div className="h-10.5 px-3 bg-[#F8FAFC] border border-[#CBD5E1] rounded-lg text-sm flex items-center justify-between gap-2">
