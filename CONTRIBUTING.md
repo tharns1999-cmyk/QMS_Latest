@@ -42,5 +42,5 @@ scope: dcc | portal | shared | web | api | db
 
 ## ตั้งค่า GitHub (ทำครั้งเดียว)
 
-- เปิด branch protection ให้ `main`, `uat` และ `develop`: บังคับ PR และบังคับให้ CI (`web`, `api`) ผ่านก่อน merge
+- เปิด branch protection ให้ `main`, `uat` และ `develop`: บังคับ PR และบังคับให้ CI (`web`, `e2e`, `api`) ผ่านก่อน merge
 - ตั้ง default branch เป็น `develop`
