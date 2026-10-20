@@ -811,7 +811,7 @@ const DarRevisionForm = () => {
       dar_no: formData.darNo || formData.id,
       type: 'REVISION',
       status: 'DRAFT',
-      title: formData.title || (selectedDoc ? selectedDoc.name : 'Untitled Draft'),
+      title: lockedSource?.documentTitle || formData.title || (selectedDoc ? selectedDoc.name : 'Untitled Draft'),
       requesterId: currentUser?.id,
       requester_id: currentUser?.id,
       requester_name: currentUser?.name,
@@ -878,7 +878,8 @@ const DarRevisionForm = () => {
     try {
       const docTypeCode = selectedDoc?.docType || selectedDoc?.type || (selectedDoc?.title ? selectedDoc.title.split('-')[0] : (formData.docType || 'WI'));
       const docCodeStr = selectedDoc?.code || selectedDoc?.title || formData.docId;
-      const docTitleStr = formData.title || selectedDoc?.name || 'Untitled Document';
+      // Periodic-review revisions keep the source title (rename is not allowed on this path)
+      const docTitleStr = lockedSource?.documentTitle || formData.title || selectedDoc?.name || 'Untitled Document';
       const nextRevStr = calculateNextRev(selectedDoc?.rev);
       const activeFile = selectedFile || formData.file;
       if (!activeFile) {
@@ -1215,14 +1216,15 @@ const DarRevisionForm = () => {
               {/* 2. ชื่อเอกสาร (แก้ไข) (4 Cols) */}
               <div className="lg:col-span-4">
                 <label className="block text-sm font-semibold text-[#334155] mb-1.5">
-                  ชื่อเอกสาร (แก้ไข) <span className="text-[#EF4444]">*</span>
+                  {lockedSource ? 'ชื่อเอกสาร' : 'ชื่อเอกสาร (แก้ไข)'} <span className="text-[#EF4444]">*</span>
                 </label>
                 <input 
                   type="text" 
                   placeholder="ระบุชื่อเอกสาร (สามารถใช้ชื่อเดิมได้)..."
-                  value={formData.title}
+                  value={lockedSource ? lockedSource.documentTitle : formData.title}
+                  readOnly={Boolean(lockedSource)}
                   onChange={(e) => setFormData(prev => ({...prev, title: e.target.value}))}
-                  className={`w-full h-10.5 px-3.5 text-sm bg-white border border-[#CBD5E1] rounded-lg text-[#1E293B] placeholder:text-[#94A3B8] focus:outline-none focus:border-[#0D99FF] focus:ring-2 focus:ring-[#0D99FF]/15 transition-all ${errors.title ? 'border-rose-400 bg-rose-50/50' : ''}`}
+                  className={`w-full h-10.5 px-3.5 text-sm ${lockedSource ? 'bg-slate-100 cursor-not-allowed' : 'bg-white'} border border-[#CBD5E1] rounded-lg text-[#1E293B] placeholder:text-[#94A3B8] focus:outline-none focus:border-[#0D99FF] focus:ring-2 focus:ring-[#0D99FF]/15 transition-all ${errors.title ? 'border-rose-400 bg-rose-50/50' : ''}`}
                 />
                 {errors.title && <p className="text-rose-500 text-xs mt-1">{errors.title}</p>}
               </div>
