@@ -11,6 +11,8 @@
       "migrations_dir": "migrations"
     }
   ],
+  // Controlled PDFs. Create once with `npx wrangler r2 bucket create qms-files`.
+  "r2_buckets": [{ "binding": "FILES", "bucket_name": "qms-files" }],
   // Comma-separated web origins allowed to call the API; JWT_SECRET is set with `npx wrangler secret put JWT_SECRET`.
   "vars": { "ALLOWED_ORIGIN": "http://localhost:5173,http://localhost:4173" }
 }
