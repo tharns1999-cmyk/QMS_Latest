@@ -214,48 +214,29 @@ const ExternalDocPreviewModal = ({ isOpen, onClose, document: doc }) => {
         fileId: doc.fileId || doc.attachedFile?.fileId
       };
 
-      if (stampedPdfBytesRef.current) {
-        // Fast path: Apply diagonal watermark directly onto the pre-stamped PDF bytes
-        const watermarkedBytes = await UniversalWatermarkService.stampPdf(
-          stampedPdfBytesRef.current,
-          watermarkPreset,
-          downloadMeta
-        );
-        const blob = new Blob([watermarkedBytes], { type: 'application/pdf' });
-        const url = window.URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        const revTag = doc.sourceVersion || doc.edition || 'STAMPED';
-        link.download = `${docCode}_${revTag}_${watermarkPreset}.pdf`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        window.URL.revokeObjectURL(url);
-      } else {
-        await UniversalWatermarkService.downloadWatermarkedPdf(
-          {
-            ...doc,
-            id: doc.id,
-            title: docCode,
-            name: doc.title,
-            docTitle: doc.title,
-            rev: doc.rev || doc.sourceVersion || '01',
-            department: doc.department || uDept,
-            effectiveDate: doc.effectiveDate,
-            status: isObsolete ? 'OBSOLETE' : (isSuperseded ? 'SUPERSEDED' : (doc.status || 'ACTIVE')),
-            sourceVersion: doc.sourceVersion || doc.edition,
-            source: doc.source,
-            isExternal: true,
-            is_external: true,
-            doc_type: 'ED',
-            docType: 'ED',
-            attachedFile: doc.attachedFile,
-            fileId: doc.fileId || doc.attachedFile?.fileId
-          },
-          watermarkPreset,
-          downloadMeta
-        );
-      }
+      await UniversalWatermarkService.downloadWatermarkedPdf(
+        {
+          ...doc,
+          id: doc.id,
+          title: docCode,
+          name: doc.title,
+          docTitle: doc.title,
+          rev: doc.rev || doc.sourceVersion || '01',
+          department: doc.department || uDept,
+          effectiveDate: doc.effectiveDate,
+          status: isObsolete ? 'OBSOLETE' : (isSuperseded ? 'SUPERSEDED' : (doc.status || 'ACTIVE')),
+          sourceVersion: doc.sourceVersion || doc.edition,
+          source: doc.source,
+          isExternal: true,
+          is_external: true,
+          doc_type: 'ED',
+          docType: 'ED',
+          attachedFile: doc.attachedFile,
+          fileId: doc.fileId || doc.attachedFile?.fileId
+        },
+        watermarkPreset,
+        downloadMeta
+      );
 
       if (logExternalDownload) {
         logExternalDownload(doc.id);

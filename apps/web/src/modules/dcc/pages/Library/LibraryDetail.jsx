@@ -5,7 +5,6 @@ import { ChevronLeft, ExternalLink, History, FileText, Download, PlusCircle, X }
 import toast from 'react-hot-toast';
 import { getDarReason, getDarDetail, getRequesterName, getReviewerName, getApproverName, getAckNames } from '../../utils/darHelper';
 import ReplacementModal from './ReplacementModal';
-import { PDFDocument } from 'pdf-lib';
 import { UniversalWatermarkService, WATERMARK_TYPES } from '../../services/UniversalWatermarkService';
 import RequestAdditionalCopiesModal from '../../components/workflow/RequestAdditionalCopiesModal';
 import Button from '../../../../shared/components/ui/Button';
@@ -80,70 +79,27 @@ const LibraryDetail = () => {
   if (!doc) return <div className="p-6 text-[#666666] font-medium">ไม่พบข้อมูลเอกสาร</div>;
   if (!hasAccess) return null;
 
+  // Real attached file through the single watermark engine (clean master is DCC-only and audited there)
   const handleDownloadMaster = async () => {
     try {
-      const pdfDoc = await PDFDocument.create();
-      const page = pdfDoc.addPage([595.28, 841.89]);
-      const { height } = page.getSize();
-      page.drawText(`Document: ${doc.title} - ${doc.name}`, { x: 50, y: height - 50, size: 14 });
-      page.drawText(`Revision: ${doc.rev}`, { x: 50, y: height - 70, size: 12 });
-      page.drawText(`Owner Department: ${doc.department}`, { x: 50, y: height - 90, size: 12 });
-      page.drawText(`Effective Date: ${doc.effectiveDate || '-'}`, { x: 50, y: height - 110, size: 12 });
-      
-      const rawBytes = await pdfDoc.save();
-      const watermarkedBytes = await UniversalWatermarkService.stampPdf(rawBytes, WATERMARK_TYPES.OFFICIAL_MASTER_COPY, {
-        docCode: doc.title,
-        docVersion: doc.rev,
-        docType: doc.title.split('-')[0],
-        status: doc.status,
-        effectiveDate: doc.effectiveDate,
-        userName: currentUser.name,
-        userDept: currentUser.department
-      });
-
-      const blob = new Blob([watermarkedBytes], { type: 'application/pdf' });
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `${doc.title}_MASTER.pdf`;
-      link.click();
-      window.URL.revokeObjectURL(url);
-      
+      await UniversalWatermarkService.downloadCleanPdf(doc, { docCode: doc.title, userName: currentUser.name, userDept: currentUser.department });
       toast.success('ดาวน์โหลด Master Document สำเร็จ');
     } catch (err) {
       console.error(err);
-      toast.error('เกิดข้อผิดพลาดในการสร้าง PDF');
+      toast.error(err?.message || 'เกิดข้อผิดพลาดในการสร้าง PDF');
     }
   };
 
   const handleDownloadExternal = async () => {
     try {
-      const pdfDoc = await PDFDocument.create();
-      const page = pdfDoc.addPage([595.28, 841.89]);
-      const { height } = page.getSize();
-      page.drawText(`Document: ${doc.title} - ${doc.name}`, { x: 50, y: height - 50, size: 14 });
-      page.drawText(`Revision: ${doc.rev}`, { x: 50, y: height - 70, size: 12 });
-      page.drawText(`Department: ${doc.department}`, { x: 50, y: height - 90, size: 12 });
-      
-      const rawBytes = await pdfDoc.save();
-      const watermarkedBytes = await UniversalWatermarkService.stampPdf(rawBytes, WATERMARK_TYPES.STRICTLY_CONFIDENTIAL, {
+      await UniversalWatermarkService.downloadWatermarkedPdf(doc, WATERMARK_TYPES.UNCONTROLLED_COPY, {
         docCode: doc.title,
+        docTitle: doc.name,
         docVersion: doc.rev,
-        docType: doc.title.split('-')[0],
-        status: doc.status,
-        authorizedScope: 'External Auditor / Vendor Release',
-        dccName: currentUser.name,
-        timestamp: new Date().toISOString().replace('T', ' ').slice(0, 16)
+        userName: currentUser.name,
+        userDept: currentUser.department,
+        authorizedScope: 'External Auditor / Vendor Release'
       });
-
-      const blob = new Blob([watermarkedBytes], { type: 'application/pdf' });
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `${doc.title}_EXTERNAL.pdf`;
-      link.click();
-      window.URL.revokeObjectURL(url);
-      
       toast.success('ดาวน์โหลดเอกสารสำหรับหน่วยงานภายนอกสำเร็จ');
     } catch (error) {
       console.error(error);
@@ -284,7 +240,7 @@ const LibraryDetail = () => {
                       onClick={handleDownloadExternal}
                       className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-amber-600 text-white hover:bg-amber-700 rounded-xl text-xs font-bold shadow-sm shadow-amber-200 transition-all"
                     >
-                      <Download size={16} /> ดาวน์โหลดสำหรับหน่วยงานภายนอก (Strictly Confidential)
+                      <Download size={16} /> ดาวน์โหลดสำหรับหน่วยงานภายนอก (Uncontrolled Copy)
                     </button>
                     <button 
                       onClick={handleDownloadUncontrolled}
