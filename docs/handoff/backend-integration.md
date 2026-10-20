@@ -6,15 +6,15 @@ This document provides essential context for the backend developer migrating the
 
 - **Framework**: React 19 + Vite
 - **Styling**: Tailwind CSS v4
-- **State Management**: Zustand (`src/store/useStore.js`)
-- **Routing**: React Router DOM (`src/App.jsx`)
+- **State Management**: Zustand (`apps/web/src/store/useStore.js`)
+- **Routing**: React Router DOM (`apps/web/src/app/App.jsx`)
 - **Testing**: Vitest (Unit/Integration) and Playwright (E2E)
 
 The frontend currently operates entirely in the browser using an in-memory/localStorage mock database via Zustand. The backend developer's goal is to replace the data operations in `useStore.js` with standard `fetch` or `axios` API calls.
 
 ## 2. Active Routes
 
-The active production routes are defined in `src/App.jsx` under the `/dcc` path:
+The active production routes are defined in `apps/web/src/app/App.jsx` under the `/dcc` path:
 - `/dcc/dashboard` - Main overview
 - `/dcc/dar/new/*` - New Document Action Requests (New, Revise, Obsolete)
 - `/dcc/dar/list` - List of active DARs

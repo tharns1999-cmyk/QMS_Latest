@@ -8,3 +8,9 @@ playwright-report/
 .DS_Store
 __MACOSX/
 *.log
+
+# AI Agent local tooling & skills
+.agents/
+
+.agents/
+.gemini/
