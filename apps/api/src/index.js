@@ -73,4 +73,36 @@ export const requireAuth = async (c, next) => {
 
 app.get('/api/auth/me', requireAuth, (c) => c.json({ user: c.get('user') }));
 
+app.get('/api/approval-matrix', requireAuth, async (c) => {
+  const { results } = await c.env.DB.prepare('SELECT * FROM approval_matrix ORDER BY doc_type').all();
+  return c.json({ matrix: results });
+});
+
+app.put('/api/approval-matrix/:docType', requireAuth, async (c) => {
+  const user = c.get('user');
+  if (!user.isDcc) return c.json({ error: 'เฉพาะ DCC เท่านั้นที่แก้ไข Approval Matrix ได้' }, 403);
+
+  const body = await c.req.json().catch(() => ({}));
+  const levels = ['min_requester_level', 'required_reviewer_level', 'required_approver_level'].map((k) => body[k]);
+  if (!levels.every((l) => Number.isInteger(l) && l >= 1 && l <= 8)) return c.json({ error: 'ระดับต้องเป็นจำนวนเต็ม 1-8' }, 400);
+  const [requester, reviewer, approver] = levels;
+  if (approver < reviewer) return c.json({ error: 'ระดับผู้อนุมัติต้องไม่ต่ำกว่าผู้ทบทวน' }, 400);
+
+  const db = c.env.DB;
+  const docType = c.req.param('docType').toUpperCase();
+  const before = await db.prepare('SELECT * FROM approval_matrix WHERE doc_type = ?').bind(docType).first();
+  if (!before) return c.json({ error: 'ไม่พบประเภทเอกสารนี้' }, 404);
+
+  await db.batch([
+    db.prepare(`UPDATE approval_matrix SET min_requester_level = ?, required_reviewer_level = ?, required_approver_level = ?,
+      updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), updated_by = ? WHERE doc_type = ?`).bind(requester, reviewer, approver, user.id, docType),
+    audit(db, user.id, 'APPROVAL_MATRIX_UPDATED', {
+      doc_type: docType,
+      before: { min_requester_level: before.min_requester_level, required_reviewer_level: before.required_reviewer_level, required_approver_level: before.required_approver_level },
+      after: { min_requester_level: requester, required_reviewer_level: reviewer, required_approver_level: approver }
+    })
+  ]);
+  return c.json({ entry: await db.prepare('SELECT * FROM approval_matrix WHERE doc_type = ?').bind(docType).first() });
+});
+
 export default app;
