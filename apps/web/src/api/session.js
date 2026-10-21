@@ -62,17 +62,38 @@ const start = async (user) => {
   await Promise.all([loadDocuments(), loadDars(), loadCopies()]);
 };
 
-// A user whose password was set by an admin must change it first; the server refuses everything else until then.
-export const login = async (email, password) => {
-  const { token, user } = await apiPost('/api/auth/login', { email, password });
+// A user whose password was set by an admin must change it first, and one the policy names must set up two-factor; the server
+// refuses everything else until then, so no data is loaded yet.
+const needsMoreSteps = (user) => user.mustChangePassword || user.mustSetUpTwoFactor;
+
+const signedIn = async ({ token, user }) => {
   setToken(token);
-  if (!user.mustChangePassword) await start(user);
+  if (!needsMoreSteps(user)) await start(user);
+  return user;
+};
+
+// Resolves to the user, or to { twoFactorChallenge } when the server wants the second step (see verifyTwoFactor).
+export const login = async (email, password) => {
+  const result = await apiPost('/api/auth/login', { email, password });
+  return result.twoFactorRequired ? { twoFactorChallenge: result.challenge } : signedIn(result);
+};
+
+export const verifyTwoFactor = async (challenge, { code, recoveryCode }) =>
+  signedIn(await apiPost('/api/auth/2fa/verify', { challenge, code, recovery_code: recoveryCode }));
+
+export const startTwoFactorSetup = () => apiPost('/api/auth/2fa/setup');
+export const confirmTwoFactorSetup = (code) => apiPost('/api/auth/2fa/confirm', { code });
+
+// After setting up two-factor the session is the same one, now allowed to load its data.
+export const finishSignIn = async () => {
+  const { user } = await apiGet('/api/auth/me');
+  await start(user);
   return user;
 };
 
 export const restoreSession = async () => {
   const { user } = await apiGet('/api/auth/me');
-  if (!user.mustChangePassword) await start(user);
+  if (!needsMoreSteps(user)) await start(user);
   return user;
 };
 
@@ -80,7 +101,8 @@ export const restoreSession = async () => {
 export const changePassword = async (current, next, { loadData = false } = {}) => {
   const { token, user } = await apiPost('/api/auth/change-password', { current_password: current, new_password: next });
   setToken(token);
-  if (loadData) await start(user);
+  if (loadData && !user.mustSetUpTwoFactor) await start(user);
+  return user;
 };
 
 // Server data must not outlive the session in this browser.

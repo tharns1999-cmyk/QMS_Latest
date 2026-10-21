@@ -1,8 +1,8 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import useStore from '../../../../store/useStore';
 import {
-  createUser, updateUser, setUserStatus, resetUserPassword,
+  createUser, updateUser, setUserStatus, resetUserPassword, resetUserTwoFactor, getSecurityPolicy, saveSecurityPolicy,
   createDepartment, updateDepartment, createLocation, updateLocation, saveMatrixEntry
 } from '../../../../api/masterData';
 
@@ -108,7 +108,7 @@ const UsersTab = ({ onPassword }) => {
       )}
       <div className="bg-white border border-slate-200 rounded-xl overflow-x-auto">
         <table className="w-full text-sm">
-          <thead className="text-xs text-slate-500 text-left"><tr><th className="p-2">ชื่อ</th><th className="p-2">แผนก</th><th className="p-2">ระดับ</th><th className="p-2">สิทธิ์พิเศษ</th><th className="p-2">สถานะ</th><th className="p-2" /></tr></thead>
+          <thead className="text-xs text-slate-500 text-left"><tr><th className="p-2">ชื่อ</th><th className="p-2">แผนก</th><th className="p-2">ระดับ</th><th className="p-2">สิทธิ์พิเศษ</th><th className="p-2">สถานะ</th><th className="p-2">ยืนยันสองขั้นตอน</th><th className="p-2" /></tr></thead>
           <tbody className="divide-y divide-slate-100">
             {rows.map((u) => (
               <tr key={u.id}>
@@ -117,16 +117,18 @@ const UsersTab = ({ onPassword }) => {
                 <td className="p-2">L{u.approval_level}</td>
                 <td className="p-2">{[u.isDcc && 'DCC', u.isQmr && 'QMR'].filter(Boolean).join(', ') || '-'}</td>
                 <td className="p-2"><StatusBadge status={u.status} /></td>
+                <td className="p-2 text-xs">{u.twoFactorEnabled ? 'ใช้แล้ว' : u.twoFactorRequired ? <span className="text-amber-700">ต้องตั้งค่า</span> : '-'}</td>
                 <td className="p-2 whitespace-nowrap text-right space-x-1">
                   <button type="button" className={ghost} onClick={() => open(u)}>แก้ไข</button>
                   <button type="button" className={ghost} onClick={() => reset(u)}>รีเซ็ตรหัสผ่าน</button>
+                  {u.twoFactorEnabled && <button type="button" className={ghost} onClick={() => window.confirm(`รีเซ็ตการยืนยันสองขั้นตอนของ ${u.name}? เขาจะถูกออกจากระบบและต้องตั้งค่าใหม่`) && resetUserTwoFactor(u.id)}>รีเซ็ต 2FA</button>}
                   {u.id !== currentUser?.id && (u.status === 'ACTIVE'
                     ? <button type="button" className={ghost} onClick={() => window.confirm(`ปิดบัญชีของ ${u.name}? เขาจะเข้าระบบไม่ได้ทันที`) && setUserStatus(u.id, 'INACTIVE')}>ปิดบัญชี</button>
                     : <button type="button" className={ghost} onClick={() => setUserStatus(u.id, 'ACTIVE')}>{u.status === 'LOCKED' ? 'ปลดล็อก' : 'เปิดใช้งาน'}</button>)}
                 </td>
               </tr>
             ))}
-            {!rows.length && <tr><td colSpan={6} className="p-4 text-center text-xs text-slate-500">ไม่พบผู้ใช้</td></tr>}
+            {!rows.length && <tr><td colSpan={7} className="p-4 text-center text-xs text-slate-500">ไม่พบผู้ใช้</td></tr>}
           </tbody>
         </table>
       </div>
@@ -287,7 +289,35 @@ const MatrixTab = () => {
   );
 };
 
-const TABS = [['users', 'ผู้ใช้'], ['departments', 'แผนก'], ['locations', 'สถานที่แจกจ่ายสำเนา'], ['matrix', 'ระดับผู้ทบทวน/อนุมัติ']];
+// Who must sign in with an authenticator app. Both values are kept by the server; nothing about levels is fixed in the app.
+const SecurityTab = () => {
+  const [policy, setPolicy] = useState(null);
+  const [error, setError] = useState('');
+  useEffect(() => { getSecurityPolicy().then(setPolicy, (err) => setError(err.message)); }, []);
+  if (error) return <p role="alert" className="text-xs text-rose-700">{error}</p>;
+  if (!policy) return <p className="text-xs text-slate-500">กำลังโหลด...</p>;
+  const save = async (e) => {
+    e.preventDefault();
+    const saved = await saveSecurityPolicy(policy);
+    if (saved && saved !== true) setPolicy(saved);
+  };
+  return (
+    <form onSubmit={save} className="bg-white border border-slate-200 rounded-xl p-4 space-y-3 max-w-xl">
+      <h2 className="text-sm font-bold text-slate-900">การยืนยันตัวตนสองขั้นตอน (แอป Authenticator)</h2>
+      <Field label="บังคับผู้ที่มีระดับอนุมัติตั้งแต่">
+        <select className={input} value={policy.twoFactorMinLevel} onChange={(e) => setPolicy({ ...policy, twoFactorMinLevel: Number(e.target.value) })}>
+          <option value={0}>ไม่บังคับตามระดับ</option>
+          {LEVELS.map((l) => <option key={l} value={l}>L{l} ขึ้นไป</option>)}
+        </select>
+      </Field>
+      <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={policy.twoFactorForDcc} onChange={(e) => setPolicy({ ...policy, twoFactorForDcc: e.target.checked })} />บังคับบัญชี DCC ทุกคน (ไม่ว่าระดับใด)</label>
+      <p className="text-xs text-slate-500">ผู้ที่ถูกบังคับต้องตั้งค่าแอปตอนเข้าระบบครั้งถัดไป ถ้าโทรศัพท์หายและไม่มีรหัสสำรอง ให้ DCC กด "รีเซ็ต 2FA" ที่แท็บผู้ใช้ (ถ้า DCC เป็นคนเดียว จึงควรมี DCC สำรองอีกคน)</p>
+      <button type="submit" className={primary}>บันทึก</button>
+    </form>
+  );
+};
+
+const TABS = [['users', 'ผู้ใช้'], ['departments', 'แผนก'], ['locations', 'สถานที่แจกจ่ายสำเนา'], ['matrix', 'ระดับผู้ทบทวน/อนุมัติ'], ['security', 'ความปลอดภัย']];
 
 // API mode: everything here is saved on the server and shared by everyone. The browser-only demo hub is not used.
 const ApiMasterData = () => {
@@ -306,6 +336,7 @@ const ApiMasterData = () => {
       {tab === 'departments' && <DepartmentsTab />}
       {tab === 'locations' && <LocationsTab />}
       {tab === 'matrix' && <MatrixTab />}
+      {tab === 'security' && <SecurityTab />}
       {notice && <PasswordNotice notice={notice} onClose={() => setNotice(null)} />}
     </div>
   );

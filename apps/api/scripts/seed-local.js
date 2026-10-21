@@ -30,6 +30,9 @@ const sql = [
   ...Object.keys(DEPARTMENTS).flatMap((dept) => [['สำนักงาน', 'ตู้เอกสารหลัก'], ['หน้างาน', 'จุดใช้งานหน้างาน']]
     .map(([name, description]) => `INSERT INTO distribution_locations (id, department, name, description) VALUES (${q(`loc-${dept}-${name}`)}, ${q(dept)}, ${q(`${dept} ${name}`)}, ${q(description)});`))
 ];
+// Production asks DCC and L5+ for an authenticator code at sign-in. Locally that would mean a phone for every test account, so it starts off;
+// turn it on in Master Data > Security to try it.
+sql.push("UPDATE settings SET value = '0' WHERE key IN ('two_factor_min_level', 'two_factor_for_dcc');");
 mkdirSync('.wrangler', { recursive: true });
 writeFileSync('.wrangler/seed-local.sql', `${sql.join('\n')}\n`);
 console.log(`Wrote ${users.length} users and ${Object.keys(DEPARTMENTS).length * 2} places to .wrangler/seed-local.sql`);
