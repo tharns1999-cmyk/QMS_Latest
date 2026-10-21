@@ -371,7 +371,10 @@ app.post('/api/dars/:id/decision', requireAuth, async (c) => {
     db.prepare(`UPDATE dars SET status = ?, ${stamp} = ${NOW}, reject_comment = ? WHERE id = ? AND status = ? AND file_key IS ? RETURNING *`)
       .bind(next, comment || null, dar.id, dar.status, dar.file_key),
     db.prepare(`INSERT INTO audit_log (actor_id, action, details) SELECT ?, ?, ? WHERE changes() > 0`)
-      .bind(user.id, body.decision === 'REJECT' ? 'DAR_REJECTED' : stage === 'REVIEW' ? 'DAR_REVIEWED' : 'DAR_APPROVED', JSON.stringify({ dar_id: dar.id, comment }))
+      .bind(user.id, body.decision === 'REJECT' ? 'DAR_REJECTED' : stage === 'REVIEW' ? 'DAR_REVIEWED' : 'DAR_APPROVED', JSON.stringify({ dar_id: dar.id, comment })),
+    // A periodic review that asked for this revision or withdrawal is free to be redone.
+    db.prepare(`UPDATE periodic_reviews SET status = 'CANCELLED', decided_at = ${NOW}, decision_comment = 'DAR ไม่ผ่านการพิจารณา'
+      WHERE doc_code = ? AND status = 'AWAITING_ACTION' AND (SELECT status FROM dars WHERE id = ?) = 'REJECTED'`).bind(dar.doc_code, dar.id)
   ]);
   if (!updated.results.length) return c.json({ error: 'คำขอนี้ถูกพิจารณาหรือเปลี่ยนไฟล์ไปแล้ว กรุณาโหลดใหม่' }, 409);
   if (next === 'PENDING_DCC') {
@@ -405,6 +408,8 @@ export const activateDue = async (db) => {
       console.error(`DAR ${dar.id}: no effective document ${dar.doc_code} to obsolete`);
       continue;
     }
+    // WI and FM are reviewed every 24 months, everything else every 12, unless the request named a cycle (external documents).
+    const cycle = dar.review_cycle_months ?? (['WI', 'FM'].includes(dar.doc_type) ? 24 : 12);
     const retire = (status) => db.prepare("UPDATE documents SET status = ? WHERE doc_code = ? AND status = 'EFFECTIVE'").bind(status, dar.doc_code);
     // Copies of the outgoing revision: those in the field must be recalled, an undispatched one is simply void.
     const recallOld = db.prepare(`UPDATE controlled_copies SET status = CASE status WHEN 'PENDING_ISSUE' THEN 'VOID' ELSE 'PENDING_RECALL' END
@@ -415,9 +420,9 @@ export const activateDue = async (db) => {
       ...(dar.type === 'REVISION' ? [retire('SUPERSEDED'), recallOld] : []),
       db.prepare(`INSERT INTO documents (id, doc_code, revision, name, doc_type, department, status, access_scope, owner_id, effective_date, file_key, ext_issuer, ext_edition, review_cycle_months, next_review_date)
         VALUES (?, ?, ?, ?, ?, ?, 'EFFECTIVE', ?, ?, max(${TODAY_TH}, COALESCE(date(?), ${TODAY_TH})), ?, ?, ?, ?,
-          CASE WHEN ? IS NULL THEN NULL ELSE date(max(${TODAY_TH}, COALESCE(date(?), ${TODAY_TH})), '+' || ? || ' months') END)`)
+          date(max(${TODAY_TH}, COALESCE(date(?), ${TODAY_TH})), '+' || ? || ' months'))`)
         .bind(documentId, dar.doc_code, dar.revision, dar.name, dar.doc_type, dar.department, dar.access_scope, dar.requester_id, dar.effective_date, dar.file_key,
-          dar.ext_issuer, dar.ext_edition, dar.review_cycle_months, dar.review_cycle_months, dar.effective_date, dar.review_cycle_months),
+          dar.ext_issuer, dar.ext_edition, cycle, dar.effective_date, cycle),
       // After the document: copies reference it.
       ...copies
     ];
@@ -477,6 +482,127 @@ app.post('/api/controlled-copies/:id/:step', requireAuth, async (c) => {
   ]);
   if (!updated.results.length) return c.json({ error: 'สถานะสำเนาเปลี่ยนไปแล้ว กรุณาโหลดใหม่' }, 409);
   return c.json({ copy: updated.results[0] });
+});
+
+// Periodic review: a member of the owner department confirms the document is still right (NO_CHANGE) or asks to revise or
+// withdraw it. NO_CHANGE moves the next review date only once someone with approver rights signs it, and the reviewer
+// signs it too when they hold those rights already.
+const REVIEW_OUTCOMES = ['NO_CHANGE', 'REVISION_REQUIRED', 'OBSOLETE'];
+const OPEN_DAR_STATUSES = `('PENDING_REVIEW', 'PENDING_APPROVAL', 'PENDING_DCC')`;
+const isCrossOrg = (user) => user.isQmr || user.approval_level >= 6 || user.depts.some((d) => ['MGMT', 'EXEC', 'QMR'].includes(d));
+// New date = the later of the date it was due and today, plus one cycle (so a late review does not leave it overdue again).
+const NEXT_REVIEW_SQL = `date(max(COALESCE(next_review_date, ${TODAY_TH}), ${TODAY_TH}), '+' || COALESCE(review_cycle_months, CASE WHEN doc_type IN ('WI', 'FM') THEN 24 ELSE 12 END) || ' months')`;
+
+app.get('/api/periodic-reviews', requireAuth, async (c) => {
+  const user = c.get('user');
+  const { results } = await c.env.DB.prepare(`SELECT pr.*, d.name AS doc_name, d.doc_type, d.department FROM periodic_reviews pr JOIN documents d ON d.id = pr.document_id
+    WHERE ? OR pr.reviewer_id = ? OR pr.approver_id = ? OR d.department IN (SELECT value FROM json_each(?)) ORDER BY pr.id DESC`)
+    .bind(user.isDcc || user.isQmr ? 1 : 0, user.id, user.id, JSON.stringify([...user.depts, user.department])).all();
+  return c.json({ reviews: results });
+});
+
+app.post('/api/documents/:id/periodic-review', requireAuth, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  const body = await c.req.json().catch(() => ({}));
+  if (!REVIEW_OUTCOMES.includes(body.outcome)) return c.json({ error: 'ผลการทบทวนไม่ถูกต้อง' }, 400);
+  const reason = typeof body.reason === 'string' ? body.reason.trim().slice(0, 2000) : '';
+  if (reason.length < 5) return c.json({ error: 'กรุณาระบุเหตุผล/รายละเอียดการทบทวน' }, 400);
+  // Free-text fields the review form collects (findings, clause, evidence...), kept for the audit record.
+  const details = Object.fromEntries(['findings', 'standard_clause', 'evidence_reference', 'additional_comment']
+    .map((k) => [k, typeof body.details?.[k] === 'string' ? body.details[k].trim().slice(0, 2000) : '']));
+
+  const doc = await db.prepare(`SELECT * FROM documents WHERE id = ? AND ${VISIBLE_TO}`).bind(c.req.param('id'), ...visibilityArgs(user)).first();
+  if (!doc) return c.json({ error: 'ไม่พบเอกสาร' }, 404);
+  if (doc.status !== 'EFFECTIVE') return c.json({ error: 'ทบทวนได้เฉพาะเอกสารที่มีผลบังคับใช้' }, 409);
+  const isMember = user.depts.includes(doc.department) || user.department === doc.department;
+  // External documents are checked by DCC for their owner department.
+  if (!isMember && !isCrossOrg(user) && !(doc.doc_type === 'ED' && user.isDcc)) return c.json({ error: 'ต้องเป็นสมาชิกแผนกเจ้าของเอกสาร' }, 403);
+  if (await db.prepare(`SELECT 1 FROM dars WHERE doc_code = ? AND status IN ${OPEN_DAR_STATUSES}`).bind(doc.doc_code).first()) {
+    return c.json({ error: 'เอกสารนี้มีคำขอ DAR ที่ยังดำเนินการอยู่ จึงทบทวนตามรอบไม่ได้' }, 409);
+  }
+
+  const thresholds = await getThresholds(db, doc.doc_type);
+  const rights = (u, requesterId = null) => checkDecisionRights(u, { stage: 'APPROVE', department: doc.department, requesterId, reviewerId: null }, thresholds);
+  let status = 'AWAITING_ACTION';
+  let approverId = null;
+  let fastTrack = 0;
+  if (body.outcome === 'NO_CHANGE') {
+    if (!rights(user)) {
+      [status, approverId, fastTrack] = ['COMPLETED', user.id, 1];
+    } else {
+      // The signer: a qualified member of the owner department first, then QMR and other cross-department signers.
+      const { results: people } = await db.prepare("SELECT * FROM users WHERE status = 'ACTIVE' AND id != ? ORDER BY approval_level, name").bind(user.id).all();
+      const eligible = people.map(toPublicUser).filter((u) => !rights(u, user.id));
+      const approver = eligible.find((u) => u.depts.includes(doc.department) || u.department === doc.department) ?? eligible[0];
+      if (!approver) return c.json({ error: 'ไม่พบผู้อนุมัติที่มีสิทธิ์ในระบบ กรุณาติดต่อผู้ดูแลระบบ' }, 400);
+      [status, approverId] = ['PENDING_APPROVAL', approver.id];
+    }
+  }
+
+  try {
+    const [inserted] = await db.batch([
+      db.prepare(`INSERT INTO periodic_reviews (document_id, doc_code, revision, outcome, status, reason, details, reviewer_id, approver_id, fast_track, due_date, new_next_review_date, decided_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CASE WHEN ? = 'COMPLETED' THEN (SELECT ${NEXT_REVIEW_SQL} FROM documents WHERE id = ?) END,
+          CASE WHEN ? = 'COMPLETED' THEN ${NOW} END) RETURNING *`)
+        .bind(doc.id, doc.doc_code, doc.revision, body.outcome, status, reason, JSON.stringify(details), user.id, approverId, fastTrack, doc.next_review_date,
+          status, doc.id, status),
+      db.prepare(`INSERT INTO audit_log (actor_id, action, details) SELECT ?, 'PERIODIC_REVIEW_SUBMITTED', json_object('review_id', id, 'doc_code', doc_code, 'outcome', outcome, 'status', status) FROM periodic_reviews WHERE id = last_insert_rowid()`).bind(user.id),
+      // Fast track: the date moves in the same transaction as the review that earned it.
+      db.prepare(`UPDATE documents SET next_review_date = (SELECT new_next_review_date FROM periodic_reviews WHERE document_id = ? AND status = 'COMPLETED' ORDER BY id DESC LIMIT 1),
+        last_reviewed_at = ${TODAY_TH} WHERE id = ? AND ? = 'COMPLETED'`).bind(doc.id, doc.id, status)
+    ]);
+    return c.json({ review: inserted.results[0] }, 201);
+  } catch (err) {
+    if (isLockConflict(err)) return c.json({ error: 'เอกสารนี้มีผลการทบทวนที่ยังรอดำเนินการอยู่' }, 409);
+    throw err;
+  }
+});
+
+app.post('/api/periodic-reviews/:id/decision', requireAuth, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  const body = await c.req.json().catch(() => ({}));
+  const comment = typeof body.comment === 'string' ? body.comment.trim().slice(0, 2000) : '';
+  if (body.decision !== 'APPROVE' && body.decision !== 'REJECT') return c.json({ error: 'ผลการพิจารณาต้องเป็น APPROVE หรือ REJECT' }, 400);
+  if (body.decision === 'REJECT' && !comment) return c.json({ error: 'กรุณาระบุเหตุผลที่ไม่อนุมัติ' }, 400);
+
+  const review = await db.prepare('SELECT pr.*, d.department, d.doc_type FROM periodic_reviews pr JOIN documents d ON d.id = pr.document_id WHERE pr.id = ?').bind(c.req.param('id')).first();
+  if (!review) return c.json({ error: 'ไม่พบผลการทบทวน' }, 404);
+  if (review.status !== 'PENDING_APPROVAL') return c.json({ error: 'ผลการทบทวนนี้ไม่อยู่ในขั้นตอนรออนุมัติ' }, 409);
+  const problem = checkDecisionRights(user, { stage: 'APPROVE', department: review.department, requesterId: review.reviewer_id, reviewerId: null }, await getThresholds(db, review.doc_type));
+  if (problem) return c.json({ error: problem }, 403);
+
+  const approve = body.decision === 'APPROVE';
+  // The status guard makes a double click or a race a no-op instead of a second decision.
+  const [updated] = await db.batch([
+    db.prepare(`UPDATE periodic_reviews SET status = ?, approver_id = ?, decision_comment = ?, decided_at = ${NOW},
+      new_next_review_date = CASE WHEN ? THEN (SELECT ${NEXT_REVIEW_SQL} FROM documents WHERE id = periodic_reviews.document_id) END
+      WHERE id = ? AND status = 'PENDING_APPROVAL' RETURNING *`).bind(approve ? 'COMPLETED' : 'REJECTED', user.id, comment || null, approve ? 1 : 0, review.id),
+    db.prepare(`INSERT INTO audit_log (actor_id, action, details) SELECT ?, ?, ? WHERE changes() > 0`)
+      .bind(user.id, approve ? 'PERIODIC_REVIEW_APPROVED' : 'PERIODIC_REVIEW_REJECTED', JSON.stringify({ review_id: review.id, doc_code: review.doc_code, comment })),
+    db.prepare(`UPDATE documents SET next_review_date = (SELECT new_next_review_date FROM periodic_reviews WHERE id = ? AND status = 'COMPLETED'), last_reviewed_at = ${TODAY_TH}
+      WHERE id = ? AND (SELECT status FROM periodic_reviews WHERE id = ?) = 'COMPLETED'`).bind(review.id, review.document_id, review.id)
+  ]);
+  if (!updated.results.length) return c.json({ error: 'ผลการทบทวนนี้ถูกพิจารณาไปแล้ว กรุณาโหลดใหม่' }, 409);
+  return c.json({ review: updated.results[0] });
+});
+
+// Lets the department start over when the DAR it asked for was dropped or the approval is stuck.
+app.post('/api/periodic-reviews/:id/cancel', requireAuth, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  const review = await db.prepare('SELECT pr.*, d.department FROM periodic_reviews pr JOIN documents d ON d.id = pr.document_id WHERE pr.id = ?').bind(c.req.param('id')).first();
+  if (!review) return c.json({ error: 'ไม่พบผลการทบทวน' }, 404);
+  const isMember = user.depts.includes(review.department) || user.department === review.department;
+  if (user.id !== review.reviewer_id && !user.isDcc && !(isMember && user.approval_level >= 4)) return c.json({ error: 'เฉพาะผู้ทบทวน หัวหน้าแผนก หรือ DCC เท่านั้นที่ยกเลิกได้' }, 403);
+  const [updated] = await db.batch([
+    db.prepare(`UPDATE periodic_reviews SET status = 'CANCELLED', decided_at = ${NOW} WHERE id = ? AND status IN ('PENDING_APPROVAL', 'AWAITING_ACTION') RETURNING *`).bind(review.id),
+    db.prepare(`INSERT INTO audit_log (actor_id, action, details) SELECT ?, 'PERIODIC_REVIEW_CANCELLED', ? WHERE changes() > 0`)
+      .bind(user.id, JSON.stringify({ review_id: review.id, doc_code: review.doc_code }))
+  ]);
+  if (!updated.results.length) return c.json({ error: 'ผลการทบทวนนี้ปิดไปแล้ว' }, 409);
+  return c.json({ review: updated.results[0] });
 });
 
 // Locked accounts are hidden from the directory above, so DCC lists them here to unlock.

@@ -1,4 +1,5 @@
 import { CalendarClock, Eye, FileText } from 'lucide-react';
+import useStore from '../../../../store/useStore';
 import { formatQmsDisplayDate } from '../../../../shared/utils/dateFormatter';
 import { getDocCode, getDocTitle, getCleanRev, getCleanDept } from '../../utils/domainNormalizer';
 
@@ -32,6 +33,7 @@ export const getCycleMonths = (document, schedule) => Number(
 export const getCycleLabel = (months) => (months % 12 === 0 ? `${months / 12} ปี` : `${months} เดือน`);
 
 export default function DocumentDigest({ schedule, document, isExternal, statusLabel, onOpenDocument, effectiveToday }) {
+  const users = useStore((state) => state.masterUsers);
   const code = getDocCode(document) || schedule.documentNumber;
   const title = getDocTitle(document) || schedule.documentName;
   const version = isExternal
@@ -44,7 +46,7 @@ export default function DocumentDigest({ schedule, document, isExternal, statusL
     [isExternal ? 'รุ่นเอกสาร (Edition)' : 'ฉบับที่ (Revision)', isExternal ? (/^Edition\b/i.test(version) ? version : `Edition ${version}`) : version],
     ...(isExternal ? [['หน่วยงานผู้ออกเอกสาร', issuer]] : []),
     ['แผนกเจ้าของ', getCleanDept(schedule.ownerDepartmentId || document, '-')],
-    ['ผู้รับผิดชอบ / เจ้าของ', schedule.ownerUserId || document?.owner || '-'],
+    ['ผู้รับผิดชอบ / เจ้าของ', (users || []).find((u) => u.id === schedule.ownerUserId)?.name || schedule.ownerUserId || document?.owner || '-'],
     ['วันที่มีผลบังคับใช้', formatQmsDisplayDate(effectiveDate)]
   ];
   const label = 'text-xs font-semibold uppercase tracking-wider text-slate-400';

@@ -2,6 +2,7 @@ import useStore from '../store/useStore';
 import { apiGet, apiPost, setToken, SESSION_EXPIRED_EVENT } from './client';
 import { loadDars } from './dars';
 import { loadCopies } from './copies';
+import { applyReviews, clearReviews, loadReviews } from './reviews';
 import { clearExternal, isExternalRow, setExternalSources } from './external';
 import { isDarDraft } from '../modules/dcc/utils/darHelper';
 
@@ -43,10 +44,15 @@ export const toStoreDocument = (d) => ({
 });
 
 export const loadDocuments = async () => {
-  const lists = await Promise.all(['EFFECTIVE', 'SUPERSEDED', 'OBSOLETE'].map((s) => apiGet(`/api/documents?status=${s}`)));
+  // The reviews come with the documents because the review flags are laid over them.
+  const [lists] = await Promise.all([
+    Promise.all(['EFFECTIVE', 'SUPERSEDED', 'OBSOLETE'].map((s) => apiGet(`/api/documents?status=${s}`))),
+    loadReviews()
+  ]);
   const rows = lists.flatMap((l) => l.documents);
   useStore.setState({ documents: rows.filter((d) => !isExternalRow(d)).map(toStoreDocument) });
   setExternalSources({ docs: rows.filter(isExternalRow) });
+  applyReviews();
 };
 
 const start = async (user) => {
@@ -92,7 +98,8 @@ export const clearSession = () => {
   // Drafts were typed by the user and never reached the server, so signing out must not throw them away.
   const drafts = (useStore.getState().dars || []).filter(isDarDraft);
   clearExternal();
-  useStore.setState({ documents: [], dars: drafts, darRequests: drafts, controlledCopyInstances: [], documentControlledCopies: [], timeline: [], tasks: [] });
+  clearReviews();
+  useStore.setState({ documents: [], periodicReviewSchedules: [], periodicReviewTasks: [], dars: drafts, darRequests: drafts, controlledCopyInstances: [], documentControlledCopies: [], timeline: [], tasks: [] });
 };
 
 export const logout = () => window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
