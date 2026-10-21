@@ -50,7 +50,7 @@ describe('Task Inbox & Generation: QC Canonicalization Suite', () => {
 
   it('1. Department Normalization: MasterDataService and taskFilter canonicalize QA/QC to QC', () => {
     expect(normalizeDepartmentId('QA/QC')).toBe('QC');
-    expect(normalizeDepartmentId('QA')).toBe('QC');
+    expect(normalizeDepartmentId('QA')).toBe('QA'); // QA is its own department
     expect(normalizeDepartmentId('QC')).toBe('QC');
     expect(normalizeDepartmentId('QAQC')).toBe('QC');
 
@@ -86,7 +86,6 @@ describe('Task Inbox & Generation: QC Canonicalization Suite', () => {
     const masterDepts = useStore.getState().masterDepartments;
     expect(formatDepartmentBadge('QC', masterDepts)).toBe('QC - ฝ่ายประกันและควบคุมคุณภาพ');
     expect(formatDepartmentBadge('QA/QC', masterDepts)).toBe('QC - ฝ่ายประกันและควบคุมคุณภาพ');
-    expect(formatDepartmentBadge('QA', masterDepts)).toBe('QC - ฝ่ายประกันและควบคุมคุณภาพ');
     expect(formatDepartmentBadge('QA/QC - ฝ่ายประกันและควบคุมคุณภาพ', masterDepts)).toBe('QC - ฝ่ายประกันและควบคุมคุณภาพ');
   });
 

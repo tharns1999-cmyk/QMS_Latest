@@ -66,7 +66,7 @@ describe('Master Architectural Blueprint: Materialize Approved DAR to Master Doc
   });
 
   it('1. Standardizes department code to QC and transforms DAR into Master Document', () => {
-    expect(standardizeDepartmentCode('QA')).toBe('QC');
+    expect(standardizeDepartmentCode('QA')).toBe('QA'); // QA is its own department
     expect(standardizeDepartmentCode('QC')).toBe('QC');
     expect(standardizeDepartmentCode('QA/QC')).toBe('QC');
     expect(standardizeDepartmentCode('QAQC')).toBe('QC');
@@ -109,7 +109,7 @@ describe('Master Architectural Blueprint: Materialize Approved DAR to Master Doc
     expect(isMyDepartment('QC', 'QC')).toBe(true);
     expect(isMyDepartment('QC', 'บีม (QC)')).toBe(true);
     expect(isMyDepartment('QC', 'QA/QC')).toBe(true);
-    expect(isMyDepartment('QC', 'QA')).toBe(true);
+    expect(isMyDepartment('QC', 'QA')).toBe(false); // QA is its own department
     expect(isMyDepartment('QC', 'PD')).toBe(false);
   });
 

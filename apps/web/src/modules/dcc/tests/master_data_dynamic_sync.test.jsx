@@ -43,8 +43,8 @@ describe('Master Data Dynamic Synchronization & Hardcoded Elimination Tests', ()
       const codes = Array.from(docTypeSelect.querySelectorAll('option')).map(o => o.value).filter(Boolean);
 
       // Verify the 6 official document types are present and zero legacy types
-      expect(codes).toEqual(expect.arrayContaining(['QM', 'SOP', 'WI', 'FM', 'SD', 'SPEC']));
-      ['HA', 'HAP', 'FSP', 'QP', 'PS', 'VA'].forEach(legacy => expect(codes).not.toContain(legacy));
+      expect(codes).toEqual(expect.arrayContaining(['QM', 'SOP', 'WI', 'FM', 'SD', 'QP']));
+      ['HA', 'HAP', 'FSP', 'PS', 'VA'].forEach(legacy => expect(codes).not.toContain(legacy));
     });
 
     it('immediately reflects new document types added to Master Data Store in real-time', () => {
@@ -79,7 +79,7 @@ describe('Master Data Dynamic Synchronization & Hardcoded Elimination Tests', ()
       fireEvent.change(docTypeSelect, { target: { value: 'FM' } });
 
       // Code preview uses the standardized QA/QC code 'QC'
-      expect(screen.getAllByText(/FM-QC-/).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/FM-QA-/).length).toBeGreaterThan(0);
     });
   });
 

@@ -30,7 +30,7 @@ describe('periodic review', () => {
     proxy = await getPlatformProxy({ persist: { path: '.wrangler/test/v3' } });
     env = { ...proxy.env, JWT_SECRET: 'test-secret' };
     const hash = await hashPassword('rev-pass');
-    const users = [['V-REQ', 'RVW', 2], ['V-STAFF', 'RVW', 3], ['V-HOD', 'RVW', 4], ['V-APP', 'RVW', 5], ['V-OTHER', 'OTH', 5]];
+    const users = [['V-REQ', 'RVW', 2], ['V-STAFF', 'RVW', 3], ['V-HOD', 'RVW', 4], ['V-APP', 'RVW', 6], ['V-OTHER', 'OTH', 5]];
     await env.DB.batch(users.map(([id, dept, level]) => env.DB.prepare(`INSERT INTO users (id, name, email, password_hash, role, approval_level, primary_department, departments)
       VALUES (?, ?, ?, ?, 'USER', ?, ?, ?)`).bind(id, id, `${id}@test.local`, hash, level, dept, JSON.stringify([dept]))));
     for (const [id] of users) {

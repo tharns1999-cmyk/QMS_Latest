@@ -577,7 +577,7 @@ const Sidebar = () => {
                 <ul className="list-disc list-inside space-y-1 text-slate-700 pl-1 font-medium text-xs">
                   <li>บัญชีผู้ใช้มาตรฐาน พร้อมรหัส PIN 123456</li>
                   <li>แผนกมาตรฐาน (PD, QA/QC, WH, EN ฯลฯ)</li>
-                  <li>ประเภทเอกสาร (QM, SOP, WI, FM, SD, SPEC)</li>
+                  <li>ประเภทเอกสาร (QM, QP, SOP, WI, FM, SD, ED)</li>
                   <li>จุดใช้งานและสถานีมาตรฐานประจำโรงงาน</li>
                   <li>การตั้งค่าความปลอดภัย e-Signature และ SLAs</li>
                 </ul>

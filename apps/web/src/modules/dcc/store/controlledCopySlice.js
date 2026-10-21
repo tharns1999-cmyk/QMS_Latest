@@ -219,8 +219,8 @@ export const resolveReceiptTaskDepartment = (copyOrTask, matchedCopy = null) => 
     if (str === 'DCC' || str === 'DC') {
       return 'DC';
     }
-    if (str === 'HR' || str === 'GA' || str === 'HR&GA') {
-      return 'HR&GA';
+    if (str === 'GA' || str === 'HR&GA') {
+      return 'HR';
     }
     return d;
   };

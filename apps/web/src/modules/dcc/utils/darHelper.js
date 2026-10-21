@@ -340,8 +340,8 @@ export const isUserAuthorizedForDocDept = (docDeptRaw, currentUser) => {
     currentUser.role === 'QMR' ||
     currentUser.role === 'EXEC' ||
     currentUser.role === 'MGMT' ||
-    ['DC', 'DCC', 'QMR', 'EXEC', 'MGMT'].includes(cleanUserDept) ||
-    ['DC', 'DCC', 'QMR', 'EXEC', 'MGMT'].includes(cleanUserPrimaryDept);
+    ['DC', 'DCC', 'QMR', 'EXEC', 'MGMT', 'MGT'].includes(cleanUserDept) ||
+    ['DC', 'DCC', 'QMR', 'EXEC', 'MGMT', 'MGT'].includes(cleanUserPrimaryDept);
 
   if (isWildcard) return true;
 

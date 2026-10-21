@@ -1312,11 +1312,7 @@ const TaskInbox = () => {
                 <button
                   key={dept}
                   type="button"
-                  aria-label={
-                    dept === 'QC'
-                      ? `QC ${deptCount} เฉพาะงาน QA เฉพาะงาน QC${isPrimary ? ' (แผนกหลัก)' : ''}`
-                      : `${dept} ${deptCount} เฉพาะงาน ${dept}${isPrimary ? ' (แผนกหลัก)' : ''}`
-                  }
+                  aria-label={`${dept} ${deptCount} เฉพาะงาน ${dept}${isPrimary ? ' (แผนกหลัก)' : ''}`}
                   onClick={() => setDeptFilter(dept)}
                   className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium transition-all whitespace-nowrap shrink-0 border cursor-pointer ${
                     isSelected

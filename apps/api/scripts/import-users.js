@@ -24,8 +24,8 @@ for (const name of ['emp_id', 'name', 'email', 'department', 'extra_departments'
   }
 }
 
-// QA and QC are one department, and HR is stored as HR&GA, the same way the web normalises them.
-const ALIASES = { QA: 'QC', HR: 'HR&GA' };
+// QA and QC are separate departments. Old names from the demo data are mapped to the plant's codes; anything else must already be a department in the app.
+const ALIASES = { 'HR&GA': 'HR', MGMT: 'MGT' };
 const dept = (code) => { const upper = code.toUpperCase(); return ALIASES[upper] ?? upper; };
 // No look-alike characters (0/O, 1/l/I); 14 characters clears the 12-character minimum.
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';

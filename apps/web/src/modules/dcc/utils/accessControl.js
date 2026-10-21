@@ -166,7 +166,7 @@ export const hasDocumentAccess = (doc, user) => {
     return userDepts.some(
       (u) =>
         u === cleanDept ||
-        ((u === 'QA' || u === 'QA/QC' || u === 'QAQC' || u === 'QC') && (cleanDept === 'QA' || cleanDept === 'QA/QC' || cleanDept === 'QAQC' || cleanDept === 'QC'))
+        ((u === 'QA/QC' || u === 'QAQC' || u === 'QC') && (cleanDept === 'QA/QC' || cleanDept === 'QAQC' || cleanDept === 'QC'))
     );
   };
 

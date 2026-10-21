@@ -35,7 +35,7 @@ export const MASTER_DOC_TYPES = [
   { id: 'WI', code: 'WI', name: 'Work Instruction', nameTh: 'วิธีการปฏิบัติงาน (Work Instruction)', prefix: 'WI', namingPattern: 'WI-{Dept}-{##}', is_form_type: false, reviewCycleMonths: 12, retentionPeriodYears: 3, status: 'ACTIVE', category: 'INTERNAL', allowDar: true, description: 'คำแนะนำขั้นตอนการทำงานเฉพาะจุดปฏิบัติงาน' },
   { id: 'FM', code: 'FM', name: 'Form / Record Format', nameTh: 'แบบฟอร์ม (Form)', prefix: 'FM', namingPattern: 'FM-{Dept}-{##}', is_form_type: true, reviewCycleMonths: 24, retentionPeriodYears: 2, status: 'ACTIVE', category: 'INTERNAL', allowDar: true, description: 'แบบฟอร์มเปล่าสำหรับบันทึกผลการปฏิบัติงาน' },
   { id: 'SD', code: 'SD', name: 'Supporting Document', nameTh: 'เอกสารสนับสนุน (Supporting Document)', prefix: 'SD', namingPattern: 'SD-{Dept}-{##}', is_form_type: false, reviewCycleMonths: 24, retentionPeriodYears: 3, status: 'ACTIVE', category: 'INTERNAL', allowDar: true, description: 'เอกสารอ้างอิงและข้อมูลทางวิชาการสนับสนุน' },
-  { id: 'SPEC', code: 'SPEC', name: 'Standard Specification', nameTh: 'ข้อกำหนดทางเทคนิค (Specification)', prefix: 'SPEC', namingPattern: 'SPEC-{Dept}-{##}', is_form_type: false, reviewCycleMonths: 12, retentionPeriodYears: 5, status: 'ACTIVE', category: 'INTERNAL', allowDar: true, description: 'เกณฑ์มาตรฐานคุณลักษณะวัตถุดิบและผลิตภัณฑ์' },
+  { id: 'QP', code: 'QP', name: 'Quality Procedure', nameTh: 'ระเบียบวิธีคุณภาพ (Quality Procedure)', prefix: 'QP', namingPattern: 'QP-{Dept}-{##}', is_form_type: false, reviewCycleMonths: 12, retentionPeriodYears: 5, status: 'ACTIVE', category: 'INTERNAL', allowDar: true, description: 'เกณฑ์มาตรฐานคุณลักษณะวัตถุดิบและผลิตภัณฑ์' },
   { id: 'ED', code: 'ED', name: 'External Document & Regulation', nameTh: 'เอกสารภายนอกและกฎหมาย (External Document)', prefix: 'ED', namingPattern: 'ED-{Dept}-{##}', is_form_type: false, isFormBypass: true, reviewCycleMonths: 12, retentionPeriodYears: 5, status: 'ACTIVE', category: 'EXTERNAL', allowDar: false, description: 'เอกสาร กฎหมาย มาตรฐาน และคู่มือจากหน่วยงานภายนอก' }
 ];
 
@@ -45,7 +45,7 @@ export const MASTER_DATA_DEPT = MASTER_DEPARTMENTS;
 
 export const SYSTEM_CORE_DEPTS = ['DC', 'QA', 'QC', 'QA/QC'];
 
-export const CROSS_ORG_DEPTS = ['MGMT', 'EXEC', 'QMR'];
+export const CROSS_ORG_DEPTS = ['MGT', 'MGMT', 'EXEC', 'QMR'];
 
 export const DEFAULT_APPROVAL_MATRIX = [
   { docType: 'QM', doc_type: 'QM', nameTh: 'คู่มือคุณภาพ (Quality Manual)', minRequesterLevel: 4, min_requester_level: 4, requiredReviewerLevel: 6, required_reviewer_level: 6, requiredApproverLevel: 8, required_approver_level: 8, requireAckDefault: true, require_ack_default: true, description: 'คู่มือระบบการบริหารคุณภาพตามมาตรฐานสากล' },
@@ -53,8 +53,8 @@ export const DEFAULT_APPROVAL_MATRIX = [
   { docType: 'WI', doc_type: 'WI', nameTh: 'คู่มือการปฏิบัติงาน (Work Instruction)', minRequesterLevel: 1, min_requester_level: 1, requiredReviewerLevel: 4, required_reviewer_level: 4, requiredApproverLevel: 5, required_approver_level: 5, requireAckDefault: false, require_ack_default: false, description: 'คำแนะนำขั้นตอนการทำงานเฉพาะจุดปฏิบัติงาน' },
   { docType: 'FM', doc_type: 'FM', nameTh: 'แบบฟอร์มบันทึกข้อมูล (Form / Record Format)', minRequesterLevel: 1, min_requester_level: 1, requiredReviewerLevel: 4, required_reviewer_level: 4, requiredApproverLevel: 5, required_approver_level: 5, requireAckDefault: false, require_ack_default: false, description: 'แบบฟอร์มเปล่าสำหรับบันทึกผลการปฏิบัติงาน' },
   { docType: 'SD', doc_type: 'SD', nameTh: 'เอกสารสนับสนุน (Supporting Document)', minRequesterLevel: 1, min_requester_level: 1, requiredReviewerLevel: 4, required_reviewer_level: 4, requiredApproverLevel: 5, required_approver_level: 5, requireAckDefault: true, require_ack_default: true, description: 'เอกสารอ้างอิงและข้อมูลทางวิชาการสนับสนุน' },
-  { docType: 'SPEC', doc_type: 'SPEC', nameTh: 'ข้อกำหนดและสเปกมาตรฐาน (Standard Specification)', minRequesterLevel: 1, min_requester_level: 1, requiredReviewerLevel: 4, required_reviewer_level: 4, requiredApproverLevel: 5, required_approver_level: 5, requireAckDefault: true, require_ack_default: true, description: 'เกณฑ์มาตรฐานคุณลักษณะวัตถุดิบและผลิตภัณฑ์' },
-  { docType: 'ED', doc_type: 'ED', nameTh: 'เอกสารภายนอกและกฎหมาย (External Document)', minRequesterLevel: 1, min_requester_level: 1, requiredReviewerLevel: 4, required_reviewer_level: 4, requiredApproverLevel: 6, required_approver_level: 6, requireAckDefault: false, require_ack_default: false, description: 'เอกสาร กฎหมาย มาตรฐาน และคู่มือจากหน่วยงานภายนอก' }
+  { docType: 'QP', doc_type: 'QP', nameTh: 'ระเบียบวิธีคุณภาพ (Quality Procedure)', minRequesterLevel: 1, min_requester_level: 1, requiredReviewerLevel: 4, required_reviewer_level: 4, requiredApproverLevel: 6, required_approver_level: 6, requireAckDefault: true, require_ack_default: true, description: 'เกณฑ์มาตรฐานคุณลักษณะวัตถุดิบและผลิตภัณฑ์' },
+  { docType: 'ED', doc_type: 'ED', nameTh: 'เอกสารภายนอกและกฎหมาย (External Document)', minRequesterLevel: 1, min_requester_level: 1, requiredReviewerLevel: 4, required_reviewer_level: 4, requiredApproverLevel: 5, required_approver_level: 5, requireAckDefault: false, require_ack_default: false, description: 'เอกสาร กฎหมาย มาตรฐาน และคู่มือจากหน่วยงานภายนอก' }
 ];
 
 export const DEFAULT_SIGNATURE_SETTINGS = {
@@ -458,7 +458,7 @@ export const getDepartmentTheme = (deptId) => {
   if (!deptId) return defaultTheme;
 
   const key = String(deptId).toUpperCase().trim();
-  const cleanKey = (key === 'QA' || key === 'QA/QC' || key === 'QAQC') ? 'QC' : (key === 'DCC' ? 'DC' : key);
+  const cleanKey = (key === 'QA/QC' || key === 'QAQC') ? 'QC' : (key === 'DCC' ? 'DC' : key);
   const theme = QMS_POLICIES.THEMES.DEPARTMENTS[cleanKey];
   if (!theme) return defaultTheme;
 

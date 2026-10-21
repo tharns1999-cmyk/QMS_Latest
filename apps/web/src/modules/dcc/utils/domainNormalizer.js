@@ -92,7 +92,6 @@ export const getCleanDept = (item, fallback = 'QC') => {
 
   if (
     upper === 'QA/QC' ||
-    upper === 'QA' ||
     upper === 'QAQC' ||
     upper === 'QA SUPER' ||
     upper === 'QASUPER' ||

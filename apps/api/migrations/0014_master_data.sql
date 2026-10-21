@@ -7,21 +7,21 @@ CREATE TABLE departments (
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
--- Same codes as MASTER_DEPARTMENTS in apps/web/src/modules/dcc/config/qmsRegistry.js.
+-- The plant's departments (codes as the factory chart names them). The DCC edits names and adds more in the app.
 INSERT INTO departments (code, name_th, name_en) VALUES
-  ('DC', 'ศูนย์ควบคุมเอกสาร', 'Document Control Center'),
-  ('PD', 'ฝ่ายผลิต', 'Production Department'),
-  ('QC', 'ฝ่ายประกันและควบคุมคุณภาพ', 'Quality Assurance & Control'),
-  ('WH', 'ฝ่ายคลังสินค้าและโลจิสติกส์', 'Warehouse & Logistics'),
-  ('EN', 'ฝ่ายวิศวกรรมและซ่อมบำรุง', 'Engineering & Maintenance'),
-  ('PC', 'ฝ่ายจัดซื้อ', 'Purchasing Department'),
-  ('HR&GA', 'ฝ่ายทรัพยากรบุคคลและธุรการ', 'Human Resources & General Affairs'),
-  ('HSE', 'ฝ่ายความปลอดภัยและสิ่งแวดล้อม', 'Health, Safety & Environment'),
-  ('MKT', 'ฝ่ายการตลาดและการขาย', 'Marketing & Sales'),
-  ('ST', 'ฝ่ายจัดเก็บวัตถุดิบ', 'Store & Inventory'),
-  ('FIN', 'ฝ่ายการเงินและบัญชี', 'Finance Department'),
-  ('MGMT', 'ตัวแทนฝ่ายบริหาร/คุณภาพ', 'Management / QMR'),
-  ('EXEC', 'ผู้บริหารสูงสุด', 'Executive Management');
+  ('MGT', 'บริหาร / QMR', 'Management / QMR'),
+  ('DC', 'ควบคุมเอกสาร', 'Document Control'),
+  ('QA', 'ประกันคุณภาพ', 'Quality Assurance'),
+  ('QC', 'ควบคุมคุณภาพ', 'Quality Control'),
+  ('PD', 'ฝ่ายผลิต', 'Production'),
+  ('WH', 'คลังสินค้า / ห้องเย็น', 'Warehouse / Cold Storage'),
+  ('EN', 'วิศวกรรม / ซ่อมบำรุง', 'Engineering / Maintenance'),
+  ('RD', 'วิจัยและพัฒนา', 'Research & Development'),
+  ('PU', 'จัดซื้อ', 'Purchasing'),
+  ('HR', 'บุคคล / ธุรการ', 'Human Resources / General Affairs'),
+  ('AC', 'บัญชีและการเงิน', 'Accounting & Finance'),
+  ('SF', 'ความปลอดภัย / จป.', 'Safety'),
+  ('LB', 'ห้องปฏิบัติการไมโคร', 'Microbiology Laboratory');
 
 -- Any department an existing user already belongs to must exist, whatever the seed above says.
 INSERT OR IGNORE INTO departments (code, name_th) SELECT DISTINCT primary_department, primary_department FROM users;

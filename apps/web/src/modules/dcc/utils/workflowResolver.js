@@ -76,7 +76,7 @@ const createRouteResult = (user, level, dept) => {
  */
 const isCrossOrgAuthority = (user) => {
   if (!user) return false;
-  if (user.isQmr || user.department === 'MGMT' || user.role === 'QMR' || user.level >= 6) return true;
+  if (user.isQmr || user.department === 'MGT' || user.department === 'MGMT' || user.role === 'QMR' || user.level >= 6) return true;
   
   const userDepts = [
     user.department, user.dept, user.primaryDepartment, user.primary_department,
@@ -108,7 +108,7 @@ export const isUserInDepartment = (user, department) => {
   if (Array.isArray(user.depts) && user.depts.includes(department)) return true;
 
   // 3. Central admin roles that have access to all
-  if (user.department === 'MGMT' || user.role === 'QMR' || user.level >= 6) {
+  if (user.department === 'MGT' || user.department === 'MGMT' || user.role === 'QMR' || user.level >= 6) {
     return true;
   }
 
