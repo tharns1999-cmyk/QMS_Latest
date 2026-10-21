@@ -944,14 +944,14 @@ const ControlledCopyRegister = () => {
   };
 
   // 8. Report Damaged / Lost
-  const handleReportSubmit = (e) => {
+  const handleReportSubmit = async (e) => {
     e.preventDefault();
     const trimmedReason = reportReason.trim();
     if (!trimmedReason) {
       toast.error('กรุณาระบุสาเหตุและความจำเป็น');
       return;
     }
-    reportCcDamagedLost(selectedInstance.id, reportType, trimmedReason);
+    if ((await reportCcDamagedLost(selectedInstance.id, reportType, trimmedReason)) === false) return;
     setReportModalOpen(false);
     setSelectedInstance(null);
     setReportReason('');

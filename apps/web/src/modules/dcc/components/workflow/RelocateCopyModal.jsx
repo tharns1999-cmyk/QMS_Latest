@@ -52,11 +52,11 @@ const RelocateCopyModal = ({ isOpen, onClose, copy }) => {
     if (!canSubmit) return;
     setIsSubmitting(true);
     try {
-      requestCcRelocation(copy.id, {
+      if ((await requestCcRelocation(copy.id, {
         newLocation: effectiveLocation.trim(),
         newDepartment: (newDepartment || currentDept).trim(),
         reason: reason.trim()
-      });
+      })) === false) return;
       toast.success(
         `ส่งคำขอย้ายจุดติดตั้ง ${docCode} Copy ${rawNo} ถึง DCC แล้ว`,
         { duration: 4000, icon: '📍' }

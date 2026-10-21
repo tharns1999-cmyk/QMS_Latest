@@ -7,7 +7,8 @@ import { isApiMode } from '../../../api/client';
 // Loaded on use: api/copies imports the store, which imports this slice.
 const apiCopies = {
   stepCopy: (...args) => import('../../../api/copies').then((m) => m.stepCopy(...args)),
-  stepCopies: (...args) => import('../../../api/copies').then((m) => m.stepCopies(...args))
+  stepCopies: (...args) => import('../../../api/copies').then((m) => m.stepCopies(...args)),
+  call: (name, ...args) => import('../../../api/copies').then((m) => m[name](...args))
 };
 import { canManageControlledCopy } from '../utils/accessControl';
 import { 
@@ -814,7 +815,9 @@ export const getActivePhysicalCopies = (copies = [], doc = null) => {
     'RECALLED_DESTROYED',
     'REPLACED_VOID',
     'VOID',
-    'SUPERSEDED_ARCHIVED'
+    'SUPERSEDED_ARCHIVED',
+    'RECALLED',
+    'LOST'
   ]);
 
   const physicalCandidates = rawMatches.filter(c => {
@@ -2142,7 +2145,7 @@ export const createControlledCopySlice = (set, get) => ({
     };
   }),
 
-  requestAdditionalControlledCopies: (docId, newLocationsList = [], reason = '') => set((state) => {
+  requestAdditionalControlledCopies: (docId, newLocationsList = [], reason = '') => isApiMode ? apiCopies.call('requestAdditionalCopies', typeof docId === 'object' && docId ? (docId.documentId || docId.docId || docId.id) : docId, newLocationsList, reason) : set((state) => {
     // Support both positional (docId, newLocationsList, reason) and object payload ({ documentId, docCode, locations, ... })
     let targetId = docId;
     let targetCode = typeof docId === 'string' ? docId : '';
@@ -2488,7 +2491,7 @@ export const createControlledCopySlice = (set, get) => ({
     };
   }),
 
-  reportCcDamagedLost: (instId, type, reason) => set((state) => {
+  reportCcDamagedLost: (instId, type, reason) => isApiMode ? apiCopies.call('reportCopyDamagedOrLost', instId, type, reason) : set((state) => {
     const targetId = String(instId || '').trim();
     if (!targetId) return state;
 
@@ -2892,7 +2895,7 @@ export const createControlledCopySlice = (set, get) => ({
    * Enforces: Origin Invariant (Copy 01 may NOT be relocated).
    * Creates: DCC task type DCC_RELOCATE, sets copy status → RELOCATION_PENDING_APPROVAL.
    */
-  requestCcRelocation: (copyId, { newLocation, newDepartment, reason } = {}) => set((state) => {
+  requestCcRelocation: (copyId, { newLocation, newDepartment, reason } = {}) => isApiMode ? apiCopies.call('requestCopyRelocation', copyId, { newLocation, newDepartment, reason }) : set((state) => {
     if (!copyId || !reason) return state;
     const targetId = String(copyId).trim();
 
@@ -3072,7 +3075,7 @@ export const createControlledCopySlice = (set, get) => ({
    * Enforces: Origin Invariant (Copy 01 may NOT be returned).
    * Creates: DCC task type DCC_RETURN, sets copy status → RETURN_PENDING_APPROVAL.
    */
-  requestCcReturn: (copyId, { reason, returnDate } = {}) => set((state) => {
+  requestCcReturn: (copyId, { reason, returnDate } = {}) => isApiMode ? apiCopies.call('requestCopyReturn', copyId, { reason, returnDate }) : set((state) => {
     if (!copyId || !reason) return state;
     const targetId = String(copyId).trim();
 
@@ -3250,7 +3253,7 @@ export const createControlledCopySlice = (set, get) => ({
    * DCC Admin approves a relocation request. Requires checklistVerified === true (ISO 9001 Clause 7.5.3).
    * Updates copy location, department, and reverts status to ISSUED_ACTIVE.
    */
-  approveCcRelocation: (taskId, { notes = '', checklistVerified = false } = {}) => set((state) => {
+  approveCcRelocation: (taskId, { notes = '', checklistVerified = false } = {}) => isApiMode ? (checklistVerified && apiCopies.call('decideCopyRequest', taskId, 'APPROVE', { notes })) : set((state) => {
     if (!checklistVerified) {
       console.warn('[approveCcRelocation] Cannot approve without checklist verification (ISO 9001 Clause 7.5.3).');
       return state;
@@ -3337,7 +3340,7 @@ export const createControlledCopySlice = (set, get) => ({
    * rejectCcRelocation
    * DCC Admin rejects a relocation request. Reverts copy status to ISSUED_ACTIVE.
    */
-  rejectCcRelocation: (taskId, { rejectReason = '' } = {}) => set((state) => {
+  rejectCcRelocation: (taskId, { rejectReason = '' } = {}) => isApiMode ? apiCopies.call('decideCopyRequest', taskId, 'REJECT', { rejectReason }) : set((state) => {
     const task = (state.tasks || []).find(t => t.id === taskId);
     if (!task) { console.warn(`[rejectCcRelocation] Task ${taskId} not found.`); return state; }
 
@@ -3408,7 +3411,7 @@ export const createControlledCopySlice = (set, get) => ({
    * DCC Admin approves a return/decommission request. Requires checklistVerified === true.
    * Sets copy status to RECALLED (archived, removed from active station inventory).
    */
-  approveCcReturn: (taskId, { dispositionMethod = 'ARCHIVE', witnessName = '', notes = '', checklistVerified = false } = {}) => set((state) => {
+  approveCcReturn: (taskId, { dispositionMethod = 'ARCHIVE', witnessName = '', notes = '', checklistVerified = false } = {}) => isApiMode ? (checklistVerified && apiCopies.call('decideCopyRequest', taskId, 'APPROVE', { notes, dispositionMethod, witnessName })) : set((state) => {
     if (!checklistVerified) {
       console.warn('[approveCcReturn] Cannot approve without checklist verification (ISO 9001 Clause 7.5.3).');
       return state;
@@ -3492,7 +3495,7 @@ export const createControlledCopySlice = (set, get) => ({
    * rejectCcReturn
    * DCC Admin rejects a return request. Reverts copy status to ISSUED_ACTIVE.
    */
-  rejectCcReturn: (taskId, { rejectReason = '' } = {}) => set((state) => {
+  rejectCcReturn: (taskId, { rejectReason = '' } = {}) => isApiMode ? apiCopies.call('decideCopyRequest', taskId, 'REJECT', { rejectReason }) : set((state) => {
     const task = (state.tasks || []).find(t => t.id === taskId);
     if (!task) { console.warn(`[rejectCcReturn] Task ${taskId} not found.`); return state; }
 
