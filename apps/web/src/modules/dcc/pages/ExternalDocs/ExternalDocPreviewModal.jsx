@@ -15,6 +15,7 @@ const ExternalDocPreviewModal = ({ isOpen, onClose, document: doc }) => {
 
   const [pdfBlobUrl, setPdfBlobUrl] = useState(null);
   const [loadingPdf, setLoadingPdf] = useState(false);
+  const [pdfBroken, setPdfBroken] = useState(false);
   const blobUrlRef = useRef(null);
   const stampedPdfBytesRef = useRef(null);
   const currentDocKeyRef = useRef(null);
@@ -31,6 +32,7 @@ const ExternalDocPreviewModal = ({ isOpen, onClose, document: doc }) => {
       currentDocKeyRef.current = null;
       setPdfBlobUrl(null);
       setLoadingPdf(false);
+      setPdfBroken(false);
       return;
     }
 
@@ -45,6 +47,7 @@ const ExternalDocPreviewModal = ({ isOpen, onClose, document: doc }) => {
     }
 
     setLoadingPdf(true);
+    setPdfBroken(false);
     const isSupersededOrObsolete = Boolean(
       doc.status === 'SUPERSEDED' ||
       doc.status === 'SUPERSEDED_ARCHIVED' ||
@@ -103,6 +106,11 @@ const ExternalDocPreviewModal = ({ isOpen, onClose, document: doc }) => {
         try {
           stampedBytes = await stampExternalDocumentTopRight(rawBuffer, stampData);
         } catch (stampErr) {
+          // A real PDF that pdf-lib cannot stamp (e.g. encrypted) still opens raw; a stub with no %%EOF would only show a blank viewer.
+          if (!new TextDecoder('latin1').decode(new Uint8Array(rawBuffer).slice(-1024)).includes('%%EOF')) {
+            setPdfBroken(true);
+            throw stampErr;
+          }
           console.warn("Failed to apply top-right preview stamp, falling back to raw buffer:", stampErr);
           stampedBytes = rawBuffer;
         }
@@ -399,8 +407,8 @@ const ExternalDocPreviewModal = ({ isOpen, onClose, document: doc }) => {
                   <ShieldAlert size={28} />
                 </div>
                 <div className="space-y-1">
-                  <p className="text-slate-200 font-semibold text-sm">ไม่พบไฟล์ต้นฉบับจริง (No original file attached)</p>
-                  <p className="text-slate-400 text-xs">เอกสารนี้อาจถูกบันทึกโดยไม่มีไฟล์แนบ หรือไฟล์อยู่ในคลังข้อมูลที่ถูกย้าย</p>
+                  <p className="text-slate-200 font-semibold text-sm">{pdfBroken ? 'เปิดไฟล์ PDF ไม่ได้ (ไฟล์เสียหรือไม่ใช่ PDF จริง)' : 'ไม่พบไฟล์ต้นฉบับจริง (No original file attached)'}</p>
+                  <p className="text-slate-400 text-xs">{pdfBroken ? 'กรุณาให้ผู้ขึ้นทะเบียนอัปโหลดไฟล์ PDF ที่เปิดอ่านได้อีกครั้ง' : 'เอกสารนี้อาจถูกบันทึกโดยไม่มีไฟล์แนบ หรือไฟล์อยู่ในคลังข้อมูลที่ถูกย้าย'}</p>
                 </div>
               </div>
             )}
