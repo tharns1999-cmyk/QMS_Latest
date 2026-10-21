@@ -245,12 +245,12 @@ export const DEPARTMENT_METADATA = [
 ];
 
 /**
- * Normalize department IDs for backward compatibility (e.g., 'QA' / 'QA/QC' -> 'QC', 'HR' -> 'HR&GA')
+ * Normalize department IDs for backward compatibility (e.g., 'QA/QC' -> 'QC', 'HR&GA' -> 'HR'); QA is its own department
  */
 export const normalizeDepartmentId = (deptId) => {
   if (!deptId) return 'PD';
   const clean = getCleanDept(deptId, String(deptId).trim());
-  if (clean === 'HR' || clean === 'GA') return 'HR&GA';
+  if (clean === 'GA' || clean === 'HR&GA') return 'HR';
   return clean;
 };
 

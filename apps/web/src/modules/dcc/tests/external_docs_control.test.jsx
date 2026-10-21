@@ -60,7 +60,7 @@ describe('External Documents Management Module (ED-Control) Tests', () => {
       const codes = Array.from(docTypeSelect.querySelectorAll('option')).map(o => o.value).filter(Boolean);
 
       // All 6 internal types present, zero ED in DAR New Form
-      expect(codes).toEqual(expect.arrayContaining(['QM', 'SOP', 'WI', 'FM', 'SD', 'SPEC']));
+      expect(codes).toEqual(expect.arrayContaining(['QM', 'SOP', 'WI', 'FM', 'SD', 'QP']));
       expect(codes).not.toContain('ED');
     });
 

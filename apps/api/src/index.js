@@ -270,7 +270,7 @@ app.post('/api/dars', requireAuth, async (c) => {
     edition: text(body.edition, 100) ?? doc.ext_edition ?? null,
     cycle: body.review_cycle_months != null ? cycle : (doc.review_cycle_months ?? 12)
   } : { issuer: null, edition: null, cycle: null };
-  const thresholds = await getThresholds(db, doc.doc_type);
+  const thresholds = await getThresholds(db, doc.doc_type, type);
   if (user.approval_level < thresholds.min_requester_level) return c.json({ error: `ผู้ขอต้องมีระดับ L${thresholds.min_requester_level} ขึ้นไป` }, 403);
 
   // Check the named reviewer and approver against the matrix now, so a DAR cannot be routed to someone who may not sign it.
@@ -416,7 +416,7 @@ app.post('/api/dars/:id/decision', requireAuth, async (c) => {
   if (dar.awaiting_requester) return c.json({ error: 'คำขอนี้ถูกส่งกลับแล้ว รอผู้ขอแก้ไขและยื่นใหม่' }, 409);
   if (user.id !== (stage === 'REVIEW' ? dar.reviewer_id : dar.approver_id)) return c.json({ error: 'คุณไม่ได้รับมอบหมายให้พิจารณาคำขอนี้' }, 403);
   // Re-checked at decision time: the user's level or the matrix may have changed since submission.
-  const problem = checkDecisionRights(user, { stage, department: dar.department, requesterId: dar.requester_id, reviewerId: dar.reviewer_id }, await getThresholds(db, dar.doc_type));
+  const problem = checkDecisionRights(user, { stage, department: dar.department, requesterId: dar.requester_id, reviewerId: dar.reviewer_id }, await getThresholds(db, dar.doc_type, dar.type));
   if (problem) return c.json({ error: problem }, 403);
   if (body.decision === 'APPROVE' && dar.type !== 'OBSOLETE' && !dar.file_key) return c.json({ error: 'ผู้ขอยังไม่ได้แนบไฟล์ PDF' }, 409);
 
@@ -716,7 +716,7 @@ app.post('/api/acknowledgements/:id/acknowledge', requireAuth, async (c) => {
 // signs it too when they hold those rights already.
 const REVIEW_OUTCOMES = ['NO_CHANGE', 'REVISION_REQUIRED', 'OBSOLETE'];
 const OPEN_DAR_STATUSES = `('PENDING_REVIEW', 'PENDING_APPROVAL', 'PENDING_DCC')`;
-const isCrossOrg = (user) => user.isQmr || user.approval_level >= 6 || user.depts.some((d) => ['MGMT', 'EXEC', 'QMR'].includes(d));
+const isCrossOrg = (user) => user.isQmr || user.approval_level >= 6 || user.depts.some((d) => ['MGT', 'EXEC', 'QMR'].includes(d));
 // New date = the later of the date it was due and today, plus one cycle (so a late review does not leave it overdue again).
 const NEXT_REVIEW_SQL = `date(max(COALESCE(next_review_date, ${TODAY_TH}), ${TODAY_TH}), '+' || COALESCE(review_cycle_months, CASE WHEN doc_type IN ('WI', 'FM') THEN 24 ELSE 12 END) || ' months')`;
 

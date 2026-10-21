@@ -97,7 +97,7 @@ export const isDccOperationalTask = (task) => {
  * Canonicalizes department identifiers to their standard Master Data code:
  * QA / QA/QC / QAQC / QC -> 'QC'
  * DCC / DC -> 'DC'
- * HR / GA -> 'HR&GA'
+ * GA / HR&GA -> 'HR'
  * Strips descriptive Thai text if attached (e.g. 'QA/QC - ฝ่ายประกัน...' -> 'QC', 'QC (Quality Control)' -> 'QC')
  */
 export const normalizeCanonicalDept = (dept) => {
@@ -119,7 +119,6 @@ export const normalizeCanonicalDept = (dept) => {
   const clean = str.replace(/[^a-zA-Z0-9&]/g, '').toUpperCase();
   if (clean === 'DCC' || clean === 'DC') return 'DC';
   if (
-    clean === 'QA' ||
     clean === 'QAQC' ||
     clean === 'QC' ||
     clean === 'QASUPER' ||
@@ -129,8 +128,9 @@ export const normalizeCanonicalDept = (dept) => {
   ) {
     return 'QC';
   }
-  if (clean === 'HR' || clean === 'GA' || clean === 'HRGA') {
-    return 'HR&GA';
+  // HR&GA is the old name of the plant's HR department, code HR.
+  if (clean === 'GA' || clean === 'HRGA' || clean === 'HR&GA') {
+    return 'HR';
   }
   return str.toUpperCase();
 };
@@ -138,7 +138,7 @@ export const normalizeCanonicalDept = (dept) => {
 export const normalizeDept = normalizeCanonicalDept;
 
 /**
- * Compares two department identifiers with normalization and alias equivalence (QA <-> QA/QC <-> QC)
+ * Compares two department identifiers with normalization and alias equivalence (QA/QC <-> QC; QA is its own department)
  */
 export const isSameDepartment = (deptA, deptB) => {
   if (!deptA || !deptB) return false;

@@ -54,7 +54,7 @@ export const getDeptBadgeStyle = (deptCode = '') => {
   }
 
   // MGMT / Management
-  if (code.includes('MGMT')) {
+  if (code.includes('MGMT') || code === 'MGT') {
     return {
       badge: 'bg-rose-50 text-rose-800 border-rose-200/90',
       icon: 'text-rose-600'

@@ -28,7 +28,7 @@ describe('checkDecisionRights', () => {
 
   it('blocks other departments unless cross-org authority, and DCC outside DC', () => {
     expect(checkDecisionRights(user({ department: 'QC', depts: ['QC'] }), { ...doc, stage: 'REVIEW' }, WI)).toMatch('แผนก');
-    expect(checkDecisionRights(user({ department: 'MGMT', depts: ['MGMT'] }), { ...doc, stage: 'REVIEW' }, WI)).toBeNull();
+    expect(checkDecisionRights(user({ department: 'MGT', depts: ['MGT'] }), { ...doc, stage: 'REVIEW' }, WI)).toBeNull();
     expect(checkDecisionRights(user({ department: 'QC', depts: ['QC'], approval_level: 6 }), { ...doc, stage: 'APPROVE' }, SOP)).toBeNull();
     expect(checkDecisionRights(user({ isDcc: true, approval_level: 8 }), { ...doc, stage: 'REVIEW' }, WI)).toMatch('DCC');
     expect(checkDecisionRights(user({ isDcc: true, department: 'DC', depts: ['DC'] }), { ...doc, department: 'DC', stage: 'REVIEW' }, WI)).toBeNull();
@@ -70,7 +70,11 @@ describe('approval matrix API', () => {
     const res = await call('/api/approval-matrix', tokens.pd);
     const { matrix } = await res.json();
     expect(matrix.find((m) => m.doc_type === 'SOP')).toMatchObject({ required_reviewer_level: 4, required_approver_level: 6 });
-    expect(await getThresholds(env.DB, 'ed')).toMatchObject({ required_approver_level: 6 });
+    expect(await getThresholds(env.DB, 'ed')).toMatchObject({ required_approver_level: 5 });
+    // Retiring an external document needs one level more than the matrix's level for adding or changing it.
+    expect(await getThresholds(env.DB, 'ed', 'OBSOLETE')).toMatchObject({ required_approver_level: 6 });
+    expect(await getThresholds(env.DB, 'sop', 'OBSOLETE')).toMatchObject({ required_approver_level: 6 });
+    expect(matrix.map((m) => m.doc_type)).toEqual(['ED', 'FM', 'QM', 'QP', 'SD', 'SOP', 'WI']);
     expect(await getThresholds(env.DB, 'UNKNOWN')).toMatchObject({ required_approver_level: 5 });
   });
 

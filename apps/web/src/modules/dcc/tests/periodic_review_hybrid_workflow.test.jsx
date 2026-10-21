@@ -403,14 +403,14 @@ describe('Hybrid 2-Step Periodic Review Workflow (Staff -> HOD Approval with 1-C
       secondaryDepartments: ['QC']
     };
 
-    // ED approver level per the approval matrix is L6
+    // ED approver level per the approval matrix is L5 (the department head); retiring an ED needs L6 on the server
     const mockQcManagerL6 = { ...mockKalyaneeL5, id: 'U010', name: 'QC Manager', level: 6, approval_level: 6 };
 
     it('approval follows the approval matrix level per doc type, not a fixed L5', () => {
       expect(canFastTrackReview(mockKalyaneeL5, 'QC', 'WI-QC-001')).toBe(true);
       expect(canFastTrackReview(mockKalyaneeL5, 'QC', 'SOP-QC-001')).toBe(false);
       expect(canFastTrackReview(mockQcManagerL6, 'QC', 'SOP-QC-001')).toBe(true);
-      expect(canFastTrackExternalReview(mockKalyaneeL5, 'QC')).toBe(false);
+      expect(canFastTrackExternalReview(mockKalyaneeL5, 'QC')).toBe(true);
       expect(canFastTrackExternalReview(mockQcManagerL6, 'QC')).toBe(true);
     });
 
@@ -514,8 +514,8 @@ describe('Hybrid 2-Step Periodic Review Workflow (Staff -> HOD Approval with 1-C
       const store = useStore.getState();
       const task = store.tasks.find(t => t.type === 'PERIODIC_REVIEW_APPROVAL');
       expect(task).toMatchObject({
-        assigneeId: mockQcManagerL6.id,
-        assignee_id: mockQcManagerL6.id,
+        assigneeId: mockKalyaneeL5.id,
+        assignee_id: mockKalyaneeL5.id,
         actionRequired: true,
         status: 'PENDING',
         is_completed: false,
@@ -525,7 +525,7 @@ describe('Hybrid 2-Step Periodic Review Workflow (Staff -> HOD Approval with 1-C
         target_department: 'QC',
         owner_dept: 'QC'
       });
-      expect(store.notifications.some(n => n.userId === mockQcManagerL6.id && n.taskId === task.id)).toBe(true);
+      expect(store.notifications.some(n => n.userId === mockKalyaneeL5.id && n.taskId === task.id)).toBe(true);
       expect(store.externalDocuments[0].nextReviewDate).toBe('2026-10-15');
       expect(store.externalDocuments[0].next_review_date).toBe('2026-10-15');
       expect(store.externalDocuments[0].review_status).toBe('PENDING_APPROVAL');

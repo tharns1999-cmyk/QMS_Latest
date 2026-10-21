@@ -97,7 +97,7 @@ describe('Department Code QC Drift Resolution & Multi-Department Filter Blueprin
 
     // Bidirectional alias equivalence
     expect(isMyDepartment('QC', 'QA/QC')).toBe(true);
-    expect(isMyDepartment('QC', 'QA')).toBe(true);
+    expect(isMyDepartment('QC', 'QA')).toBe(false); // QA is its own department
     expect(isMyDepartment('QC', 'บีม (QC)')).toBe(true);
     expect(isMyDepartment('QA/QC', 'QC')).toBe(true);
     expect(isMyDepartment('QC', 'PD')).toBe(false);

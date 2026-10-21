@@ -17,7 +17,7 @@ describe('external documents (doc_type ED) through the request pipeline', () => 
     const { dar } = (await post('/api/dars', 'E-REQ', { reason: 'ทดสอบ', reviewer_id: 'E-REV', approver_id: 'E-APP', ...body })).body;
     if (body.type !== 'OBSOLETE') await app.request(`/api/dars/${dar.id}/file`, { method: 'PUT', headers: { 'Content-Type': 'application/pdf', Authorization: `Bearer ${tokens['E-REQ']}` }, body: PDF }, env);
     await post(`/api/dars/${dar.id}/decision`, 'E-REV', { decision: 'APPROVE' });
-    return (await post(`/api/dars/${dar.id}/decision`, 'E-APP', { decision: 'APPROVE' })).body.dar;
+    return (await post(`/api/dars/${dar.id}/decision`, body.approver_id || 'E-APP', { decision: 'APPROVE' })).body.dar;
   };
   const doc = (code) => env.DB.prepare("SELECT * FROM documents WHERE doc_code = ? AND status = 'EFFECTIVE'").bind(code).first();
 
@@ -26,7 +26,7 @@ describe('external documents (doc_type ED) through the request pipeline', () => 
     env = { ...proxy.env, JWT_SECRET: 'test-secret' };
     const hash = await hashPassword('ext-pass');
     // Level 6 for the approver: the matrix asks for it on ED in a real deployment; a level above every threshold works either way.
-    const users = [['E-REQ', 'EXT', 2], ['E-REV', 'EXT', 4], ['E-APP', 'EXT', 6]];
+    const users = [['E-REQ', 'EXT', 2], ['E-REV', 'EXT', 4], ['E-APP', 'EXT', 6], ['E-L5', 'EXT', 5]];
     await env.DB.batch(users.map(([id, dept, level]) => env.DB.prepare(`INSERT INTO users (id, name, email, password_hash, role, approval_level, primary_department, departments)
       VALUES (?, ?, ?, ?, 'USER', ?, ?, ?)`).bind(id, id, `${id}@test.local`, hash, level, dept, JSON.stringify([dept]))));
     for (const [id] of users) {
@@ -53,6 +53,16 @@ describe('external documents (doc_type ED) through the request pipeline', () => 
     const rev = await run({ type: 'REVISION', doc_code: code, edition: '2020' });
     expect(rev.status).toBe('COMPLETED');
     expect(await doc(code)).toMatchObject({ revision: '01', ext_issuer: 'ISO', ext_edition: '2020', review_cycle_months: 6 });
+  });
+
+  it('an external document is approved by the department head (L5), but retiring one needs L6', async () => {
+    const created = await run({ type: 'NEW', doc_type: 'ED', department: 'EXT', name: 'กฎหมายภายนอก', approver_id: 'E-L5' });
+    expect(created.status).toMatch(/PENDING_DCC|COMPLETED/); // an L5 approver was enough
+    await env.DB.prepare('UPDATE dars SET effective_date = ? WHERE id = ?').bind(new Date(Date.now() + 7 * 3600e3).toISOString().slice(0, 10), created.id).run();
+    await request('GET', '/api/dars', 'E-REQ');
+    const retire = (approver) => post('/api/dars', 'E-REQ', { type: 'OBSOLETE', doc_code: created.doc_code, reason: 'ยกเลิก', reviewer_id: 'E-REV', approver_id: approver });
+    expect((await retire('E-L5')).body.error).toMatch('L6');
+    expect((await retire('E-APP')).status).toBe(201);
   });
 
   it('leaves internal documents without external fields, on the default cycle for their type', async () => {
