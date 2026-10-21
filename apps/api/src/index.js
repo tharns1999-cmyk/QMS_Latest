@@ -173,6 +173,7 @@ const visibilityArgs = (user) => [JSON.stringify([...user.depts, user.department
 
 // One status per request: Active, Superseded and Obsolete lists are never mixed (ISO 9001 7.5.3).
 app.get('/api/documents', requireAuth, async (c) => {
+  await activateDue(c.env.DB);
   const status = (c.req.query('status') || 'EFFECTIVE').toUpperCase();
   if (!DOC_STATUSES.includes(status)) return c.json({ error: 'สถานะเอกสารไม่ถูกต้อง' }, 400);
   const { results } = await c.env.DB.prepare(`SELECT * FROM documents WHERE status = ? AND ${VISIBLE_TO} ORDER BY doc_code, revision`)
@@ -281,6 +282,7 @@ app.post('/api/dars', requireAuth, async (c) => {
 });
 
 app.get('/api/dars', requireAuth, async (c) => {
+  await activateDue(c.env.DB);
   const status = c.req.query('status')?.toUpperCase();
   const { results } = await c.env.DB.prepare(`SELECT * FROM dars WHERE (? IS NULL OR status = ?) AND ${DAR_VISIBLE_TO} ORDER BY id DESC`)
     .bind(status ?? null, status ?? null, ...darVisibilityArgs(c.get('user'))).all();
@@ -358,6 +360,10 @@ app.post('/api/dars/:id/decision', requireAuth, async (c) => {
       .bind(user.id, body.decision === 'REJECT' ? 'DAR_REJECTED' : stage === 'REVIEW' ? 'DAR_REVIEWED' : 'DAR_APPROVED', JSON.stringify({ dar_id: dar.id, comment }))
   ]);
   if (!updated.results.length) return c.json({ error: 'คำขอนี้ถูกพิจารณาหรือเปลี่ยนไฟล์ไปแล้ว กรุณาโหลดใหม่' }, 409);
+  if (next === 'PENDING_DCC') {
+    await activateDue(db);
+    return c.json({ dar: await db.prepare('SELECT * FROM dars WHERE id = ?').bind(dar.id).first() });
+  }
   // Uploads stop once the DAR leaves PENDING_REVIEW (a late one deletes its own object), so any other
   // object under this DAR is an orphan from concurrent uploads or a failed write: sweep it now.
   if (stage === 'REVIEW') {
@@ -368,41 +374,44 @@ app.post('/api/dars/:id/decision', requireAuth, async (c) => {
   return c.json({ dar: updated.results[0] });
 });
 
-// DCC puts an approved DAR into force: the register changes and the DAR closes in one transaction.
-app.post('/api/dars/:id/publish', requireAuth, async (c) => {
-  const user = c.get('user');
-  if (!user.isDcc) return c.json({ error: 'เฉพาะ DCC เท่านั้นที่ประกาศใช้เอกสารได้' }, 403);
-  const db = c.env.DB;
-  const dar = await db.prepare('SELECT * FROM dars WHERE id = ?').bind(c.req.param('id')).first();
-  if (!dar) return c.json({ error: 'ไม่พบคำขอ' }, 404);
-  if (dar.status !== 'PENDING_DCC') return c.json({ error: 'คำขอนี้ยังไม่พร้อมประกาศใช้' }, 409);
+// Documents take effect at 00:00 Thailand time on the date the requester chose (today when none was chosen).
+const TODAY_TH = `date('now', '+7 hours')`;
 
-  const documentId = dar.type === 'OBSOLETE'
-    ? (await db.prepare("SELECT id FROM documents WHERE doc_code = ? AND status = 'EFFECTIVE'").bind(dar.doc_code).first())?.id
-    : crypto.randomUUID();
-  if (!documentId) return c.json({ error: 'ไม่พบเอกสารฉบับที่มีผลบังคับใช้' }, 409);
-  const retire = (status) => db.prepare("UPDATE documents SET status = ? WHERE doc_code = ? AND status = 'EFFECTIVE'").bind(status, dar.doc_code);
-  const statements = dar.type === 'OBSOLETE' ? [retire('OBSOLETE')] : [
-    ...(dar.type === 'REVISION' ? [retire('SUPERSEDED')] : []),
-    db.prepare(`INSERT INTO documents (id, doc_code, revision, name, doc_type, department, status, access_scope, owner_id, effective_date, file_key)
-      VALUES (?, ?, ?, ?, ?, ?, 'EFFECTIVE', ?, ?, max(date('now'), COALESCE(date(?), date('now'))), ?)`)
-      .bind(documentId, dar.doc_code, dar.revision, dar.name, dar.doc_type, dar.department, dar.access_scope, dar.requester_id, dar.effective_date, dar.file_key)
-  ];
-
-  try {
-    // A racing second publish of NEW/REVISION hits UNIQUE(doc_code, revision) and the whole batch rolls back.
-    await db.batch([
-      ...statements,
-      // After the insert: document_id is a foreign key to the new row.
-      db.prepare(`UPDATE dars SET status = 'COMPLETED', completed_at = ${NOW}, document_id = ? WHERE id = ? AND status = 'PENDING_DCC'`).bind(documentId, dar.id),
-      audit(db, user.id, dar.type === 'OBSOLETE' ? 'DOCUMENT_OBSOLETED' : 'DOCUMENT_PUBLISHED', { dar_id: dar.id, doc_code: dar.doc_code, revision: dar.revision })
-    ]);
-  } catch (err) {
-    if (isLockConflict(err)) return c.json({ error: 'คำขอนี้ถูกประกาศใช้ไปแล้ว' }, 409);
-    throw err;
+// Puts every approved DAR whose effective date has come into force: the register changes and the DAR closes in one
+// transaction per DAR. Runs from the daily cron, after a final approval, and before the DAR and document lists are
+// read, so a missed cron run only delays nothing. A DAR another run already activated fails the status guard
+// (OBSOLETE) or UNIQUE(doc_code, revision) (NEW/REVISION) and is skipped.
+export const activateDue = async (db) => {
+  const { results } = await db.prepare(`SELECT * FROM dars WHERE status = 'PENDING_DCC' AND COALESCE(effective_date, ${TODAY_TH}) <= ${TODAY_TH} ORDER BY id`).all();
+  for (const dar of results) {
+    const documentId = dar.type === 'OBSOLETE'
+      ? (await db.prepare("SELECT id FROM documents WHERE doc_code = ? AND status = 'EFFECTIVE'").bind(dar.doc_code).first())?.id
+      : crypto.randomUUID();
+    if (!documentId) {
+      console.error(`DAR ${dar.id}: no effective document ${dar.doc_code} to obsolete`);
+      continue;
+    }
+    const retire = (status) => db.prepare("UPDATE documents SET status = ? WHERE doc_code = ? AND status = 'EFFECTIVE'").bind(status, dar.doc_code);
+    const statements = dar.type === 'OBSOLETE' ? [retire('OBSOLETE')] : [
+      ...(dar.type === 'REVISION' ? [retire('SUPERSEDED')] : []),
+      db.prepare(`INSERT INTO documents (id, doc_code, revision, name, doc_type, department, status, access_scope, owner_id, effective_date, file_key)
+        VALUES (?, ?, ?, ?, ?, ?, 'EFFECTIVE', ?, ?, max(${TODAY_TH}, COALESCE(date(?), ${TODAY_TH})), ?)`)
+        .bind(documentId, dar.doc_code, dar.revision, dar.name, dar.doc_type, dar.department, dar.access_scope, dar.requester_id, dar.effective_date, dar.file_key)
+    ];
+    try {
+      await db.batch([
+        ...statements,
+        // After the insert: document_id is a foreign key to the new row.
+        db.prepare(`UPDATE dars SET status = 'COMPLETED', completed_at = ${NOW}, document_id = ? WHERE id = ? AND status = 'PENDING_DCC'`).bind(documentId, dar.id),
+        // No actor: the system acts on the approver's decision and the chosen date.
+        db.prepare('INSERT INTO audit_log (actor_id, action, details) SELECT NULL, ?, ? WHERE changes() > 0')
+          .bind(dar.type === 'OBSOLETE' ? 'DOCUMENT_OBSOLETED' : 'DOCUMENT_PUBLISHED', JSON.stringify({ dar_id: dar.id, doc_code: dar.doc_code, revision: dar.revision, automatic: true }))
+      ]);
+    } catch (err) {
+      if (!isLockConflict(err)) throw err;
+    }
   }
-  return c.json({ dar: await db.prepare('SELECT * FROM dars WHERE id = ?').bind(dar.id).first() });
-});
+};
 
 // Locked accounts are hidden from the directory above, so DCC lists them here to unlock.
 app.get('/api/users/locked', requireAuth, async (c) => {
@@ -459,4 +468,9 @@ app.get('/api/audit-log', requireAuth, async (c) => {
   return c.json({ entries: results, next_before_id: results.length === limit ? results.at(-1).id : null });
 });
 
-export default app;
+// Workers calls scheduled() from the cron in wrangler.jsonc; tests call request() directly.
+export default {
+  fetch: app.fetch,
+  request: app.request,
+  scheduled: (event, env, ctx) => ctx.waitUntil(activateDue(env.DB))
+};

@@ -85,15 +85,14 @@ const toTimeline = (d, users) => {
 // The inbox, DarList and the task pages read pending work from `tasks`; in API mode it is derived from DAR status.
 const TASK_BY_STATUS = {
   PENDING_REVIEW: { kind: 'review', type: 'Review', taskType: 'DAR_REVIEW', label: 'ทบทวน', assignee: 'reviewer_id', since: 'created_at' },
-  PENDING_APPROVAL: { kind: 'approve', type: 'Approve', taskType: 'DAR_APPROVE', label: 'อนุมัติ', assignee: 'approver_id', since: 'reviewed_at' },
-  PENDING_DCC: { kind: 'publish', type: 'DCC_PUBLISH', taskType: 'DCC_PUBLISH', label: 'ประกาศใช้', since: 'approved_at' }
+  PENDING_APPROVAL: { kind: 'approve', type: 'Approve', taskType: 'DAR_APPROVE', label: 'อนุมัติ', assignee: 'approver_id', since: 'reviewed_at' }
+  // PENDING_DCC (approved, waiting for its effective date) is nobody's task: the server puts it in force on that date.
 };
 
-export const toTask = (d, users, me) => {
+export const toTask = (d, users) => {
   const t = TASK_BY_STATUS[d.status];
   if (!t) return null;
-  // Publishing belongs to every DCC member; only the signed-in one needs the task.
-  const assigneeId = t.assignee ? d[t.assignee] : me?.isDcc ? me.id : null;
+  const assigneeId = d[t.assignee];
   if (!assigneeId) return null;
   const darId = String(d.id);
   return {
@@ -142,18 +141,9 @@ export const decideTask = async (taskId, action, comment) => {
   try {
     await apiPost(`/api/dars/${task.darId}/decision`, { decision, comment });
   } finally {
-    await loadDars().catch(() => {});
+    // A final approval can put the document in force at once, so the register is re-read too.
+    await Promise.all([loadDars(), loadDocuments()]).catch(() => {});
   }
-};
-
-export const publishDarToApi = async (dar) => {
-  try {
-    await apiPost(`/api/dars/${dar.apiId}/publish`);
-    toast.success(dar.type === 'OBSOLETE' ? 'ยกเลิกเอกสารเรียบร้อย' : 'ประกาศใช้เอกสารเรียบร้อย');
-  } catch (err) {
-    toast.error(err.message);
-  }
-  await Promise.all([loadDars(), loadDocuments()]).catch(() => {});
 };
 
 // API-mode twin of darSlice.submitDar: returns the stored DAR, or null after showing the server's reason.
