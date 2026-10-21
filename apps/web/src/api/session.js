@@ -1,6 +1,7 @@
 import useStore from '../store/useStore';
 import { apiGet, apiPost, setToken, SESSION_EXPIRED_EVENT } from './client';
 import { loadDars } from './dars';
+import { isDarDraft } from '../modules/dcc/utils/darHelper';
 
 // The pages were built on demo records with many alias fields; API rows get the aliases they read.
 export const toStoreUser = (u) => ({
@@ -84,7 +85,9 @@ export const changePassword = async (current, next, { loadData = false } = {}) =
 // Server data must not outlive the session in this browser.
 export const clearSession = () => {
   setToken(null);
-  useStore.setState({ documents: [], dars: [], darRequests: [], timeline: [], tasks: [] });
+  // Drafts were typed by the user and never reached the server, so signing out must not throw them away.
+  const drafts = (useStore.getState().dars || []).filter(isDarDraft);
+  useStore.setState({ documents: [], dars: drafts, darRequests: drafts, timeline: [], tasks: [] });
 };
 
 export const logout = () => window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));

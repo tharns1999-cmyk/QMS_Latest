@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { toStoreDar, toTask, submitDarToApi, decideTask } from './dars';
+import { toStoreDar, toTask, submitDarToApi, decideTask, loadDars } from './dars';
 import useStore from '../store/useStore';
 
 const users = [{ id: 'req', name: 'ผู้ขอ' }, { id: 'rev', name: 'ผู้ทบทวน' }, { id: 'app', name: 'ผู้อนุมัติ' }];
@@ -84,5 +84,17 @@ describe('API DAR tasks', () => {
     expect(fetch.mock.calls[0][0]).toMatch(/\/api\/dars\/7\/decision$/);
     expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ decision: 'REJECT', comment: 'แก้ขั้นตอน' });
     expect(useStore.getState().tasks).toEqual([]); // reloaded, so the stale task is gone
+  });
+});
+
+describe('loadDars', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('keeps the drafts saved in this browser when it reads the server list', async () => {
+    useStore.setState({ currentUser: { id: 'req' }, masterUsers: users, dars: [{ id: 'draft_1', status: 'DRAFT', isDraft: true, requesterId: 'req' }, { id: '99', status: 'UNDER_REVIEW' }] });
+    vi.stubGlobal('fetch', vi.fn(() => json(200, { dars: [row] })));
+    await loadDars();
+    expect(useStore.getState().dars.map((d) => d.id)).toEqual(['draft_1', '7']);
+    expect(useStore.getState().darRequests).toHaveLength(2);
   });
 });
