@@ -1442,7 +1442,7 @@ const DocumentDetailModal = ({
     const userDepts = currentUser.depts || (userDept ? [userDept] : []);
     const docDept = doc.owner_dept || doc.department;
 
-    const isOwnerDept = docDept && (docDept === userDept || userDepts.includes(docDept) || (userDept === 'QA' && docDept === 'QA/QC') || (userDept === 'QA/QC' && docDept === 'QA'));
+    const isOwnerDept = docDept && (docDept === userDept || userDepts.includes(docDept));
     const isDcc = currentUser.isDcc || currentUser.role === 'DCC_ADMIN' || currentUser.level >= 5;
 
     return isOwnerDept || isDcc;

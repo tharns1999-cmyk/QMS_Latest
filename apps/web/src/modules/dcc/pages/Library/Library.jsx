@@ -169,9 +169,6 @@ const Library = () => {
     const s2 = normalizeDept(d2);
     if (!s1 || !s2) return false;
     if (s1 === s2) return true;
-    const isQa1 = s1 === 'QA' || s1 === 'QA/QC' || s1 === 'QAQC' || s1 === 'QC';
-    const isQa2 = s2 === 'QA' || s2 === 'QA/QC' || s2 === 'QAQC' || s2 === 'QC';
-    if (isQa1 && isQa2) return true;
     return false;
   };
 

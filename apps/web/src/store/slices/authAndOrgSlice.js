@@ -93,14 +93,14 @@ export const createAuthAndOrgSlice = (set, get) => ({
     // The primary active department
     let userDeptsList = Array.isArray(baseUser.departments) ? baseUser.departments : (Array.isArray(depts) ? depts : [baseUser.department].filter(Boolean));
     let activeDept = baseUser.primary_department || baseUser.department || userDeptsList[0] || 'DC';
-    if (activeDept === 'QA/QC' || activeDept === 'QA') activeDept = 'QC';
+    if (activeDept === 'QA/QC') activeDept = 'QC';
 
-    userDeptsList = userDeptsList.map(d => (d === 'QA/QC' || d === 'QA') ? 'QC' : d);
-    depts = depts.map(d => (d === 'QA/QC' || d === 'QA') ? 'QC' : d);
+    userDeptsList = userDeptsList.map(d => (d === 'QA/QC') ? 'QC' : d);
+    depts = depts.map(d => (d === 'QA/QC') ? 'QC' : d);
 
     const rawSecondary = baseUser.secondaryDepartments || (Array.isArray(baseUser.affiliated_departments) ? baseUser.affiliated_departments.filter(d => d !== activeDept) : userDeptsList.filter(d => d !== activeDept));
-    const secondaryDepts = rawSecondary.map(d => (d === 'QA/QC' || d === 'QA') ? 'QC' : d).filter(d => d !== activeDept);
-    const affiliated = Array.from(new Set([activeDept, ...secondaryDepts, ...userDeptsList])).map(d => (d === 'QA/QC' || d === 'QA') ? 'QC' : d);
+    const secondaryDepts = rawSecondary.map(d => (d === 'QA/QC') ? 'QC' : d).filter(d => d !== activeDept);
+    const affiliated = Array.from(new Set([activeDept, ...secondaryDepts, ...userDeptsList])).map(d => (d === 'QA/QC') ? 'QC' : d);
 
     const permissions = (baseUser.permissions && baseUser.permissions.length > 0)
       ? baseUser.permissions
