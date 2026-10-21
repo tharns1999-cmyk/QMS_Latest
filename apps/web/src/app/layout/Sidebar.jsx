@@ -318,7 +318,7 @@ const Sidebar = () => {
       </div>
 
       {/* ================= CENTER SECTION: Grouped Navigation Links ================= */}
-      <nav className="flex-1 overflow-y-auto px-3 py-2 space-y-1 scrollbar-none">
+      <nav className="flex-1 overflow-y-auto px-3 py-2 space-y-1">
         {/* WORKSPACE NAVIGATION (Hub vs Spoke) */}
         <SectionHeader title="WORKSPACE" />
         {!isDccModule ? (
@@ -428,8 +428,8 @@ const Sidebar = () => {
 
       {/* ================= BOTTOM SECTION: Dev Tools & User Profile ================= */}
       <div className="p-3 border-t border-slate-200/80 bg-white shrink-0 space-y-2.5">
-        {/* Compact Dev Action Bar (QA Seed / Clean Slate) - Admins only */}
-        {isAdmin && (
+        {/* Compact Dev Action Bar (QA Seed / Clean Slate) - Admins only; it loads and wipes demo data in this browser, so not when connected to the server */}
+        {isAdmin && !isApiMode && (
           <div className="flex items-center justify-between gap-1.5 py-1 px-2 bg-slate-50 border border-slate-200/60 rounded-lg text-[11px] text-slate-500">
             <span className="font-mono text-[10px] font-medium text-slate-400 uppercase tracking-wider pl-1">
               DEV TOOLS
@@ -461,8 +461,8 @@ const Sidebar = () => {
           </div>
         )}
 
-        {/* Global System Time Simulator Widget - Available for all roles & pages */}
-        <SystemTimeSimulatorWidget />
+        {/* Global System Time Simulator Widget - demo only: connected to the server, its dates decide, and this widget would just mislead */}
+        {!isApiMode && <SystemTimeSimulatorWidget />}
 
         {/* User Profile & Role Switcher */}
         <div className="p-2.5 bg-slate-50/80 border border-slate-200/80 rounded-xl space-y-2.5 shadow-2xs">
