@@ -82,3 +82,41 @@ describe('master data kept as settings: document types, SLA, signatures', () => 
     expect((await env.DB.prepare("SELECT count(*) AS n FROM audit_log WHERE action = 'SIGNATURE_UPDATED'").first()).n).toBeGreaterThanOrEqual(2);
   });
 });
+
+describe('main place of a department', () => {
+  const PASSWORD = 'ms-pass-123456';
+  let proxy;
+  let env;
+  let token;
+  const call = async (method, path, body) => {
+    const res = await app.request(path, { method, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: body && JSON.stringify(body) }, env);
+    return { status: res.status, body: await res.json() };
+  };
+
+  beforeAll(async () => {
+    proxy = await getPlatformProxy({ persist: { path: '.wrangler/test/v3' } });
+    env = { ...proxy.env, JWT_SECRET: 'test-secret' };
+    const hash = await hashPassword(PASSWORD);
+    await env.DB.batch([
+      env.DB.prepare("INSERT OR IGNORE INTO departments (code, name_th) VALUES ('MSM', 'แผนกจุดหลัก')"),
+      env.DB.prepare("INSERT OR IGNORE INTO users (id, name, email, password_hash, role, approval_level, primary_department, departments, is_dcc) VALUES ('MS-DCC3', 'MS-DCC3', 'ms-dcc3@ms.local', ?, 'USER', 3, 'MSM', '[\"MSM\"]', 1)").bind(hash)
+    ]);
+    const res = await app.request('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'ms-dcc3@ms.local', password: PASSWORD }) }, env);
+    token = (await res.json()).token;
+  });
+
+  afterAll(async () => {
+    await env.DB.prepare("DELETE FROM distribution_locations WHERE department = 'MSM'").run();
+    await proxy?.dispose();
+  });
+
+  it('the first place is the main one, DCC can move it, and a closed place is never main', async () => {
+    const first = (await call('POST', '/api/distribution-locations', { department: 'MSM', name: 'สำนักงาน' })).body.location;
+    const second = (await call('POST', '/api/distribution-locations', { department: 'MSM', name: 'หน้างาน' })).body.location;
+    expect([first.is_master, second.is_master]).toEqual([1, 0]);
+    expect((await call('PATCH', `/api/distribution-locations/${second.id}`, { is_master: true })).body.location.is_master).toBe(1);
+    const list = (await call('GET', '/api/distribution-locations')).body.locations.filter((l) => l.department === 'MSM');
+    expect(list.filter((l) => l.is_master).map((l) => l.name)).toEqual(['หน้างาน']);
+    expect((await call('PATCH', `/api/distribution-locations/${second.id}`, { status: 'INACTIVE' })).body.location.is_master).toBe(0);
+  });
+});

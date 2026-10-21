@@ -1,5 +1,6 @@
 import toast from 'react-hot-toast';
 import useStore from '../store/useStore';
+import { setServerStations } from '../modules/dcc/services/MasterDataService';
 import { apiGet, apiPost, apiPatch, apiPut } from './client';
 
 // The pages were built on demo records with many alias fields; server rows get the aliases they read.
@@ -19,7 +20,7 @@ const toStoreDepartment = (d) => ({
   id: d.code, code: d.code, deptCode: d.code, name: d.name_th, nameTh: d.name_th, name_th: d.name_th, nameEn: d.name_en, name_en: d.name_en, status: d.status
 });
 
-const toStoreLocation = (l) => ({ id: l.id, departmentId: l.department, name: l.name, code: l.name, description: l.description, status: l.status });
+const toStoreLocation = (l) => ({ id: l.id, departmentId: l.department, name: l.name, code: l.name, description: l.description, status: l.status, isMasterOffice: Boolean(l.is_master) });
 
 // Who can be picked now (ACTIVE) and who only needs to be named on old records (INACTIVE); the admin page also gets locked accounts.
 export const setUsers = (users) => {
@@ -45,7 +46,9 @@ export const loadUsers = async () => {
 export const loadMasterData = async () => {
   const [{ departments }, { locations }] = await Promise.all([apiGet('/api/departments'), apiGet('/api/distribution-locations')]);
   const mapped = departments.map(toStoreDepartment);
-  useStore.setState({ departments: mapped, masterDepartments: mapped, distributionLocations: locations.map(toStoreLocation) });
+  const stations = locations.map(toStoreLocation);
+  setServerStations(stations);
+  useStore.setState({ departments: mapped, masterDepartments: mapped, distributionLocations: stations });
 };
 
 export const loadApprovalMatrix = async () => {

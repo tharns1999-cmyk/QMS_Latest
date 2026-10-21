@@ -1084,10 +1084,14 @@ app.post('/api/distribution-locations', requireAuth, async (c) => {
   const db = c.env.DB;
   if (!(await db.prepare("SELECT 1 FROM departments WHERE code = ? AND status = 'ACTIVE'").bind(department).first())) return c.json({ error: 'ไม่พบแผนกที่ใช้งานอยู่' }, 400);
   const id = crypto.randomUUID();
+  // A department's first place becomes its main place; after that the DCC picks one with is_master.
+  const hasMaster = await db.prepare("SELECT 1 FROM distribution_locations WHERE department = ? AND is_master = 1 AND status = 'ACTIVE'").bind(department).first();
+  const master = body.is_master === true || !hasMaster ? 1 : 0;
   try {
     await db.batch([
-      db.prepare('INSERT INTO distribution_locations (id, department, name, description) VALUES (?, ?, ?, ?)').bind(id, department, name, clean(body.description, 500) ?? ''),
-      audit(db, c.get('user').id, 'LOCATION_CREATED', { id, department, name })
+      ...(master ? [db.prepare('UPDATE distribution_locations SET is_master = 0 WHERE department = ?').bind(department)] : []),
+      db.prepare('INSERT INTO distribution_locations (id, department, name, description, is_master) VALUES (?, ?, ?, ?, ?)').bind(id, department, name, clean(body.description, 500) ?? '', master),
+      audit(db, c.get('user').id, 'LOCATION_CREATED', { id, department, name, is_master: master })
     ]);
   } catch (err) {
     if (isUnique(err)) return c.json({ error: 'แผนกนี้มีสถานที่ชื่อนี้อยู่แล้ว' }, 409);
@@ -1108,10 +1112,14 @@ app.patch('/api/distribution-locations/:id', requireAuth, async (c) => {
   const status = body.status === undefined ? before.status : body.status;
   if (!name) return c.json({ error: 'กรุณาระบุชื่อสถานที่' }, 400);
   if (!['ACTIVE', 'INACTIVE'].includes(status)) return c.json({ error: 'สถานะไม่ถูกต้อง' }, 400);
+  if (body.is_master !== undefined && typeof body.is_master !== 'boolean') return c.json({ error: 'ค่าจุดหลักไม่ถูกต้อง' }, 400);
+  // A closed place cannot be the main one; choosing a new main place un-marks the old one.
+  const master = status === 'INACTIVE' ? 0 : body.is_master === undefined ? before.is_master : body.is_master ? 1 : 0;
   try {
     await db.batch([
-      db.prepare('UPDATE distribution_locations SET name = ?, description = ?, status = ? WHERE id = ?').bind(name, description, status, before.id),
-      audit(db, c.get('user').id, 'LOCATION_UPDATED', { id: before.id, before: { name: before.name, description: before.description, status: before.status }, after: { name, description, status } })
+      ...(master && !before.is_master ? [db.prepare('UPDATE distribution_locations SET is_master = 0 WHERE department = ?').bind(before.department)] : []),
+      db.prepare('UPDATE distribution_locations SET name = ?, description = ?, status = ?, is_master = ? WHERE id = ?').bind(name, description, status, master, before.id),
+      audit(db, c.get('user').id, 'LOCATION_UPDATED', { id: before.id, before: { name: before.name, description: before.description, status: before.status, is_master: before.is_master }, after: { name, description, status, is_master: master } })
     ]);
   } catch (err) {
     if (isUnique(err)) return c.json({ error: 'แผนกนี้มีสถานที่ชื่อนี้อยู่แล้ว' }, 409);

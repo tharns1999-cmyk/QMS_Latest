@@ -751,8 +751,8 @@ const MasterDataHub = () => {
 
     if (isApiMode) {
       const saved = editingLoc
-        ? await serverData.updateLocation(editingLoc.id, { name: locFormData.name, description: locFormData.description })
-        : await serverData.createLocation({ department: locFormData.departmentId, name: locFormData.name, description: locFormData.description });
+        ? await serverData.updateLocation(editingLoc.id, { name: locFormData.name, description: locFormData.description, is_master: Boolean(locFormData.isMasterOffice) })
+        : await serverData.createLocation({ department: locFormData.departmentId, name: locFormData.name, description: locFormData.description, is_master: Boolean(locFormData.isMasterOffice) });
       if (saved) setIsLocModalOpen(false);
       return;
     }
