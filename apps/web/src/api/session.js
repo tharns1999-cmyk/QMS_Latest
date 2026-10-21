@@ -5,18 +5,7 @@ import { loadCopies } from './copies';
 import { applyReviews, clearReviews, loadReviews } from './reviews';
 import { clearExternal, isExternalRow, setExternalSources } from './external';
 import { isDarDraft } from '../modules/dcc/utils/darHelper';
-
-// The pages were built on demo records with many alias fields; API rows get the aliases they read.
-export const toStoreUser = (u) => ({
-  ...u,
-  userId: u.id,
-  status: 'ACTIVE',
-  primary_department: u.department,
-  departments: u.depts,
-  affiliated_departments: u.depts,
-  affiliatedDepartments: u.depts,
-  level: u.approval_level
-});
+import { toStoreUser, loadUsers, loadMasterData, loadApprovalMatrix } from './masterData';
 
 export const toStoreDocument = (d) => ({
   ...d,
@@ -67,18 +56,9 @@ export const loadDocuments = async () => {
 };
 
 const start = async (user) => {
-  const [{ users }, { matrix }] = await Promise.all([apiGet('/api/users'), apiGet('/api/approval-matrix')]);
-  const people = users.map(toStoreUser);
-  // Routing previews and pickers read these lists, so they must hold the real signers, not demo users.
-  useStore.setState({
-    currentUser: toStoreUser(user),
-    masterUsers: people,
-    requestUsers: people,
-    reviewUsers: people,
-    approveUsers: people,
-    approvalMatrix: matrix,
-    approval_matrix: matrix
-  });
+  useStore.setState({ currentUser: toStoreUser(user) });
+  // Routing previews and pickers read these lists, so they must hold the real people, departments and places, not demo ones.
+  await Promise.all([loadUsers(), loadMasterData(), loadApprovalMatrix()]);
   await Promise.all([loadDocuments(), loadDars(), loadCopies()]);
 };
 
@@ -110,7 +90,7 @@ export const clearSession = () => {
   const drafts = (useStore.getState().dars || []).filter(isDarDraft);
   clearExternal();
   clearReviews();
-  useStore.setState({ documents: [], periodicReviewSchedules: [], periodicReviewTasks: [], dars: drafts, darRequests: drafts, controlledCopyInstances: [], documentControlledCopies: [], timeline: [], tasks: [] });
+  useStore.setState({ adminUsers: [], formerUsers: [], documents: [], periodicReviewSchedules: [], periodicReviewTasks: [], dars: drafts, darRequests: drafts, controlledCopyInstances: [], documentControlledCopies: [], timeline: [], tasks: [] });
 };
 
 export const logout = () => window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));

@@ -1,6 +1,7 @@
 import toast from 'react-hot-toast';
 import useStore from '../store/useStore';
 import { apiGet, apiPost } from './client';
+import { knownUsers } from './people';
 
 // A damaged copy waits for recall under the same server status as a superseded one; the pages tell them apart.
 const pageStatus = (c) => (c.status === 'PENDING_RECALL' && c.report_kind === 'DAMAGED' ? 'DAMAGED_PENDING_RECALL' : c.status);
@@ -68,7 +69,7 @@ export const toStoreCopy = (c) => ({
 // Work the API derives from copy status: DCC prints and hands out, a department head confirms receipt, DCC takes old copies back.
 export const toCopyTasks = (copies, me) => {
   const tasks = [];
-  const nameOf = (id) => (useStore.getState().masterUsers || []).find((u) => u.id === id)?.name || id;
+  const nameOf = (id) => knownUsers().find((u) => u.id === id)?.name || id;
   const pick = (status) => copies.filter((c) => c.status === status);
   const byRevision = (list) => [...Map.groupBy(list, (c) => `${c.doc_code}-${c.revision}-${c.reportType || ''}`).values()];
   const dcc = (kind, type, taskType, label, list) => byRevision(list).map((group) => {

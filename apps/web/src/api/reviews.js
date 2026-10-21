@@ -1,6 +1,7 @@
 import toast from 'react-hot-toast';
 import useStore from '../store/useStore';
 import { apiGet, apiPost } from './client';
+import { knownUsers } from './people';
 
 // Periodic reviews live on the server. The review pages read the demo's shapes (flags on the document, history lists,
 // approval tasks, schedules), so the server rows are laid over the documents here and the schedules are rebuilt from them.
@@ -100,8 +101,8 @@ const approvalTask = (r, payload, isExternal, me) => ({
 
 // Lays the server's reviews over the documents and rebuilds the demo's schedules and review tasks from them.
 export const applyReviews = () => {
-  const { documents, externalDocuments, masterUsers, currentUser } = useStore.getState();
-  const users = masterUsers || [];
+  const { documents, externalDocuments, currentUser } = useStore.getState();
+  const users = knownUsers();
   const byDoc = Map.groupBy([...reviews].reverse(), (r) => r.document_id);
   const approvalTasks = [];
   const rejections = new Map();
