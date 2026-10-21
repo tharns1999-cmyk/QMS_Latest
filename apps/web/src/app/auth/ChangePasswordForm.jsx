@@ -19,8 +19,7 @@ const ChangePasswordForm = ({ forced = false, onDone, onCancel }) => {
     setBusy(true);
     setError('');
     try {
-      await changePassword(current, next, { loadData: forced });
-      onDone();
+      onDone(await changePassword(current, next, { loadData: forced }));
     } catch (err) {
       setError(err.message);
       setBusy(false);

@@ -73,6 +73,11 @@ export const createUser = (form) => act(() => apiPost('/api/users', userBody(for
 export const updateUser = (id, form, status) => act(() => apiPatch(`/api/users/${id}`, { ...userBody(form), ...(status && { status }) }), [loadUsers], 'บันทึกแล้ว');
 export const setUserStatus = (id, status) => act(() => apiPatch(`/api/users/${id}`, { status }), [loadUsers], status === 'ACTIVE' ? 'เปิดใช้งานบัญชีแล้ว' : 'ปิดบัญชีแล้ว');
 export const resetUserPassword = (id) => act(() => apiPost(`/api/users/${id}/reset-password`), [loadUsers]);
+export const resetUserTwoFactor = (id) => act(() => apiPost(`/api/users/${id}/two-factor/reset`), [loadUsers], 'รีเซ็ตการยืนยันสองขั้นตอนแล้ว ผู้ใช้ต้องเข้าระบบและตั้งค่าใหม่');
+
+// Who must use two-factor: a level and a switch for DCC, both kept by the server.
+export const getSecurityPolicy = () => apiGet('/api/settings/security');
+export const saveSecurityPolicy = (policy) => act(() => apiPut('/api/settings/security', policy), [], 'บันทึกนโยบายความปลอดภัยแล้ว');
 
 export const createDepartment = (form) => act(() => apiPost('/api/departments', { code: form.code, name_th: form.nameTh, name_en: form.nameEn }), [loadMasterData], 'เพิ่มแผนกแล้ว');
 export const updateDepartment = (code, patch) => act(() => apiPatch(`/api/departments/${encodeURIComponent(code)}`, patch), [loadMasterData], 'บันทึกแล้ว');

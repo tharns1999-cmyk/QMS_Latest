@@ -4,6 +4,7 @@ import { secureHeaders } from 'hono/secure-headers';
 import { sign, verify } from 'hono/jwt';
 import { hashPassword, verifyPassword } from './password.js';
 import { checkDecisionRights, getThresholds } from './approval.js';
+import { newSecret, verifyCode, otpauthUri } from './totp.js';
 
 const MAX_FAILED_LOGINS = 5;
 const TOKEN_TTL_SECONDS = 8 * 60 * 60;
@@ -12,6 +13,11 @@ const LOGIN_WINDOW_MS = 15 * 60 * 1000;
 const MIN_PASSWORD_LENGTH = 12;
 const MAX_PASSWORD_LENGTH = 128;
 const INVALID_LOGIN = { error: 'อีเมลหรือรหัสผ่านไม่ถูกต้อง' };
+const TOO_MANY_FAILURES = { error: 'พยายามเข้าสู่ระบบผิดหลายครั้งเกินไป กรุณารอ 15 นาทีแล้วลองใหม่' };
+const TWO_FACTOR_PURPOSE = '2fa';
+const TWO_FACTOR_ISSUER = 'QMS Portal';
+const CHALLENGE_TTL_SECONDS = 5 * 60;
+const RECOVERY_CODE_COUNT = 8;
 
 const app = new Hono();
 
@@ -23,7 +29,15 @@ app.use('/api/*', (c, next) => cors({ origin: c.env.ALLOWED_ORIGIN.split(',') })
 const audit = (db, actorId, action, details) =>
   db.prepare('INSERT INTO audit_log (actor_id, action, details) VALUES (?, ?, ?)').bind(actorId, action, JSON.stringify(details));
 
-const toPublicUser = (row) => ({
+// Who must use two-factor is read from the settings table (the DCC edits it), so nothing about levels or roles is fixed here.
+const loadSecurityPolicy = async (db) => {
+  const { results } = await db.prepare("SELECT key, value FROM settings WHERE key IN ('two_factor_min_level', 'two_factor_for_dcc')").all();
+  const value = Object.fromEntries(results.map((r) => [r.key, r.value]));
+  return { twoFactorMinLevel: Number(value.two_factor_min_level) || 0, twoFactorForDcc: value.two_factor_for_dcc === '1' };
+};
+const twoFactorRequired = (row, policy) => (policy.twoFactorForDcc && row.is_dcc === 1) || (policy.twoFactorMinLevel > 0 && row.approval_level >= policy.twoFactorMinLevel);
+
+const toPublicUser = (row, policy) => ({
   id: row.id,
   empId: row.emp_id,
   name: row.name,
@@ -34,8 +48,27 @@ const toPublicUser = (row) => ({
   depts: JSON.parse(row.departments),
   isDcc: row.is_dcc === 1,
   isQmr: row.is_qmr === 1,
-  mustChangePassword: row.must_change_password === 1
+  mustChangePassword: row.must_change_password === 1,
+  twoFactorEnabled: Boolean(row.totp_confirmed_at),
+  // Only known when the policy is passed; true until the person has finished setting it up.
+  ...(policy && { twoFactorRequired: twoFactorRequired(row, policy), mustSetUpTwoFactor: twoFactorRequired(row, policy) && !row.totp_confirmed_at })
 });
+
+const issueChallenge = (secret, userId) => {
+  const now = Math.floor(Date.now() / 1000);
+  return sign({ sub: userId, purpose: TWO_FACTOR_PURPOSE, iat: now, exp: now + CHALLENGE_TTL_SECONDS }, secret, 'HS256');
+};
+
+// Recovery codes look like ABCDE-FGHJK; only a hash of the normalised form is stored.
+const RECOVERY_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const newRecoveryCode = () => {
+  const chars = Array.from(crypto.getRandomValues(new Uint8Array(10)), (b) => RECOVERY_ALPHABET[b % RECOVERY_ALPHABET.length]).join('');
+  return `${chars.slice(0, 5)}-${chars.slice(5)}`;
+};
+const recoveryHash = async (code) => {
+  const bytes = new TextEncoder().encode(String(code).replace(/[\s-]/g, '').toUpperCase());
+  return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), (b) => b.toString(16).padStart(2, '0')).join('');
+};
 
 const issueToken = (secret, userId) => {
   const now = Math.floor(Date.now() / 1000);
@@ -50,6 +83,14 @@ const recordFailedLogin = (db, user, details) => db.batch([
   audit(db, user.id, 'LOGIN_FAILED', { failed_logins: user.failed_logins + 1, ...details })
 ]);
 
+// Cloudflare always sets the IP header; it is absent only in local dev and tests, where the limit is skipped.
+const tooManyFailures = async (db, ip) => {
+  if (!ip) return false;
+  const since = new Date(Date.now() - LOGIN_WINDOW_MS).toISOString();
+  const { n } = await db.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'LOGIN_FAILED' AND at > ? AND json_extract(details, '$.ip') = ?").bind(since, ip).first();
+  return n >= MAX_FAILED_LOGINS_PER_IP;
+};
+
 app.post('/api/auth/login', async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const email = typeof body.email === 'string' ? body.email.trim() : '';
@@ -57,13 +98,8 @@ app.post('/api/auth/login', async (c) => {
   if (!email || !password) return c.json({ error: 'กรุณากรอกอีเมลและรหัสผ่าน' }, 400);
 
   const db = c.env.DB;
-  // Cloudflare always sets this header; it is absent only in local dev and tests, where the limit is skipped.
   const ip = c.req.header('cf-connecting-ip');
-  if (ip) {
-    const since = new Date(Date.now() - LOGIN_WINDOW_MS).toISOString();
-    const { n } = await db.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'LOGIN_FAILED' AND at > ? AND json_extract(details, '$.ip') = ?").bind(since, ip).first();
-    if (n >= MAX_FAILED_LOGINS_PER_IP) return c.json({ error: 'พยายามเข้าสู่ระบบผิดหลายครั้งเกินไป กรุณารอ 15 นาทีแล้วลองใหม่' }, 429, { 'Retry-After': String(LOGIN_WINDOW_MS / 1000) });
-  }
+  if (await tooManyFailures(db, ip)) return c.json(TOO_MANY_FAILURES, 429, { 'Retry-After': String(LOGIN_WINDOW_MS / 1000) });
   const user = await db.prepare('SELECT * FROM users WHERE email = ?').bind(email).first();
   const passwordOk = await verifyPassword(password, user?.password_hash);
 
@@ -77,27 +113,36 @@ app.post('/api/auth/login', async (c) => {
   }
   if (user.status === 'LOCKED') return c.json({ error: 'บัญชีถูกล็อก กรุณาติดต่อ DCC' }, 423);
   if (user.status !== 'ACTIVE') return c.json({ error: 'บัญชีถูกปิดใช้งาน' }, 403);
+  // Anyone who has set up two-factor is asked for the second step, whether or not the policy requires it of them.
+  if (user.totp_confirmed_at) return c.json({ twoFactorRequired: true, challenge: await issueChallenge(c.env.JWT_SECRET, user.id) });
 
   await db.batch([
     db.prepare('UPDATE users SET failed_logins = 0 WHERE id = ?').bind(user.id),
     audit(db, user.id, 'LOGIN', {})
   ]);
-  return c.json({ token: await issueToken(c.env.JWT_SECRET, user.id), user: toPublicUser(user) });
+  return c.json({ token: await issueToken(c.env.JWT_SECRET, user.id), user: toPublicUser(user, await loadSecurityPolicy(db)) });
 });
 
 const PASSWORD_CHANGE_PATHS = ['/api/auth/me', '/api/auth/change-password'];
+// Someone who must use two-factor but has not set it up yet can do only this until they have.
+const TWO_FACTOR_SETUP_PATHS = [...PASSWORD_CHANGE_PATHS, '/api/auth/2fa/setup', '/api/auth/2fa/confirm'];
 
 // The token carries only the user id; role, level and status are re-read so a lock or demotion applies at once.
 export const requireAuth = async (c, next) => {
   const token = c.req.header('Authorization')?.replace(/^Bearer /, '');
   const payload = token && await verify(token, c.env.JWT_SECRET, 'HS256').catch(() => null);
-  const user = payload && await c.env.DB.prepare("SELECT * FROM users WHERE id = ? AND status = 'ACTIVE'").bind(payload.sub).first();
+  // A token made for the second sign-in step is not a session.
+  const user = payload && !payload.purpose && await c.env.DB.prepare("SELECT * FROM users WHERE id = ? AND status = 'ACTIVE'").bind(payload.sub).first();
   // A password change signs out every token issued before it.
   if (!user || !(payload.iat >= user.password_changed_at)) return c.json({ error: 'กรุณาเข้าสู่ระบบ' }, 401);
   if (user.must_change_password && !PASSWORD_CHANGE_PATHS.includes(c.req.path)) {
     return c.json({ error: 'กรุณาเปลี่ยนรหัสผ่านก่อนใช้งาน', code: 'PASSWORD_CHANGE_REQUIRED' }, 403);
   }
-  c.set('user', toPublicUser(user));
+  const publicUser = toPublicUser(user, await loadSecurityPolicy(c.env.DB));
+  if (publicUser.mustSetUpTwoFactor && !TWO_FACTOR_SETUP_PATHS.includes(c.req.path)) {
+    return c.json({ error: 'กรุณาตั้งค่าการยืนยันตัวตนสองขั้นตอนก่อนใช้งาน', code: 'TWO_FACTOR_SETUP_REQUIRED' }, 403);
+  }
+  c.set('user', publicUser);
   await next();
 };
 
@@ -125,7 +170,7 @@ app.post('/api/auth/change-password', requireAuth, async (c) => {
     audit(db, user.id, 'PASSWORD_CHANGED', {})
   ]);
   // The old token dies with the change, so the caller gets a fresh one.
-  return c.json({ token: await issueToken(c.env.JWT_SECRET, user.id), user: toPublicUser({ ...user, must_change_password: 0 }) });
+  return c.json({ token: await issueToken(c.env.JWT_SECRET, user.id), user: toPublicUser({ ...user, must_change_password: 0 }, await loadSecurityPolicy(db)) });
 });
 
 // Directory for routing DARs and showing who signed, no credentials. Deactivated people stay so old records still show their names;
@@ -898,7 +943,8 @@ const userFields = async (db, body, current = {}) => {
 app.get('/api/admin/users', requireAuth, async (c) => {
   if (!c.get('user').isDcc) return c.json(DCC_ONLY, 403);
   const { results } = await c.env.DB.prepare('SELECT * FROM users ORDER BY name').all();
-  return c.json({ users: results.map((r) => ({ ...toPublicUser(r), status: r.status })) });
+  const policy = await loadSecurityPolicy(c.env.DB);
+  return c.json({ users: results.map((r) => ({ ...toPublicUser(r, policy), status: r.status })) });
 });
 
 app.post('/api/users', requireAuth, async (c) => {
@@ -1069,6 +1115,108 @@ app.patch('/api/distribution-locations/:id', requireAuth, async (c) => {
     throw err;
   }
   return c.json({ location: await db.prepare('SELECT * FROM distribution_locations WHERE id = ?').bind(before.id).first() });
+});
+
+// --- Two-factor sign-in (authenticator app). Who needs it comes from the settings table, never from a constant here. ---
+// Sign-in with a correct password answers { twoFactorRequired, challenge } for anyone who has set it up; this finishes the sign-in.
+app.post('/api/auth/2fa/verify', async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const payload = typeof body.challenge === 'string' ? await verify(body.challenge, c.env.JWT_SECRET, 'HS256').catch(() => null) : null;
+  if (payload?.purpose !== TWO_FACTOR_PURPOSE) return c.json({ error: 'หมดเวลายืนยันตัวตน กรุณาเข้าสู่ระบบใหม่' }, 401);
+  const db = c.env.DB;
+  const ip = c.req.header('cf-connecting-ip');
+  if (await tooManyFailures(db, ip)) return c.json(TOO_MANY_FAILURES, 429, { 'Retry-After': String(LOGIN_WINDOW_MS / 1000) });
+  const user = await db.prepare('SELECT * FROM users WHERE id = ?').bind(payload.sub).first();
+  if (!user || user.status !== 'ACTIVE' || !user.totp_confirmed_at) return c.json({ error: 'หมดเวลายืนยันตัวตน กรุณาเข้าสู่ระบบใหม่' }, 401);
+
+  // One guarded statement per kind of proof, so the same code cannot be spent twice even by two requests at once.
+  const recovery = typeof body.recovery_code === 'string' ? await recoveryHash(body.recovery_code) : null;
+  const step = recovery ? null : await verifyCode(user.totp_secret, body.code, user.totp_last_step);
+  const [spent] = recovery
+    ? await db.batch([db.prepare(`UPDATE recovery_codes SET used_at = ${NOW} WHERE user_id = ? AND code_hash = ? AND used_at IS NULL RETURNING code_hash`).bind(user.id, recovery)])
+    : step === null ? [{ results: [] }]
+      : await db.batch([db.prepare('UPDATE users SET totp_last_step = ? WHERE id = ? AND totp_last_step < ? RETURNING id').bind(step, user.id, step)]);
+  if (!spent.results.length) {
+    await recordFailedLogin(db, user, { ip, via: '2fa' });
+    return c.json({ error: 'รหัสยืนยันไม่ถูกต้อง' }, 401);
+  }
+  await db.batch([
+    db.prepare('UPDATE users SET failed_logins = 0 WHERE id = ?').bind(user.id),
+    audit(db, user.id, 'LOGIN', { twoFactor: recovery ? 'recovery_code' : 'app' })
+  ]);
+  return c.json({ token: await issueToken(c.env.JWT_SECRET, user.id), user: toPublicUser(user, await loadSecurityPolicy(db)) });
+});
+
+// Setting up: the person gets a secret to add to their app, then proves it works by typing a code.
+app.post('/api/auth/2fa/setup', requireAuth, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  const secret = newSecret();
+  const [saved] = await db.batch([db.prepare('UPDATE users SET totp_secret = ? WHERE id = ? AND totp_confirmed_at IS NULL RETURNING id').bind(secret, user.id)]);
+  if (!saved.results.length) return c.json({ error: 'เปิดใช้งานการยืนยันสองขั้นตอนไว้แล้ว หากต้องตั้งค่าใหม่ ให้ DCC รีเซ็ตให้' }, 409);
+  return c.json({ secret, otpauthUri: otpauthUri(secret, user.email, TWO_FACTOR_ISSUER) });
+});
+
+app.post('/api/auth/2fa/confirm', requireAuth, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  const body = await c.req.json().catch(() => ({}));
+  const row = await db.prepare('SELECT * FROM users WHERE id = ?').bind(user.id).first();
+  if (row.totp_confirmed_at) return c.json({ error: 'เปิดใช้งานการยืนยันสองขั้นตอนไว้แล้ว' }, 409);
+  if (!row.totp_secret) return c.json({ error: 'กรุณาเริ่มตั้งค่าใหม่' }, 409);
+  const step = await verifyCode(row.totp_secret, body.code, 0);
+  if (step === null) {
+    await recordFailedLogin(db, row, { ip: c.req.header('cf-connecting-ip'), via: '2fa-setup' });
+    return c.json({ error: 'รหัสไม่ถูกต้อง ตรวจสอบว่านาฬิกาเครื่องตรงและลองใหม่' }, 400);
+  }
+  const codes = Array.from({ length: RECOVERY_CODE_COUNT }, newRecoveryCode);
+  const hashes = await Promise.all(codes.map(recoveryHash));
+  const [confirmed] = await db.batch([
+    db.prepare(`UPDATE users SET totp_confirmed_at = ${NOW}, totp_last_step = ? WHERE id = ? AND totp_confirmed_at IS NULL RETURNING id`).bind(step, user.id),
+    ...hashes.map((h) => db.prepare('INSERT INTO recovery_codes (user_id, code_hash) SELECT ?, ? WHERE changes() > 0').bind(user.id, h)),
+    db.prepare("INSERT INTO audit_log (actor_id, action, details) SELECT ?, 'TWO_FACTOR_ENABLED', '{}' WHERE changes() > 0").bind(user.id)
+  ]);
+  if (!confirmed.results.length) return c.json({ error: 'เปิดใช้งานการยืนยันสองขั้นตอนไว้แล้ว' }, 409);
+  // Shown once; only hashes are kept.
+  return c.json({ recoveryCodes: codes });
+});
+
+// A lost phone and lost recovery codes: the DCC clears the setup, the person signs in again and sets it up afresh.
+app.post('/api/users/:id/two-factor/reset', requireAuth, async (c) => {
+  if (!c.get('user').isDcc) return c.json(DCC_ONLY, 403);
+  const db = c.env.DB;
+  const id = c.req.param('id');
+  const [cleared] = await db.batch([
+    db.prepare('UPDATE users SET totp_secret = NULL, totp_confirmed_at = NULL, totp_last_step = 0, password_changed_at = ? WHERE id = ? RETURNING id').bind(Math.floor(Date.now() / 1000), id),
+    db.prepare('DELETE FROM recovery_codes WHERE user_id = ?').bind(id),
+    db.prepare("INSERT INTO audit_log (actor_id, action, details) SELECT ?, 'TWO_FACTOR_RESET', ? WHERE EXISTS (SELECT 1 FROM users WHERE id = ?)").bind(c.get('user').id, JSON.stringify({ user_id: id }), id)
+  ]);
+  if (!cleared.results.length) return c.json({ error: 'ไม่พบผู้ใช้' }, 404);
+  return c.json({ ok: true });
+});
+
+// The policy itself: who must use two-factor.
+app.get('/api/settings/security', requireAuth, async (c) => {
+  if (!c.get('user').isDcc) return c.json(DCC_ONLY, 403);
+  return c.json(await loadSecurityPolicy(c.env.DB));
+});
+
+app.put('/api/settings/security', requireAuth, async (c) => {
+  if (!c.get('user').isDcc) return c.json(DCC_ONLY, 403);
+  const body = await c.req.json().catch(() => ({}));
+  const level = body.twoFactorMinLevel;
+  if (!(Number.isInteger(level) && level >= 0 && level <= 8)) return c.json({ error: 'ระดับต้องเป็นจำนวนเต็ม 0-8 (0 = ไม่บังคับตามระดับ)' }, 400);
+  if (typeof body.twoFactorForDcc !== 'boolean') return c.json({ error: 'กรุณาระบุว่าบังคับ DCC หรือไม่' }, 400);
+  const db = c.env.DB;
+  const before = await loadSecurityPolicy(db);
+  const save = (key, value) => db.prepare(`INSERT INTO settings (key, value, updated_by) VALUES (?, ?, ?)
+    ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = ${NOW}, updated_by = excluded.updated_by`).bind(key, value, c.get('user').id);
+  await db.batch([
+    save('two_factor_min_level', String(level)),
+    save('two_factor_for_dcc', body.twoFactorForDcc ? '1' : '0'),
+    audit(db, c.get('user').id, 'SECURITY_SETTINGS_UPDATED', { before, after: { twoFactorMinLevel: level, twoFactorForDcc: body.twoFactorForDcc } })
+  ]);
+  return c.json(await loadSecurityPolicy(db));
 });
 
 const MAX_AUDIT_ROWS = 50000;

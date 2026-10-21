@@ -7,7 +7,8 @@ import * as api from '../../../api/masterData';
 
 vi.mock('../../../api/masterData', () => ({
   createUser: vi.fn(), updateUser: vi.fn(), setUserStatus: vi.fn(), resetUserPassword: vi.fn(),
-  createDepartment: vi.fn(), updateDepartment: vi.fn(), createLocation: vi.fn(), updateLocation: vi.fn(), saveMatrixEntry: vi.fn()
+  createDepartment: vi.fn(), updateDepartment: vi.fn(), createLocation: vi.fn(), updateLocation: vi.fn(), saveMatrixEntry: vi.fn(),
+  resetUserTwoFactor: vi.fn(), getSecurityPolicy: vi.fn(), saveSecurityPolicy: vi.fn()
 }));
 
 const person = (id, status, extra = {}) => ({ id, name: `คน ${id}`, email: `${id}@x.local`, empId: '', approval_level: 3, department: 'QC', depts: ['QC'], isDcc: false, isQmr: false, status, ...extra });
@@ -17,7 +18,7 @@ describe('API master data page', () => {
     vi.clearAllMocks();
     useStore.setState({
       currentUser: { id: 'me', isDcc: true },
-      adminUsers: [person('me', 'ACTIVE', { isDcc: true }), person('u1', 'ACTIVE'), person('u2', 'LOCKED')],
+      adminUsers: [person('me', 'ACTIVE', { isDcc: true }), person('u1', 'ACTIVE', { twoFactorEnabled: true }), person('u2', 'LOCKED', { twoFactorRequired: true })],
       departments: [{ code: 'QC', nameTh: 'คุณภาพ', nameEn: 'Quality', status: 'ACTIVE' }, { code: 'PD', nameTh: 'ผลิต', nameEn: '', status: 'INACTIVE' }],
       distributionLocations: [{ id: 'l1', departmentId: 'QC', name: 'ห้องแล็บ', description: '', status: 'ACTIVE' }],
       approvalMatrix: [{ doc_type: 'SOP', name_th: 'ระเบียบ', min_requester_level: 1, required_reviewer_level: 4, required_approver_level: 6, updated_at: 't' }]
@@ -88,5 +89,28 @@ describe('API master data page', () => {
     fireEvent.change(screen.getByRole('textbox', { name: /ชื่อสถานที่/ }), { target: { value: 'คลังเอกสาร' } });
     fireEvent.click(screen.getByRole('button', { name: 'เพิ่มสถานที่' }));
     expect(api.createLocation).toHaveBeenCalledWith({ department: 'QC', name: 'คลังเอกสาร', description: '' });
+  });
+
+  it('shows who has two-factor and who still has to set it up, and resets it only for those who have it', () => {
+    render(<ApiMasterData />);
+    expect(screen.getByText('ใช้แล้ว')).toBeInTheDocument();
+    expect(screen.getByText('ต้องตั้งค่า')).toBeInTheDocument();
+    const reset = screen.getByRole('button', { name: 'รีเซ็ต 2FA' }); // only u1 has it on
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    fireEvent.click(reset);
+    expect(api.resetUserTwoFactor).toHaveBeenCalledWith('u1');
+  });
+
+  it('edits the two-factor policy from the values the server holds', async () => {
+    api.getSecurityPolicy.mockResolvedValue({ twoFactorMinLevel: 5, twoFactorForDcc: true });
+    api.saveSecurityPolicy.mockResolvedValue({ twoFactorMinLevel: 4, twoFactorForDcc: false });
+    render(<ApiMasterData />);
+    fireEvent.click(screen.getByRole('tab', { name: 'ความปลอดภัย' }));
+    const level = await screen.findByDisplayValue('L5 ขึ้นไป');
+    fireEvent.change(level, { target: { value: '4' } });
+    fireEvent.click(screen.getByLabelText(/บังคับบัญชี DCC/));
+    fireEvent.click(screen.getByRole('button', { name: 'บันทึก' }));
+    await waitFor(() => expect(api.saveSecurityPolicy).toHaveBeenCalledWith({ twoFactorMinLevel: 4, twoFactorForDcc: false }));
+    expect(await screen.findByDisplayValue('L4 ขึ้นไป')).toBeInTheDocument();
   });
 });
