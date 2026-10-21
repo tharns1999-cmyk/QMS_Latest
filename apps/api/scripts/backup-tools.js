@@ -15,14 +15,14 @@ const COUNTS_SQL = `SELECT ${COUNTED.map((t) => `(SELECT COUNT(*) FROM ${t}) AS 
 const REQUIRED_TRIGGERS = ['audit_log_no_delete', 'audit_log_no_update'];
 
 const d1 = (args, file) => {
-  const out = execSync(`npx wrangler d1 execute DB ${args} --json --file "${file}"`, { encoding: 'utf8', env: { ...process.env, CI: 'true' }, stdio: ['ignore', 'pipe', 'inherit'], maxBuffer: 1 << 28 });
+  const out = execSync(`npx wrangler d1 execute DB ${args} --json ${file}`, { encoding: 'utf8', env: { ...process.env, CI: 'true' }, stdio: ['ignore', 'pipe', 'inherit'], maxBuffer: 1 << 28 });
   return JSON.parse(out.slice(out.indexOf('['), out.lastIndexOf(']') + 1));
 };
 
 const withSqlFile = (dir, sql) => {
   const file = join(dir, 'query.sql');
   writeFileSync(file, sql);
-  return file;
+  return `--file "${file}"`;
 };
 
 const [command, ...args] = process.argv.slice(2);
@@ -31,10 +31,12 @@ const dir = mkdtempSync(join(tmpdir(), 'qms-backup-'));
 
 try {
   if (command === 'counts') {
-    const [{ results: [counts] }] = d1(args.includes('--remote') ? '--remote' : '--local', withSqlFile(dir, COUNTS_SQL));
+    // A remote --file goes through D1's import path, which returns no rows, so the remote count uses --command.
+    const [{ results: [counts] }] = args.includes('--remote') ? d1('--remote', `--command "${COUNTS_SQL}"`) : d1('--local', withSqlFile(dir, COUNTS_SQL));
+    if (counts?.users === undefined) throw new Error('The database returned no row counts');
     console.log(JSON.stringify(counts));
   } else if (command === 'verify' && args[0]) {
-    d1(`--local --persist-to "${dir}"`, args[0]);
+    d1(`--local --persist-to "${dir}"`, `--file "${args[0]}"`);
     const [counts, triggers, migrations, brokenKeys] = d1(`--local --persist-to "${dir}"`, withSqlFile(dir,
       `${COUNTS_SQL}\nSELECT name FROM sqlite_master WHERE type = 'trigger';\nSELECT COUNT(*) AS n FROM d1_migrations;\nPRAGMA foreign_key_check;`)).map((r) => r.results);
 
