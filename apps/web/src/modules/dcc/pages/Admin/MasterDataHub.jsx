@@ -2356,8 +2356,8 @@ const MasterDataHub = () => {
                 {/* Selected Departments Tag Tray */}
                 <div className="flex flex-wrap items-center gap-1.5 min-h-[40px] p-2 bg-white border border-slate-200 rounded-lg">
                   {(userFormData.affiliated_departments || []).map((deptCode) => {
-                    const normDeptCode = (deptCode === 'QA/QC' || deptCode === 'QA') ? 'QC' : normalizeDepartmentId(deptCode);
-                    const currentPrimary = (userFormData.primary_department === 'QA/QC' || userFormData.primary_department === 'QA') ? 'QC' : (userFormData.primary_department || userFormData.department);
+                    const normDeptCode = (deptCode === 'QA/QC') ? 'QC' : normalizeDepartmentId(deptCode);
+                    const currentPrimary = (userFormData.primary_department === 'QA/QC') ? 'QC' : (userFormData.primary_department || userFormData.department);
                     const isPrimary = normDeptCode === currentPrimary || normalizeDepartmentId(deptCode) === normalizeDepartmentId(currentPrimary);
                     const deptObj = departmentsList.find(d => d.id === normDeptCode || normalizeDepartmentId(d.id) === normalizeDepartmentId(deptCode));
                     const displayCode = normDeptCode === 'QA/QC' ? 'QC' : normDeptCode;
@@ -2380,7 +2380,7 @@ const MasterDataHub = () => {
                           <button
                             type="button"
                             onClick={() => {
-                              const cleanDept = (deptCode === 'QA/QC' || deptCode === 'QA') ? 'QC' : deptCode;
+                              const cleanDept = (deptCode === 'QA/QC') ? 'QC' : deptCode;
                               setUserFormData(prev => ({
                                 ...prev,
                                 primary_department: cleanDept,
@@ -2437,7 +2437,7 @@ const MasterDataHub = () => {
                     onChange={(e) => {
                       const selected = e.target.value;
                       if (!selected) return;
-                      const cleanSelected = (selected === 'QA/QC' || selected === 'QA') ? 'QC' : selected;
+                      const cleanSelected = (selected === 'QA/QC') ? 'QC' : selected;
                       const current = userFormData.affiliated_departments || [];
                       const hasSelected = current.some(c => c === cleanSelected || ((c === 'QC' || c === 'QA/QC') && (cleanSelected === 'QC' || cleanSelected === 'QA/QC')));
                       if (!hasSelected) {
@@ -2457,19 +2457,19 @@ const MasterDataHub = () => {
                     <option value="" disabled>+ เลือกเพิ่มแผนกที่สังกัดร่วม...</option>
                     {departmentsList
                       .filter(d => {
-                        const dCode = (d.id === 'QA/QC' || d.id === 'QA') ? 'QC' : d.id;
-                        const primaryCode = (userFormData.primary_department === 'QA/QC' || userFormData.primary_department === 'QA')
+                        const dCode = (d.id === 'QA/QC') ? 'QC' : d.id;
+                        const primaryCode = (userFormData.primary_department === 'QA/QC')
                           ? 'QC'
                           : (userFormData.primary_department || userFormData.department);
                         // Exclude primary department
                         if (dCode === primaryCode) return false;
                         // Exclude if already in affiliated_departments
-                        const affCodes = (userFormData.affiliated_departments || []).map(a => (a === 'QA/QC' || a === 'QA') ? 'QC' : a);
+                        const affCodes = (userFormData.affiliated_departments || []).map(a => (a === 'QA/QC') ? 'QC' : a);
                         if (affCodes.includes(dCode)) return false;
                         return true;
                       })
                       .map(d => {
-                        const dCode = (d.id === 'QA/QC' || d.id === 'QA') ? 'QC' : d.id;
+                        const dCode = (d.id === 'QA/QC') ? 'QC' : d.id;
                         return (
                           <option key={d.id} value={dCode}>
                             + เพิ่ม: {dCode} ({d.nameTh || d.name})

@@ -125,7 +125,6 @@ const ExternalDocDetailModal = ({
     const s2 = String(typeof d2 === 'object' ? (d2.id || d2.code || d2.dept || d2.department || '') : d2).trim().toUpperCase();
     if (!s1 || !s2) return false;
     if (s1 === s2) return true;
-    if ((s1 === 'QA' || s1 === 'QA/QC' || s1 === 'QAQC' || s1 === 'QC') && (s2 === 'QA' || s2 === 'QA/QC' || s2 === 'QAQC' || s2 === 'QC')) return true;
     return false;
   };
 

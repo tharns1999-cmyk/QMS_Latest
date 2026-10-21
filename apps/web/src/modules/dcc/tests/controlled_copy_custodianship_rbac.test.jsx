@@ -50,8 +50,8 @@ describe('Enterprise Security & RBAC Guard: Controlled Copy Custodianship Isolat
     docTitle: 'SOP-PD-01',
     copy_no: '03',
     issue_no: '01',
-    holder_dept: 'QA',
-    department: 'QA',
+    holder_dept: 'QC',
+    department: 'QC',
     location: 'QA In-Process Lab',
     status: 'ISSUED_ACTIVE'
   };
@@ -126,7 +126,7 @@ describe('Enterprise Security & RBAC Guard: Controlled Copy Custodianship Isolat
     expect(screen.getByRole('button', { name: /ส่งคืน/i })).toBeInTheDocument();
 
     // Lock badge on Copy 03 QA
-    expect(screen.getByText(/เฉพาะแผนก QA/i)).toBeInTheDocument();
+    expect(screen.getByText(/เฉพาะแผนก QC/i)).toBeInTheDocument();
 
     // Non-DCC user does NOT see Watermark Studio
     expect(screen.queryByRole('button', { name: /Watermark Studio/i })).not.toBeInTheDocument();
@@ -185,7 +185,7 @@ describe('Enterprise Security & RBAC Guard: Controlled Copy Custodianship Isolat
     const state = useStore.getState();
     const replaced = state.controlledCopyInstances.find(c => c.is_replacement);
     expect(replaced).toBeDefined();
-    expect(replaced.holder_dept).toBe('QA');
+    expect(replaced.holder_dept).toBe('QC');
   });
 
   it('6. Store-Level Security Guard: DCC Admin can relocate, return, and report damage on copies of any department', () => {

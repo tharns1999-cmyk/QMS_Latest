@@ -565,7 +565,7 @@ export const persistConfig = {
 
         // Auto-Sanitize QA/QC residue to QC
         const taskDeptStr = String(updated.department || '');
-        if (taskDeptStr === 'QA/QC' || taskDeptStr === 'QA' || taskDeptStr === 'QAQC' || taskDeptStr.includes('QA/QC') || taskDeptStr.includes('ประกันและควบคุมคุณภาพ')) {
+        if (taskDeptStr === 'QA/QC' || taskDeptStr === 'QAQC' || taskDeptStr.includes('QA/QC') || taskDeptStr.includes('ประกันและควบคุมคุณภาพ')) {
           if (updated.department !== 'QC') {
             updated.department = 'QC';
             changed = true;
@@ -578,15 +578,15 @@ export const persistConfig = {
             updated.target_department = 'QC';
             changed = true;
           }
-          if (updated.targetDepartment === 'QA/QC' || updated.targetDepartment === 'QA') {
+          if (updated.targetDepartment === 'QA/QC') {
             updated.targetDepartment = 'QC';
             changed = true;
           }
-          if (updated.destinationDept === 'QA/QC' || updated.destinationDept === 'QA') {
+          if (updated.destinationDept === 'QA/QC') {
             updated.destinationDept = 'QC';
             changed = true;
           }
-          if (updated.assignedToDept === 'QA/QC' || updated.assignedToDept === 'QA') {
+          if (updated.assignedToDept === 'QA/QC') {
             updated.assignedToDept = 'QC';
             changed = true;
           }

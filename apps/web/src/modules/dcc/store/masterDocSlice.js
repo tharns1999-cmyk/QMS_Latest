@@ -295,9 +295,7 @@ export const createMasterDocSlice = (set, get) => ({
       if (!targetDept) return false;
       return userDepts.some(u => {
         if (u === targetDept) return true;
-        const isQa1 = u === 'QA' || u === 'QA/QC' || u === 'QC' || u === 'QAQC';
-        const isQa2 = targetDept === 'QA' || targetDept === 'QA/QC' || targetDept === 'QC' || targetDept === 'QAQC';
-        return Boolean(isQa1 && isQa2);
+        return false;
       });
     };
 

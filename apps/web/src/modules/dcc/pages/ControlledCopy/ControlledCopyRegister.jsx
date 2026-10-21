@@ -149,9 +149,7 @@ const ControlledCopyRegister = () => {
     const norm = issueDept.trim().toUpperCase();
     return (distributionLocations || []).filter(s => 
       s.status !== 'INACTIVE' && (
-        (s.departmentId || '').toUpperCase() === norm ||
-        (norm === 'QA' && s.departmentId === 'QA/QC') ||
-        (norm === 'QA/QC' && s.departmentId === 'QA')
+        (s.departmentId || '').toUpperCase() === norm
       )
     );
   }, [issueDept, distributionLocations]);

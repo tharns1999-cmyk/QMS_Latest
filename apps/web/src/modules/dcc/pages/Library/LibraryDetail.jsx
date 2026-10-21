@@ -39,7 +39,7 @@ const LibraryDetail = () => {
 
     const isMatch = (targetDept) => {
       if (!targetDept) return false;
-      return userDepts.some(u => u === targetDept || (u === 'QA' && targetDept === 'QA/QC') || (u === 'QA/QC' && targetDept === 'QA'));
+      return userDepts.some(u => u === targetDept);
     };
 
     if (isMatch(docDept)) return true;

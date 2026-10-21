@@ -307,8 +307,8 @@ export const normalizeDeptCode = (d) => {
   const val = typeof d === 'object' ? (d.id || d.code || d.dept || d.department || d.dept_code) : d;
   if (typeof val !== 'string') return '';
   const clean = val.trim().toUpperCase();
-  if (clean === 'QA' || clean === 'QA/QC' || clean === 'QAQC' || clean === 'QC') {
-    return 'QA/QC';
+  if (clean === 'QA/QC' || clean === 'QAQC') {
+    return 'QC';
   }
   return clean;
 };

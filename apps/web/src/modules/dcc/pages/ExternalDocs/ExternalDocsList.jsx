@@ -340,7 +340,6 @@ const ExternalDocsList = () => {
     const s2 = normalizeDept(d2);
     if (!s1 || !s2) return false;
     if (s1 === s2) return true;
-    if ((s1 === 'QA' || s1 === 'QA/QC' || s1 === 'QAQC' || s1 === 'QC') && (s2 === 'QA' || s2 === 'QA/QC' || s2 === 'QAQC' || s2 === 'QC')) return true;
     return false;
   }, []);
 

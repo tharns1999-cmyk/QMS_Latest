@@ -106,9 +106,7 @@ export const canManageControlledCopy = (arg1, arg2, arg3) => {
     const cleanDept = String(dept).trim().toUpperCase();
     return userDepts.some(
       (u) =>
-        u === cleanDept ||
-        ((u === 'QA' || u === 'QA/QC' || u === 'QAQC' || u === 'QC') && 
-         (cleanDept === 'QA' || cleanDept === 'QA/QC' || cleanDept === 'QAQC' || cleanDept === 'QC'))
+        u === cleanDept
     );
   };
 

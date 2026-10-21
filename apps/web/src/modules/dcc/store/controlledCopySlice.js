@@ -480,13 +480,13 @@ export const cleanupDccTasks = (tasks, instances, documents, dars = []) => {
 
     // Auto-Sanitize QA/QC residue on any task
     const rawDeptStr = String(updated.department || '');
-    if (rawDeptStr === 'QA/QC' || rawDeptStr === 'QA' || rawDeptStr === 'QAQC' || rawDeptStr.includes('QA/QC') || rawDeptStr.includes('ประกันและควบคุมคุณภาพ')) {
+    if (rawDeptStr === 'QA/QC' || rawDeptStr === 'QAQC' || rawDeptStr.includes('QA/QC') || rawDeptStr.includes('ประกันและควบคุมคุณภาพ')) {
       updated.department = 'QC';
       updated.departmentName = 'ฝ่ายประกันและควบคุมคุณภาพ';
       if (updated.target_department === 'QA/QC' || updated.target_department === 'QA') updated.target_department = 'QC';
-      if (updated.targetDepartment === 'QA/QC' || updated.targetDepartment === 'QA') updated.targetDepartment = 'QC';
-      if (updated.destinationDept === 'QA/QC' || updated.destinationDept === 'QA') updated.destinationDept = 'QC';
-      if (updated.assignedToDept === 'QA/QC' || updated.assignedToDept === 'QA') updated.assignedToDept = 'QC';
+      if (updated.targetDepartment === 'QA/QC') updated.targetDepartment = 'QC';
+      if (updated.destinationDept === 'QA/QC') updated.destinationDept = 'QC';
+      if (updated.assignedToDept === 'QA/QC') updated.assignedToDept = 'QC';
     }
 
     return updated;
