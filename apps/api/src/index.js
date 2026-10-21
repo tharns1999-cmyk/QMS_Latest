@@ -250,6 +250,15 @@ app.post('/api/dars', requireAuth, async (c) => {
   }
 
   if (!user.depts.includes(doc.department) && user.department !== doc.department) return c.json({ error: 'ต้องเป็นสมาชิกแผนกเจ้าของเอกสาร' }, 403);
+  // External documents: where it came from, which edition, how often to review. A revision inherits what it does not restate.
+  const isExternal = doc.doc_type === 'ED';
+  const cycle = Number(body.review_cycle_months);
+  if (isExternal && body.review_cycle_months != null && !(Number.isInteger(cycle) && cycle >= 1 && cycle <= 120)) return c.json({ error: 'รอบการทบทวนต้องเป็นจำนวนเดือน 1-120' }, 400);
+  const ext = isExternal ? {
+    issuer: text(body.issuer, 200) ?? doc.ext_issuer ?? null,
+    edition: text(body.edition, 100) ?? doc.ext_edition ?? null,
+    cycle: body.review_cycle_months != null ? cycle : (doc.review_cycle_months ?? 12)
+  } : { issuer: null, edition: null, cycle: null };
   const thresholds = await getThresholds(db, doc.doc_type);
   if (user.approval_level < thresholds.min_requester_level) return c.json({ error: `ผู้ขอต้องมีระดับ L${thresholds.min_requester_level} ขึ้นไป` }, 403);
 
@@ -273,9 +282,9 @@ app.post('/api/dars', requireAuth, async (c) => {
     : ['?', [docCode]];
   try {
     const [inserted] = await db.batch([
-      db.prepare(`INSERT INTO dars (type, doc_code, doc_type, department, revision, name, access_scope, reason, requester_id, reviewer_id, approver_id, effective_date, distributions)
-        VALUES (?, ${codeSql}, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`)
-        .bind(type, ...codeArgs, doc.doc_type, doc.department, doc.revision, doc.name, doc.access_scope, str('reason'), user.id, reviewerId, approverId, effectiveDate, JSON.stringify(distributions)),
+      db.prepare(`INSERT INTO dars (type, doc_code, doc_type, department, revision, name, access_scope, reason, requester_id, reviewer_id, approver_id, effective_date, distributions, ext_issuer, ext_edition, review_cycle_months)
+        VALUES (?, ${codeSql}, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`)
+        .bind(type, ...codeArgs, doc.doc_type, doc.department, doc.revision, doc.name, doc.access_scope, str('reason'), user.id, reviewerId, approverId, effectiveDate, JSON.stringify(distributions), ext.issuer, ext.edition, ext.cycle),
       db.prepare(`INSERT INTO audit_log (actor_id, action, details)
         SELECT ?, 'DAR_SUBMITTED', json_object('type', type, 'doc_code', doc_code, 'dar_id', id) FROM dars WHERE id = last_insert_rowid()`).bind(user.id)
     ]);
@@ -404,9 +413,11 @@ export const activateDue = async (db) => {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).bind(crypto.randomUUID(), documentId, dar.doc_code, dar.revision, String(i + 1).padStart(2, '0'), d.department, d.location_id, d.location_name));
     const statements = dar.type === 'OBSOLETE' ? [retire('OBSOLETE'), recallOld] : [
       ...(dar.type === 'REVISION' ? [retire('SUPERSEDED'), recallOld] : []),
-      db.prepare(`INSERT INTO documents (id, doc_code, revision, name, doc_type, department, status, access_scope, owner_id, effective_date, file_key)
-        VALUES (?, ?, ?, ?, ?, ?, 'EFFECTIVE', ?, ?, max(${TODAY_TH}, COALESCE(date(?), ${TODAY_TH})), ?)`)
-        .bind(documentId, dar.doc_code, dar.revision, dar.name, dar.doc_type, dar.department, dar.access_scope, dar.requester_id, dar.effective_date, dar.file_key),
+      db.prepare(`INSERT INTO documents (id, doc_code, revision, name, doc_type, department, status, access_scope, owner_id, effective_date, file_key, ext_issuer, ext_edition, review_cycle_months, next_review_date)
+        VALUES (?, ?, ?, ?, ?, ?, 'EFFECTIVE', ?, ?, max(${TODAY_TH}, COALESCE(date(?), ${TODAY_TH})), ?, ?, ?, ?,
+          CASE WHEN ? IS NULL THEN NULL ELSE date(max(${TODAY_TH}, COALESCE(date(?), ${TODAY_TH})), '+' || ? || ' months') END)`)
+        .bind(documentId, dar.doc_code, dar.revision, dar.name, dar.doc_type, dar.department, dar.access_scope, dar.requester_id, dar.effective_date, dar.file_key,
+          dar.ext_issuer, dar.ext_edition, dar.review_cycle_months, dar.review_cycle_months, dar.effective_date, dar.review_cycle_months),
       // After the document: copies reference it.
       ...copies
     ];
