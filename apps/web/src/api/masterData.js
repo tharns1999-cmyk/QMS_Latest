@@ -3,7 +3,7 @@ import useStore from '../store/useStore';
 import { apiGet, apiPost, apiPatch, apiPut } from './client';
 
 // The pages were built on demo records with many alias fields; server rows get the aliases they read.
-export const toStoreUser = (u) => ({
+export const toStoreUser = (u) => withSignature({
   ...u,
   userId: u.id,
   status: u.status || 'ACTIVE',
@@ -53,6 +53,33 @@ export const loadApprovalMatrix = async () => {
   useStore.setState({ approvalMatrix: matrix, approval_matrix: matrix });
 };
 
+// Document types and SLA days: null from the server means the DCC never edited them, so the built-in starting values stay.
+export const loadDocumentTypes = async () => {
+  const { documentTypes } = await apiGet('/api/settings/document-types');
+  if (documentTypes) useStore.setState({ documentTypes });
+};
+
+export const loadSla = async () => {
+  const { sla } = await apiGet('/api/settings/sla');
+  if (sla) useStore.setState({ slaSettings: sla });
+};
+
+// Signatures are merged into every user list, and again whenever the lists are reloaded.
+let signatures = {};
+const withSignature = (u) => {
+  const s = signatures[u.id];
+  return s ? { ...u, signatureImage: s.image, signatureType: s.signature_type, signatureStyle: s.signature_style, signatureInitials: s.initials, hasRegisteredSignature: true, hasSignature: true } : u;
+};
+export const loadSignatures = async () => {
+  const { signatures: rows } = await apiGet('/api/signatures');
+  signatures = Object.fromEntries(rows.map((r) => [r.user_id, r]));
+  const state = useStore.getState();
+  const next = {};
+  for (const key of ['masterUsers', 'formerUsers', 'adminUsers', 'requestUsers', 'reviewUsers', 'approveUsers']) if (state[key]) next[key] = state[key].map(withSignature);
+  if (state.currentUser) next.currentUser = withSignature(state.currentUser);
+  useStore.setState(next);
+};
+
 // One call for each button: runs it, tells the person what the server said, refreshes what changed. Resolves to the result or null.
 const act = async (run, refresh, success) => {
   try {
@@ -84,5 +111,9 @@ export const updateDepartment = (code, patch) => act(() => apiPatch(`/api/depart
 
 export const createLocation = (form) => act(() => apiPost('/api/distribution-locations', form), [loadMasterData], 'เพิ่มสถานที่แล้ว');
 export const updateLocation = (id, patch) => act(() => apiPatch(`/api/distribution-locations/${id}`, patch), [loadMasterData], 'บันทึกแล้ว');
+
+export const saveDocumentTypes = (list) => act(() => apiPut('/api/settings/document-types', { documentTypes: list }), [loadDocumentTypes, loadApprovalMatrix], 'บันทึกประเภทเอกสารแล้ว');
+export const saveSla = (sla) => act(() => apiPut('/api/settings/sla', sla), [loadSla], 'บันทึก SLA แล้ว');
+export const saveSignature = (userId, s) => act(() => apiPut(`/api/users/${userId}/signature`, { signature_type: s.signatureType, signature_style: s.signatureStyle, initials: s.signatureInitials, image: s.signatureImage }), [loadSignatures], 'บันทึกลายเซ็นแล้ว');
 
 export const saveMatrixEntry = (docType, entry) => act(() => apiPut(`/api/approval-matrix/${docType}`, entry), [loadApprovalMatrix], `บันทึกระดับของ ${docType} แล้ว`);

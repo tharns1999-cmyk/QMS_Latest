@@ -309,6 +309,9 @@ app.post('/api/dars', requireAuth, async (c) => {
     doc = { doc_type: str('doc_type').toUpperCase(), department: str('department').toUpperCase(), name: str('name'), access_scope: scope, revision: '00' };
     // They become the code prefix, which is matched with GLOB below.
     if (!/^[A-Z0-9]+$/.test(doc.doc_type) || !/^[A-Z0-9&]+$/.test(doc.department)) return c.json({ error: 'ประเภทหรือแผนกของเอกสารไม่ถูกต้อง' }, 400);
+    // Once the DCC has edited the list, a new document must use a type that is still open.
+    const types = await loadJsonSetting(db, 'document_types');
+    if (types && !types.some((t) => t.code === doc.doc_type && t.status !== 'INACTIVE')) return c.json({ error: `ประเภทเอกสาร ${doc.doc_type} ถูกปิดหรือไม่มีในระบบ` }, 400);
   } else {
     if (!/^[A-Z0-9-]+$/.test(docCode)) return c.json({ error: 'รหัสเอกสารไม่ถูกต้อง' }, 400);
     const current = await db.prepare("SELECT * FROM documents WHERE doc_code = ? AND status = 'EFFECTIVE'").bind(docCode).first();
@@ -1217,6 +1220,75 @@ app.put('/api/settings/security', requireAuth, async (c) => {
     audit(db, c.get('user').id, 'SECURITY_SETTINGS_UPDATED', { before, after: { twoFactorMinLevel: level, twoFactorForDcc: body.twoFactorForDcc } })
   ]);
   return c.json(await loadSecurityPolicy(db));
+});
+
+// --- Master data kept as JSON in settings: document types and SLA days. null means "never edited", so the pages use their built-in starting list. ---
+const loadJsonSetting = async (db, key) => {
+  const row = await db.prepare('SELECT value FROM settings WHERE key = ?').bind(key).first();
+  return row ? JSON.parse(row.value) : null;
+};
+const saveJsonSetting = (db, key, value, userId) => db.prepare(`INSERT INTO settings (key, value, updated_by) VALUES (?, ?, ?)
+  ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = ${NOW}, updated_by = excluded.updated_by`).bind(key, JSON.stringify(value), userId);
+
+app.get('/api/settings/document-types', requireAuth, async (c) => c.json({ documentTypes: await loadJsonSetting(c.env.DB, 'document_types') }));
+
+app.put('/api/settings/document-types', requireAuth, async (c) => {
+  const user = c.get('user');
+  if (!user.isDcc) return c.json(DCC_ONLY, 403);
+  const { documentTypes } = await c.req.json().catch(() => ({}));
+  const codes = Array.isArray(documentTypes) ? documentTypes.map((t) => String(t?.code ?? '')) : [];
+  if (!codes.length || codes.length > 50 || codes.some((code) => !/^[A-Z0-9]{1,10}$/.test(code)) || new Set(codes).size !== codes.length) return c.json({ error: 'รหัสประเภทเอกสารต้องเป็น A-Z 0-9 ไม่เกิน 10 ตัว และห้ามซ้ำ' }, 400);
+  if (documentTypes.some((t) => typeof t.nameTh !== 'string' || !t.nameTh.trim())) return c.json({ error: 'กรุณากรอกชื่อประเภทเอกสาร' }, 400);
+  if (JSON.stringify(documentTypes).length > 100000) return c.json({ error: 'ข้อมูลประเภทเอกสารใหญ่เกินไป' }, 400);
+  const db = c.env.DB;
+  // A new type needs approval levels to route by; it starts like the common ones and the DCC adjusts it in the matrix.
+  await db.batch([
+    saveJsonSetting(db, 'document_types', documentTypes, user.id),
+    ...documentTypes.map((t) => db.prepare('INSERT OR IGNORE INTO approval_matrix (doc_type, name_th, min_requester_level, required_reviewer_level, required_approver_level, updated_by) VALUES (?, ?, 1, 4, 5, ?)').bind(t.code, t.nameTh.slice(0, 200), user.id)),
+    audit(db, user.id, 'DOCUMENT_TYPES_UPDATED', { codes, inactive: documentTypes.filter((t) => t.status === 'INACTIVE').map((t) => t.code) })
+  ]);
+  return c.json({ documentTypes });
+});
+
+const SLA_KEYS = ['reviewSlaDays', 'approvalSlaDays', 'hardcopyReceiptSlaDays', 'recallSlaDays'];
+app.get('/api/settings/sla', requireAuth, async (c) => c.json({ sla: await loadJsonSetting(c.env.DB, 'sla_settings') }));
+
+app.put('/api/settings/sla', requireAuth, async (c) => {
+  const user = c.get('user');
+  if (!user.isDcc) return c.json(DCC_ONLY, 403);
+  const body = await c.req.json().catch(() => ({}));
+  if (!SLA_KEYS.every((k) => Number.isInteger(body[k]) && body[k] >= 1 && body[k] <= 365)) return c.json({ error: 'จำนวนวัน SLA ต้องเป็นจำนวนเต็ม 1-365' }, 400);
+  const db = c.env.DB;
+  const sla = Object.fromEntries(SLA_KEYS.map((k) => [k, body[k]]));
+  await db.batch([saveJsonSetting(db, 'sla_settings', sla, user.id), audit(db, user.id, 'SLA_SETTINGS_UPDATED', { before: await loadJsonSetting(db, 'sla_settings'), after: sla })]);
+  return c.json({ sla });
+});
+
+// Signatures are stamped onto PDFs in the browser, so every signed-in person can read them; only DCC (or the owner) can change one.
+const MAX_SIGNATURE_CHARS = 700000;
+const short = (v) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, 40) : null);
+app.get('/api/signatures', requireAuth, async (c) => {
+  const { results } = await c.env.DB.prepare('SELECT user_id, signature_type, signature_style, initials, image, updated_at FROM user_signatures').all();
+  return c.json({ signatures: results });
+});
+
+app.put('/api/users/:id/signature', requireAuth, async (c) => {
+  const user = c.get('user');
+  const id = c.req.param('id');
+  if (!user.isDcc && user.id !== id) return c.json({ error: 'แก้ได้เฉพาะลายเซ็นของตัวเอง หรือเป็น DCC' }, 403);
+  const body = await c.req.json().catch(() => ({}));
+  if (!['DRAWN', 'IMAGE', 'TYPOGRAPHIC'].includes(body.signature_type)) return c.json({ error: 'ชนิดลายเซ็นไม่ถูกต้อง' }, 400);
+  if (typeof body.image !== 'string' || !/^data:image\/(png|jpeg);base64,[A-Za-z0-9+/=]+$/.test(body.image) || body.image.length > MAX_SIGNATURE_CHARS) return c.json({ error: 'ภาพลายเซ็นต้องเป็น PNG หรือ JPEG ขนาดไม่เกินประมาณ 500 KB' }, 400);
+  const db = c.env.DB;
+  if (!(await db.prepare('SELECT 1 FROM users WHERE id = ?').bind(id).first())) return c.json({ error: 'ไม่พบผู้ใช้' }, 404);
+  await db.batch([
+    db.prepare(`INSERT INTO user_signatures (user_id, signature_type, signature_style, initials, image, updated_by) VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT (user_id) DO UPDATE SET signature_type = excluded.signature_type, signature_style = excluded.signature_style, initials = excluded.initials,
+      image = excluded.image, updated_at = ${NOW}, updated_by = excluded.updated_by`)
+      .bind(id, body.signature_type, short(body.signature_style), short(body.initials), body.image, user.id),
+    audit(db, user.id, 'SIGNATURE_UPDATED', { user_id: id, type: body.signature_type })
+  ]);
+  return c.json({ ok: true });
 });
 
 const MAX_AUDIT_ROWS = 50000;
