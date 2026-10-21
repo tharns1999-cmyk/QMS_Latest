@@ -187,7 +187,7 @@ export const submitDarToApi = async (dar, file) => {
       approver_id: approverId
     }));
   } catch (err) {
-    toast.error(err.message);
+    toast.error(err.message, { duration: 8000 });
     return null;
   }
   // The server numbers NEW documents; the form's preview can be overtaken by another request.

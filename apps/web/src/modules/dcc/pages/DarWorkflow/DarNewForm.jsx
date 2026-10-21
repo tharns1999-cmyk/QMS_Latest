@@ -300,6 +300,13 @@ const DarNewForm = () => {
   const handleFormSubmit = (e) => {
     e.preventDefault();
     if (validate()) {
+      // Stop here, with the reason, rather than open a confirmation that the server (or nobody) can then not honour.
+      const steps = generateDynamicWorkflow(currentUser, standardizeDepartmentCode(formData.department || currentUser?.department || 'PD'), masterUsers || [], formData.docType, approvalMatrix);
+      const missing = !steps.find(s => s.role === 'REVIEWER')?.userId ? 'ผู้ทบทวน' : !steps.find(s => s.role === 'APPROVER')?.userId ? 'ผู้อนุมัติ' : null;
+      if (missing) {
+        toast.error(`ยังไม่มี${missing}ที่มีสิทธิ์สำหรับเอกสารประเภทนี้ในแผนกของคุณ กรุณาติดต่อ DCC`, { duration: 8000 });
+        return;
+      }
       setShowConfirm(true);
     } else {
       toast.error('กรุณากรอกข้อมูลให้ครบถ้วนและถูกต้อง');
@@ -396,7 +403,7 @@ const DarNewForm = () => {
     
     // ส่งทั้ง metadata และ File Object ตัวจริง
     const result = await submitDar(newDar, activeFile);
-    if (!result) return; // API mode: the server refused and the reason was shown
+    if (!result) { setShowConfirm(false); return; } // API mode: the server refused and the reason was shown
 
     if (result) {
       const allocatedId = result.id || result.darNumber || result.darNo;

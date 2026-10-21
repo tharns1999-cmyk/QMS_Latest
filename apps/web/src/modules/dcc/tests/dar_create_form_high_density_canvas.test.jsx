@@ -34,15 +34,15 @@ describe('High-Density Unified DAR Create Form Canvas Tests', () => {
         { code: 'FM', name: 'Form', nameTh: 'แบบฟอร์ม', status: 'ACTIVE', namingPattern: 'FM-{Dept}-{###}', is_form_type: true }
       ],
       masterUsers: [
-        { id: 'u1', name: 'ธนาวุฒิ สมควรกิจดำรง', department: 'MKT', position_level: 4, role: 'STAFF' },
-        { id: 'u2', name: 'กัลยาณี พลไกร', department: 'MKT', position_level: 5, role: 'MANAGER' },
-        { id: 'u3', name: 'วิชัย ผู้บริหาร', department: 'MKT', position_level: 6, role: 'DIRECTOR' }
+        { id: 'u1', name: 'ธนาวุฒิ สมควรกิจดำรง', department: 'MKT', position_level: 4, approval_level: 4, role: 'STAFF' },
+        { id: 'u2', name: 'กัลยาณี พลไกร', department: 'MKT', position_level: 5, approval_level: 5, role: 'MANAGER' },
+        { id: 'u3', name: 'วิชัย ผู้บริหาร', department: 'MKT', position_level: 6, approval_level: 6, role: 'DIRECTOR' }
       ],
       reviewUsers: [
-        { id: 'u2', name: 'กัลยาณี พลไกร', department: 'MKT', position_level: 5, role: 'MANAGER' }
+        { id: 'u2', name: 'กัลยาณี พลไกร', department: 'MKT', position_level: 5, approval_level: 5, role: 'MANAGER' }
       ],
       approveUsers: [
-        { id: 'u3', name: 'วิชัย ผู้บริหาร', department: 'MKT', position_level: 6, role: 'DIRECTOR' }
+        { id: 'u3', name: 'วิชัย ผู้บริหาร', department: 'MKT', position_level: 6, approval_level: 6, role: 'DIRECTOR' }
       ],
       dars: [],
       documents: [],
