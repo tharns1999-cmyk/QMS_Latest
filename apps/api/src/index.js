@@ -172,13 +172,16 @@ const VISIBLE_TO = `(access_scope = 'GENERAL' OR department IN (SELECT value FRO
 const visibilityArgs = (user) => [JSON.stringify([...user.depts, user.department]), user.isDcc || user.isQmr ? 1 : 0];
 
 // One status per request: Active, Superseded and Obsolete lists are never mixed (ISO 9001 7.5.3).
+// At most DOC_PAGE documents come back; `more` says to ask again with offset, so one request stays small however many documents there are.
+const DOC_PAGE = 500;
 app.get('/api/documents', requireAuth, async (c) => {
   await activateDue(c.env.DB);
   const status = (c.req.query('status') || 'EFFECTIVE').toUpperCase();
   if (!DOC_STATUSES.includes(status)) return c.json({ error: 'สถานะเอกสารไม่ถูกต้อง' }, 400);
-  const { results } = await c.env.DB.prepare(`SELECT * FROM documents WHERE status = ? AND ${VISIBLE_TO} ORDER BY doc_code, revision`)
-    .bind(status, ...visibilityArgs(c.get('user'))).all();
-  return c.json({ documents: results });
+  const offset = Math.max(0, Math.floor(Number(c.req.query('offset'))) || 0);
+  const { results } = await c.env.DB.prepare(`SELECT * FROM documents WHERE status = ? AND ${VISIBLE_TO} ORDER BY doc_code, revision LIMIT ? OFFSET ?`)
+    .bind(status, ...visibilityArgs(c.get('user')), DOC_PAGE + 1, offset).all();
+  return c.json({ documents: results.slice(0, DOC_PAGE), more: results.length > DOC_PAGE });
 });
 
 app.get('/api/documents/:id', requireAuth, async (c) => {

@@ -23,7 +23,7 @@ describe('ApiSessionGate', () => {
       if (url.endsWith('/api/dars')) return json(200, { dars: [] });
       if (url.endsWith('/api/controlled-copies')) return json(200, { copies: [] });
       if (url.endsWith('/api/periodic-reviews')) return json(200, { reviews: [] });
-      return json(200, { documents: url.endsWith('EFFECTIVE') ? [doc] : [] });
+      return json(200, { documents: url.includes('status=EFFECTIVE') ? [doc] : [] });
     });
     vi.stubGlobal('fetch', fetch);
     render(<ApiSessionGate><p>app</p></ApiSessionGate>);
