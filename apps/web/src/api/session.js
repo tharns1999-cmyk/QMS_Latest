@@ -43,13 +43,24 @@ export const toStoreDocument = (d) => ({
   apiFilePath: d.file_key ? `/api/documents/${d.id}/file` : null
 });
 
+// The server sends documents in pages; keep asking until it says there are no more.
+const loadAllDocuments = async (status) => {
+  const rows = [];
+  for (let more = true; more; ) {
+    const page = await apiGet(`/api/documents?status=${status}&offset=${rows.length}`);
+    rows.push(...page.documents);
+    more = page.more && page.documents.length > 0;
+  }
+  return rows;
+};
+
 export const loadDocuments = async () => {
   // The reviews come with the documents because the review flags are laid over them.
   const [lists] = await Promise.all([
-    Promise.all(['EFFECTIVE', 'SUPERSEDED', 'OBSOLETE'].map((s) => apiGet(`/api/documents?status=${s}`))),
+    Promise.all(['EFFECTIVE', 'SUPERSEDED', 'OBSOLETE'].map(loadAllDocuments)),
     loadReviews()
   ]);
-  const rows = lists.flatMap((l) => l.documents);
+  const rows = lists.flat();
   useStore.setState({ documents: rows.filter((d) => !isExternalRow(d)).map(toStoreDocument) });
   setExternalSources({ docs: rows.filter(isExternalRow) });
   applyReviews();

@@ -51,6 +51,25 @@ describe('documents API', () => {
     expect((await get('/api/documents', 'bad-token')).status).toBe(401);
   });
 
+  it('sends a long list in pages of 500 and loses none', async () => {
+    const insert = env.DB.prepare(`INSERT INTO documents (id, doc_code, revision, name, doc_type, department, status, access_scope)
+      VALUES (?, ?, '00', 'x', 'SOP', 'QA', 'OBSOLETE', 'GENERAL')`);
+    await env.DB.batch(Array.from({ length: 1001 }, (_, i) => insert.bind(`pg-${i}`, `PG-${String(i).padStart(4, '0')}`)));
+    try {
+      const ids = [];
+      for (let more = true; more; ) {
+        const { body } = await get(`/api/documents?status=OBSOLETE&offset=${ids.length}`, tokens['D-DCC']);
+        expect(body.documents.length).toBeLessThanOrEqual(500);
+        ids.push(...body.documents.map((d) => d.id));
+        more = body.more;
+      }
+      expect(ids.filter((id) => id.startsWith('pg-'))).toHaveLength(1001);
+      expect(new Set(ids).size).toBe(ids.length);
+    } finally {
+      await env.DB.prepare("DELETE FROM documents WHERE id LIKE 'pg-%'").run();
+    }
+  });
+
   it('refuses a second effective revision of the same document', async () => {
     const insert = env.DB.prepare(`INSERT INTO documents (id, doc_code, revision, name, doc_type, department, status)
       VALUES ('d5', 'SOP-QA-001', '02', 'x', 'SOP', 'QA', 'EFFECTIVE')`);
