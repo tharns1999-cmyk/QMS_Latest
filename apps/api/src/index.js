@@ -193,9 +193,17 @@ app.get('/api/documents/:id', requireAuth, async (c) => {
 });
 
 const MAX_PDF_BYTES = 25 * 1024 * 1024; // matches the limit the upload forms state
-const servePdf = async (c, key, filename) => {
+// Every read of a file is audited, with why it was read. The web says which (default: looking at it on screen); the audit action is the one place a purpose is mapped.
+const FILE_PURPOSE_ACTION = { view: 'DOCUMENT_VIEWED', download: 'DOCUMENT_DOWNLOADED' };
+const DEFAULT_FILE_PURPOSE = 'view';
+
+// `source` is where the file lives ('document' or 'dar'); the row is written before the file is handed over, so no read goes unrecorded.
+const servePdf = async (c, key, filename, source) => {
+  const purpose = c.req.query('purpose') || DEFAULT_FILE_PURPOSE;
+  if (!Object.hasOwn(FILE_PURPOSE_ACTION, purpose)) return c.json({ error: 'วัตถุประสงค์ในการเปิดไฟล์ไม่ถูกต้อง' }, 400);
   const obj = key && await c.env.FILES.get(key);
   if (!obj) return c.json({ error: 'ไม่พบไฟล์' }, 404);
+  await audit(c.env.DB, c.get('user').id, FILE_PURPOSE_ACTION[purpose], { source: source.kind, id: source.id, doc_code: source.doc_code, revision: source.revision, status: source.status }).run();
   return new Response(obj.body, {
     headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': `inline; filename="${filename}.pdf"`, 'Cache-Control': 'private, no-store' }
   });
@@ -207,7 +215,7 @@ app.get('/api/documents/:id/file', requireAuth, async (c) => {
   if (!doc) return c.json({ error: 'ไม่พบเอกสาร' }, 404);
   // Superseded and obsolete copies stay with DCC/QMR so they cannot be used by mistake (ISO 9001 7.5.3).
   if (doc.status !== 'EFFECTIVE' && !user.isDcc && !user.isQmr) return c.json({ error: 'เอกสารนี้ไม่มีผลบังคับใช้แล้ว' }, 403);
-  return servePdf(c, doc.file_key, `${doc.doc_code}_Rev${doc.revision}`);
+  return servePdf(c, doc.file_key, `${doc.doc_code}_Rev${doc.revision}`, { kind: 'document', id: doc.id, doc_code: doc.doc_code, revision: doc.revision, status: doc.status });
 });
 
 const NOW = `strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`;
@@ -322,7 +330,7 @@ app.get('/api/dars/:id', requireAuth, async (c) => {
 app.get('/api/dars/:id/file', requireAuth, async (c) => {
   const dar = await c.env.DB.prepare(`SELECT * FROM dars WHERE id = ? AND ${DAR_VISIBLE_TO}`).bind(c.req.param('id'), ...darVisibilityArgs(c.get('user'))).first();
   if (!dar) return c.json({ error: 'ไม่พบคำขอ' }, 404);
-  return servePdf(c, dar.file_key, `${dar.doc_code}_Rev${dar.revision}_DAR${dar.id}`);
+  return servePdf(c, dar.file_key, `${dar.doc_code}_Rev${dar.revision}_DAR${dar.id}`, { kind: 'dar', id: dar.id, doc_code: dar.doc_code, revision: dar.revision, status: dar.status });
 });
 
 // The requester attaches the PDF before review, so reviewer and approver sign off on this exact file.

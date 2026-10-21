@@ -30,6 +30,7 @@ import { normalizeDepartmentId, cleanLocationName } from '../../services/MasterD
 import { ErrorBoundary } from '../../../../shared/components/ErrorBoundary';
 import { UniversalWatermarkService, resolveWatermarkConfig, WATERMARK_TYPES, applySupersededWatermark } from '../../services/UniversalWatermarkService';
 import * as fileStorage from '../../utils/fileStorage';
+import { FILE_PURPOSE } from '../../../../api/client';
 import RequestAdditionalCopiesModal from './RequestAdditionalCopiesModal';
 import ReplacementModal from '../../pages/Library/ReplacementModal';
 import RelocateCopyModal from './RelocateCopyModal';
@@ -623,7 +624,7 @@ const DocumentDetailModal = ({
 
     try {
       // 1. Resolve raw file blob through Universal File Resolver
-      const rawBlob = await fileStorage.resolveFileBlob(doc, doc.fileId || doc.id || doc.docCode || doc.title || doc.darId);
+      const rawBlob = await fileStorage.resolveFileBlob(doc, doc.fileId || doc.id || doc.docCode || doc.title || doc.darId, { purpose: FILE_PURPOSE.DOWNLOAD });
 
       if (!rawBlob) {
         toast.dismiss(toastId);
@@ -735,7 +736,7 @@ const DocumentDetailModal = ({
     try {
       const copyNum = targetCopy.copy_no || targetCopy.copyNo || targetCopy.ccNumber || '01';
       const toastId = toast.loading(`กำลังจัดเตรียมสำเนาควบคุม Copy ${copyNum}...`);
-      const rawBlob = await resolveFileBlob(doc, doc.fileId || doc.id || doc.docCode || doc.title || doc.darId);
+      const rawBlob = await fileStorage.resolveFileBlob(doc, doc.fileId || doc.id || doc.docCode || doc.title || doc.darId, { purpose: FILE_PURPOSE.DOWNLOAD });
       const docCode = resolveDocCode(doc) || doc.docNo || doc.title || 'DOCUMENT';
       const docRev = normalizeRev(doc.rev || doc.revision || doc.doc_version || '01');
       const docTitle = resolveDocTitle(doc) || doc.name || doc.docName || doc.title || '';

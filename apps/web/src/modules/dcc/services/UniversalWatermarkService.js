@@ -15,6 +15,7 @@ import {
   renderSignatoryText
 } from '../utils/pdfStamper';
 import { resolveFileBlob } from '../utils/fileStorage';
+import { FILE_PURPOSE } from '../../../api/client';
 import { generateQmsDownloadName } from '../utils/documentNamingHelper';
 import { cleanLocationName } from './MasterDataService';
 import { isDccUser } from '../utils/taskFilter';
@@ -134,7 +135,8 @@ export const prepareMasterPdfForDownload = async ({
   let pdfBytes = document.fileData || document.originalPdfBytes || document.fileBlob || document.file;
   if (!pdfBytes) {
     const fallbackKey = document.fileId || document.file_id || document.id || document.docCode || document.document_code || dar?.id;
-    const resolvedBlob = await resolveFileBlob(document, fallbackKey);
+    // Preparing a master file for download: the server audits it as a download.
+    const resolvedBlob = await resolveFileBlob(document, fallbackKey, { purpose: FILE_PURPOSE.DOWNLOAD });
     if (resolvedBlob) {
       pdfBytes = await resolvedBlob.arrayBuffer();
     }
@@ -334,7 +336,7 @@ export class UniversalWatermarkService {
       if (!rawPdfBytes) {
         const merged = { ...meta, ...doc };
         const docCodeFallback = doc?.fileId || doc?.file_id || doc?.attachedFile?.fileId || doc?.attachedFile?.id || doc?.edCode || doc?.doc_code || doc?.document_code || doc?.docNo || doc?.darId || doc?.id || meta?.docCode;
-        const fileBlob = await resolveFileBlob(merged, docCodeFallback);
+        const fileBlob = await resolveFileBlob(merged, docCodeFallback, { purpose: FILE_PURPOSE.DOWNLOAD });
         if (fileBlob) {
           rawPdfBytes = await fileBlob.arrayBuffer();
         }
