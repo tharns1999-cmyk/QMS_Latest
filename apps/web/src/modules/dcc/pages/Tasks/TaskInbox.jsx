@@ -877,13 +877,11 @@ const TaskInbox = () => {
     
     const tDept = resolveTaskDept(task);
 
-    if (isDirectAssignee) {
-      if (!targetDept || targetDept === 'ALL') return true;
-      return isSameDepartment(tDept, targetDept) || isSameDepartment(currentUser?.department, targetDept) || isSameDepartment(currentUser?.primary_department, targetDept);
-    }
-
     if (!targetDept || targetDept === 'ALL') return true;
-    return isSameDepartment(tDept, targetDept);
+    if (isSameDepartment(tDept, targetDept)) return true;
+    // A task with no department of its own falls under the assignee's department, so it is not lost.
+    // One that has a department is counted there only: a QMR's QC tasks are not also MGMT tasks.
+    return isDirectAssignee && !tDept && (isSameDepartment(currentUser?.department, targetDept) || isSameDepartment(currentUser?.primary_department, targetDept));
   }, [resolveTaskDept, currentUser]);
 
   const effectiveToday = useMemo(() => {
