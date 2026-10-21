@@ -304,7 +304,9 @@ const PeriodicReviewDetail = () => {
         toast.success('บันทึกผลการทบทวนเรียบร้อยแล้ว');
         handleLinkedAction(outcome === 'REVISION_REQUIRED' ? 'REVISION' : 'OBSOLETE');
       } else {
-        toast.success(saved.status === 'COMPLETED' ? 'อนุมัติผลการทบทวนเรียบร้อยแล้ว (ขยายรอบการทบทวน)' : 'ส่งผลการทบทวนไปยังผู้อนุมัติเรียบร้อยแล้ว');
+        // Say who it went to: the server picks the person the Approval Matrix allows, who may not be the submitter's own head.
+        const approver = (useStore.getState().masterUsers || []).find((u) => u.id === saved.approver_id);
+        toast.success(saved.status === 'COMPLETED' ? 'อนุมัติผลการทบทวนเรียบร้อยแล้ว (ขยายรอบการทบทวน)' : `ส่งผลการทบทวนไปยังผู้อนุมัติเรียบร้อยแล้ว: ${approver ? `${approver.name} (L${approver.approval_level})` : 'ผู้อนุมัติตาม Approval Matrix'}`, { duration: 7000 });
         navigate(taskId ? '/tasks' : '/dcc/periodic-reviews');
       }
       return;
