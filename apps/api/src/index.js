@@ -128,10 +128,11 @@ app.post('/api/auth/change-password', requireAuth, async (c) => {
   return c.json({ token: await issueToken(c.env.JWT_SECRET, user.id), user: toPublicUser({ ...user, must_change_password: 0 }) });
 });
 
-// Directory for routing DARs and showing who signed: active users, no credentials.
+// Directory for routing DARs and showing who signed, no credentials. Deactivated people stay so old records still show their names;
+// the pages offer only status ACTIVE for new routing, and the server refuses anyone else.
 app.get('/api/users', requireAuth, async (c) => {
-  const { results } = await c.env.DB.prepare("SELECT * FROM users WHERE status = 'ACTIVE' ORDER BY name").all();
-  return c.json({ users: results.map(toPublicUser) });
+  const { results } = await c.env.DB.prepare("SELECT * FROM users WHERE status IN ('ACTIVE', 'INACTIVE') ORDER BY name").all();
+  return c.json({ users: results.map((r) => ({ ...toPublicUser(r), status: r.status })) });
 });
 
 app.get('/api/approval-matrix', requireAuth, async (c) => {
@@ -849,6 +850,213 @@ app.post('/api/users/:id/unlock', requireAuth, async (c) => {
   ]);
   if (!updated.results.length) return c.json({ error: 'ไม่พบบัญชีที่ถูกล็อกนี้' }, 404);
   return c.json({ ok: true });
+});
+
+// --- Master data: users, departments and distribution locations. DCC only; every change is audited in the same batch. ---
+const DCC_ONLY = { error: 'เฉพาะ DCC เท่านั้นที่จัดการข้อมูลหลักได้' };
+const readBody = (c) => c.req.json().catch(() => ({}));
+const clean = (v, max) => (typeof v === 'string' && v.trim() && v.trim().length <= max ? v.trim() : null);
+const isUnique = (err) => /UNIQUE/.test(String(err?.message));
+// No look-alike characters (0/O, 1/l/I); 14 characters clears the 12-character minimum.
+const PASSWORD_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+const tempPassword = () => Array.from(crypto.getRandomValues(new Uint8Array(14)), (b) => PASSWORD_ALPHABET[b % PASSWORD_ALPHABET.length]).join('');
+const roleOf = (isDccUser) => (isDccUser ? 'DCC_ADMIN' : 'GENERAL_USER');
+
+// Checks the fields of a user form (a PATCH keeps what it does not mention); returns the clean values or the Thai reason.
+const userFields = async (db, body, current = {}) => {
+  const name = body.name === undefined ? current.name : clean(body.name, 200);
+  const email = body.email === undefined ? current.email : clean(body.email, 200)?.toLowerCase();
+  if (!name) return { error: 'กรุณาระบุชื่อ' };
+  if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return { error: 'อีเมลไม่ถูกต้อง' };
+  const level = body.approval_level === undefined ? current.approval_level : body.approval_level;
+  if (!(Number.isInteger(level) && level >= 1 && level <= 8)) return { error: 'ระดับต้องเป็นจำนวนเต็ม 1-8' };
+  const primary = body.department === undefined ? current.primary_department : clean(body.department, 12);
+  const extra = body.depts === undefined ? JSON.parse(current.departments || '[]') : body.depts;
+  if (!primary || !Array.isArray(extra)) return { error: 'กรุณาระบุแผนก' };
+  const depts = [...new Set([primary, ...extra])];
+  const { results } = await db.prepare("SELECT code FROM departments WHERE status = 'ACTIVE' AND code IN (SELECT value FROM json_each(?))").bind(JSON.stringify(depts)).all();
+  const missing = depts.filter((d) => !results.some((r) => r.code === d));
+  if (missing.length) return { error: `ไม่พบแผนกที่ใช้งานอยู่: ${missing.join(', ')}` };
+  const empId = body.empId === undefined ? current.emp_id ?? null : clean(body.empId, 50);
+  const dcc = body.isDcc === undefined ? current.is_dcc === 1 : Boolean(body.isDcc);
+  const qmr = body.isQmr === undefined ? current.is_qmr === 1 : Boolean(body.isQmr);
+  return { name, email, level, primary, depts, empId, dcc, qmr };
+};
+
+// Everyone, including deactivated and locked accounts, for the management page.
+app.get('/api/admin/users', requireAuth, async (c) => {
+  if (!c.get('user').isDcc) return c.json(DCC_ONLY, 403);
+  const { results } = await c.env.DB.prepare('SELECT * FROM users ORDER BY name').all();
+  return c.json({ users: results.map((r) => ({ ...toPublicUser(r), status: r.status })) });
+});
+
+app.post('/api/users', requireAuth, async (c) => {
+  if (!c.get('user').isDcc) return c.json(DCC_ONLY, 403);
+  const db = c.env.DB;
+  const f = await userFields(db, await readBody(c));
+  if (f.error) return c.json({ error: f.error }, 400);
+  const id = crypto.randomUUID();
+  const password = tempPassword();
+  try {
+    await db.batch([
+      db.prepare(`INSERT INTO users (id, emp_id, name, email, password_hash, role, approval_level, primary_department, departments, is_dcc, is_qmr, must_change_password)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`)
+        .bind(id, f.empId, f.name, f.email, await hashPassword(password), roleOf(f.dcc), f.level, f.primary, JSON.stringify(f.depts), f.dcc ? 1 : 0, f.qmr ? 1 : 0),
+      audit(db, c.get('user').id, 'USER_CREATED', { user_id: id, email: f.email, level: f.level, department: f.primary, depts: f.depts, isDcc: f.dcc, isQmr: f.qmr })
+    ]);
+  } catch (err) {
+    if (isUnique(err)) return c.json({ error: 'อีเมลหรือรหัสพนักงานนี้มีอยู่แล้ว' }, 409);
+    throw err;
+  }
+  // The temporary password is shown once; the person must change it at first sign-in.
+  return c.json({ user: toPublicUser(await db.prepare('SELECT * FROM users WHERE id = ?').bind(id).first()), temporaryPassword: password }, 201);
+});
+
+app.patch('/api/users/:id', requireAuth, async (c) => {
+  const actor = c.get('user');
+  if (!actor.isDcc) return c.json(DCC_ONLY, 403);
+  const db = c.env.DB;
+  const body = await readBody(c);
+  const before = await db.prepare('SELECT * FROM users WHERE id = ?').bind(c.req.param('id')).first();
+  if (!before) return c.json({ error: 'ไม่พบผู้ใช้' }, 404);
+  const f = await userFields(db, body, before);
+  if (f.error) return c.json({ error: f.error }, 400);
+  const status = body.status === undefined ? before.status : body.status;
+  if (!['ACTIVE', 'INACTIVE', 'LOCKED'].includes(status)) return c.json({ error: 'สถานะไม่ถูกต้อง' }, 400);
+  // LOCKED comes only from failed logins; an admin moves an account between ACTIVE and INACTIVE.
+  if (status === 'LOCKED' && before.status !== 'LOCKED') return c.json({ error: 'ไม่สามารถตั้งสถานะล็อกด้วยตนเองได้' }, 400);
+  // An admin cannot lock themselves out of the admin pages.
+  if (before.id === actor.id && (!f.dcc || status !== 'ACTIVE')) return c.json({ error: 'ไม่สามารถปิดบัญชีหรือถอนสิทธิ์ DCC ของตนเองได้' }, 400);
+  const after = { name: f.name, email: f.email, emp_id: f.empId, approval_level: f.level, department: f.primary, depts: f.depts, isDcc: f.dcc, isQmr: f.qmr, status };
+  try {
+    await db.batch([
+      db.prepare(`UPDATE users SET name = ?, email = ?, emp_id = ?, approval_level = ?, primary_department = ?, departments = ?, is_dcc = ?, is_qmr = ?, role = ?,
+        status = ?, failed_logins = CASE WHEN ? = 'ACTIVE' THEN 0 ELSE failed_logins END WHERE id = ?`)
+        .bind(f.name, f.email, f.empId, f.level, f.primary, JSON.stringify(f.depts), f.dcc ? 1 : 0, f.qmr ? 1 : 0, roleOf(f.dcc), status, status, before.id),
+      audit(db, actor.id, 'USER_UPDATED', {
+        user_id: before.id,
+        before: { name: before.name, email: before.email, emp_id: before.emp_id, approval_level: before.approval_level, department: before.primary_department, depts: JSON.parse(before.departments), isDcc: before.is_dcc === 1, isQmr: before.is_qmr === 1, status: before.status },
+        after
+      })
+    ]);
+  } catch (err) {
+    if (isUnique(err)) return c.json({ error: 'อีเมลหรือรหัสพนักงานนี้มีอยู่แล้ว' }, 409);
+    throw err;
+  }
+  const row = await db.prepare('SELECT * FROM users WHERE id = ?').bind(before.id).first();
+  return c.json({ user: { ...toPublicUser(row), status: row.status } });
+});
+
+// A new temporary password; the old one and every signed-in session of that person stop working.
+app.post('/api/users/:id/reset-password', requireAuth, async (c) => {
+  if (!c.get('user').isDcc) return c.json(DCC_ONLY, 403);
+  const db = c.env.DB;
+  const password = tempPassword();
+  const [updated] = await db.batch([
+    db.prepare('UPDATE users SET password_hash = ?, must_change_password = 1, failed_logins = 0, password_changed_at = ? WHERE id = ? RETURNING id')
+      .bind(await hashPassword(password), Math.floor(Date.now() / 1000), c.req.param('id')),
+    db.prepare("INSERT INTO audit_log (actor_id, action, details) SELECT ?, 'USER_PASSWORD_RESET', ? WHERE changes() > 0").bind(c.get('user').id, JSON.stringify({ user_id: c.req.param('id') }))
+  ]);
+  if (!updated.results.length) return c.json({ error: 'ไม่พบผู้ใช้' }, 404);
+  return c.json({ temporaryPassword: password });
+});
+
+app.get('/api/departments', requireAuth, async (c) => {
+  const { results } = await c.env.DB.prepare('SELECT * FROM departments ORDER BY code').all();
+  return c.json({ departments: results });
+});
+
+app.post('/api/departments', requireAuth, async (c) => {
+  if (!c.get('user').isDcc) return c.json(DCC_ONLY, 403);
+  const body = await readBody(c);
+  const code = clean(body.code, 12)?.toUpperCase();
+  const nameTh = clean(body.name_th, 200);
+  if (!code || !/^[A-Z0-9&_-]+$/.test(code)) return c.json({ error: 'รหัสแผนกใช้ได้เฉพาะ A-Z 0-9 & _ - ไม่เกิน 12 ตัว' }, 400);
+  if (!nameTh) return c.json({ error: 'กรุณาระบุชื่อแผนก' }, 400);
+  const db = c.env.DB;
+  try {
+    await db.batch([
+      db.prepare('INSERT INTO departments (code, name_th, name_en) VALUES (?, ?, ?)').bind(code, nameTh, clean(body.name_en, 200) ?? ''),
+      audit(db, c.get('user').id, 'DEPARTMENT_CREATED', { code, name_th: nameTh })
+    ]);
+  } catch (err) {
+    if (isUnique(err)) return c.json({ error: `รหัสแผนก ${code} มีอยู่แล้ว` }, 409);
+    throw err;
+  }
+  return c.json({ department: await db.prepare('SELECT * FROM departments WHERE code = ?').bind(code).first() }, 201);
+});
+
+// The code is what users and documents point to, so only names and status change.
+app.patch('/api/departments/:code', requireAuth, async (c) => {
+  if (!c.get('user').isDcc) return c.json(DCC_ONLY, 403);
+  const db = c.env.DB;
+  const body = await readBody(c);
+  const before = await db.prepare('SELECT * FROM departments WHERE code = ?').bind(c.req.param('code')).first();
+  if (!before) return c.json({ error: 'ไม่พบแผนก' }, 404);
+  const nameTh = body.name_th === undefined ? before.name_th : clean(body.name_th, 200);
+  const nameEn = body.name_en === undefined ? before.name_en : (clean(body.name_en, 200) ?? '');
+  const status = body.status === undefined ? before.status : body.status;
+  if (!nameTh) return c.json({ error: 'กรุณาระบุชื่อแผนก' }, 400);
+  if (!['ACTIVE', 'INACTIVE'].includes(status)) return c.json({ error: 'สถานะไม่ถูกต้อง' }, 400);
+  if (status === 'INACTIVE' && before.status === 'ACTIVE') {
+    const { n } = await db.prepare("SELECT COUNT(*) AS n FROM users WHERE status != 'INACTIVE' AND ? IN (SELECT value FROM json_each(users.departments))").bind(before.code).first();
+    if (n) return c.json({ error: `ปิดแผนกไม่ได้ ยังมีผู้ใช้ ${n} คนสังกัดแผนกนี้ กรุณาย้ายหรือปิดบัญชีก่อน` }, 409);
+  }
+  await db.batch([
+    db.prepare('UPDATE departments SET name_th = ?, name_en = ?, status = ? WHERE code = ?').bind(nameTh, nameEn, status, before.code),
+    audit(db, c.get('user').id, 'DEPARTMENT_UPDATED', { code: before.code, before: { name_th: before.name_th, name_en: before.name_en, status: before.status }, after: { name_th: nameTh, name_en: nameEn, status } })
+  ]);
+  return c.json({ department: await db.prepare('SELECT * FROM departments WHERE code = ?').bind(before.code).first() });
+});
+
+app.get('/api/distribution-locations', requireAuth, async (c) => {
+  const { results } = await c.env.DB.prepare('SELECT * FROM distribution_locations ORDER BY department, name').all();
+  return c.json({ locations: results });
+});
+
+app.post('/api/distribution-locations', requireAuth, async (c) => {
+  if (!c.get('user').isDcc) return c.json(DCC_ONLY, 403);
+  const body = await readBody(c);
+  const name = clean(body.name, 200);
+  const department = clean(body.department, 12);
+  if (!name || !department) return c.json({ error: 'กรุณาระบุชื่อสถานที่และแผนก' }, 400);
+  const db = c.env.DB;
+  if (!(await db.prepare("SELECT 1 FROM departments WHERE code = ? AND status = 'ACTIVE'").bind(department).first())) return c.json({ error: 'ไม่พบแผนกที่ใช้งานอยู่' }, 400);
+  const id = crypto.randomUUID();
+  try {
+    await db.batch([
+      db.prepare('INSERT INTO distribution_locations (id, department, name, description) VALUES (?, ?, ?, ?)').bind(id, department, name, clean(body.description, 500) ?? ''),
+      audit(db, c.get('user').id, 'LOCATION_CREATED', { id, department, name })
+    ]);
+  } catch (err) {
+    if (isUnique(err)) return c.json({ error: 'แผนกนี้มีสถานที่ชื่อนี้อยู่แล้ว' }, 409);
+    throw err;
+  }
+  return c.json({ location: await db.prepare('SELECT * FROM distribution_locations WHERE id = ?').bind(id).first() }, 201);
+});
+
+// Copies already issued keep the place they were sent to, so a place is closed rather than deleted.
+app.patch('/api/distribution-locations/:id', requireAuth, async (c) => {
+  if (!c.get('user').isDcc) return c.json(DCC_ONLY, 403);
+  const db = c.env.DB;
+  const body = await readBody(c);
+  const before = await db.prepare('SELECT * FROM distribution_locations WHERE id = ?').bind(c.req.param('id')).first();
+  if (!before) return c.json({ error: 'ไม่พบสถานที่' }, 404);
+  const name = body.name === undefined ? before.name : clean(body.name, 200);
+  const description = body.description === undefined ? before.description : (clean(body.description, 500) ?? '');
+  const status = body.status === undefined ? before.status : body.status;
+  if (!name) return c.json({ error: 'กรุณาระบุชื่อสถานที่' }, 400);
+  if (!['ACTIVE', 'INACTIVE'].includes(status)) return c.json({ error: 'สถานะไม่ถูกต้อง' }, 400);
+  try {
+    await db.batch([
+      db.prepare('UPDATE distribution_locations SET name = ?, description = ?, status = ? WHERE id = ?').bind(name, description, status, before.id),
+      audit(db, c.get('user').id, 'LOCATION_UPDATED', { id: before.id, before: { name: before.name, description: before.description, status: before.status }, after: { name, description, status } })
+    ]);
+  } catch (err) {
+    if (isUnique(err)) return c.json({ error: 'แผนกนี้มีสถานที่ชื่อนี้อยู่แล้ว' }, 409);
+    throw err;
+  }
+  return c.json({ location: await db.prepare('SELECT * FROM distribution_locations WHERE id = ?').bind(before.id).first() });
 });
 
 const MAX_AUDIT_ROWS = 50000;
