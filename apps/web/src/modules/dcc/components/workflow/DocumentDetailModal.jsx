@@ -1076,7 +1076,8 @@ const DocumentDetailModal = ({
         const existingPrio = STATUS_PRIORITY[String(existing.status).toUpperCase()] || 0;
         const newPrio = STATUS_PRIORITY[String(copy.status).toUpperCase()] || 0;
 
-        if (newIssue > existingIssue || (copy.is_replacement && !existing.is_replacement) || newPrio > existingPrio) {
+        // A newer issue always wins: a recalled old copy would otherwise outrank the replacement that stands in for it.
+        if (newIssue > existingIssue || (newIssue === existingIssue && ((copy.is_replacement && !existing.is_replacement) || newPrio > existingPrio))) {
           activeMap.set(copyKey, hydrated);
         }
       }
@@ -2756,10 +2757,10 @@ const DocumentDetailModal = ({
       {selectedReplacementCopy && (
         <ReplacementModal
           isOpen={!!selectedReplacementCopy}
-          onClose={(success, type, reason) => {
+          onClose={async (success, type, reason) => {
             if (success && type && reason) {
               try {
-                reportCcDamagedLost(selectedReplacementCopy.id, type, reason);
+                if ((await reportCcDamagedLost(selectedReplacementCopy.id, type, reason)) === false) return;
                 toast.success('ยื่นคำร้องขอสำเนาทดแทนเรียบร้อยแล้ว กรุณารอเจ้าหน้าที่ DCC จัดพิมพ์และส่งมอบ');
                 setSelectedReplacementCopy(null);
               } catch (err) {

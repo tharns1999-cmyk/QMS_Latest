@@ -62,15 +62,15 @@ const DccCustodyActionModal = ({ isOpen, onClose, task }) => {
     setIsSubmitting(true);
     try {
       if (isRelocation) {
-        approveCcRelocation(task.id, { notes: notes.trim(), checklistVerified: true });
+        if ((await approveCcRelocation(task.id, { notes: notes.trim(), checklistVerified: true })) === false) return;
         toast.success(`อนุมัติย้ายจุดติดตั้ง ${docCode} Copy ${copyNo} เรียบร้อยแล้ว`, { icon: '✅', duration: 4000 });
       } else {
-        approveCcReturn(task.id, {
+        if ((await approveCcReturn(task.id, {
           dispositionMethod,
           witnessName: witnessName.trim(),
           notes: notes.trim(),
           checklistVerified: true
-        });
+        })) === false) return;
         toast.success(`อนุมัติรับคืน ${docCode} Copy ${copyNo} เรียบร้อยแล้ว`, { icon: '✅', duration: 4000 });
       }
       onClose();
@@ -86,9 +86,9 @@ const DccCustodyActionModal = ({ isOpen, onClose, task }) => {
     setIsSubmitting(true);
     try {
       if (isRelocation) {
-        rejectCcRelocation(task.id, { rejectReason: rejectReason.trim() });
+        if ((await rejectCcRelocation(task.id, { rejectReason: rejectReason.trim() })) === false) return;
       } else {
-        rejectCcReturn(task.id, { rejectReason: rejectReason.trim() });
+        if ((await rejectCcReturn(task.id, { rejectReason: rejectReason.trim() })) === false) return;
       }
       toast.success(`ปฏิเสธคำขอ ${docCode} Copy ${copyNo} แล้ว`, { icon: '❌', duration: 4000 });
       onClose();

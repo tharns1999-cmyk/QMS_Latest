@@ -420,7 +420,7 @@ export const activateDue = async (db) => {
     const retire = (status) => db.prepare("UPDATE documents SET status = ? WHERE doc_code = ? AND status = 'EFFECTIVE'").bind(status, dar.doc_code);
     // Copies of the outgoing revision: those in the field must be recalled, an undispatched one is simply void.
     const recallOld = db.prepare(`UPDATE controlled_copies SET status = CASE status WHEN 'PENDING_ISSUE' THEN 'VOID' ELSE 'PENDING_RECALL' END
-      WHERE doc_code = ? AND status IN ('PENDING_ISSUE', 'DISPATCHED_PENDING_RECEIPT', 'ISSUED_ACTIVE')`).bind(dar.doc_code);
+      WHERE doc_code = ? AND status IN ('PENDING_ISSUE', 'DISPATCHED_PENDING_RECEIPT', 'ISSUED_ACTIVE', 'RELOCATION_PENDING_APPROVAL', 'RETURN_PENDING_APPROVAL')`).bind(dar.doc_code);
     const copies = JSON.parse(dar.distributions || '[]').map((d, i) => db.prepare(`INSERT INTO controlled_copies (id, document_id, doc_code, revision, copy_no, department, location_id, location_name)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).bind(crypto.randomUUID(), documentId, dar.doc_code, dar.revision, String(i + 1).padStart(2, '0'), d.department, d.location_id, d.location_name));
     const statements = dar.type === 'OBSOLETE' ? [retire('OBSOLETE'), recallOld] : [
@@ -461,6 +461,136 @@ app.get('/api/controlled-copies', requireAuth, async (c) => {
     WHERE ? OR cc.department IN (SELECT value FROM json_each(?)) ORDER BY cc.issued_at DESC, cc.copy_no`)
     .bind(user.isDcc || user.isQmr ? 1 : 0, JSON.stringify([...user.depts, user.department])).all();
   return c.json({ copies: results });
+});
+
+// What the people who hold copies can ask for. DCC and the holding department take part; the rest is DCC's to approve.
+const holdsCopy = (user, copy) => user.isDcc || user.depts.includes(copy.department) || user.department === copy.department;
+const copyReason = (body) => (typeof body.reason === 'string' ? body.reason.trim() : '');
+const COPY_REASON_PROBLEM = 'กรุณาระบุเหตุผล (ไม่เกิน 500 ตัวอักษร)';
+const loadCopy = (db, id) => db.prepare('SELECT * FROM controlled_copies WHERE id = ?').bind(id).first();
+
+// Another printed copy for a document in force, at places the department names. DCC prints and hands it out like any other.
+app.post('/api/documents/:id/additional-copies', requireAuth, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  const body = await c.req.json().catch(() => ({}));
+  const reason = copyReason(body);
+  if (!reason || reason.length > 500) return c.json({ error: COPY_REASON_PROBLEM }, 400);
+  const text = (v, max) => (typeof v === 'string' && v.trim() && v.trim().length <= max ? v.trim() : null);
+  const places = (Array.isArray(body.locations) ? body.locations : []).map((l) => ({ department: text(l?.department, 20)?.toUpperCase(), location_id: text(l?.location_id, 100), location_name: text(l?.location_name, 200) }));
+  if (!places.length || places.length > 20 || places.some((l) => !l.department || !l.location_name)) return c.json({ error: 'จุดแจกจ่ายสำเนาไม่ถูกต้อง (ระบุได้ 1-20 จุด)' }, 400);
+
+  const doc = await db.prepare(`SELECT * FROM documents WHERE id = ? AND ${VISIBLE_TO}`).bind(c.req.param('id'), ...visibilityArgs(user)).first();
+  if (!doc) return c.json({ error: 'ไม่พบเอกสาร' }, 404);
+  if (doc.status !== 'EFFECTIVE') return c.json({ error: 'ขอสำเนาเพิ่มได้เฉพาะเอกสารที่มีผลบังคับใช้' }, 409);
+  if (doc.doc_type === 'FM') return c.json({ error: 'แบบฟอร์ม (FM) ไม่มีสำเนาควบคุมแบบกระดาษ' }, 400);
+  const mine = (d) => user.depts.includes(d) || user.department === d;
+  if (!user.isDcc && !mine(doc.department) && !places.every((l) => mine(l.department))) return c.json({ error: 'ต้องเป็นสมาชิกแผนกเจ้าของเอกสารหรือแผนกที่จะรับสำเนา' }, 403);
+
+  // The next number is worked out inside each INSERT, so two requests cannot take the same one.
+  const results = await db.batch([
+    ...places.map((l) => db.prepare(`INSERT INTO controlled_copies (id, document_id, doc_code, revision, copy_no, department, location_id, location_name, origin, request_reason, requested_by, requested_at)
+      VALUES (?, ?, ?, ?, (SELECT printf('%02d', 1 + COALESCE(MAX(CAST(copy_no AS INTEGER)), 0)) FROM controlled_copies WHERE doc_code = ? AND revision = ?), ?, ?, ?, 'ADDITIONAL', ?, ?, ${NOW}) RETURNING *`)
+      .bind(crypto.randomUUID(), doc.id, doc.doc_code, doc.revision, doc.doc_code, doc.revision, l.department, l.location_id, l.location_name, reason, user.id)),
+    audit(db, user.id, 'CC_ADDITIONAL_REQUESTED', { doc_code: doc.doc_code, revision: doc.revision, copies: places.length, reason })
+  ]);
+  return c.json({ copies: results.slice(0, places.length).map((r) => r.results[0]) }, 201);
+});
+
+// Damaged or lost: the copy leaves service (a damaged one goes back to DCC for recall) and a replacement with the next issue
+// number waits for DCC to print. Only a copy in the field of a revision still in force is replaced.
+app.post('/api/controlled-copies/:id/report', requireAuth, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  const body = await c.req.json().catch(() => ({}));
+  const reason = copyReason(body);
+  if (!['DAMAGED', 'LOST'].includes(body.type)) return c.json({ error: 'ประเภทต้องเป็น DAMAGED หรือ LOST' }, 400);
+  if (!reason || reason.length > 500) return c.json({ error: COPY_REASON_PROBLEM }, 400);
+  const copy = await loadCopy(db, c.req.param('id'));
+  if (!copy) return c.json({ error: 'ไม่พบสำเนา' }, 404);
+  if (!holdsCopy(user, copy)) return c.json({ error: `เฉพาะ DCC หรือแผนก ${copy.department} ที่ถือสำเนาเท่านั้นที่แจ้งได้` }, 403);
+  if (copy.status !== 'ISSUED_ACTIVE') return c.json({ error: 'แจ้งชำรุด/สูญหายได้เฉพาะสำเนาที่ใช้งานอยู่' }, 409);
+  if (!await db.prepare("SELECT 1 FROM documents WHERE doc_code = ? AND revision = ? AND status = 'EFFECTIVE'").bind(copy.doc_code, copy.revision).first()) {
+    return c.json({ error: 'เอกสารฉบับนี้ไม่มีผลบังคับใช้แล้ว ไม่ต้องออกสำเนาทดแทน' }, 409);
+  }
+  const [updated, replacement] = await db.batch([
+    db.prepare(`UPDATE controlled_copies SET status = ?, report_kind = ?, request_reason = ?, requested_by = ?, requested_at = ${NOW}
+      WHERE id = ? AND status = 'ISSUED_ACTIVE' RETURNING *`).bind(body.type === 'DAMAGED' ? 'PENDING_RECALL' : 'LOST', body.type, reason, user.id, copy.id),
+    // Only when the report above took: changes() is that UPDATE's.
+    db.prepare(`INSERT INTO controlled_copies (id, document_id, doc_code, revision, copy_no, issue_no, department, location_id, location_name, origin, replaces_id, request_reason, requested_by, requested_at)
+      SELECT ?, document_id, doc_code, revision, copy_no, issue_no + 1, department, location_id, location_name, 'REPLACEMENT', id, ?, ?, ${NOW} FROM controlled_copies
+      WHERE id = ? AND changes() > 0 RETURNING *`).bind(crypto.randomUUID(), reason, user.id, copy.id),
+    db.prepare('INSERT INTO audit_log (actor_id, action, details) SELECT ?, ?, ? WHERE changes() > 0')
+      .bind(user.id, body.type === 'DAMAGED' ? 'CC_DAMAGED_REPORTED' : 'CC_LOST_REPORTED', JSON.stringify({ copy_id: copy.id, doc_code: copy.doc_code, revision: copy.revision, copy_no: copy.copy_no, department: copy.department, reason }))
+  ]);
+  if (!updated.results.length) return c.json({ error: 'สถานะสำเนาเปลี่ยนไปแล้ว กรุณาโหลดใหม่' }, 409);
+  return c.json({ copy: updated.results[0], replacement: replacement.results[0] }, 201);
+});
+
+// Relocation and return wait for DCC to check the physical copy. Copy 01 is the owner's own office and stays where it is.
+const custodyRequest = (kind) => async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  const body = await c.req.json().catch(() => ({}));
+  const reason = copyReason(body);
+  if (!reason || reason.length > 500) return c.json({ error: COPY_REASON_PROBLEM }, 400);
+  const copy = await loadCopy(db, c.req.param('id'));
+  if (!copy) return c.json({ error: 'ไม่พบสำเนา' }, 404);
+  if (!holdsCopy(user, copy)) return c.json({ error: `เฉพาะ DCC หรือแผนก ${copy.department} ที่ถือสำเนาเท่านั้นที่ขอได้` }, 403);
+  if (copy.copy_no === '01') return c.json({ error: 'สำเนาต้นทาง (Copy 01) ย้ายหรือส่งคืนไม่ได้' }, 400);
+  if (copy.status !== 'ISSUED_ACTIVE') return c.json({ error: 'ทำได้เฉพาะสำเนาที่ใช้งานอยู่ และยังไม่มีคำขออื่นค้างอยู่' }, 409);
+
+  const text = (v, max) => (typeof v === 'string' && v.trim() && v.trim().length <= max ? v.trim() : null);
+  let set;
+  if (kind === 'RELOCATION') {
+    const name = text(body.new_location_name, 200);
+    if (!name) return c.json({ error: 'กรุณาระบุจุดติดตั้งใหม่' }, 400);
+    set = { sql: "status = 'RELOCATION_PENDING_APPROVAL', new_department = ?, new_location_id = ?, new_location_name = ?", args: [text(body.new_department, 20)?.toUpperCase() ?? copy.department, text(body.new_location_id, 100), name] };
+  } else {
+    const date = text(body.return_date, 10);
+    if (date && !(/^\d{4}-\d{2}-\d{2}$/.test(date) && !Number.isNaN(Date.parse(date)))) return c.json({ error: 'วันที่ส่งคืนไม่ถูกต้อง' }, 400);
+    set = { sql: "status = 'RETURN_PENDING_APPROVAL', return_date = ?", args: [date] };
+  }
+  const [updated] = await db.batch([
+    db.prepare(`UPDATE controlled_copies SET ${set.sql}, request_reason = ?, requested_by = ?, requested_at = ${NOW} WHERE id = ? AND status = 'ISSUED_ACTIVE' RETURNING *`)
+      .bind(...set.args, reason, user.id, copy.id),
+    db.prepare('INSERT INTO audit_log (actor_id, action, details) SELECT ?, ?, ? WHERE changes() > 0')
+      .bind(user.id, `CC_${kind}_REQUESTED`, JSON.stringify({ copy_id: copy.id, doc_code: copy.doc_code, revision: copy.revision, copy_no: copy.copy_no, department: copy.department, reason }))
+  ]);
+  if (!updated.results.length) return c.json({ error: 'สถานะสำเนาเปลี่ยนไปแล้ว กรุณาโหลดใหม่' }, 409);
+  return c.json({ copy: updated.results[0] }, 201);
+};
+app.post('/api/controlled-copies/:id/relocate', requireAuth, custodyRequest('RELOCATION'));
+app.post('/api/controlled-copies/:id/return', requireAuth, custodyRequest('RETURN'));
+
+// DCC's answer to a relocation or return. Approving a relocation moves the copy; approving a return takes it out of service.
+app.post('/api/controlled-copies/:id/decide', requireAuth, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  if (!user.isDcc) return c.json({ error: 'เฉพาะ DCC เท่านั้นที่พิจารณาคำขอได้' }, 403);
+  const body = await c.req.json().catch(() => ({}));
+  const str = (k) => (typeof body[k] === 'string' ? body[k].trim().slice(0, 500) : '');
+  if (body.decision !== 'APPROVE' && body.decision !== 'REJECT') return c.json({ error: 'ผลการพิจารณาต้องเป็น APPROVE หรือ REJECT' }, 400);
+  if (body.decision === 'REJECT' && !str('note')) return c.json({ error: 'กรุณาระบุเหตุผลที่ไม่อนุมัติ' }, 400);
+  const copy = await loadCopy(db, c.req.param('id'));
+  if (!copy) return c.json({ error: 'ไม่พบสำเนา' }, 404);
+  const kind = { RELOCATION_PENDING_APPROVAL: 'RELOCATION', RETURN_PENDING_APPROVAL: 'RETURN' }[copy.status];
+  if (!kind) return c.json({ error: 'สำเนานี้ไม่มีคำขอที่รอพิจารณา' }, 409);
+
+  const note = body.decision === 'APPROVE' && kind === 'RETURN' ? [str('disposition'), str('witness') && `พยาน: ${str('witness')}`, str('note')].filter(Boolean).join(' | ') : str('note');
+  const approve = body.decision === 'APPROVE';
+  const outcome = !approve ? "status = 'ISSUED_ACTIVE'"
+    : kind === 'RELOCATION' ? "status = 'ISSUED_ACTIVE', department = new_department, location_id = new_location_id, location_name = new_location_name"
+      : `status = 'RECALLED', recalled_at = ${NOW}, recalled_by = ?`;
+  const [updated] = await db.batch([
+    db.prepare(`UPDATE controlled_copies SET ${outcome}, new_department = NULL, new_location_id = NULL, new_location_name = NULL, return_date = NULL,
+      decision_note = ?, decided_by = ?, decided_at = ${NOW} WHERE id = ? AND status = ? RETURNING *`)
+      .bind(...(approve && kind === 'RETURN' ? [user.id] : []), note || null, user.id, copy.id, copy.status),
+    db.prepare('INSERT INTO audit_log (actor_id, action, details) SELECT ?, ?, ? WHERE changes() > 0')
+      .bind(user.id, `CC_${kind}_${approve ? 'APPROVED' : 'REJECTED'}`, JSON.stringify({ copy_id: copy.id, doc_code: copy.doc_code, revision: copy.revision, copy_no: copy.copy_no, note }))
+  ]);
+  if (!updated.results.length) return c.json({ error: 'คำขอนี้ถูกพิจารณาไปแล้ว กรุณาโหลดใหม่' }, 409);
+  return c.json({ copy: updated.results[0] });
 });
 
 // One step in a copy's life: who may take it, and the status it must be in (so a double click is a no-op).

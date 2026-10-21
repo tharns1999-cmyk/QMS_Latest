@@ -2196,10 +2196,10 @@ const Library = () => {
       {replacementInstance && (
         <ReplacementModal
           isOpen={!!replacementInstance}
-          onClose={(success, type, reason) => {
+          onClose={async (success, type, reason) => {
             if (success && type && reason) {
               try {
-                reportCcDamagedLost(replacementInstance.id, type, reason);
+                if ((await reportCcDamagedLost(replacementInstance.id, type, reason)) === false) return;
                 toast.success('ยื่นคำร้องขอสำเนาทดแทนเรียบร้อยแล้ว กรุณารอเจ้าหน้าที่ DCC จัดพิมพ์และส่งมอบ');
                 setReplacementInstance(null);
               } catch (err) {
