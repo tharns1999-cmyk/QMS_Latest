@@ -6,6 +6,8 @@ import toast from 'react-hot-toast';
 import { FileText, CheckCircle, ChevronLeft, Eye, Download } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { getDarReason, getDarDetail, getDarDocInfo } from '../../utils/darHelper';
+import { isApiMode, apiBlob } from '../../../../api/client';
+import { acknowledgeOnApi } from '../../../../api/acknowledgements';
 
 const TaskAck = () => {
   const { id } = useParams();
@@ -42,14 +44,31 @@ const TaskAck = () => {
     return <div className="p-6 text-rose-600 font-medium">คุณไม่มีสิทธิ์เข้าถึงงานนี้</div>;
   }
 
-  const handleOpenPdf = () => {
-    toast.success('กำลังเปิดไฟล์ PDF...');
+  const handleOpenPdf = async () => {
+    if (isApiMode && task.documentId) {
+      try {
+        const url = URL.createObjectURL(await apiBlob(`/api/documents/${task.documentId}/file`));
+        window.open(url, '_blank');
+      } catch (err) {
+        toast.error(err.message);
+        return;
+      }
+    } else {
+      toast.success('กำลังเปิดไฟล์ PDF...');
+    }
     setHasOpenedPdf(true);
   };
 
-  const handleAction = () => {
+  const handleAction = async () => {
     if (!hasOpenedPdf) {
       toast.error('กรุณาเปิดอ่านไฟล์ PDF ก่อนกดยืนยันรับทราบ');
+      return;
+    }
+    if (isApiMode && task.acknowledgementId) {
+      if (await acknowledgeOnApi(task.acknowledgementId)) {
+        toast.success('ยืนยันการรับทราบเอกสารสำเร็จ');
+        navigate('/tasks');
+      }
       return;
     }
     processWorkflow(task.id, 'ACKNOWLEDGE', 'Acknowledged');

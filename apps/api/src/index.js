@@ -232,6 +232,13 @@ app.post('/api/dars', requireAuth, async (c) => {
   const rawDist = type !== 'OBSOLETE' && Array.isArray(body.distributions) ? body.distributions : [];
   const distributions = rawDist.map((d) => ({ department: text(d?.department, 20)?.toUpperCase(), location_id: text(d?.location_id, 100), location_name: text(d?.location_name, 200) }));
   if (distributions.length > 50 || distributions.some((d) => !d.department || !d.location_name)) return c.json({ error: 'จุดแจกจ่ายสำเนาไม่ถูกต้อง' }, 400);
+  // Who must read and acknowledge the document once it is in force (any active user, not the requester).
+  const ackIds = Array.isArray(body.ack_user_ids) ? [...new Set(body.ack_user_ids)] : [];
+  if (ackIds.length > 50 || ackIds.some((id) => typeof id !== 'string' || !id || id === user.id)) return c.json({ error: 'รายชื่อผู้รับทราบไม่ถูกต้อง' }, 400);
+  if (ackIds.length) {
+    const found = await db.prepare(`SELECT count(*) AS n FROM users WHERE status = 'ACTIVE' AND id IN (SELECT value FROM json_each(?))`).bind(JSON.stringify(ackIds)).first();
+    if (found.n !== ackIds.length) return c.json({ error: 'ไม่พบผู้รับทราบบางรายในระบบ' }, 400);
+  }
 
   // NEW takes its metadata from the request and its code from the server; REVISION/OBSOLETE take both from the effective document.
   let doc;
@@ -282,9 +289,9 @@ app.post('/api/dars', requireAuth, async (c) => {
     : ['?', [docCode]];
   try {
     const [inserted] = await db.batch([
-      db.prepare(`INSERT INTO dars (type, doc_code, doc_type, department, revision, name, access_scope, reason, requester_id, reviewer_id, approver_id, effective_date, distributions, ext_issuer, ext_edition, review_cycle_months)
-        VALUES (?, ${codeSql}, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`)
-        .bind(type, ...codeArgs, doc.doc_type, doc.department, doc.revision, doc.name, doc.access_scope, str('reason'), user.id, reviewerId, approverId, effectiveDate, JSON.stringify(distributions), ext.issuer, ext.edition, ext.cycle),
+      db.prepare(`INSERT INTO dars (type, doc_code, doc_type, department, revision, name, access_scope, reason, requester_id, reviewer_id, approver_id, effective_date, distributions, ack_user_ids, ext_issuer, ext_edition, review_cycle_months)
+        VALUES (?, ${codeSql}, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`)
+        .bind(type, ...codeArgs, doc.doc_type, doc.department, doc.revision, doc.name, doc.access_scope, str('reason'), user.id, reviewerId, approverId, effectiveDate, JSON.stringify(distributions), ackIds.length ? JSON.stringify(ackIds) : null, ext.issuer, ext.edition, ext.cycle),
       db.prepare(`INSERT INTO audit_log (actor_id, action, details)
         SELECT ?, 'DAR_SUBMITTED', json_object('type', type, 'doc_code', doc_code, 'dar_id', id) FROM dars WHERE id = last_insert_rowid()`).bind(user.id)
     ]);
@@ -433,7 +440,11 @@ export const activateDue = async (db) => {
         db.prepare(`UPDATE dars SET status = 'COMPLETED', completed_at = ${NOW}, document_id = ? WHERE id = ? AND status = 'PENDING_DCC'`).bind(documentId, dar.id),
         // No actor: the system acts on the approver's decision and the chosen date.
         db.prepare('INSERT INTO audit_log (actor_id, action, details) SELECT NULL, ?, ? WHERE changes() > 0')
-          .bind(dar.type === 'OBSOLETE' ? 'DOCUMENT_OBSOLETED' : 'DOCUMENT_PUBLISHED', JSON.stringify({ dar_id: dar.id, doc_code: dar.doc_code, revision: dar.revision, automatic: true, copies_issued: copies.length }))
+          .bind(dar.type === 'OBSOLETE' ? 'DOCUMENT_OBSOLETED' : 'DOCUMENT_PUBLISHED', JSON.stringify({ dar_id: dar.id, doc_code: dar.doc_code, revision: dar.revision, automatic: true, copies_issued: copies.length })),
+        // After the audit row, which reads changes() of the UPDATE above. Re-running is a no-op (UNIQUE dar_id + user_id).
+        ...JSON.parse(dar.ack_user_ids || '[]').map((userId) => db.prepare(`INSERT OR IGNORE INTO acknowledgements (dar_id, document_id, doc_code, revision, user_id)
+          SELECT ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM dars WHERE id = ? AND status = 'COMPLETED' AND document_id = ?)`)
+          .bind(dar.id, documentId, dar.doc_code, dar.revision, userId, dar.id, documentId))
       ]);
     } catch (err) {
       if (!isLockConflict(err)) throw err;
@@ -482,6 +493,31 @@ app.post('/api/controlled-copies/:id/:step', requireAuth, async (c) => {
   ]);
   if (!updated.results.length) return c.json({ error: 'สถานะสำเนาเปลี่ยนไปแล้ว กรุณาโหลดใหม่' }, 409);
   return c.json({ copy: updated.results[0] });
+});
+
+// Acknowledgement: the people the requester named read the published document and confirm. Each sees their own; DCC, QMR
+// and the requester see everyone's.
+app.get('/api/acknowledgements', requireAuth, async (c) => {
+  await activateDue(c.env.DB);
+  const user = c.get('user');
+  const { results } = await c.env.DB.prepare(`SELECT a.*, d.name AS doc_name, d.doc_type, d.department, d.requester_id, d.effective_date FROM acknowledgements a JOIN dars d ON d.id = a.dar_id
+    WHERE ? OR a.user_id = ? OR d.requester_id = ? ORDER BY a.id DESC`).bind(user.isDcc || user.isQmr ? 1 : 0, user.id, user.id).all();
+  return c.json({ acknowledgements: results });
+});
+
+app.post('/api/acknowledgements/:id/acknowledge', requireAuth, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  const ack = await db.prepare('SELECT * FROM acknowledgements WHERE id = ?').bind(c.req.param('id')).first();
+  if (!ack) return c.json({ error: 'ไม่พบรายการรับทราบ' }, 404);
+  if (ack.user_id !== user.id) return c.json({ error: 'เฉพาะผู้ที่ได้รับมอบหมายเท่านั้นที่รับทราบได้' }, 403);
+  const [updated] = await db.batch([
+    db.prepare(`UPDATE acknowledgements SET status = 'ACKNOWLEDGED', acknowledged_at = ${NOW} WHERE id = ? AND status = 'PENDING' RETURNING *`).bind(ack.id),
+    db.prepare('INSERT INTO audit_log (actor_id, action, details) SELECT ?, ?, ? WHERE changes() > 0')
+      .bind(user.id, 'DOCUMENT_ACKNOWLEDGED', JSON.stringify({ acknowledgement_id: ack.id, dar_id: ack.dar_id, doc_code: ack.doc_code, revision: ack.revision }))
+  ]);
+  if (!updated.results.length) return c.json({ error: 'รับทราบเอกสารนี้ไปแล้ว' }, 409);
+  return c.json({ acknowledgement: updated.results[0] });
 });
 
 // Periodic review: a member of the owner department confirms the document is still right (NO_CHANGE) or asks to revise or
