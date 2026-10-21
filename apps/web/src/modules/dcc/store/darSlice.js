@@ -863,6 +863,8 @@ export const createDarSlice = (set, get) => ({
   }),
 
   finalizeAndPublishMaster: async (darId) => {
+    // API mode: the register changes only when DCC publishes on the server.
+    if (isApiMode) return;
     const state = get();
     const safeDars = state.dars || [];
     const safeDarRequests = state.darRequests || [];
@@ -1065,6 +1067,7 @@ export const createDarSlice = (set, get) => ({
   },
 
   processWorkflow: (taskId, action, comment) => {
+    if (isApiMode) return import('../../../api/dars').then((m) => m.decideTask(taskId, action, comment));
     let newlyCompletedDar = null;
     let targetTask = null;
     let targetDar = null;

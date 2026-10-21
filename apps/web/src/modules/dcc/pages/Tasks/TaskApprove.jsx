@@ -32,6 +32,7 @@ import {
 } from '../../utils/pdfStamper';
 import { formatSignOffDate } from '../../../../shared/utils/dateFormatter';
 import { resolveFileBlob } from '../../utils/fileStorage';
+import { isApiMode, apiBlob } from '../../../../api/client';
 import { generateQmsDownloadName, triggerBrowserDownload, formatDarHeaderTitle } from '../../utils/documentNamingHelper';
 
 const TaskApprove = () => {
@@ -240,6 +241,12 @@ const TaskApprove = () => {
         }
 
         let rawBlob = null;
+        // API mode: show only the server's copy, never a cached or sample stand-in, so the signer sees what they sign.
+        if (isApiMode) {
+          const source = isObsolete ? (documents || []).find(d => d.doc_code === dar.doc_code && d.status === 'EFFECTIVE') : dar;
+          if (!source?.apiFilePath) throw new Error('ยังไม่มีไฟล์ PDF ของคำขอนี้บนเซิร์ฟเวอร์');
+          rawBlob = await apiBlob(source.apiFilePath);
+        }
         const allKeys = Array.from(new Set([
           primaryKey,
           activeMasterDoc?.fileId,

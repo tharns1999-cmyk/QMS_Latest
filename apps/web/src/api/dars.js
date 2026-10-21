@@ -1,6 +1,7 @@
 import toast from 'react-hot-toast';
 import useStore from '../store/useStore';
 import { apiGet, apiPost, apiUpload } from './client';
+import { loadDocuments } from './session';
 import { resolveReviewer, resolveApprover } from '../modules/dcc/utils/workflowResolver';
 
 // The pages key their badges and handler logic on the demo status names.
@@ -79,11 +80,76 @@ const toTimeline = (d, users) => {
   }));
 };
 
+// The inbox, DarList and the task pages read pending work from `tasks`; in API mode it is derived from DAR status.
+const TASK_BY_STATUS = {
+  PENDING_REVIEW: { kind: 'review', type: 'Review', taskType: 'DAR_REVIEW', label: 'ทบทวน', assignee: 'reviewer_id', since: 'created_at' },
+  PENDING_APPROVAL: { kind: 'approve', type: 'Approve', taskType: 'DAR_APPROVE', label: 'อนุมัติ', assignee: 'approver_id', since: 'reviewed_at' },
+  PENDING_DCC: { kind: 'publish', type: 'DCC_PUBLISH', taskType: 'DCC_PUBLISH', label: 'ประกาศใช้', since: 'approved_at' }
+};
+
+export const toTask = (d, users, me) => {
+  const t = TASK_BY_STATUS[d.status];
+  if (!t) return null;
+  // Publishing belongs to every DCC member; only the signed-in one needs the task.
+  const assigneeId = t.assignee ? d[t.assignee] : me?.isDcc ? me.id : null;
+  if (!assigneeId) return null;
+  const darId = String(d.id);
+  return {
+    id: `api-dar-${darId}-${t.kind}`,
+    darId,
+    referenceType: 'INTERNAL_DAR',
+    referenceId: darId,
+    docCode: d.doc_code,
+    doc_code: d.doc_code,
+    docTitle: d.name,
+    docName: d.name,
+    title: `[DAR ${t.label}] ${d.name} (${d.doc_code})`,
+    type: t.type,
+    taskType: t.taskType,
+    assigneeId,
+    assignee_id: assigneeId,
+    assigneeName: nameOf(users, assigneeId),
+    requesterId: d.requester_id,
+    department: d.department,
+    status: 'PENDING',
+    createdAt: d[t.since] || d.created_at
+  };
+};
+
 export const loadDars = async () => {
   const { dars } = await apiGet('/api/dars');
-  const users = useStore.getState().masterUsers || [];
+  const { masterUsers, currentUser } = useStore.getState();
+  const users = masterUsers || [];
   const mapped = dars.map((d) => toStoreDar(d, users));
-  useStore.setState({ dars: mapped, darRequests: mapped, timeline: dars.flatMap((d) => toTimeline(d, users)) });
+  useStore.setState({
+    dars: mapped,
+    darRequests: mapped,
+    timeline: dars.flatMap((d) => toTimeline(d, users)),
+    tasks: dars.map((d) => toTask(d, users, currentUser)).filter(Boolean)
+  });
+};
+
+// API-mode twin of darSlice.processWorkflow. Throws with the server's reason so the task page stays open.
+export const decideTask = async (taskId, action, comment) => {
+  const task = useStore.getState().tasks.find((t) => t.id === taskId);
+  if (!task) throw new Error('ไม่พบงานนี้ กรุณาโหลดหน้าใหม่');
+  // The API has no send-back state: RETURN and REJECT both close the DAR, and the requester submits a new one.
+  const decision = action === 'APPROVE' ? 'APPROVE' : 'REJECT';
+  try {
+    await apiPost(`/api/dars/${task.darId}/decision`, { decision, comment });
+  } finally {
+    await loadDars().catch(() => {});
+  }
+};
+
+export const publishDarToApi = async (dar) => {
+  try {
+    await apiPost(`/api/dars/${dar.apiId}/publish`);
+    toast.success(dar.type === 'OBSOLETE' ? 'ยกเลิกเอกสารเรียบร้อย' : 'ประกาศใช้เอกสารเรียบร้อย');
+  } catch (err) {
+    toast.error(err.message);
+  }
+  await Promise.all([loadDars(), loadDocuments()]).catch(() => {});
 };
 
 // API-mode twin of darSlice.submitDar: returns the stored DAR, or null after showing the server's reason.
@@ -121,6 +187,8 @@ export const submitDarToApi = async (dar, file) => {
     toast.error(err.message);
     return null;
   }
+  // The server numbers NEW documents; the form's preview can be overtaken by another request.
+  if (type === 'NEW' && created.doc_code !== docCode) toast(`ระบบออกรหัสเอกสารให้เป็น ${created.doc_code}`, { icon: 'ℹ️' });
   if (file && type !== 'OBSOLETE') {
     try {
       await apiUpload(`/api/dars/${created.id}/file`, file);

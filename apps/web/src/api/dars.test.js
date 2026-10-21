@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { toStoreDar, submitDarToApi } from './dars';
+import { toStoreDar, toTask, submitDarToApi, decideTask } from './dars';
 import useStore from '../store/useStore';
 
 const users = [{ id: 'req', name: 'ผู้ขอ' }, { id: 'rev', name: 'ผู้ทบทวน' }, { id: 'app', name: 'ผู้อนุมัติ' }];
@@ -61,5 +61,28 @@ describe('submitDarToApi', () => {
     vi.stubGlobal('fetch', fetch);
     expect(await submitDarToApi({ type: 'NEW', docCode: 'SOP-QA-009', docType: 'SOP', workflowSteps: [{ role: 'REVIEWER', userId: 'rev' }, { role: 'APPROVER', userId: null }] })).toBeNull();
     expect(fetch).not.toHaveBeenCalled();
+  });
+});
+
+describe('API DAR tasks', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('derives the pending task from the DAR status', () => {
+    expect(toTask(row, users)).toMatchObject({ id: 'api-dar-7-review', type: 'Review', assigneeId: 'rev', darId: '7', requesterId: 'req' });
+    expect(toTask({ ...row, status: 'PENDING_APPROVAL' }, users)).toMatchObject({ type: 'Approve', assigneeId: 'app' });
+    // Publishing is any DCC member's job, so only a DCC viewer gets the task.
+    expect(toTask({ ...row, status: 'PENDING_DCC' }, users, { id: 'dcc', isDcc: true })).toMatchObject({ type: 'DCC_PUBLISH', assigneeId: 'dcc' });
+    expect(toTask({ ...row, status: 'PENDING_DCC' }, users, { id: 'req' })).toBeNull();
+    expect(toTask({ ...row, status: 'COMPLETED' }, users, { id: 'dcc', isDcc: true })).toBeNull();
+  });
+
+  it('sends a send-back as REJECT and keeps the page open on refusal', async () => {
+    useStore.setState({ currentUser: { id: 'rev' }, masterUsers: users, tasks: [toTask(row, users)] });
+    const fetch = vi.fn((url, init) => (init?.method === 'POST' ? json(409, { error: 'คำขอนี้ถูกพิจารณาไปแล้ว' }) : json(200, { dars: [] })));
+    vi.stubGlobal('fetch', fetch);
+    await expect(decideTask('api-dar-7-review', 'RETURN', 'แก้ขั้นตอน')).rejects.toThrow('ถูกพิจารณาไปแล้ว');
+    expect(fetch.mock.calls[0][0]).toMatch(/\/api\/dars\/7\/decision$/);
+    expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ decision: 'REJECT', comment: 'แก้ขั้นตอน' });
+    expect(useStore.getState().tasks).toEqual([]); // reloaded, so the stale task is gone
   });
 });

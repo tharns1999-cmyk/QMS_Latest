@@ -169,19 +169,20 @@ app.post('/api/dars', requireAuth, async (c) => {
   const type = str('type').toUpperCase();
   const docCode = str('doc_code').toUpperCase();
   if (!DAR_TYPES.includes(type)) return c.json({ error: 'ประเภทคำขอไม่ถูกต้อง' }, 400);
-  if (!/^[A-Z0-9-]+$/.test(docCode)) return c.json({ error: 'รหัสเอกสารไม่ถูกต้อง' }, 400);
   if (!str('reason')) return c.json({ error: 'กรุณาระบุเหตุผลของคำขอ' }, 400);
 
-  // NEW takes its metadata from the request; REVISION/OBSOLETE take it from the effective document.
-  const current = await db.prepare("SELECT * FROM documents WHERE doc_code = ? AND status = 'EFFECTIVE'").bind(docCode).first();
+  // NEW takes its metadata from the request and its code from the server; REVISION/OBSOLETE take both from the effective document.
   let doc;
   if (type === 'NEW') {
-    if (await db.prepare('SELECT 1 FROM documents WHERE doc_code = ?').bind(docCode).first()) return c.json({ error: 'รหัสเอกสารนี้มีอยู่แล้ว' }, 409);
     const scope = str('access_scope').toUpperCase() || 'DEPT';
     if (!str('name') || !str('doc_type') || !str('department')) return c.json({ error: 'กรุณากรอกชื่อ ประเภท และแผนกของเอกสาร' }, 400);
     if (!['GENERAL', 'DEPT'].includes(scope)) return c.json({ error: 'ขอบเขตการเข้าถึงไม่ถูกต้อง' }, 400);
     doc = { doc_type: str('doc_type').toUpperCase(), department: str('department').toUpperCase(), name: str('name'), access_scope: scope, revision: '00' };
+    // They become the code prefix, which is matched with GLOB below.
+    if (!/^[A-Z0-9]+$/.test(doc.doc_type) || !/^[A-Z0-9]+$/.test(doc.department)) return c.json({ error: 'ประเภทหรือแผนกของเอกสารไม่ถูกต้อง' }, 400);
   } else {
+    if (!/^[A-Z0-9-]+$/.test(docCode)) return c.json({ error: 'รหัสเอกสารไม่ถูกต้อง' }, 400);
+    const current = await db.prepare("SELECT * FROM documents WHERE doc_code = ? AND status = 'EFFECTIVE'").bind(docCode).first();
     if (!current) return c.json({ error: 'ไม่พบเอกสารฉบับที่มีผลบังคับใช้' }, 404);
     doc = { ...current, name: type === 'REVISION' && str('name') ? str('name') : current.name, revision: type === 'REVISION' ? nextRevision(current.revision) : null };
   }
@@ -201,12 +202,20 @@ app.post('/api/dars', requireAuth, async (c) => {
     ?? checkDecisionRights(toPublicUser(find(approverId)), { ...decision, stage: 'APPROVE' }, thresholds);
   if (problem) return c.json({ error: problem }, 400);
 
+  // A NEW code is TYPE-DEPT-NN, one past the highest number ever issued (documents and DARs, rejected ones included),
+  // so numbers are never reused. It is computed inside the INSERT, so concurrent requests cannot take the same number.
+  const prefix = `${doc.doc_type}-${doc.department}-`;
+  const [codeSql, codeArgs] = type === 'NEW'
+    ? [`? || printf('%02d', 1 + (SELECT COALESCE(MAX(CAST(substr(doc_code, length(?) + 1) AS INTEGER)), 0)
+        FROM (SELECT doc_code FROM documents UNION ALL SELECT doc_code FROM dars) WHERE doc_code GLOB ? || '[0-9]*'))`, [prefix, prefix, prefix]]
+    : ['?', [docCode]];
   try {
     const [inserted] = await db.batch([
       db.prepare(`INSERT INTO dars (type, doc_code, doc_type, department, revision, name, access_scope, reason, requester_id, reviewer_id, approver_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`)
-        .bind(type, docCode, doc.doc_type, doc.department, doc.revision, doc.name, doc.access_scope, str('reason'), user.id, reviewerId, approverId),
-      audit(db, user.id, 'DAR_SUBMITTED', { type, doc_code: docCode })
+        VALUES (?, ${codeSql}, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`)
+        .bind(type, ...codeArgs, doc.doc_type, doc.department, doc.revision, doc.name, doc.access_scope, str('reason'), user.id, reviewerId, approverId),
+      db.prepare(`INSERT INTO audit_log (actor_id, action, details)
+        SELECT ?, 'DAR_SUBMITTED', json_object('type', type, 'doc_code', doc_code, 'dar_id', id) FROM dars WHERE id = last_insert_rowid()`).bind(user.id)
     ]);
     return c.json({ dar: inserted.results[0] }, 201);
   } catch (err) {

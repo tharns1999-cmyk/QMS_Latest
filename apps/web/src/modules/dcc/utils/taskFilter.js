@@ -201,7 +201,8 @@ export const isLevel1To5 = (user) => {
 export const isReceiptTask = (task) => {
   if (!task) return false;
   const normType = (task.type || task.taskType || task.task_type || task.category || '').toUpperCase();
-  const title = String(task.title || '');
+  // A DAR task's title carries the document's name, which may itself contain "ตรวจรับ".
+  const title = task.referenceType === 'INTERNAL_DAR' ? '' : String(task.title || '');
   return (
     normType === 'RECEIPT' || 
     normType === 'DEPT_CONFIRM_HARDCOPY_RECEIPT' || 

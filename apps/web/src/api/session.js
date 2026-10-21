@@ -71,7 +71,7 @@ export const restoreSession = async () => start((await apiGet('/api/auth/me')).u
 // Server data must not outlive the session in this browser.
 export const clearSession = () => {
   setToken(null);
-  useStore.setState({ documents: [], dars: [], darRequests: [], timeline: [] });
+  useStore.setState({ documents: [], dars: [], darRequests: [], timeline: [], tasks: [] });
 };
 
 export const logout = () => window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));

@@ -153,7 +153,8 @@ const DarList = () => {
     
     if (activeTask) {
       const taskRoute = activeTask.type === 'Review' ? `/tasks/review/${activeTask.id}` : 
-                        activeTask.type === 'Approve' ? `/tasks/approve/${activeTask.id}` : `/tasks/ack/${activeTask.id}`;
+                        activeTask.type === 'Approve' ? `/tasks/approve/${activeTask.id}` :
+                        activeTask.type === 'DCC_PUBLISH' ? `/dar/${dar.id}` : `/tasks/ack/${activeTask.id}`;
       return (
         <div className="flex items-center justify-center">
           <button 
