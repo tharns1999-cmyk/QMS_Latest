@@ -393,10 +393,10 @@ const DarDetail = () => {
                     </p>
                   </div>
                   <span className={`text-[10px] font-medium shrink-0 inline-flex items-center gap-1 ${
-                    dar.ackRequirement === 'REQUIRED' ? 'text-amber-700' : 'text-slate-500'
+                    getActor('Acknowledged') !== '-' ? 'text-emerald-700' : dar.ackRequirement === 'REQUIRED' ? 'text-amber-700' : 'text-slate-500'
                   }`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${dar.ackRequirement === 'REQUIRED' ? 'bg-amber-500' : 'bg-slate-400'}`} />
-                    {dar.ackRequirement === 'REQUIRED' ? 'Required' : 'Optional'}
+                    <span className={`w-1.5 h-1.5 rounded-full ${getActor('Acknowledged') !== '-' ? 'bg-emerald-500' : dar.ackRequirement === 'REQUIRED' ? 'bg-amber-500' : 'bg-slate-400'}`} />
+                    {getActor('Acknowledged') !== '-' ? 'รับทราบแล้ว' : dar.ackRequirement === 'REQUIRED' ? 'Required' : 'Optional'}
                   </span>
                 </div>
               </div>

@@ -145,6 +145,7 @@ export const submitExternalToApi = async ({ payload, fileBlob, documentToEdit, i
     issuer: payload.issuer || payload.source,
     edition: payload.sourceVersion || payload.edition,
     review_cycle_months: payload.reviewCycleMonths,
+    ack_user_ids: type === 'OBSOLETE' ? [] : payload.acknowledgees || [],
     distributions: payload.is_physical_copy ? distributionsOf({ type, docType: 'ED' }, calculateCopyAllocations(department, payload.distributions || []).allAllocations) : []
   };
   if (type !== 'NEW') delete body.access_scope;

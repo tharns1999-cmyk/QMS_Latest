@@ -7,6 +7,7 @@ import { isDarDraft } from '../modules/dcc/utils/darHelper';
 import { calculateCopyAllocations } from '../modules/dcc/services/MasterDataService';
 import { distributionsOf, loadCopies } from './copies';
 import { isExternalRow, setExternalSources } from './external';
+import { loadAcknowledgements } from './acknowledgements';
 
 // The pages key their badges and handler logic on the demo status names.
 const STATUS_FROM_API = { PENDING_REVIEW: 'UNDER_REVIEW', PENDING_DCC: 'APPROVED_WAITING_EFFECTIVE' };
@@ -28,8 +29,15 @@ const stageStatus = (d, at, isApprover) => {
 
 export const toStoreDar = (d, users) => {
   const filePath = d.file_key ? `/api/dars/${d.id}/file` : null;
+  const ackUserIds = JSON.parse(d.ack_user_ids || '[]');
   return {
     ...d,
+    // The pages read a list; the server keeps it as JSON text.
+    distributions: JSON.parse(d.distributions || '[]').map((x, i) => ({ departmentId: x.department, locationId: x.location_id, locationName: x.location_name, copyNo: String(i + 1).padStart(2, '0') })),
+    ackUserIds,
+    ackUserId: ackUserIds[0] || null,
+    ackRequirement: ackUserIds.length ? 'REQUIRED' : 'NOT_REQUIRED',
+    requireAck: ackUserIds.length > 0,
     id: String(d.id),
     apiId: d.id,
     apiStatus: d.status,
@@ -121,7 +129,7 @@ export const toTask = (d, users) => {
 };
 
 export const loadDars = async () => {
-  const { dars: all } = await apiGet('/api/dars');
+  const [{ dars: all }, acks] = await Promise.all([apiGet('/api/dars'), loadAcknowledgements()]);
   // External documents have their own pages; they read what api/external.js builds.
   const dars = all.filter((d) => !isExternalRow(d));
   const { masterUsers } = useStore.getState();
@@ -132,8 +140,8 @@ export const loadDars = async () => {
   useStore.setState({
     dars: mapped,
     darRequests: mapped,
-    timeline: dars.flatMap((d) => toTimeline(d, users)),
-    tasks: [...dars.map((d) => toTask(d, users)).filter(Boolean), ...(useStore.getState().tasks || []).filter((t) => String(t.id).startsWith('api-cc-'))]
+    timeline: [...dars.flatMap((d) => toTimeline(d, users)), ...acks.timeline(users)],
+    tasks: [...dars.map((d) => toTask(d, users)).filter(Boolean), ...acks.tasks(), ...(useStore.getState().tasks || []).filter((t) => /^api-(cc|rev)-/.test(String(t.id)))]
   });
   setExternalSources({ darRows: all.filter(isExternalRow) });
 };
@@ -182,6 +190,7 @@ export const submitDarToApi = async (dar, file) => {
       reason: dar.reason || dar.requestReason,
       effective_date: dar.effectiveDate || dar.effective_date,
       distributions: distributionsOf({ type, docType }, calculateCopyAllocations(dar.department, dar.distributions || []).allAllocations),
+      ack_user_ids: dar.ackRequirement === 'REQUIRED' ? dar.ackUserIds || [] : [],
       reviewer_id: reviewerId,
       approver_id: approverId
     }));
