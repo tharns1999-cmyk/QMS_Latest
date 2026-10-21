@@ -119,13 +119,13 @@ export const resolveProgressiveSignatories = ({
   const reqHistory = history.find(h => h.role === 'REQUESTER' || h.step === 1 || h.action === 'SUBMIT' || h.action === 'REQUEST' || h.action === 'CREATE' || h.action === 'Created');
   const reqStepName = step1Def?.userName || step1Def?.name || step1Def?.assignedTo;
   const reqUserId = masterDoc?.signatories?.requester?.id || reqHistory?.userId || step1Def?.userId || dar?.requesterId || dar?.requester_id || masterDoc?.ownerId || masterDoc?.requesterId || currentUser?.id;
-  const reqNameFallback = masterDoc?.signatories?.requester?.name || reqHistory?.userName || reqStepName || dar?.created_by_name || dar?.requesterName || dar?.requester_name || masterDoc?.ownerName || masterDoc?.requesterName || masterDoc?.author || currentUser?.name || 'บีม';
+  const reqNameFallback = masterDoc?.signatories?.requester?.name || reqHistory?.userName || reqStepName || dar?.created_by_name || dar?.requesterName || dar?.requester_name || masterDoc?.ownerName || masterDoc?.requesterName || masterDoc?.author || currentUser?.name || '-';
   const reqProfile = getUserProfile(reqUserId, reqNameFallback);
 
   const requester = {
     title: 'ผู้จัดทำ',
-    name: reqProfile?.name || reqProfile?.fullName || reqStepName || dar?.created_by_name || dar?.requester_name || dar?.requesterName || reqNameFallback || 'บีม',
-    position: masterDoc?.signatories?.requester?.position || reqProfile?.position || reqProfile?.role || step1Def?.position || dar?.created_by_role || dar?.requester_role || dar?.requesterRole || dar?.requesterPosition || 'QAQC Supervisor',
+    name: reqProfile?.name || reqProfile?.fullName || reqStepName || dar?.created_by_name || dar?.requester_name || dar?.requesterName || reqNameFallback || '-',
+    position: masterDoc?.signatories?.requester?.position || reqProfile?.position || reqProfile?.role || step1Def?.position || dar?.created_by_role || dar?.requester_role || dar?.requesterRole || dar?.requesterPosition || '',
     date: formatSignatoryDate(masterDoc?.signatories?.requester?.date || reqHistory?.timestamp || step1Def?.timestamp || dar?.submitted_date || dar?.submittedAt || dar?.createdAt || dar?.created_at || dar?.date || masterDoc?.createdAt || new Date()),
     signatureImage: masterDoc?.signatories?.requester?.signatureImage || getSignatureAsset(reqProfile) || null,
     isCompleted: true,

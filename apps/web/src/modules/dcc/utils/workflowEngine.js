@@ -46,6 +46,11 @@ export const generateDynamicWorkflow = (requesterUser, docDepartment, allUsers =
   const levelOf = (u) => Number(u.level || u.approval_level) || 0;
   // Segregation of duties: ผู้จัดทำห้ามเป็นผู้ทบทวน/ผู้อนุมัติงานของตนเอง
   const isNotRequester = (u) => (u.id || u.userId) !== step1.userId;
+  // Same rule as the server (apps/api/src/approval.js): a signer belongs to the owning department or is cross-org
+  // (QMR, L6+, MGMT/EXEC), and DCC staff only sign for DC. Routing anyone else gets the request refused.
+  const isCrossOrg = (u) => Boolean(u.isQmr) || levelOf(u) >= 6 ||
+    ['MGMT', 'EXEC', 'QMR'].some((d) => [u.department, u.dept, u.primary_department, ...(u.depts || [])].some((x) => String(x || '').toUpperCase() === d));
+  const maySign = (u) => (!(u.isDcc || u.role === 'DCC_ADMIN') || String(docDepartment).toUpperCase() === 'DC') && (isMatchDept(u, docDepartment) || isCrossOrg(u));
 
   // 2. ค้นหาผู้ทบทวน (Step 2 - ผู้มีระดับต่ำสุดที่ผ่านเกณฑ์ในแผนกเดียวกัน)
   let reviewerUser = allUsers
@@ -55,7 +60,7 @@ export const generateDynamicWorkflow = (requesterUser, docDepartment, allUsers =
   // Fallback: หากแผนกนั้นไม่มีผู้ผ่านเกณฑ์ ให้ใช้ผู้บริหารฝ่ายคุณภาพ/ตัวแทนฝ่ายบริหาร (MGMT / L6)
   if (!reviewerUser) {
     reviewerUser = allUsers.find(u =>
-      isActive(u) && isNotRequester(u) &&
+      isActive(u) && isNotRequester(u) && maySign(u) &&
       (u.department === 'MGMT' || u.dept === 'MGMT' || u.role === 'QMR' || u.isQmr || levelOf(u) === 6)
     );
   }
@@ -72,7 +77,7 @@ export const generateDynamicWorkflow = (requesterUser, docDepartment, allUsers =
 
   // 3. ค้นหาผู้อนุมัติ (Step 3 - ระดับตามเกณฑ์ Approval Matrix, เน้น MGMT/EXEC)
   const reviewerUserId = reviewerUser?.id || reviewerUser?.userId;
-  const canApprove = (u) => isActive(u) && isNotRequester(u) && levelOf(u) >= minApproverLevel && (u.id || u.userId) !== reviewerUserId;
+  const canApprove = (u) => isActive(u) && isNotRequester(u) && maySign(u) && levelOf(u) >= minApproverLevel && (u.id || u.userId) !== reviewerUserId;
   let approverUser = allUsers.find(u =>
     canApprove(u) &&
     (u.department === 'MGMT' || u.department === 'EXEC' || u.dept === 'MGMT' || u.dept === 'EXEC')
