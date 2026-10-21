@@ -23,7 +23,7 @@ const StatusBadge = ({ status }) => (
 );
 
 // Shown once: the server never keeps or returns a temporary password again.
-const PasswordNotice = ({ notice, onClose }) => (
+export const PasswordNotice = ({ notice, onClose }) => (
   <div role="dialog" aria-label="รหัสผ่านชั่วคราว" className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
     <div className="bg-white rounded-xl p-5 max-w-md w-full space-y-3">
       <h2 className="text-base font-bold text-slate-900">รหัสผ่านชั่วคราวของ {notice.name}</h2>
@@ -290,7 +290,7 @@ const MatrixTab = () => {
 };
 
 // Who must sign in with an authenticator app. Both values are kept by the server; nothing about levels is fixed in the app.
-const SecurityTab = () => {
+export const SecurityTab = () => {
   const [policy, setPolicy] = useState(null);
   const [error, setError] = useState('');
   useEffect(() => { getSecurityPolicy().then(setPolicy, (err) => setError(err.message)); }, []);

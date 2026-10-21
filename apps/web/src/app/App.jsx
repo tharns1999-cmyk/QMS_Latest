@@ -54,7 +54,7 @@ const Viewer = lazy(() => import('../modules/dcc/pages/Library/Viewer'));
 const Reports = lazy(() => import('../modules/dcc/pages/Admin/Reports'));
 const ActionLog = lazy(() => import('../modules/dcc/pages/Admin/ActionLog'));
 // Connected to the server, the page that saves on the server replaces the browser-only demo hub.
-const MasterDataHub = lazy(isApiMode ? () => import('../modules/dcc/pages/Admin/ApiMasterData') : () => import('../modules/dcc/pages/Admin/MasterDataHub'));
+const MasterDataHub = lazy(() => import('../modules/dcc/pages/Admin/MasterDataHub'));
 const ControlledCopyRegister = lazy(() => import('../modules/dcc/pages/ControlledCopy/ControlledCopyRegister'));
 const ExternalDocsList = lazy(() => import('../modules/dcc/pages/ExternalDocs/ExternalDocsList'));
 const MyExternalRequests = lazy(() => import('../modules/dcc/pages/ExternalDocs/MyExternalRequests'));
