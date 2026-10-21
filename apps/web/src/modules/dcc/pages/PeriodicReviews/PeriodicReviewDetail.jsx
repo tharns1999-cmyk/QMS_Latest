@@ -12,6 +12,8 @@ import { resolveReviewContext, normalizeReviewUser } from './resolveReviewContex
 import { getDetailStatusLabel } from './reviewDetailStatus';
 import DocumentDetailModal from '../../components/workflow/DocumentDetailModal';
 import ExternalDocDetailModal from '../ExternalDocs/ExternalDocDetailModal';
+import { isApiMode } from '../../../../api/client';
+import { submitReviewToApi, decideReviewOnApi } from '../../../../api/reviews';
 
 const PeriodicReviewDetail = () => {
   const { reviewId, docCode, id: routeParamId } = useParams();
@@ -182,7 +184,13 @@ const PeriodicReviewDetail = () => {
     );
   }
 
-  const handleApproveReview = () => {
+  const handleApproveReview = async () => {
+    if (isApiMode) {
+      if (await decideReviewOnApi({ docId: doc?.id || schedule.documentId || schedule.externalDocumentId, decision: 'APPROVE', comment: 'อนุมัติผลการทบทวน' })) {
+        toast.success('อนุมัติผลการทบทวนเรียบร้อยแล้ว');
+      }
+      return;
+    }
     const storeState = useStore.getState();
     const currentTasks = storeState.tasks || [];
     const approvalTask = currentTasks.find(t => 
@@ -272,13 +280,33 @@ const PeriodicReviewDetail = () => {
     navigate(route, { state: { prefillDocId: schedule.documentId || schedule.externalDocumentId, prefillReviewId: schedule.id } });
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!outcome) {
       toast.error('กรุณาเลือกผลการทบทวน');
       return;
     }
     if (comment.length < 5) {
       toast.error('กรุณาระบุเหตุผล/รายละเอียดการทบทวน');
+      return;
+    }
+
+    if (isApiMode) {
+      // The server records the review and decides who signs it; a revision or withdrawal then continues in its own request.
+      const saved = await submitReviewToApi({
+        docId: doc?.id || schedule.externalDocumentId || schedule.documentId,
+        outcome,
+        comment,
+        details: { findings, standard_clause: standards, evidence_reference: references, additional_comment: additionalComments }
+      });
+      if (!saved) return;
+      setIsReEvaluating(false);
+      if (outcome === 'REVISION_REQUIRED' || outcome === 'OBSOLETE_REQUIRED') {
+        toast.success('บันทึกผลการทบทวนเรียบร้อยแล้ว');
+        handleLinkedAction(outcome === 'REVISION_REQUIRED' ? 'REVISION' : 'OBSOLETE');
+      } else {
+        toast.success(saved.status === 'COMPLETED' ? 'อนุมัติผลการทบทวนเรียบร้อยแล้ว (ขยายรอบการทบทวน)' : 'ส่งผลการทบทวนไปยังผู้อนุมัติเรียบร้อยแล้ว');
+        navigate(taskId ? '/tasks' : '/dcc/periodic-reviews');
+      }
       return;
     }
 

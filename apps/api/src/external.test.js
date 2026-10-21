@@ -55,8 +55,10 @@ describe('external documents (doc_type ED) through the request pipeline', () => 
     expect(await doc(code)).toMatchObject({ revision: '01', ext_issuer: 'ISO', ext_edition: '2020', review_cycle_months: 6 });
   });
 
-  it('leaves internal documents without external fields', async () => {
+  it('leaves internal documents without external fields, on the default cycle for their type', async () => {
     const dar = await run({ type: 'NEW', doc_type: 'WI', department: 'EXT', name: 'ภายใน' });
-    expect(await doc(dar.doc_code)).toMatchObject({ ext_issuer: null, review_cycle_months: null, next_review_date: null });
+    const wi = await doc(dar.doc_code);
+    expect(wi).toMatchObject({ ext_issuer: null, ext_edition: null, review_cycle_months: 24 });
+    expect(wi.next_review_date).toBe(`${Number(wi.effective_date.slice(0, 4)) + 2}${wi.effective_date.slice(4)}`);
   });
 });

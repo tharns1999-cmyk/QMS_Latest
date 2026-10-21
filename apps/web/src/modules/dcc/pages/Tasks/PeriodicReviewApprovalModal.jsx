@@ -9,6 +9,8 @@ import {
 import useStore from '../../../../store/useStore';
 import toast from 'react-hot-toast';
 import { getCycleDisplayText } from '../../utils/documentUtils';
+import { isApiMode } from '../../../../api/client';
+import { decideReviewOnApi } from '../../../../api/reviews';
 
 export default function PeriodicReviewApprovalModal({ isOpen, onClose, task }) {
   const { currentUser, approvePeriodicReview, rejectPeriodicReview, documents, externalDocuments, periodicReviewSchedules } = useStore();
@@ -36,7 +38,17 @@ export default function PeriodicReviewApprovalModal({ isOpen, onClose, task }) {
   const docInfo = targetDoc || targetSchedule || payload;
   const cycleText = getCycleDisplayText(docInfo);
 
+  const decideOnApi = async (decision, success) => {
+    setIsSubmitting(true);
+    if (await decideReviewOnApi({ reviewId: task.reviewId, docId: task.docId, decision, comment: remarks.trim() })) {
+      toast.success(success);
+      onClose();
+    }
+    setIsSubmitting(false);
+  };
+
   const handleApprove = () => {
+    if (isApiMode) return decideOnApi('APPROVE', `อนุมัติผลการทบทวนเอกสารเรียบร้อยแล้ว (ขยายรอบ ${cycleText})`);
     setIsSubmitting(true);
     try {
       approvePeriodicReview({
@@ -58,6 +70,7 @@ export default function PeriodicReviewApprovalModal({ isOpen, onClose, task }) {
       toast.error('กรุณาระบุเหตุผลที่ตีกลับแก้ไข');
       return;
     }
+    if (isApiMode) return decideOnApi('REJECT', 'ตีกลับผลการทบทวนให้ผู้จัดทำเรียบร้อยแล้ว');
     setIsSubmitting(true);
     try {
       rejectPeriodicReview({

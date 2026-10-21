@@ -3,6 +3,7 @@
  * Extracted from useStore.js (Phase 2 Refactor)
  */
 import toast from 'react-hot-toast';
+import { isApiMode } from '../../../api/client';
 import { 
   generateSchedules, 
   generateTasksForSchedules, 
@@ -207,7 +208,9 @@ export const createPeriodicReviewSlice = (set, get) => ({
         const pending = item.review_status === 'PENDING_APPROVAL' || (isSchedule && item.status === 'PENDING_APPROVAL') || Boolean(item.pending_periodic_review || item.pendingReview);
         // A pending review whose approval task is still open belongs to this cycle — keep it
         const approvalTaskId = item.pendingApprovalTaskId || item.pending_review_task_id;
-        if (!completed && !(pending && !openTaskIds.has(approvalTaskId))) return null;
+        // An API approval task lives only in its approver's inbox, so its absence here does not mean it was closed
+        const approvalOpen = openTaskIds.has(approvalTaskId) || String(approvalTaskId || '').startsWith('api-rev-');
+        if (!completed && !(pending && !approvalOpen)) return null;
         const dueDate = new Date(due);
         dueDate.setHours(0, 0, 0, 0);
         if (isNaN(dueDate.getTime()) || Math.ceil((dueDate - today) / 86400000) > 30) return null;
@@ -981,7 +984,13 @@ export const createPeriodicReviewSlice = (set, get) => ({
     return { periodicReviewSchedules: schedules };
   }),
 
-  resetPendingReviewIntent: (docIdOrCode) => set(state => {
+  resetPendingReviewIntent: (docIdOrCode) => {
+    // API mode: the open review lives on the server, so it is dropped there; the local reset below only tidies this browser's view.
+    if (isApiMode && docIdOrCode) import('../../../api/reviews').then(m => m.cancelOpenReview(String(docIdOrCode)));
+    return get().resetPendingReviewLocal(docIdOrCode);
+  },
+
+  resetPendingReviewLocal: (docIdOrCode) => set(state => {
     if (!docIdOrCode) return state;
 
     const targetKey = String(docIdOrCode).trim();

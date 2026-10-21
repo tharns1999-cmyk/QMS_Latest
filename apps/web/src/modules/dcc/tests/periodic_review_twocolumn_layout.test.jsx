@@ -80,7 +80,7 @@ describe('PeriodicReviewDetail - Two-Column Layout & Compact UI', () => {
     expect(screen.getByText('แผนกเจ้าของ')).toBeInTheDocument();
     expect(screen.getByText('PD')).toBeInTheDocument();
     expect(screen.getByText('ผู้รับผิดชอบ / เจ้าของ')).toBeInTheDocument();
-    expect(screen.getByText('U005')).toBeInTheDocument();
+    expect(screen.getByText('บีม')).toBeInTheDocument(); // the owner is shown by name, not by id
     expect(screen.getByText('วันที่มีผลบังคับใช้')).toBeInTheDocument();
     expect(screen.getByText(formatQmsDisplayDate('2025-01-15'))).toBeInTheDocument();
     expect(screen.getByText('วันที่ครบกำหนดรอบนี้')).toBeInTheDocument();

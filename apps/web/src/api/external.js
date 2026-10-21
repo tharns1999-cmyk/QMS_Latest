@@ -3,6 +3,7 @@ import useStore from '../store/useStore';
 import { apiPost, apiUpload } from './client';
 import { calculateCopyAllocations } from '../modules/dcc/services/MasterDataService';
 import { distributionsOf, loadCopies } from './copies';
+import { applyReviews } from './reviews';
 
 // External documents (doc_type ED) travel through the same request pipeline as internal ones on the server;
 // the external pages read the demo's externalDocuments / externalRequests / tasks, so they are rebuilt from both lists here.
@@ -114,6 +115,8 @@ export const setExternalSources = ({ docs, darRows }) => {
     externalRequests: dars.map((r) => toStoreExternalRequest(r, docIdFor(r), users)),
     tasks: [...(tasks || []).filter((t) => t.referenceType !== 'EXTERNAL_DOC'), ...dars.map((r) => toExternalTask(r, docIdFor(r), users)).filter(Boolean)]
   });
+  // The documents were just rebuilt, so the review flags are laid over them again.
+  applyReviews();
 };
 
 export const clearExternal = () => {
