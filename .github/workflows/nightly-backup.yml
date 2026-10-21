@@ -82,6 +82,7 @@ jobs:
 
       - name: Copy the controlled PDFs (never deletes)
         run: |
+          rclone mkdir safe:files # an empty bucket would otherwise leave nothing to measure
           rclone copy r2:qms-files safe:files --transfers 8
           source_count=$(rclone size r2:qms-files --json | jq .count)
           backup_count=$(rclone size safe:files --json | jq .count)
