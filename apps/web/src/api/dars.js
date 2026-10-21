@@ -3,6 +3,7 @@ import useStore from '../store/useStore';
 import { apiGet, apiPost, apiUpload } from './client';
 import { loadDocuments } from './session';
 import { resolveReviewer, resolveApprover } from '../modules/dcc/utils/workflowResolver';
+import { isDarDraft } from '../modules/dcc/utils/darHelper';
 
 // The pages key their badges and handler logic on the demo status names.
 const STATUS_FROM_API = { PENDING_REVIEW: 'UNDER_REVIEW', PENDING_DCC: 'APPROVED_WAITING_EFFECTIVE' };
@@ -120,7 +121,9 @@ export const loadDars = async () => {
   const { dars } = await apiGet('/api/dars');
   const { masterUsers, currentUser } = useStore.getState();
   const users = masterUsers || [];
-  const mapped = dars.map((d) => toStoreDar(d, users));
+  // Drafts exist only in this browser (the server has no draft status); keep them or opening the list would wipe them.
+  const drafts = (useStore.getState().dars || []).filter(isDarDraft);
+  const mapped = [...drafts, ...dars.map((d) => toStoreDar(d, users))];
   useStore.setState({
     dars: mapped,
     darRequests: mapped,
