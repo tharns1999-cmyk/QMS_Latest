@@ -15,6 +15,8 @@ import {
   Activity
 } from 'lucide-react';
 import dayjs from 'dayjs';
+import { isApiMode } from '../../../../api/client';
+import ApiAdminPanel from './ApiAdminPanel';
 import { TablePagination } from '../../../../shared/components/common/TablePagination';
 import { useTablePagination } from '../../../../shared/hooks/useTablePagination';
 
@@ -335,6 +337,8 @@ const ActionLog = () => {
           <Download size={16} /> ส่งออกไฟล์ CSV (Excel)
         </button>
       </div>
+
+      {isApiMode && <ApiAdminPanel />}
 
       {/* Filter Tabs */}
       <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">

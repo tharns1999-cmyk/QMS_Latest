@@ -60,13 +60,26 @@ const start = async (user) => {
   await Promise.all([loadDocuments(), loadDars()]);
 };
 
+// A user whose password was set by an admin must change it first; the server refuses everything else until then.
 export const login = async (email, password) => {
   const { token, user } = await apiPost('/api/auth/login', { email, password });
   setToken(token);
-  await start(user);
+  if (!user.mustChangePassword) await start(user);
+  return user;
 };
 
-export const restoreSession = async () => start((await apiGet('/api/auth/me')).user);
+export const restoreSession = async () => {
+  const { user } = await apiGet('/api/auth/me');
+  if (!user.mustChangePassword) await start(user);
+  return user;
+};
+
+// The server signs out every older token on a change and returns a fresh one.
+export const changePassword = async (current, next, { loadData = false } = {}) => {
+  const { token, user } = await apiPost('/api/auth/change-password', { current_password: current, new_password: next });
+  setToken(token);
+  if (loadData) await start(user);
+};
 
 // Server data must not outlive the session in this browser.
 export const clearSession = () => {

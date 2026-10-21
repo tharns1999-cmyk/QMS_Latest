@@ -11,15 +11,15 @@ if (!email || !name || !department || !(Number(level) >= 1 && Number(level) <= 8
 }
 
 const rl = createInterface({ input: process.stdin, output: process.stderr });
-const password = await rl.question('Password (at least 8 characters): ');
+const password = await rl.question('Initial password (at least 12 characters; the user must change it at first login): ');
 rl.close();
-if (password.length < 8) {
-  console.error('Password must be at least 8 characters.');
+if (password.length < 12) {
+  console.error('Password must be at least 12 characters.');
   process.exit(1);
 }
 
 const quote = (value) => `'${String(value).replaceAll("'", "''")}'`;
 const values = [crypto.randomUUID(), name, email, await hashPassword(password), role, Number(level), department, JSON.stringify([department]), role === 'DCC_ADMIN' ? 1 : 0];
 mkdirSync('.wrangler', { recursive: true });
-writeFileSync('.wrangler/new-user.sql', `INSERT INTO users (id, name, email, password_hash, role, approval_level, primary_department, departments, is_dcc) VALUES (${values.map(quote).join(', ')});\n`);
+writeFileSync('.wrangler/new-user.sql', `INSERT INTO users (id, name, email, password_hash, role, approval_level, primary_department, departments, is_dcc, must_change_password) VALUES (${values.map(quote).join(', ')}, 1);\n`);
 console.log('Wrote .wrangler/new-user.sql');
