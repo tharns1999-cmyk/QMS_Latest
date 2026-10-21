@@ -4,6 +4,7 @@ import { apiPost, apiUpload } from './client';
 import { calculateCopyAllocations } from '../modules/dcc/services/MasterDataService';
 import { distributionsOf, loadCopies } from './copies';
 import { applyReviews } from './reviews';
+import { knownUsers } from './people';
 
 // External documents (doc_type ED) travel through the same request pipeline as internal ones on the server;
 // the external pages read the demo's externalDocuments / externalRequests / tasks, so they are rebuilt from both lists here.
@@ -112,8 +113,7 @@ let dars = [];
 export const setExternalSources = ({ docs, darRows }) => {
   if (docs) documents = docs;
   if (darRows) dars = darRows;
-  const { masterUsers } = useStore.getState();
-  const users = masterUsers || [];
+  const users = knownUsers();
   const docIdFor = (r) => (r.type === 'NEW' ? `dar-${r.id}` : documents.find((d) => d.doc_code === r.doc_code && d.status === 'EFFECTIVE')?.id) || `dar-${r.id}`;
   const inFlight = dars.filter((r) => r.type === 'NEW' && ['PENDING_REVIEW', 'PENDING_APPROVAL', 'PENDING_DCC'].includes(r.status));
   const { tasks } = useStore.getState();

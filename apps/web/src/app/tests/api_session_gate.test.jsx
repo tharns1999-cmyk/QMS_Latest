@@ -19,6 +19,8 @@ describe('ApiSessionGate', () => {
     const fetch = vi.fn((url) => {
       if (url.endsWith('/api/auth/login')) return json(200, { token: 't1', user });
       if (url.endsWith('/api/users')) return json(200, { users: [user] });
+      if (url.endsWith('/api/departments')) return json(200, { departments: [{ code: 'QA', name_th: 'ประกันคุณภาพ', name_en: 'QA', status: 'ACTIVE' }] });
+      if (url.endsWith('/api/distribution-locations')) return json(200, { locations: [] });
       if (url.endsWith('/api/approval-matrix')) return json(200, { matrix: [{ doc_type: 'SOP', required_reviewer_level: 4 }] });
       if (url.endsWith('/api/dars')) return json(200, { dars: [] });
       if (url.endsWith('/api/controlled-copies')) return json(200, { copies: [] });
@@ -56,6 +58,8 @@ describe('ApiSessionGate', () => {
       if (url.endsWith('/api/auth/login')) return json(200, { token: 't1', user: { ...user, mustChangePassword: true } });
       if (url.endsWith('/api/auth/change-password')) return json(200, { token: 't2', user });
       if (url.endsWith('/api/users')) return json(200, { users: [user] });
+      if (url.endsWith('/api/departments')) return json(200, { departments: [{ code: 'QA', name_th: 'ประกันคุณภาพ', name_en: 'QA', status: 'ACTIVE' }] });
+      if (url.endsWith('/api/distribution-locations')) return json(200, { locations: [] });
       if (url.endsWith('/api/approval-matrix')) return json(200, { matrix: [] });
       if (url.endsWith('/api/dars')) return json(200, { dars: [] });
       if (url.endsWith('/api/controlled-copies')) return json(200, { copies: [] });

@@ -8,6 +8,7 @@ import { calculateCopyAllocations } from '../modules/dcc/services/MasterDataServ
 import { distributionsOf, loadCopies } from './copies';
 import { isExternalRow, setExternalSources } from './external';
 import { loadAcknowledgements } from './acknowledgements';
+import { knownUsers } from './people';
 
 // The pages key their badges and handler logic on the demo status names.
 const STATUS_FROM_API = { PENDING_REVIEW: 'UNDER_REVIEW', PENDING_DCC: 'APPROVED_WAITING_EFFECTIVE' };
@@ -142,8 +143,7 @@ export const loadDars = async () => {
   const [{ dars: all }, acks] = await Promise.all([apiGet('/api/dars'), loadAcknowledgements()]);
   // External documents have their own pages; they read what api/external.js builds.
   const dars = all.filter((d) => !isExternalRow(d));
-  const { masterUsers } = useStore.getState();
-  const users = masterUsers || [];
+  const users = knownUsers();
   // Drafts exist only in this browser (the server has no draft status); keep them or opening the list would wipe them.
   const drafts = (useStore.getState().dars || []).filter(isDarDraft);
   const mapped = [...drafts, ...dars.map((d) => toStoreDar(d, users))];

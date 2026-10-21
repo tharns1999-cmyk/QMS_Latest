@@ -36,6 +36,10 @@ const request = async (path, { method = 'GET', body, headers = {} } = {}) => {
 export const apiGet = async (path) => (await request(path)).json();
 export const apiPost = async (path, body = {}) =>
   (await request(path, { method: 'POST', body: JSON.stringify(body), headers: { 'Content-Type': 'application/json' } })).json();
+const sendJson = (method) => async (path, body) =>
+  (await request(path, { method, body: JSON.stringify(body), headers: { 'Content-Type': 'application/json' } })).json();
+export const apiPatch = sendJson('PATCH');
+export const apiPut = sendJson('PUT');
 export const apiUpload = async (path, file) =>
   (await request(path, { method: 'PUT', body: file, headers: { 'Content-Type': 'application/pdf' } })).json();
 export const apiBlob = async (path) => (await request(path)).blob();
