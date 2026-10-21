@@ -10,17 +10,18 @@ const PASSWORD = '1234';
 const DEPARTMENTS = { DC: 'dc', PD: 'pd', QC: 'qc', WH: 'wh', EN: 'en', PC: 'pc', 'HR&GA': 'hr', HSE: 'hse', MKT: 'mkt', ST: 'st', FIN: 'fin', MGMT: 'mg', EXEC: 'ex' };
 // Level 2 asks, 4 reviews, 6 approves (L6 covers every type but the Quality Manual, which needs 8).
 const ROLES = [[2, 'พนักงาน'], [4, 'หัวหน้า'], [6, 'ผู้จัดการ']];
+// DCC (L4) runs master data and admin alone, so dcc2 is the backup. The MGMT L6 manager is the QMR and the DCC's boss; DCC accounts are
+// kept out of the reviewer and approver pickers, so the boss is QMR rather than DCC.
 const EXTRA = [
-  { id: 'dcc', name: 'DCC หลัก', dept: 'DC', level: 5, dcc: 1, qmr: 0 },
-  { id: 'dcc2', name: 'DCC สำรอง', dept: 'DC', level: 5, dcc: 1, qmr: 0 },
-  { id: 'qmr', name: 'QMR', dept: 'MGMT', level: 6, dcc: 0, qmr: 1 },
+  { id: 'dcc', name: 'DCC หัวหน้า', dept: 'DC', level: 4, dcc: 1, qmr: 0 },
+  { id: 'dcc2', name: 'DCC สำรอง', dept: 'DC', level: 4, dcc: 1, qmr: 0 },
   { id: 'md', name: 'กรรมการผู้จัดการ', dept: 'EXEC', level: 8, dcc: 0, qmr: 0 }
 ];
 
 const q = (v) => `'${String(v).replaceAll("'", "''")}'`;
 const hash = await hashPassword(PASSWORD);
 const users = [
-  ...Object.entries(DEPARTMENTS).flatMap(([dept, prefix]) => ROLES.map(([level, title]) => ({ id: `${prefix}${level}`, name: `${dept} ${title}`, dept, level, dcc: 0, qmr: 0 }))),
+  ...Object.entries(DEPARTMENTS).flatMap(([dept, prefix]) => ROLES.map(([level, title]) => ({ id: `${prefix}${level}`, name: `${dept} ${title}`, dept, level, dcc: 0, qmr: dept === 'MGMT' && level === 6 ? 1 : 0 }))),
   ...EXTRA
 ];
 const sql = [
