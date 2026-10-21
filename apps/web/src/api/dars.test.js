@@ -72,7 +72,7 @@ describe('API DAR tasks', () => {
     expect(toTask(row, users)).toMatchObject({ id: 'api-dar-7-review', type: 'Review', assigneeId: 'rev', darId: '7', requesterId: 'req' });
     expect(toTask({ ...row, status: 'PENDING_APPROVAL' }, users)).toMatchObject({ type: 'Approve', assigneeId: 'app' });
     // Publishing is any DCC member's job, so only a DCC viewer gets the task.
-    expect(toTask({ ...row, status: 'PENDING_DCC' }, users, { id: 'dcc', isDcc: true })).toMatchObject({ type: 'DCC_PUBLISH', assigneeId: 'dcc' });
+    expect(toTask({ ...row, status: 'PENDING_DCC' }, users, { id: 'dcc', isDcc: true })).toBeNull(); // waits for its date, no one's task
     expect(toTask({ ...row, status: 'PENDING_DCC' }, users, { id: 'req' })).toBeNull();
     expect(toTask({ ...row, status: 'COMPLETED' }, users, { id: 'dcc', isDcc: true })).toBeNull();
   });

@@ -54,21 +54,17 @@ describe('DAR workflow API', () => {
     expect((await post('/api/dars', 'R-REQ', newDar({ reason: '' }))).status).toBe(400);
   });
 
-  it('runs NEW -> review -> approve -> publish, then a REVISION supersedes it', async () => {
+  it('runs NEW -> review -> approve (in force at once without a date), then a REVISION supersedes it', async () => {
     const created = await post('/api/dars', 'R-REQ', newDar());
     expect(created.status).toBe(201);
     const { id, doc_code: code } = created.body.dar;
 
     expect((await post(`/api/dars/${id}/decision`, 'R-APP', { decision: 'APPROVE' })).status).toBe(403); // not the reviewer
-    expect((await post(`/api/dars/${id}/publish`, 'R-DCC')).status).toBe(409);
     expect((await post(`/api/dars/${id}/decision`, 'R-REV', { decision: 'APPROVE' })).status).toBe(409); // no PDF yet
     expect((await upload(id, 'R-REQ')).status).toBe(200);
     expect((await post(`/api/dars/${id}/decision`, 'R-REV', { decision: 'APPROVE' })).body.dar.status).toBe('PENDING_APPROVAL');
     expect((await post(`/api/dars/${id}/decision`, 'R-REV', { decision: 'APPROVE' })).status).toBe(403);
-    expect((await post(`/api/dars/${id}/decision`, 'R-APP', { decision: 'APPROVE' })).body.dar.status).toBe('PENDING_DCC');
-    expect((await post(`/api/dars/${id}/publish`, 'R-REQ')).status).toBe(403);
-    expect((await post(`/api/dars/${id}/publish`, 'R-DCC')).body.dar.status).toBe('COMPLETED');
-    expect((await post(`/api/dars/${id}/publish`, 'R-DCC')).status).toBe(409);
+    expect((await post(`/api/dars/${id}/decision`, 'R-APP', { decision: 'APPROVE' })).body.dar.status).toBe('COMPLETED');
     expect((await get('/api/documents', 'R-REQ')).body.documents.map((d) => `${d.doc_code}/${d.revision}`)).toContain(`${code}/00`);
 
     const rev = (await post('/api/dars', 'R-REQ', { type: 'REVISION', doc_code: code.toLowerCase(), reason: 'ปรับขั้นตอน', reviewer_id: 'R-REV', approver_id: 'R-APP' })).body.dar;
@@ -77,7 +73,6 @@ describe('DAR workflow API', () => {
     await upload(rev.id, 'R-REQ');
     await post(`/api/dars/${rev.id}/decision`, 'R-REV', { decision: 'APPROVE' });
     await post(`/api/dars/${rev.id}/decision`, 'R-APP', { decision: 'APPROVE' });
-    expect((await post(`/api/dars/${rev.id}/publish`, 'R-DCC')).status).toBe(200);
     const list = async (s) => (await get(`/api/documents?status=${s}`, 'R-REQ')).body.documents.filter((d) => d.doc_code === code).map((d) => d.revision);
     expect(await list('EFFECTIVE')).toEqual(['01']);
     expect(await list('SUPERSEDED')).toEqual(['00']);
@@ -91,7 +86,6 @@ describe('DAR workflow API', () => {
     const obs = (await post('/api/dars', 'R-REQ', { type: 'OBSOLETE', doc_code: code, reason: 'เลิกใช้', reviewer_id: 'R-REV', approver_id: 'R-APP' })).body.dar;
     await post(`/api/dars/${obs.id}/decision`, 'R-REV', { decision: 'APPROVE' });
     await post(`/api/dars/${obs.id}/decision`, 'R-APP', { decision: 'APPROVE' });
-    expect((await post(`/api/dars/${obs.id}/publish`, 'R-DCC')).status).toBe(200);
     expect(await list('EFFECTIVE')).toEqual([]);
     expect(await list('OBSOLETE')).toEqual(['01']);
 
@@ -100,18 +94,34 @@ describe('DAR workflow API', () => {
     expect(actions).toContain('DOCUMENT_OBSOLETED');
   });
 
-  it('keeps the requested effective date through to the published document, never earlier than today', async () => {
+  it('puts a document in force on the requested date, never earlier than approval', async () => {
     expect((await post('/api/dars', 'R-REQ', newDar({ effective_date: '31/12/2027' }))).status).toBe(400);
-    for (const [asked, expected] of [['2099-01-01', '2099-01-01'], ['2001-01-01', new Date().toISOString().slice(0, 10)]]) {
+    const todayTh = new Date(Date.now() + 7 * 3600e3).toISOString().slice(0, 10);
+    const approve = async (asked) => {
       const { id, doc_code: code } = (await post('/api/dars', 'R-REQ', newDar({ effective_date: asked }))).body.dar;
-      expect((await get(`/api/dars`, 'R-REQ')).body.dars.find((d) => d.id === id).effective_date).toBe(asked);
       await upload(id, 'R-REQ');
       await post(`/api/dars/${id}/decision`, 'R-REV', { decision: 'APPROVE' });
-      await post(`/api/dars/${id}/decision`, 'R-APP', { decision: 'APPROVE' });
-      expect((await post(`/api/dars/${id}/publish`, 'R-DCC')).status).toBe(200);
-      const doc = (await env.DB.prepare('SELECT effective_date FROM documents WHERE doc_code = ?').bind(code).first());
-      expect(doc.effective_date).toBe(expected);
-    }
+      const dar = (await post(`/api/dars/${id}/decision`, 'R-APP', { decision: 'APPROVE' })).body.dar;
+      const doc = () => env.DB.prepare('SELECT effective_date FROM documents WHERE doc_code = ?').bind(code).first();
+      return { id, dar, doc };
+    };
+
+    const past = await approve('2001-01-01');
+    expect(past.dar.status).toBe('COMPLETED');
+    expect((await past.doc()).effective_date).toBe(todayTh);
+
+    const future = await approve('2099-01-01');
+    expect(future.dar.status).toBe('PENDING_DCC'); // approved, waiting for its date
+    expect(await future.doc()).toBeNull();
+    await get('/api/dars', 'R-REQ');
+    expect(await future.doc()).toBeNull();
+    // The date arrives: the next read (or the daily cron) puts it in force.
+    await env.DB.prepare('UPDATE dars SET effective_date = ? WHERE id = ?').bind(todayTh, future.id).run();
+    expect((await get('/api/dars', 'R-REQ')).body.dars.find((d) => d.id === future.id).status).toBe('COMPLETED');
+    expect((await future.doc()).effective_date).toBe(todayTh);
+    const audit = await env.DB.prepare("SELECT actor_id, details FROM audit_log WHERE action = 'DOCUMENT_PUBLISHED' AND json_extract(details, '$.dar_id') = ?").bind(future.id).all();
+    expect(audit.results).toHaveLength(1);
+    expect(audit.results[0].actor_id).toBeNull();
   });
 
   it('numbers NEW documents on the server, without collisions or reuse', async () => {

@@ -18,7 +18,7 @@ import {
   Upload
 } from 'lucide-react';
 import { isApiMode } from '../../../../api/client';
-import { loadDars, replaceDarFile, publishDarToApi } from '../../../../api/dars';
+import { loadDars, replaceDarFile } from '../../../../api/dars';
 import toast from 'react-hot-toast';
 import DARComments from '../../components/workflow/DARComments';
 import { resolveReviewer, resolveApprover } from '../../utils/workflowResolver';
@@ -33,7 +33,6 @@ const DarDetail = () => {
   const { dars, documents, timeline, currentUser, masterUsers, reviewUsers, approveUsers } = useStore();
   const [isInspectorOpen, setIsInspectorOpen] = useState(false);
   const [isFileViewerOpen, setIsFileViewerOpen] = useState(false);
-  const [isPublishing, setIsPublishing] = useState(false);
 
   // API mode: other people move the DAR along, so read its current state on open.
   useEffect(() => {
@@ -242,30 +241,15 @@ const DarDetail = () => {
       )}
 
       {/* API mode: DCC puts the approved DAR into force */}
-      {isApiMode && dar.apiStatus === 'PENDING_DCC' && currentUser?.isDcc && (
-        <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-3 shadow-2xs">
-          <div className="flex items-center gap-3">
-            <CheckCircle2 className="text-emerald-600 shrink-0" size={20} strokeWidth={1.5} />
-            <div>
-              <p className="font-bold text-xs">อนุมัติครบแล้ว รอ DCC {dar.type === 'OBSOLETE' ? 'ยกเลิกเอกสาร' : 'ประกาศใช้'}</p>
-              <p className="text-xs text-emerald-700 mt-0.5">
-                {dar.type === 'OBSOLETE' ? `เอกสาร ${dar.doc_code} จะถูกย้ายไปทะเบียนเอกสารยกเลิก` : `เอกสาร ${dar.doc_code} Rev.${dar.revision} จะมีผลบังคับใช้ทันที${dar.type === 'REVISION' ? ' และฉบับเดิมจะถูกย้ายไปทะเบียนฉบับเก่า' : ''}`}
-              </p>
-            </div>
+      {isApiMode && dar.apiStatus === 'PENDING_DCC' && (
+        <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-2xl p-4 flex items-center gap-3 shadow-2xs">
+          <CheckCircle2 className="text-emerald-600 shrink-0" size={20} strokeWidth={1.5} />
+          <div>
+            <p className="font-bold text-xs">อนุมัติครบแล้ว รอวันมีผลบังคับใช้ {dar.effectiveDate || '-'}</p>
+            <p className="text-xs text-emerald-700 mt-0.5">
+              {dar.type === 'OBSOLETE' ? `เอกสาร ${dar.doc_code} จะถูกย้ายไปทะเบียนเอกสารยกเลิกเมื่อถึงวันดังกล่าว เวลา 00:00 น.` : `เอกสาร ${dar.doc_code} Rev.${dar.revision} จะมีผลบังคับใช้อัตโนมัติเมื่อถึงวันดังกล่าว เวลา 00:00 น.${dar.type === 'REVISION' ? ' และฉบับเดิมจะถูกย้ายไปทะเบียนฉบับเก่า' : ''}`}
+            </p>
           </div>
-          <button
-            type="button"
-            disabled={isPublishing}
-            onClick={async () => {
-              if (!window.confirm(`ยืนยัน${dar.type === 'OBSOLETE' ? 'ยกเลิก' : 'ประกาศใช้'}เอกสาร ${dar.doc_code}?`)) return;
-              setIsPublishing(true);
-              await publishDarToApi(dar);
-              setIsPublishing(false);
-            }}
-            className="h-9 px-4 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 rounded-lg transition-colors cursor-pointer"
-          >
-            {isPublishing ? 'กำลังดำเนินการ...' : dar.type === 'OBSOLETE' ? 'ยกเลิกเอกสาร' : 'ประกาศใช้เอกสาร'}
-          </button>
         </div>
       )}
 
