@@ -216,6 +216,15 @@ export const isReceiptTask = (task) => {
   );
 };
 
+// The inbox shows a task that names an assignee only to that person (DCC, QMR, approvals and receipts aside); the menu badge counts the same way.
+export const isAssignedToSomeoneElse = (task, currentUser) => {
+  if (!task || !currentUser || isDccAdmin(currentUser) || currentUser.role === 'QMR' || currentUser.isQmr) return false;
+  const type = String(task.type || task.taskType || '').toUpperCase();
+  if (type === 'PERIODIC_REVIEW_APPROVAL' || isReceiptTask(task)) return false;
+  const assignee = task.assigneeId || task.assignee_id || task.assignedToUserId || task.target_user_id;
+  return Boolean(assignee) && ![currentUser.id, currentUser.empId].includes(assignee) && task.assigneeName !== currentUser.name;
+};
+
 export const isActionableTask = (task, currentUser, documents = [], referenceDate = new Date()) => {
   if (!task || !currentUser) return false;
 
