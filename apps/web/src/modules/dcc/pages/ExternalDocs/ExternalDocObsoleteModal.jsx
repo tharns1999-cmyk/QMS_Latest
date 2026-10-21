@@ -1,4 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { isApiMode } from '../../../../api/client';
+import { submitExternalToApi } from '../../../../api/external';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, AlertTriangle, Archive, Calendar, Layers } from 'lucide-react';
 import useStore from '../../../../store/useStore';
@@ -145,7 +147,7 @@ const ExternalDocObsoleteModal = ({ isOpen, onClose, documentToObsolete }) => {
     setShowConfirm(true);
   };
 
-  const executeSubmit = () => {
+  const executeSubmit = async () => {
     const currentUserId = currentUser?.id;
     const currentUserEmpId = currentUser?.empId;
     const currentUsername = currentUser?.username;
@@ -163,6 +165,15 @@ const ExternalDocObsoleteModal = ({ isOpen, onClose, documentToObsolete }) => {
 
     if (isMatchCurrentUser(formData.reviewerId) || isMatchCurrentUser(formData.approverId) || formData.reviewerId === formData.approverId) {
       toast.error('ข้อมูลผู้ลงนามไม่ถูกต้องตามหลักการแบ่งแยกหน้าที่ (SoD)');
+      return;
+    }
+
+    if (isApiMode) {
+      const created = await submitExternalToApi({ payload: { reason: formData.reason, effectiveDate: formData.effectiveDate, reviewerId: formData.reviewerId, approverId: formData.approverId }, documentToEdit: documentToObsolete, isObsolete: true });
+      if (!created) return;
+      toast.success(`ส่งคำขอยกเลิกเอกสาร ${docCode} เรียบร้อยแล้ว`);
+      setShowConfirm(false);
+      onClose();
       return;
     }
 

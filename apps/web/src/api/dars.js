@@ -6,6 +6,7 @@ import { resolveReviewer, resolveApprover } from '../modules/dcc/utils/workflowR
 import { isDarDraft } from '../modules/dcc/utils/darHelper';
 import { calculateCopyAllocations } from '../modules/dcc/services/MasterDataService';
 import { distributionsOf, loadCopies } from './copies';
+import { isExternalRow, setExternalSources } from './external';
 
 // The pages key their badges and handler logic on the demo status names.
 const STATUS_FROM_API = { PENDING_REVIEW: 'UNDER_REVIEW', PENDING_DCC: 'APPROVED_WAITING_EFFECTIVE' };
@@ -120,7 +121,9 @@ export const toTask = (d, users) => {
 };
 
 export const loadDars = async () => {
-  const { dars } = await apiGet('/api/dars');
+  const { dars: all } = await apiGet('/api/dars');
+  // External documents have their own pages; they read what api/external.js builds.
+  const dars = all.filter((d) => !isExternalRow(d));
   const { masterUsers } = useStore.getState();
   const users = masterUsers || [];
   // Drafts exist only in this browser (the server has no draft status); keep them or opening the list would wipe them.
@@ -132,6 +135,7 @@ export const loadDars = async () => {
     timeline: dars.flatMap((d) => toTimeline(d, users)),
     tasks: [...dars.map((d) => toTask(d, users)).filter(Boolean), ...(useStore.getState().tasks || []).filter((t) => String(t.id).startsWith('api-cc-'))]
   });
+  setExternalSources({ darRows: all.filter(isExternalRow) });
 };
 
 // API-mode twin of darSlice.processWorkflow. Throws with the server's reason so the task page stays open.

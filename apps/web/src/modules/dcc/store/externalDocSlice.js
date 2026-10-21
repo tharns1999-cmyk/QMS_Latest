@@ -10,6 +10,14 @@ import {
   checkDocumentCodeCollision 
 } from '../services/MasterDataService';
 import { isDccAdmin } from '../utils/taskFilter';
+import { isApiMode } from '../../../api/client';
+import toast from 'react-hot-toast';
+
+// Pieces of the external module that still run only in the browser must not look as if they worked on the server.
+const notYetOnApi = () => {
+  toast.error('ฟังก์ชันนี้ยังไม่เปิดใช้งานกับระบบจริง กรุณาติดต่อ DCC', { duration: 8000 });
+  return false;
+};
 
 // Domain Helpers for External Documents
 export const resolveDccAdminUserId = (masterUsers) => {
@@ -1021,6 +1029,7 @@ export const createExternalDocSlice = (set, get) => ({
   },
 
   cancelExternalRequest: (requestIdOrDocId, reason = '') => {
+    if (isApiMode) return notYetOnApi();
     let affectedDocId = null;
     let targetReqId = null;
     set(state => {
@@ -1082,6 +1091,7 @@ export const createExternalDocSlice = (set, get) => ({
   },
 
   rejectExternalRequest: (requestIdOrDocId, reason = '') => {
+    if (isApiMode) return notYetOnApi();
     let affectedDocId = null;
     let targetReqId = null;
     set(state => {
@@ -1221,7 +1231,7 @@ export const createExternalDocSlice = (set, get) => ({
   },
 
   // ─── External Document Controlled Copy Disposition Handler ────────────────
-  recordExternalCopyDisposition: (docId, copyNumber, dispositionData = {}) => set((state) => {
+  recordExternalCopyDisposition: (docId, copyNumber, dispositionData = {}) => isApiMode ? notYetOnApi() : set((state) => {
     const {
       dispositionAction = 'SHREDDED', // 'SHREDDED' | 'STAMPED_VOID'
       recalledAt = new Date().toISOString(),
@@ -1418,7 +1428,7 @@ export const createExternalDocSlice = (set, get) => ({
     };
   }),
 
-  processExternalTask: (taskId, action, comment) => set((state) => {
+  processExternalTask: (taskId, action, comment) => isApiMode ? import('../../../api/dars').then((m) => m.decideTask(taskId, action, comment)) : set((state) => {
     // ─── Phase 2: Defensive Task Lookup ───────────────────────────────────
     // Primary: find by taskId. Fallback: find by referenceId or docCode.
     let taskIndex = state.tasks.findIndex(t => t.id === taskId);
@@ -2657,7 +2667,7 @@ export const createExternalDocSlice = (set, get) => ({
   }),
 
   // Closed-Loop Resubmit External Document after Revision
-  resubmitExternalDoc: (id, updates, taskId) => set((state) => {
+  resubmitExternalDoc: (id, updates, taskId) => isApiMode ? notYetOnApi() : set((state) => {
     const oldDoc = (state.externalDocuments || []).find(d => d.id === id || d.edCode === id || d.doc_code === id) ||
                    (state.externalRequests || []).find(r => r.id === id || r.requestId === id || r.docId === id || r.externalDocId === id || r.edCode === id);
     if (!oldDoc) return state;

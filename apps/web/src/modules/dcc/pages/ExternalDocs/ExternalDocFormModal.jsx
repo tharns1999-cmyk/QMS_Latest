@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { isApiMode } from '../../../../api/client';
+import { submitExternalToApi } from '../../../../api/external';
 import useStore, { generateNextEdrNumber } from '../../../../store/useStore';
 import { X, Upload, Save, AlertCircle, FileText, CheckCircle2, Shield, Building2, Tag, Layers, Printer } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -474,6 +476,16 @@ const ExternalDocFormModal = ({ isOpen, onClose, documentToEdit = null, resubmit
         toast.error('ผู้ทบทวนและผู้อนุมัติต้องไม่เป็นบุคคลเดียวกัน');
         return;
       }
+    }
+
+    // API mode: the server numbers the document, routes it to the named signers and keeps the PDF.
+    if (isApiMode) {
+      const created = await submitExternalToApi({ payload: payloadToSubmit, fileBlob, documentToEdit });
+      if (!created) return;
+      toast.success(documentToEdit ? `ส่งคำขอปรับปรุงเอกสาร ${created.doc_code} สำเร็จ` : `ลงทะเบียนเอกสารภายนอก ${created.doc_code} เรียบร้อยแล้ว`);
+      setShowConfirmModal(false);
+      onClose();
+      return;
     }
 
     let attachedFile = null;
