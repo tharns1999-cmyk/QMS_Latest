@@ -6,5 +6,5 @@ UPDATE approval_matrix SET doc_type = 'QP', name_th = 'ระเบียบว�
   required_approver_level = CASE WHEN updated_by IS NULL THEN 6 ELSE required_approver_level END
   WHERE doc_type = 'SPEC';
 
--- External documents are approved by the owning department's head (L5); retiring one still goes to L6 (enforced in code).
+-- External documents are approved by the owning department head (L5); retiring one is set separately in 0016.
 UPDATE approval_matrix SET required_approver_level = 5 WHERE doc_type = 'ED' AND updated_by IS NULL;

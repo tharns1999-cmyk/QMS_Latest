@@ -71,7 +71,7 @@ describe('approval matrix API', () => {
     const { matrix } = await res.json();
     expect(matrix.find((m) => m.doc_type === 'SOP')).toMatchObject({ required_reviewer_level: 4, required_approver_level: 6 });
     expect(await getThresholds(env.DB, 'ed')).toMatchObject({ required_approver_level: 5 });
-    // Retiring an external document needs one level more than the matrix's level for adding or changing it.
+    // Retiring an external document is set higher in the matrix (obsolete_approver_level) than adding or changing it; types without one use the normal level.
     expect(await getThresholds(env.DB, 'ed', 'OBSOLETE')).toMatchObject({ required_approver_level: 6 });
     expect(await getThresholds(env.DB, 'sop', 'OBSOLETE')).toMatchObject({ required_approver_level: 6 });
     expect(matrix.map((m) => m.doc_type)).toEqual(['ED', 'FM', 'QM', 'QP', 'SD', 'SOP', 'WI']);
@@ -90,5 +90,20 @@ describe('approval matrix API', () => {
     expect((await res.json()).entry).toMatchObject({ doc_type: 'WI', required_approver_level: 6, updated_by: 'M-DCC' });
     const log = await env.DB.prepare("SELECT details FROM audit_log WHERE action = 'APPROVAL_MATRIX_UPDATED'").first();
     expect(JSON.parse(log.details)).toMatchObject({ doc_type: 'WI', before: { required_approver_level: 5 }, after: { required_approver_level: 6 } });
+  });
+
+  it('lets the DCC set a higher approver level for retiring a type, validated and audited, and clears it again', async () => {
+    const put = (extra) => call('/api/approval-matrix/SD', tokens.dcc, { method: 'PUT', body: JSON.stringify({ min_requester_level: 1, required_reviewer_level: 4, required_approver_level: 5, ...extra }) });
+    expect(await getThresholds(env.DB, 'sd', 'OBSOLETE')).toMatchObject({ required_approver_level: 5 }); // none set: same as normal
+    expect((await put({ obsolete_approver_level: 4 })).status).toBe(400); // not below the normal approver
+    expect((await put({ obsolete_approver_level: 9 })).status).toBe(400);
+    expect((await put({ obsolete_approver_level: '6' })).status).toBe(400);
+    expect((await (await put({ obsolete_approver_level: 7 })).json()).entry).toMatchObject({ obsolete_approver_level: 7 });
+    expect(await getThresholds(env.DB, 'sd', 'OBSOLETE')).toMatchObject({ required_approver_level: 7 });
+    expect(await getThresholds(env.DB, 'sd', 'REVISION')).toMatchObject({ required_approver_level: 5 }); // only retiring is stricter
+    expect((await (await put({})).json()).entry).toMatchObject({ obsolete_approver_level: 7 }); // omitted keeps it
+    expect((await (await put({ obsolete_approver_level: null })).json()).entry.obsolete_approver_level).toBeNull();
+    const rows = (await env.DB.prepare("SELECT details FROM audit_log WHERE action = 'APPROVAL_MATRIX_UPDATED' AND json_extract(details, '$.doc_type') = 'SD' ORDER BY id").all()).results.map((r) => JSON.parse(r.details));
+    expect(rows[0]).toMatchObject({ before: { obsolete_approver_level: null }, after: { obsolete_approver_level: 7 } });
   });
 });

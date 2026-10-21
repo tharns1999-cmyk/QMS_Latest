@@ -70,7 +70,11 @@ describe('API master data page', () => {
     expect(save).toBeDisabled();
     fireEvent.change(screen.getByLabelText('SOP required_approver_level'), { target: { value: '7' } });
     fireEvent.click(save);
-    expect(api.saveMatrixEntry).toHaveBeenCalledWith('SOP', { min_requester_level: 1, required_reviewer_level: 4, required_approver_level: 7 });
+    expect(api.saveMatrixEntry).toHaveBeenCalledWith('SOP', { min_requester_level: 1, required_reviewer_level: 4, required_approver_level: 7, obsolete_approver_level: null });
+    // Retiring can be set stricter than the normal approver; the save button follows the change.
+    fireEvent.change(screen.getByLabelText('SOP obsolete_approver_level'), { target: { value: '8' } });
+    fireEvent.click(screen.getByRole('button', { name: 'บันทึก' }));
+    expect(api.saveMatrixEntry).toHaveBeenLastCalledWith('SOP', expect.objectContaining({ obsolete_approver_level: 8 }));
   });
 
   it('closes a department and adds a place through the server', () => {
