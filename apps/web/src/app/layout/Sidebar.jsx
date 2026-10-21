@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import NotificationPopover from './NotificationPopover';
-import { isActionableTask, isDccAdmin as checkDccAdmin, isSameDepartment } from '../../modules/dcc/utils/taskFilter';
+import { isActionableTask, isAssignedToSomeoneElse, isDccAdmin as checkDccAdmin, isSameDepartment } from '../../modules/dcc/utils/taskFilter';
 import { evaluateDocumentReviewStatus } from '../../modules/dcc/utils/documentUtils';
 import { extractDeptCode } from '../../modules/dcc/services/darService';
 import SystemTimeSimulatorWidget from '../../modules/dcc/components/common/SystemTimeSimulatorWidget';
@@ -86,7 +86,7 @@ const Sidebar = () => {
   const allDocs = useMemo(() => [...(documents || []), ...(externalDocuments || [])], [documents, externalDocuments]);
 
   // Task Counts Calculations
-  const userTasks = (tasks || []).filter(t => isActionableTask(t, currentUser, allDocs, effectiveToday));
+  const userTasks = (tasks || []).filter(t => isActionableTask(t, currentUser, allDocs, effectiveToday) && !isAssignedToSomeoneElse(t, currentUser));
   const myTaskCount = userTasks.filter(t => t.actionRequired !== false && !t.is_completed && t.status !== 'COMPLETED').length;
 
   const ccTaskCount = (controlledCopyInstances || []).filter(inst => {
