@@ -53,7 +53,7 @@ describe('submitDarToApi', () => {
     const fetch = vi.fn(() => json(400, { error: 'ต้องมีระดับอนุมัติ L4 ขึ้นไป' }));
     vi.stubGlobal('fetch', fetch);
     expect(await submitDarToApi({ type: 'OBSOLETE', docCode: 'WI-QA-001', reason: 'เลิกใช้', workflowSteps: [{ role: 'REVIEWER', userId: 'rev' }, { role: 'APPROVER', userId: 'app' }] })).toBeNull();
-    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch.mock.calls.map(([url]) => url.replace(/^.*(?=\/api)/, ''))).toEqual(['/api/dars', '/api/users']); // refused, then the people lists are re-read
   });
 
   it('does not call the API when no eligible approver exists', async () => {

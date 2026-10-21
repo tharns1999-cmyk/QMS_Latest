@@ -2,6 +2,7 @@ import toast from 'react-hot-toast';
 import useStore from '../store/useStore';
 import { apiGet, apiPost, apiUpload } from './client';
 import { loadDocuments } from './session';
+import { loadUsers } from './masterData';
 import { resolveReviewer, resolveApprover } from '../modules/dcc/utils/workflowResolver';
 import { isDarDraft } from '../modules/dcc/utils/darHelper';
 import { calculateCopyAllocations } from '../modules/dcc/services/MasterDataService';
@@ -206,6 +207,8 @@ export const submitDarToApi = async (dar, file) => {
     }));
   } catch (err) {
     toast.error(err.message, { duration: 8000 });
+    // The lists may be out of date (someone was closed or moved); read them again so the next try routes correctly.
+    loadUsers().catch(() => {});
     return null;
   }
   // The server numbers NEW documents; the form's preview can be overtaken by another request.

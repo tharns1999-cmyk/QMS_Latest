@@ -337,7 +337,7 @@ app.post('/api/dars', requireAuth, async (c) => {
   const approverId = str('approver_id');
   const { results } = await db.prepare("SELECT * FROM users WHERE id IN (?, ?) AND status = 'ACTIVE'").bind(reviewerId, approverId).all();
   const find = (id) => results.find((u) => u.id === id);
-  if (!find(reviewerId) || !find(approverId)) return c.json({ error: 'ไม่พบผู้ทบทวนหรือผู้อนุมัติ' }, 400);
+  if (!find(reviewerId) || !find(approverId)) return c.json({ error: `ไม่พบผู้ทบทวนหรือผู้อนุมัติที่ใช้งานอยู่ (${!find(reviewerId) ? `ผู้ทบทวน "${reviewerId}"` : `ผู้อนุมัติ "${approverId}"`}) กรุณารีเฟรชหน้าแล้วลองใหม่` }, 400);
   const decision = { department: doc.department, requesterId: user.id, reviewerId };
   const problem = checkDecisionRights(toPublicUser(find(reviewerId)), { ...decision, stage: 'REVIEW' }, thresholds)
     ?? checkDecisionRights(toPublicUser(find(approverId)), { ...decision, stage: 'APPROVE' }, thresholds);
