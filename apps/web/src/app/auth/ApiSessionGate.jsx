@@ -1,6 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { getToken, SESSION_EXPIRED_EVENT } from '../../api/client';
 import { clearSession, login, restoreSession } from '../../api/session';
+import ChangePasswordForm from './ChangePasswordForm';
+
+const stateFor = (user) => (user?.mustChangePassword ? 'change' : 'in');
 
 const LoginPage = ({ onLogin }) => {
   const [email, setEmail] = useState('');
@@ -13,8 +16,7 @@ const LoginPage = ({ onLogin }) => {
     setBusy(true);
     setError('');
     try {
-      await login(email.trim(), password);
-      onLogin();
+      onLogin(await login(email.trim(), password));
     } catch (err) {
       setError(err.message);
       setBusy(false);
@@ -58,14 +60,21 @@ const ApiSessionGate = ({ children }) => {
       setState('out');
     };
     window.addEventListener(SESSION_EXPIRED_EVENT, signOut);
-    if (getToken()) restoreSession().then(() => setState('in'), signOut);
+    if (getToken()) restoreSession().then((user) => setState(stateFor(user)), signOut);
     return () => window.removeEventListener(SESSION_EXPIRED_EVENT, signOut);
   }, []);
 
   if (state === 'loading') {
     return <div className="h-full flex items-center justify-center text-sm text-slate-500">กำลังโหลด...</div>;
   }
-  if (state === 'out') return <LoginPage onLogin={() => setState('in')} />;
+  if (state === 'out') return <LoginPage onLogin={(user) => setState(stateFor(user))} />;
+  if (state === 'change') {
+    return (
+      <div className="min-h-full flex items-center justify-center bg-slate-50 p-4">
+        <ChangePasswordForm forced onDone={() => setState('in')} onCancel={() => window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT))} />
+      </div>
+    );
+  }
   return children;
 };
 

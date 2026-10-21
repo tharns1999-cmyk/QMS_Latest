@@ -1,14 +1,22 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
+import { secureHeaders } from 'hono/secure-headers';
 import { sign, verify } from 'hono/jwt';
-import { verifyPassword } from './password.js';
+import { hashPassword, verifyPassword } from './password.js';
 import { checkDecisionRights, getThresholds } from './approval.js';
 
 const MAX_FAILED_LOGINS = 5;
 const TOKEN_TTL_SECONDS = 8 * 60 * 60;
+const MAX_FAILED_LOGINS_PER_IP = 10;
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+const MIN_PASSWORD_LENGTH = 12;
+const MAX_PASSWORD_LENGTH = 128;
 const INVALID_LOGIN = { error: 'อีเมลหรือรหัสผ่านไม่ถูกต้อง' };
 
 const app = new Hono();
+
+// This API only returns JSON and PDFs, so it needs no scripts, frames or subresources of its own.
+app.use('*', secureHeaders({ xFrameOptions: 'DENY', contentSecurityPolicy: { defaultSrc: ["'none'"], frameAncestors: ["'none'"] } }));
 
 app.use('/api/*', (c, next) => cors({ origin: c.env.ALLOWED_ORIGIN.split(',') })(c, next));
 
@@ -25,8 +33,22 @@ const toPublicUser = (row) => ({
   department: row.primary_department,
   depts: JSON.parse(row.departments),
   isDcc: row.is_dcc === 1,
-  isQmr: row.is_qmr === 1
+  isQmr: row.is_qmr === 1,
+  mustChangePassword: row.must_change_password === 1
 });
+
+const issueToken = (secret, userId) => {
+  const now = Math.floor(Date.now() / 1000);
+  return sign({ sub: userId, iat: now, exp: now + TOKEN_TTL_SECONDS }, secret, 'HS256');
+};
+
+// Five bad passwords lock the account; the same count applies to a wrong "current password" on a change.
+const recordFailedLogin = (db, user, details) => db.batch([
+  db.prepare(`UPDATE users SET failed_logins = failed_logins + 1,
+    status = CASE WHEN status = 'ACTIVE' AND failed_logins + 1 >= ? THEN 'LOCKED' ELSE status END
+    WHERE id = ?`).bind(MAX_FAILED_LOGINS, user.id),
+  audit(db, user.id, 'LOGIN_FAILED', { failed_logins: user.failed_logins + 1, ...details })
+]);
 
 app.post('/api/auth/login', async (c) => {
   const body = await c.req.json().catch(() => ({}));
@@ -35,20 +57,22 @@ app.post('/api/auth/login', async (c) => {
   if (!email || !password) return c.json({ error: 'กรุณากรอกอีเมลและรหัสผ่าน' }, 400);
 
   const db = c.env.DB;
+  // Cloudflare always sets this header; it is absent only in local dev and tests, where the limit is skipped.
+  const ip = c.req.header('cf-connecting-ip');
+  if (ip) {
+    const since = new Date(Date.now() - LOGIN_WINDOW_MS).toISOString();
+    const { n } = await db.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'LOGIN_FAILED' AND at > ? AND json_extract(details, '$.ip') = ?").bind(since, ip).first();
+    if (n >= MAX_FAILED_LOGINS_PER_IP) return c.json({ error: 'พยายามเข้าสู่ระบบผิดหลายครั้งเกินไป กรุณารอ 15 นาทีแล้วลองใหม่' }, 429, { 'Retry-After': String(LOGIN_WINDOW_MS / 1000) });
+  }
   const user = await db.prepare('SELECT * FROM users WHERE email = ?').bind(email).first();
   const passwordOk = await verifyPassword(password, user?.password_hash);
 
   if (!user) {
-    await audit(db, null, 'LOGIN_FAILED', { email }).run();
+    await audit(db, null, 'LOGIN_FAILED', { email, ip }).run();
     return c.json(INVALID_LOGIN, 401);
   }
   if (!passwordOk) {
-    await db.batch([
-      db.prepare(`UPDATE users SET failed_logins = failed_logins + 1,
-        status = CASE WHEN status = 'ACTIVE' AND failed_logins + 1 >= ? THEN 'LOCKED' ELSE status END
-        WHERE id = ?`).bind(MAX_FAILED_LOGINS, user.id),
-      audit(db, user.id, 'LOGIN_FAILED', { failed_logins: user.failed_logins + 1 })
-    ]);
+    await recordFailedLogin(db, user, { ip });
     return c.json(INVALID_LOGIN, 401);
   }
   if (user.status === 'LOCKED') return c.json({ error: 'บัญชีถูกล็อก กรุณาติดต่อ DCC' }, 423);
@@ -58,21 +82,51 @@ app.post('/api/auth/login', async (c) => {
     db.prepare('UPDATE users SET failed_logins = 0 WHERE id = ?').bind(user.id),
     audit(db, user.id, 'LOGIN', {})
   ]);
-  const token = await sign({ sub: user.id, exp: Math.floor(Date.now() / 1000) + TOKEN_TTL_SECONDS }, c.env.JWT_SECRET, 'HS256');
-  return c.json({ token, user: toPublicUser(user) });
+  return c.json({ token: await issueToken(c.env.JWT_SECRET, user.id), user: toPublicUser(user) });
 });
+
+const PASSWORD_CHANGE_PATHS = ['/api/auth/me', '/api/auth/change-password'];
 
 // The token carries only the user id; role, level and status are re-read so a lock or demotion applies at once.
 export const requireAuth = async (c, next) => {
   const token = c.req.header('Authorization')?.replace(/^Bearer /, '');
   const payload = token && await verify(token, c.env.JWT_SECRET, 'HS256').catch(() => null);
   const user = payload && await c.env.DB.prepare("SELECT * FROM users WHERE id = ? AND status = 'ACTIVE'").bind(payload.sub).first();
-  if (!user) return c.json({ error: 'กรุณาเข้าสู่ระบบ' }, 401);
+  // A password change signs out every token issued before it.
+  if (!user || !(payload.iat >= user.password_changed_at)) return c.json({ error: 'กรุณาเข้าสู่ระบบ' }, 401);
+  if (user.must_change_password && !PASSWORD_CHANGE_PATHS.includes(c.req.path)) {
+    return c.json({ error: 'กรุณาเปลี่ยนรหัสผ่านก่อนใช้งาน', code: 'PASSWORD_CHANGE_REQUIRED' }, 403);
+  }
   c.set('user', toPublicUser(user));
   await next();
 };
 
 app.get('/api/auth/me', requireAuth, (c) => c.json({ user: c.get('user') }));
+
+app.post('/api/auth/change-password', requireAuth, async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const current = typeof body.current_password === 'string' ? body.current_password : '';
+  const next = typeof body.new_password === 'string' ? body.new_password : '';
+  const db = c.env.DB;
+  const user = await db.prepare('SELECT * FROM users WHERE id = ?').bind(c.get('user').id).first();
+
+  if (!(await verifyPassword(current, user.password_hash))) {
+    await recordFailedLogin(db, user, { via: 'change-password', ip: c.req.header('cf-connecting-ip') });
+    return c.json({ error: 'รหัสผ่านปัจจุบันไม่ถูกต้อง' }, 400);
+  }
+  if (next.length < MIN_PASSWORD_LENGTH || next.length > MAX_PASSWORD_LENGTH) {
+    return c.json({ error: `รหัสผ่านใหม่ต้องยาว ${MIN_PASSWORD_LENGTH}-${MAX_PASSWORD_LENGTH} ตัวอักษร` }, 400);
+  }
+  if (next === current) return c.json({ error: 'รหัสผ่านใหม่ต้องไม่ซ้ำกับรหัสผ่านเดิม' }, 400);
+
+  await db.batch([
+    db.prepare('UPDATE users SET password_hash = ?, must_change_password = 0, failed_logins = 0, password_changed_at = ? WHERE id = ?')
+      .bind(await hashPassword(next), Math.floor(Date.now() / 1000), user.id),
+    audit(db, user.id, 'PASSWORD_CHANGED', {})
+  ]);
+  // The old token dies with the change, so the caller gets a fresh one.
+  return c.json({ token: await issueToken(c.env.JWT_SECRET, user.id), user: toPublicUser({ ...user, must_change_password: 0 }) });
+});
 
 // Directory for routing DARs and showing who signed: active users, no credentials.
 app.get('/api/users', requireAuth, async (c) => {
@@ -346,6 +400,61 @@ app.post('/api/dars/:id/publish', requireAuth, async (c) => {
     throw err;
   }
   return c.json({ dar: await db.prepare('SELECT * FROM dars WHERE id = ?').bind(dar.id).first() });
+});
+
+// Locked accounts are hidden from the directory above, so DCC lists them here to unlock.
+app.get('/api/users/locked', requireAuth, async (c) => {
+  if (!c.get('user').isDcc) return c.json({ error: 'เฉพาะ DCC เท่านั้นที่ดูบัญชีที่ถูกล็อกได้' }, 403);
+  const { results } = await c.env.DB.prepare("SELECT id, name, email, primary_department FROM users WHERE status = 'LOCKED' ORDER BY name").all();
+  return c.json({ users: results });
+});
+
+app.post('/api/users/:id/unlock', requireAuth, async (c) => {
+  const user = c.get('user');
+  if (!user.isDcc) return c.json({ error: 'เฉพาะ DCC เท่านั้นที่ปลดล็อกบัญชีได้' }, 403);
+  const db = c.env.DB;
+  const targetId = c.req.param('id');
+  const [updated] = await db.batch([
+    db.prepare("UPDATE users SET status = 'ACTIVE', failed_logins = 0 WHERE id = ? AND status = 'LOCKED' RETURNING id").bind(targetId),
+    db.prepare("INSERT INTO audit_log (actor_id, action, details) SELECT ?, 'USER_UNLOCKED', ? WHERE changes() > 0").bind(user.id, JSON.stringify({ user_id: targetId }))
+  ]);
+  if (!updated.results.length) return c.json({ error: 'ไม่พบบัญชีที่ถูกล็อกนี้' }, 404);
+  return c.json({ ok: true });
+});
+
+const MAX_AUDIT_ROWS = 50000;
+const DATE = /^\d{4}-\d{2}-\d{2}$/;
+// A cell starting with = + - @ would run as a formula when the CSV is opened in Excel.
+const csvCell = (value) => {
+  const text = value == null ? '' : String(value);
+  return `"${(/^[=+\-@\t\r]/.test(text) ? `'${text}` : text).replaceAll('"', '""')}"`;
+};
+
+// For auditors: the whole trail, filtered by date (inclusive) and action, as JSON pages or one CSV.
+app.get('/api/audit-log', requireAuth, async (c) => {
+  const user = c.get('user');
+  if (!user.isDcc && !user.isQmr) return c.json({ error: 'เฉพาะ DCC และ QMR เท่านั้นที่ดู Audit Log ได้' }, 403);
+  const { from, to, action, before_id: beforeId, format } = c.req.query();
+  if ((from && !DATE.test(from)) || (to && !DATE.test(to))) return c.json({ error: 'วันที่ต้องอยู่ในรูปแบบ YYYY-MM-DD' }, 400);
+  const limit = Math.min(Math.max(Number(c.req.query('limit')) || 1000, 1), MAX_AUDIT_ROWS);
+
+  const filters = [[from, 'a.at >= ?'], [to, "a.at < date(?, '+1 day')"], [action, 'a.action = ?'], [beforeId, 'a.id < ?']].filter(([value]) => value);
+  const { results } = await c.env.DB.prepare(
+    `SELECT a.id, a.at, a.actor_id, u.name AS actor_name, u.email AS actor_email, a.action, a.details
+     FROM audit_log a LEFT JOIN users u ON u.id = a.actor_id
+     ${filters.length ? `WHERE ${filters.map(([, sql]) => sql).join(' AND ')}` : ''} ORDER BY a.id DESC LIMIT ?`
+  ).bind(...filters.map(([value]) => value), limit).all();
+  await audit(c.env.DB, user.id, 'AUDIT_LOG_EXPORTED', { from, to, action, format: format || 'json', rows: results.length }).run();
+
+  if (format === 'csv') {
+    const columns = ['id', 'at', 'actor_id', 'actor_name', 'actor_email', 'action', 'details'];
+    const lines = [columns.join(','), ...results.map((row) => columns.map((k) => csvCell(row[k])).join(','))];
+    // The BOM makes Excel read the Thai names as UTF-8.
+    return new Response(`﻿${lines.join('\r\n')}\r\n`, {
+      headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': 'attachment; filename="audit-log.csv"', 'Cache-Control': 'private, no-store' }
+    });
+  }
+  return c.json({ entries: results, next_before_id: results.length === limit ? results.at(-1).id : null });
 });
 
 export default app;

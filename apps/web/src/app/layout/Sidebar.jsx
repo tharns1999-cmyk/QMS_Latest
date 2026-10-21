@@ -28,6 +28,8 @@ import { extractDeptCode } from '../../modules/dcc/services/darService';
 import SystemTimeSimulatorWidget from '../../modules/dcc/components/common/SystemTimeSimulatorWidget';
 import { isApiMode } from '../../api/client';
 import { logout } from '../../api/session';
+import { createPortal } from 'react-dom';
+import ChangePasswordForm from '../auth/ChangePasswordForm';
 
 const Sidebar = () => {
   const navigate = useNavigate();
@@ -41,6 +43,7 @@ const Sidebar = () => {
   } = useStore();
   
   const [isCleanSlateOpen, setIsCleanSlateOpen] = useState(false);
+  const [changingPassword, setChangingPassword] = useState(false);
   
   const path = location.pathname;
   // Context-aware Hub & Spoke: DCC module routes
@@ -485,10 +488,22 @@ const Sidebar = () => {
           </div>
 
           {isApiMode ? (
-            <button type="button" onClick={logout}
-              className="w-full h-8 px-2.5 text-xs font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 cursor-pointer">
-              ออกจากระบบ
-            </button>
+            <div className="space-y-1.5">
+              <button type="button" onClick={() => setChangingPassword(true)}
+                className="w-full h-8 px-2.5 text-xs font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 cursor-pointer">
+                เปลี่ยนรหัสผ่าน
+              </button>
+              <button type="button" onClick={logout}
+                className="w-full h-8 px-2.5 text-xs font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 cursor-pointer">
+                ออกจากระบบ
+              </button>
+              {changingPassword && createPortal(
+                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 p-4">
+                  <ChangePasswordForm onDone={() => { setChangingPassword(false); toast.success('เปลี่ยนรหัสผ่านเรียบร้อย'); }} onCancel={() => setChangingPassword(false)} />
+                </div>,
+                document.body
+              )}
+            </div>
           ) : (
           <div className="relative">
             <select
