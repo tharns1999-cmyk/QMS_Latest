@@ -41,7 +41,12 @@ export const toStoreDar = (d, users) => {
     id: String(d.id),
     apiId: d.id,
     apiStatus: d.status,
-    status: STATUS_FROM_API[d.status] || d.status,
+    // A returned DAR stays PENDING_REVIEW on the server (it keeps the document locked) with a flag; the pages know it as RETURNED_FOR_REVISION.
+    status: d.awaiting_requester ? 'RETURNED_FOR_REVISION' : STATUS_FROM_API[d.status] || d.status,
+    awaitingRequester: d.awaiting_requester === 1,
+    returnReason: d.return_comment,
+    returnedBy: d.returned_by ? nameOf(users, d.returned_by) : undefined,
+    returnDate: d.returned_at ? localTime(d.returned_at) : undefined,
     darNumber: `DAR-${d.id}`,
     title: d.name,
     docCode: d.doc_code,
@@ -79,6 +84,7 @@ const toTimeline = (d, users) => {
   // Action names match the demo timeline: DarDetail looks signers up by 'Created', 'Reviewed' and 'Approved'.
   const events = [
     [d.created_at, 'Created', d.requester_id],
+    [d.returned_at, 'Returned', d.returned_by],
     [d.reviewed_at, rejected && !d.approved_at ? 'Rejected' : 'Reviewed', d.reviewer_id],
     [d.approved_at, rejected ? 'Rejected' : 'Approved', d.approver_id],
     [d.completed_at, 'Published', null]
@@ -89,7 +95,7 @@ const toTimeline = (d, users) => {
     action,
     user: userId ? nameOf(users, userId) : 'DCC',
     date: localTime(at),
-    comment: rejected && i === all.length - 1 ? d.reject_comment : undefined
+    comment: action === 'Returned' ? d.return_comment : rejected && i === all.length - 1 ? d.reject_comment : undefined
   }));
 };
 
@@ -100,8 +106,11 @@ const TASK_BY_STATUS = {
   // PENDING_DCC (approved, waiting for its effective date) is nobody's task: the server puts it in force on that date.
 };
 
+const REVISE_TASK = { kind: 'revise', type: 'Revise', taskType: 'DAR_REVISE', label: 'ส่งกลับแก้ไข', assignee: 'requester_id', since: 'returned_at' };
+
 export const toTask = (d, users) => {
-  const t = TASK_BY_STATUS[d.status];
+  // A returned DAR is its requester's work, not the reviewer's.
+  const t = d.awaiting_requester ? REVISE_TASK : TASK_BY_STATUS[d.status];
   if (!t) return null;
   const assigneeId = d[t.assignee];
   if (!assigneeId) return null;
@@ -124,6 +133,7 @@ export const toTask = (d, users) => {
     requesterId: d.requester_id,
     department: d.department,
     status: 'PENDING',
+    ...(t.kind === 'revise' && { returnReason: d.return_comment, returnedBy: nameOf(users, d.returned_by), returnDate: localTime(d.returned_at) }),
     createdAt: d[t.since] || d.created_at
   };
 };
@@ -150,8 +160,8 @@ export const loadDars = async () => {
 export const decideTask = async (taskId, action, comment) => {
   const task = useStore.getState().tasks.find((t) => t.id === taskId);
   if (!task) throw new Error('ไม่พบงานนี้ กรุณาโหลดหน้าใหม่');
-  // The API has no send-back state: RETURN and REJECT both close the DAR, and the requester submits a new one.
-  const decision = action === 'APPROVE' ? 'APPROVE' : 'REJECT';
+  // RETURN sends it back to the requester to fix and resubmit; REJECT closes it.
+  const decision = ['APPROVE', 'RETURN'].includes(action) ? action : 'REJECT';
   try {
     await apiPost(`/api/dars/${task.darId}/decision`, { decision, comment });
   } finally {
@@ -218,5 +228,32 @@ export const replaceDarFile = async (dar, file) => {
     toast.success('แนบไฟล์เรียบร้อย');
   } catch (err) {
     toast.error(err.message);
+  }
+};
+
+// The requester's side of a send-back: fix the details (and the file), then start review again; or withdraw it to free the document.
+// Returns true once the server took it, otherwise shows its reason.
+export const resubmitDarOnApi = async (dar, { name, reason, effectiveDate, file } = {}) => {
+  try {
+    if (file) await apiUpload(`/api/dars/${dar.apiId}/file`, file);
+    await apiPost(`/api/dars/${dar.apiId}/resubmit`, { name, reason, effective_date: effectiveDate });
+    return true;
+  } catch (err) {
+    toast.error(err.message, { duration: 8000 });
+    return false;
+  } finally {
+    await loadDars().catch(() => {});
+  }
+};
+
+export const withdrawDarOnApi = async (dar) => {
+  try {
+    await apiPost(`/api/dars/${dar.apiId}/withdraw`);
+    return true;
+  } catch (err) {
+    toast.error(err.message);
+    return false;
+  } finally {
+    await Promise.all([loadDars(), loadDocuments()]).catch(() => {});
   }
 };
