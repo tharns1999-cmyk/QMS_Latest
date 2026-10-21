@@ -1,6 +1,7 @@
 import useStore from '../store/useStore';
 import { apiGet, apiPost, setToken, SESSION_EXPIRED_EVENT } from './client';
 import { loadDars } from './dars';
+import { loadCopies } from './copies';
 import { isDarDraft } from '../modules/dcc/utils/darHelper';
 
 // The pages were built on demo records with many alias fields; API rows get the aliases they read.
@@ -58,7 +59,7 @@ const start = async (user) => {
     approvalMatrix: matrix,
     approval_matrix: matrix
   });
-  await Promise.all([loadDocuments(), loadDars()]);
+  await Promise.all([loadDocuments(), loadDars(), loadCopies()]);
 };
 
 // A user whose password was set by an admin must change it first; the server refuses everything else until then.
@@ -87,7 +88,7 @@ export const clearSession = () => {
   setToken(null);
   // Drafts were typed by the user and never reached the server, so signing out must not throw them away.
   const drafts = (useStore.getState().dars || []).filter(isDarDraft);
-  useStore.setState({ documents: [], dars: drafts, darRequests: drafts, timeline: [], tasks: [] });
+  useStore.setState({ documents: [], dars: drafts, darRequests: drafts, controlledCopyInstances: [], documentControlledCopies: [], timeline: [], tasks: [] });
 };
 
 export const logout = () => window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));

@@ -21,6 +21,7 @@ describe('ApiSessionGate', () => {
       if (url.endsWith('/api/users')) return json(200, { users: [user] });
       if (url.endsWith('/api/approval-matrix')) return json(200, { matrix: [{ doc_type: 'SOP', required_reviewer_level: 4 }] });
       if (url.endsWith('/api/dars')) return json(200, { dars: [] });
+      if (url.endsWith('/api/controlled-copies')) return json(200, { copies: [] });
       return json(200, { documents: url.endsWith('EFFECTIVE') ? [doc] : [] });
     });
     vi.stubGlobal('fetch', fetch);
@@ -56,6 +57,7 @@ describe('ApiSessionGate', () => {
       if (url.endsWith('/api/users')) return json(200, { users: [user] });
       if (url.endsWith('/api/approval-matrix')) return json(200, { matrix: [] });
       if (url.endsWith('/api/dars')) return json(200, { dars: [] });
+      if (url.endsWith('/api/controlled-copies')) return json(200, { copies: [] });
       return json(200, { documents: [] });
     });
     vi.stubGlobal('fetch', fetch);
