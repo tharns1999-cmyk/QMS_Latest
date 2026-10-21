@@ -154,14 +154,17 @@ app.put('/api/approval-matrix/:docType', requireAuth, async (c) => {
   const docType = c.req.param('docType').toUpperCase();
   const before = await db.prepare('SELECT * FROM approval_matrix WHERE doc_type = ?').bind(docType).first();
   if (!before) return c.json({ error: 'ไม่พบประเภทเอกสารนี้' }, 404);
+  // Optional higher approver level for retiring a document of this type: omitted keeps it, null clears it.
+  const obsolete = body.obsolete_approver_level === undefined ? before.obsolete_approver_level : body.obsolete_approver_level;
+  if (obsolete !== null && !(Number.isInteger(obsolete) && obsolete >= approver && obsolete <= 8)) return c.json({ error: 'ระดับผู้อนุมัติกรณียกเลิกเอกสารต้องไม่ต่ำกว่าผู้อนุมัติปกติ และไม่เกิน 8' }, 400);
 
   await db.batch([
-    db.prepare(`UPDATE approval_matrix SET min_requester_level = ?, required_reviewer_level = ?, required_approver_level = ?,
-      updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), updated_by = ? WHERE doc_type = ?`).bind(requester, reviewer, approver, user.id, docType),
+    db.prepare(`UPDATE approval_matrix SET min_requester_level = ?, required_reviewer_level = ?, required_approver_level = ?, obsolete_approver_level = ?,
+      updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), updated_by = ? WHERE doc_type = ?`).bind(requester, reviewer, approver, obsolete, user.id, docType),
     audit(db, user.id, 'APPROVAL_MATRIX_UPDATED', {
       doc_type: docType,
-      before: { min_requester_level: before.min_requester_level, required_reviewer_level: before.required_reviewer_level, required_approver_level: before.required_approver_level },
-      after: { min_requester_level: requester, required_reviewer_level: reviewer, required_approver_level: approver }
+      before: { min_requester_level: before.min_requester_level, required_reviewer_level: before.required_reviewer_level, required_approver_level: before.required_approver_level, obsolete_approver_level: before.obsolete_approver_level },
+      after: { min_requester_level: requester, required_reviewer_level: reviewer, required_approver_level: approver, obsolete_approver_level: obsolete }
     })
   ]);
   return c.json({ entry: await db.prepare('SELECT * FROM approval_matrix WHERE doc_type = ?').bind(docType).first() });

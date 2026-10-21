@@ -250,8 +250,8 @@ const LocationsTab = () => {
 };
 
 const MatrixRow = ({ entry }) => {
-  const [v, setV] = useState({ min_requester_level: entry.min_requester_level, required_reviewer_level: entry.required_reviewer_level, required_approver_level: entry.required_approver_level });
-  const dirty = Object.keys(v).some((k) => v[k] !== entry[k]);
+  const [v, setV] = useState({ min_requester_level: entry.min_requester_level, required_reviewer_level: entry.required_reviewer_level, required_approver_level: entry.required_approver_level, obsolete_approver_level: entry.obsolete_approver_level ?? null });
+  const dirty = Object.keys(v).some((k) => v[k] !== (entry[k] ?? null));
   const level = (k) => (
     <select aria-label={`${entry.doc_type} ${k}`} className={input} value={v[k]} onChange={(e) => setV({ ...v, [k]: Number(e.target.value) })}>{LEVELS.map((l) => <option key={l} value={l}>L{l}</option>)}</select>
   );
@@ -261,6 +261,12 @@ const MatrixRow = ({ entry }) => {
       <td className="p-2">{level('min_requester_level')}</td>
       <td className="p-2">{level('required_reviewer_level')}</td>
       <td className="p-2">{level('required_approver_level')}</td>
+      <td className="p-2">
+        <select aria-label={`${entry.doc_type} obsolete_approver_level`} className={input} value={v.obsolete_approver_level ?? ''}
+          onChange={(e) => setV({ ...v, obsolete_approver_level: e.target.value === '' ? null : Number(e.target.value) })}>
+          <option value="">เท่ากับผู้อนุมัติปกติ</option>{LEVELS.map((l) => <option key={l} value={l}>L{l}</option>)}
+        </select>
+      </td>
       <td className="p-2 text-right"><button type="button" className={ghost} disabled={!dirty} onClick={() => saveMatrixEntry(entry.doc_type, v)}>บันทึก</button></td>
     </tr>
   );
@@ -270,10 +276,10 @@ const MatrixTab = () => {
   const { approvalMatrix = [] } = useStore();
   return (
     <section className="space-y-3">
-      <p className="text-xs text-slate-500">ระดับต่ำสุดของผู้ยื่นคำขอ ผู้ทบทวน และผู้อนุมัติ ของเอกสารแต่ละประเภท ผู้อนุมัติต้องไม่ต่ำกว่าผู้ทบทวน มีผลกับคำขอที่ยื่นหลังจากบันทึก</p>
+      <p className="text-xs text-slate-500">ระดับต่ำสุดของผู้ยื่นคำขอ ผู้ทบทวน และผู้อนุมัติ ของเอกสารแต่ละประเภท ผู้อนุมัติต้องไม่ต่ำกว่าผู้ทบทวน ส่วนกรณียกเลิกเอกสารตั้งสูงกว่าได้ (เว้นว่างคือเท่ากัน) มีผลกับคำขอที่ยื่นหลังจากบันทึก</p>
       <div className="bg-white border border-slate-200 rounded-xl overflow-x-auto">
         <table className="w-full text-sm">
-          <thead className="text-xs text-slate-500 text-left"><tr><th className="p-2">ประเภทเอกสาร</th><th className="p-2">ผู้ยื่นขั้นต่ำ</th><th className="p-2">ผู้ทบทวนขั้นต่ำ</th><th className="p-2">ผู้อนุมัติขั้นต่ำ</th><th className="p-2" /></tr></thead>
+          <thead className="text-xs text-slate-500 text-left"><tr><th className="p-2">ประเภทเอกสาร</th><th className="p-2">ผู้ยื่นขั้นต่ำ</th><th className="p-2">ผู้ทบทวนขั้นต่ำ</th><th className="p-2">ผู้อนุมัติขั้นต่ำ</th><th className="p-2">ผู้อนุมัติ กรณียกเลิกเอกสาร</th><th className="p-2" /></tr></thead>
           <tbody className="divide-y divide-slate-100">{approvalMatrix.map((e) => <MatrixRow key={`${e.doc_type}-${e.updated_at}`} entry={e} />)}</tbody>
         </table>
       </div>
