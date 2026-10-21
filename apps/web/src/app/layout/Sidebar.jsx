@@ -351,6 +351,34 @@ const Sidebar = () => {
               />
             )}
 
+            {/* DCC MANAGEMENT (งานกำกับดูแล DCC - แสดงเฉพาะ Role DCC / Admin): first, so the admin never has to scroll for it */}
+            {(isDccUser || isAdmin) && (
+              <>
+                <SectionHeader title="งานกำกับดูแล DCC" />
+                <NavItem 
+                  to="/dcc/controlled-copy" 
+                  icon={Files} 
+                  label="ทะเบียนสำเนาควบคุม" 
+                  badgeCount={ccTaskCount}
+                  badgeColor="blue"
+                />
+                {isAdmin && (
+                  <>
+                    <NavItem 
+                      to="/dcc/admin/master-data" 
+                      icon={SlidersHorizontal} 
+                      label="จัดการข้อมูลหลัก" 
+                    />
+                    <NavItem 
+                      to="/dcc/admin/action-log" 
+                      icon={History} 
+                      label="บันทึกประวัติการทำงาน" 
+                    />
+                  </>
+                )}
+              </>
+            )}
+
             {/* GROUP 2: INTERNAL DOCS / DAR (เอกสารภายใน) */}
             <SectionHeader title="เอกสารภายใน" />
             <NavItem 
@@ -394,34 +422,6 @@ const Sidebar = () => {
               badgeCount={periodicReviewCount}
               badgeColor="amber"
             />
-
-            {/* GROUP 4: DCC MANAGEMENT (งานกำกับดูแล DCC - แสดงเฉพาะ Role DCC / Admin) */}
-            {(isDccUser || isAdmin) && (
-              <>
-                <SectionHeader title="งานกำกับดูแล DCC" />
-                <NavItem 
-                  to="/dcc/controlled-copy" 
-                  icon={Files} 
-                  label="ทะเบียนสำเนาควบคุม" 
-                  badgeCount={ccTaskCount}
-                  badgeColor="blue"
-                />
-                {isAdmin && (
-                  <>
-                    <NavItem 
-                      to="/dcc/admin/master-data" 
-                      icon={SlidersHorizontal} 
-                      label="จัดการข้อมูลหลัก" 
-                    />
-                    <NavItem 
-                      to="/dcc/admin/action-log" 
-                      icon={History} 
-                      label="บันทึกประวัติการทำงาน" 
-                    />
-                  </>
-                )}
-              </>
-            )}
           </>
         )}
       </nav>
