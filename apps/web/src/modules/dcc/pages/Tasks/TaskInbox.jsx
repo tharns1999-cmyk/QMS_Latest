@@ -154,7 +154,7 @@ export const getDocumentIdentifier = (task, storeContext = {}, matchedDar = null
 
   // 4. Extract standard doc code pattern from title (e.g. SOP-PD-01, WI-WH-002)
   const titleMatch = String(task.title || '').match(
-    /\b([A-Z]{1,5}-[A-Z]{1,5}-\d{2,4}(?:-\d{1,3})?)\b/
+    /\b([A-Z]{1,5}-[A-Z&]{1,6}-\d{2,4}(?:-\d{1,3})?)\b/
   );
   if (titleMatch) return titleMatch[1];
 

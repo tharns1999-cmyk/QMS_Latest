@@ -149,7 +149,7 @@ const DepartmentsTab = () => {
   return (
     <section className="space-y-3">
       <form onSubmit={add} className="bg-white border border-slate-200 rounded-xl p-4 flex flex-wrap items-end gap-2">
-        <Field label="รหัสแผนก (A-Z 0-9 ไม่เกิน 12 ตัว)"><input required className={`${input} w-40`} value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} /></Field>
+        <Field label="รหัสแผนก (A-Z 0-9 & ไม่เกิน 12 ตัว)"><input required className={`${input} w-40`} value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} /></Field>
         <Field label="ชื่อแผนก (ไทย)"><input required className={`${input} w-56`} value={form.nameTh} onChange={(e) => setForm({ ...form, nameTh: e.target.value })} /></Field>
         <Field label="ชื่อแผนก (อังกฤษ)"><input className={`${input} w-56`} value={form.nameEn} onChange={(e) => setForm({ ...form, nameEn: e.target.value })} /></Field>
         <button type="submit" className={primary}>เพิ่มแผนก</button>

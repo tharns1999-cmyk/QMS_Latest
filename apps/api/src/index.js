@@ -252,7 +252,7 @@ app.post('/api/dars', requireAuth, async (c) => {
     if (!['GENERAL', 'DEPT'].includes(scope)) return c.json({ error: 'ขอบเขตการเข้าถึงไม่ถูกต้อง' }, 400);
     doc = { doc_type: str('doc_type').toUpperCase(), department: str('department').toUpperCase(), name: str('name'), access_scope: scope, revision: '00' };
     // They become the code prefix, which is matched with GLOB below.
-    if (!/^[A-Z0-9]+$/.test(doc.doc_type) || !/^[A-Z0-9]+$/.test(doc.department)) return c.json({ error: 'ประเภทหรือแผนกของเอกสารไม่ถูกต้อง' }, 400);
+    if (!/^[A-Z0-9]+$/.test(doc.doc_type) || !/^[A-Z0-9&]+$/.test(doc.department)) return c.json({ error: 'ประเภทหรือแผนกของเอกสารไม่ถูกต้อง' }, 400);
   } else {
     if (!/^[A-Z0-9-]+$/.test(docCode)) return c.json({ error: 'รหัสเอกสารไม่ถูกต้อง' }, 400);
     const current = await db.prepare("SELECT * FROM documents WHERE doc_code = ? AND status = 'EFFECTIVE'").bind(docCode).first();
@@ -971,7 +971,8 @@ app.post('/api/departments', requireAuth, async (c) => {
   const body = await readBody(c);
   const code = clean(body.code, 12)?.toUpperCase();
   const nameTh = clean(body.name_th, 200);
-  if (!code || !/^[A-Z0-9&_-]+$/.test(code)) return c.json({ error: 'รหัสแผนกใช้ได้เฉพาะ A-Z 0-9 & _ - ไม่เกิน 12 ตัว' }, 400);
+  // The code is part of every document number (TYPE-DEPT-NN), so it cannot hold a dash; & is allowed for HR&GA.
+  if (!code || !/^[A-Z0-9&]+$/.test(code)) return c.json({ error: 'รหัสแผนกใช้ได้เฉพาะ A-Z 0-9 & ไม่เกิน 12 ตัว' }, 400);
   if (!nameTh) return c.json({ error: 'กรุณาระบุชื่อแผนก' }, 400);
   const db = c.env.DB;
   try {
