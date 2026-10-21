@@ -89,7 +89,10 @@ Deploy คอมมิตเวอร์ชันก่อนหน้าอี�
 2. `npx wrangler d1 time-travel info DB` แล้วจด bookmark ลงบันทึกการปล่อย
 3. สั่ง Nightly backup ด้วยมือ (Run workflow) และรอให้เขียว
 4. ตรวจว่า migration ใหม่เป็นแบบเพิ่มอย่างเดียว (หัวข้อ 4 ข้อ D)
-5. `npm run db:migrate:remote` ตามด้วย `npm run deploy` (ใน apps/api) แล้ว deploy เว็บ
+5. ปล่อยเวอร์ชัน:
+   - API: `cd apps/api` แล้ว `npm run db:migrate:remote` ตามด้วย `npm run deploy`
+   - เว็บ: `cd apps/web` ตั้ง `VITE_API_URL=https://qms-api.qms-api.workers.dev` แล้ว `npm run build` ตามด้วย `npx wrangler@4.151.3 deploy`
+   - ที่อยู่ระบบ: เว็บ https://qms-web.qms-api.workers.dev, API https://qms-api.qms-api.workers.dev
 6. ติด tag ใน git (เช่น `v1.0.0`) และบันทึกวันที่ ผู้ปล่อย และ bookmark
 
 ## 6. บันทึกการซ้อมกู้คืน (อย่างน้อยปีละ 2 ครั้ง)
