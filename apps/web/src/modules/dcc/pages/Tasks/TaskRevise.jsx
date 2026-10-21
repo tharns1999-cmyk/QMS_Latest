@@ -13,11 +13,13 @@ import {
   ShieldAlert 
 } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { isApiMode } from '../../../../api/client';
+import { resubmitDarOnApi, withdrawDarOnApi } from '../../../../api/dars';
 
 const TaskRevise = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { tasks, dars, darRequests, timeline, resubmitDar, currentUser } = useStore();
+  const { tasks, dars, darRequests, timeline, resubmitDar, currentUser, externalRequests } = useStore();
   
   const rawId = String(id || '').trim();
   const allTasks = tasks || [];
@@ -100,6 +102,12 @@ const TaskRevise = () => {
       title: `[DAR ส่งกลับแก้ไข] ${dar.title || dar.name || dar.dar_no || dar.id}`,
       returnReason: dar.returnReason || dar.rejectReason || dar.comment || dar.reviewComment || dar.approvalComment
     };
+  }
+
+  // External requests are not in `dars`; the revise page builds what it needs from the request.
+  if (!dar && isApiMode && task?.darId) {
+    const req = (externalRequests || []).find((r) => r.darId === String(task.darId));
+    if (req) dar = { apiId: Number(task.darId), darNumber: req.requestNo, doc_code: req.documentCode || req.doc_code, name: req.title, reason: req.reason, effective_date: req.effectiveDate, type: req.requestType, file_key: req.apiFilePath ? 'attached' : null };
   }
 
   const resolvedDar = useMemo(() => {
@@ -218,6 +226,11 @@ const TaskRevise = () => {
     returnedTimelineItem?.date || 
     resolvedDar?.updatedAt || 
     resolvedDar?.date;
+
+  // The server keeps no draft: the requester fixes the details here and resubmits, or withdraws.
+  if (isApiMode && resolvedDar?.apiId) {
+    return <ApiReviseView dar={resolvedDar} returnReason={returnReason} returnAuthor={returnAuthor} returnDate={returnDate} navigate={navigate} />;
+  }
 
   // Navigate to full DAR edit form
   const handleOpenFullForm = () => {
@@ -426,6 +439,101 @@ const TaskRevise = () => {
             className="w-full sm:w-auto btn-primary justify-center text-xs py-2.5 px-5"
           >
             <CheckCircle size={16} /> ส่งกลับไปทบทวนใหม่ (Resubmit for Review)
+          </button>
+        </div>
+      </div>
+    </motion.div>
+  );
+};
+
+const ApiReviseView = ({ dar, returnReason, returnAuthor, returnDate, navigate }) => {
+  const isObsolete = dar.type === 'OBSOLETE';
+  const [form, setForm] = useState({ name: dar.name || '', reason: dar.reason || '', effectiveDate: dar.effective_date || '' });
+  const [file, setFile] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  const done = (message) => {
+    toast.success(message);
+    navigate('/dcc/tasks');
+  };
+  const resubmit = async () => {
+    if (!isObsolete && !form.name.trim()) return toast.error('กรุณาระบุชื่อเอกสาร');
+    if (!form.reason.trim()) return toast.error('กรุณาระบุเหตุผลของคำขอ');
+    if (!isObsolete && !file && !dar.file_key) return toast.error('กรุณาแนบไฟล์ PDF');
+    setBusy(true);
+    const ok = await resubmitDarOnApi(dar, { name: isObsolete ? undefined : form.name.trim(), reason: form.reason.trim(), effectiveDate: form.effectiveDate || undefined, file });
+    setBusy(false);
+    if (ok) done('ยื่นคำขอใหม่เรียบร้อยแล้ว ส่งไปให้ผู้ทบทวนอีกครั้ง');
+  };
+  const withdraw = async () => {
+    if (!window.confirm('ยกเลิกคำขอนี้? เอกสารจะถูกปลดล็อกและต้องยื่นคำขอใหม่หากต้องการดำเนินการต่อ')) return;
+    setBusy(true);
+    const ok = await withdrawDarOnApi(dar);
+    setBusy(false);
+    if (ok) done('ยกเลิกคำขอเรียบร้อยแล้ว');
+  };
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }} className="max-w-4xl mx-auto space-y-6 pb-12 w-full max-w-full overflow-hidden">
+      <button onClick={() => navigate('/dcc/tasks')} className="flex items-center gap-1.5 text-xs font-bold text-slate-600 hover:text-indigo-600 transition-colors cursor-pointer">
+        <ChevronLeft size={16} /> กลับหน้า Inbox
+      </button>
+
+      <div className="flex items-center gap-3">
+        <div className="w-11 h-11 rounded-xl bg-amber-50 text-amber-600 border border-amber-200/60 flex items-center justify-center shadow-2xs shrink-0">
+          <FileEdit size={22} strokeWidth={2} />
+        </div>
+        <div>
+          <div className="flex items-center gap-2">
+            <h2 className="text-xl font-black text-slate-900 tracking-tight">แก้ไขคำร้อง DAR</h2>
+            <span className="font-mono text-xs px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 font-bold border border-amber-200">{dar.darNumber} · {dar.doc_code}</span>
+          </div>
+          <p className="text-xs text-slate-500 mt-0.5">แก้ไขตามข้อเสนอแนะ แล้วยื่นใหม่ ระบบจะเริ่มการทบทวนตั้งแต่ต้น</p>
+        </div>
+      </div>
+
+      <div className="card-surface p-5 bg-rose-50/70 border-rose-200/90 shadow-xs flex items-start gap-4">
+        <div className="bg-rose-100 p-2.5 rounded-xl text-rose-700 shrink-0"><AlertCircle size={22} strokeWidth={2} /></div>
+        <div className="space-y-2 flex-1 min-w-0">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="font-bold text-sm text-rose-950">ส่งกลับแก้ไข (Returned for Revision)</h3>
+            <div className="flex items-center gap-3 text-[11px] text-rose-700 font-medium">
+              {returnAuthor && <span className="flex items-center gap-1"><User size={12} /> ผู้ส่งกลับ: <strong>{returnAuthor}</strong></span>}
+              {returnDate && <span className="flex items-center gap-1"><Clock size={12} /> {returnDate}</span>}
+            </div>
+          </div>
+          <div className="bg-white/95 border border-rose-200/80 rounded-xl p-3.5 text-xs font-medium leading-relaxed">
+            <span className="font-bold text-rose-800 block mb-1">สิ่งที่ต้องแก้ไข:</span>
+            <p className="whitespace-pre-line text-slate-800">{returnReason}</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="card-surface p-6 space-y-5">
+        {!isObsolete && (
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1.5">ชื่อเอกสาร <span className="text-rose-500">*</span></label>
+            <input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full input-primary text-xs" />
+          </div>
+        )}
+        <div>
+          <label className="block text-xs font-bold text-slate-700 mb-1.5">เหตุผลของคำขอ <span className="text-rose-500">*</span></label>
+          <textarea rows={3} value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} className="w-full input-primary text-xs" />
+        </div>
+        <div>
+          <label className="block text-xs font-bold text-slate-700 mb-1.5">วันที่มีผลบังคับใช้</label>
+          <input type="date" value={form.effectiveDate} onChange={(e) => setForm({ ...form, effectiveDate: e.target.value })} className="input-primary text-xs" />
+        </div>
+        {!isObsolete && (
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1.5">ไฟล์ PDF {dar.file_key ? '(มีไฟล์เดิมแนบอยู่ — เลือกไฟล์ใหม่ถ้าต้องการเปลี่ยน)' : '(ยังไม่ได้แนบ)'}</label>
+            <input type="file" accept="application/pdf" onChange={(e) => setFile(e.target.files?.[0] || null)} className="text-xs" />
+          </div>
+        )}
+        <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-end gap-3">
+          <button type="button" disabled={busy} onClick={withdraw} className="w-full sm:w-auto btn-secondary text-xs py-2.5 px-4 justify-center text-rose-700">ยกเลิกคำขอ</button>
+          <button type="button" disabled={busy} onClick={resubmit} className="w-full sm:w-auto btn-primary justify-center text-xs py-2.5 px-5">
+            <CheckCircle size={16} /> ยื่นใหม่เพื่อทบทวนอีกครั้ง
           </button>
         </div>
       </div>

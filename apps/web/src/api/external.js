@@ -12,6 +12,8 @@ export const isExternalRow = (row) => row.doc_type === 'ED';
 const DOC_STATUS = { EFFECTIVE: 'ACTIVE', SUPERSEDED: 'SUPERSEDED', OBSOLETE: 'OBSOLETE_ARCHIVED' };
 const REQUEST_STATUS = { PENDING_REVIEW: 'PENDING_EXT_REVIEW', PENDING_APPROVAL: 'PENDING_EXT_APPROVAL', PENDING_DCC: 'APPROVED_WAITING_EFFECTIVE', COMPLETED: 'ACTIVE', REJECTED: 'REJECTED' };
 const nameOf = (users, id) => users.find((u) => u.id === id)?.name || null;
+// A returned request stays PENDING_REVIEW on the server with a flag; the external pages know it as REVISE_REQUESTED.
+const requestStatus = (r) => (r.awaiting_requester ? 'REVISE_REQUESTED' : REQUEST_STATUS[r.status] || r.status);
 
 const edFields = (r) => ({
   code: r.doc_code, edCode: r.doc_code, doc_code: r.doc_code, docNo: r.doc_code,
@@ -42,7 +44,8 @@ export const toStoreExternalDoc = (d) => ({
 const toPendingDoc = (r, users) => ({
   ...edFields(r),
   id: `dar-${r.id}`,
-  status: REQUEST_STATUS[r.status] || r.status,
+  status: requestStatus(r),
+  returnReason: r.return_comment, revisionComment: r.return_comment,
   rev: r.revision, revision: r.revision,
   ownerId: r.requester_id, requesterName: nameOf(users, r.requester_id),
   reviewerId: r.reviewer_id, reviewerName: nameOf(users, r.reviewer_id),
@@ -69,8 +72,8 @@ export const toStoreExternalRequest = (r, docId, users) => {
     requesterId: r.requester_id, requesterName: nameOf(users, r.requester_id), requesterDepartment: r.department,
     reviewerId: r.reviewer_id, reviewerName: nameOf(users, r.reviewer_id),
     approverId: r.approver_id, approverName: nameOf(users, r.approver_id),
-    status: REQUEST_STATUS[r.status] === 'ACTIVE' && r.type === 'OBSOLETE' ? 'OBSOLETE_ARCHIVED' : REQUEST_STATUS[r.status] || r.status,
-    returnReason: r.reject_comment, revisionComment: r.reject_comment,
+    status: REQUEST_STATUS[r.status] === 'ACTIVE' && r.type === 'OBSOLETE' ? 'OBSOLETE_ARCHIVED' : requestStatus(r),
+    returnReason: r.awaiting_requester ? r.return_comment : r.reject_comment, revisionComment: r.awaiting_requester ? r.return_comment : r.reject_comment,
     createdAt: r.created_at, updatedAt: r.completed_at || r.approved_at || r.reviewed_at || r.created_at,
     reason: r.reason, changeReason: r.reason,
     signoffs: [
@@ -87,15 +90,19 @@ const TASK = {
   PENDING_APPROVAL: { type: 'EXT_APPROVAL', label: 'อนุมัติเอกสารภายนอก', assignee: 'approver_id', since: 'reviewed_at' }
 };
 
+const REVISE_TASK = { type: 'EXTERNAL_REVISE', assignee: 'requester_id', since: 'returned_at' };
+
 export const toExternalTask = (r, docId, users) => {
-  const t = TASK[r.status];
+  // A returned request is its requester's work, not the reviewer's.
+  const t = r.awaiting_requester ? REVISE_TASK : TASK[r.status];
   if (!t) return null;
   const assigneeId = r[t.assignee];
   return {
     id: `api-dar-${r.id}-${t.type}`, darId: String(r.id), referenceType: 'EXTERNAL_DOC', referenceId: docId, docId, origin: 'EXTERNAL',
     docCode: r.doc_code, doc_code: r.doc_code, docTitle: r.name, docName: r.name, title: `${r.doc_code}: ${r.name}`,
     type: t.type, taskType: t.type, assigneeId, assignee_id: assigneeId, assigneeName: nameOf(users, assigneeId),
-    requesterId: r.requester_id, requestType: r.type, department: r.department, status: 'PENDING', createdAt: r[t.since] || r.created_at
+    requesterId: r.requester_id, requestType: r.type, department: r.department, status: 'PENDING', createdAt: r[t.since] || r.created_at,
+    ...(r.awaiting_requester && { returnReason: r.return_comment, returnedBy: nameOf(users, r.returned_by) })
   };
 };
 

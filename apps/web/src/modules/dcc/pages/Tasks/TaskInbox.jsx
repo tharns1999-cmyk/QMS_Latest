@@ -31,6 +31,7 @@ import ExternalDocActionModal from './ExternalDocActionModal';
 import PeriodicReviewApprovalModal from './PeriodicReviewApprovalModal';
 import ExternalDocFormModal from '../ExternalDocs/ExternalDocFormModal';
 import TaskConfirmHardcopyReceiptModal from '../../components/workflow/TaskConfirmHardcopyReceiptModal';
+import { isApiMode } from '../../../../api/client';
 import DccCustodyActionModal from '../../components/modals/DccCustodyActionModal';
 import { ErrorBoundary } from '../../../../shared/components/ErrorBoundary';
 import { TablePagination } from '../../../../shared/components/common/TablePagination';
@@ -1138,6 +1139,11 @@ const TaskInbox = () => {
 
     if (task.referenceType === 'EXTERNAL_DOC' || task.origin === 'EXTERNAL') {
       // 🛡️ Phase 2: If task is EXTERNAL_REVISE, open ExternalDocFormModal in Resubmit mode
+      // API mode: the requester fixes a returned request on the revise page (the server keeps no draft).
+      if (isApiMode && (normType === 'EXTERNAL_REVISE' || normType === 'REVISE')) {
+        navigate(`/tasks/revise/${task.id}`);
+        return;
+      }
       if (normType === 'EXTERNAL_REVISE' || normType === 'REVISE') {
         const extDoc = (externalDocuments || []).find(d => d.id === task.referenceId || d.id === task.docId || (task.docCode && d.edCode === task.docCode)) ||
                        (externalRequests || []).find(r => r.id === task.referenceId || r.requestId === task.referenceId || r.docId === task.referenceId || r.externalDocId === task.referenceId || (task.docCode && r.edCode === task.docCode));

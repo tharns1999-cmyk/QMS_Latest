@@ -352,23 +352,80 @@ app.put('/api/dars/:id/file', requireAuth, async (c) => {
   return c.json({ dar: updated.results[0] });
 });
 
+// A returned DAR waits for its requester: they fix it (name, reason, date, or a new file through the file route) and resubmit,
+// which starts review again, or withdraw it, which frees the document.
+app.post('/api/dars/:id/resubmit', requireAuth, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  const body = await c.req.json().catch(() => ({}));
+  const dar = await db.prepare('SELECT * FROM dars WHERE id = ?').bind(c.req.param('id')).first();
+  if (!dar) return c.json({ error: 'ไม่พบคำขอ' }, 404);
+  if (dar.requester_id !== user.id) return c.json({ error: 'เฉพาะผู้ขอเท่านั้นที่ยื่นคำขอใหม่ได้' }, 403);
+  if (!dar.awaiting_requester) return c.json({ error: 'คำขอนี้ไม่ได้ถูกส่งกลับ' }, 409);
+  const text = (k, max) => (typeof body[k] === 'string' && body[k].trim() && body[k].trim().length <= max ? body[k].trim() : null);
+  const date = text('effective_date', 10);
+  if (date && !(/^\d{4}-\d{2}-\d{2}$/.test(date) && !Number.isNaN(Date.parse(date)))) return c.json({ error: 'วันที่มีผลบังคับใช้ไม่ถูกต้อง' }, 400);
+  if (dar.type !== 'OBSOLETE' && !dar.file_key) return c.json({ error: 'กรุณาแนบไฟล์ PDF ก่อนยื่นใหม่' }, 409);
+  // The name of an existing document is not the requester's to change on a withdrawal.
+  const name = dar.type === 'OBSOLETE' ? null : text('name', 300);
+  const [updated] = await db.batch([
+    db.prepare(`UPDATE dars SET awaiting_requester = 0, name = COALESCE(?, name), reason = COALESCE(?, reason), effective_date = COALESCE(?, effective_date)
+      WHERE id = ? AND awaiting_requester = 1 RETURNING *`).bind(name, text('reason', 2000), date, dar.id),
+    db.prepare('INSERT INTO audit_log (actor_id, action, details) SELECT ?, ?, ? WHERE changes() > 0')
+      .bind(user.id, 'DAR_RESUBMITTED', JSON.stringify({ dar_id: dar.id, doc_code: dar.doc_code, return_count: dar.return_count }))
+  ]);
+  if (!updated.results.length) return c.json({ error: 'คำขอนี้ถูกยื่นใหม่ไปแล้ว กรุณาโหลดใหม่' }, 409);
+  return c.json({ dar: updated.results[0] });
+});
+
+app.post('/api/dars/:id/withdraw', requireAuth, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  const dar = await db.prepare('SELECT * FROM dars WHERE id = ?').bind(c.req.param('id')).first();
+  if (!dar) return c.json({ error: 'ไม่พบคำขอ' }, 404);
+  if (dar.requester_id !== user.id) return c.json({ error: 'เฉพาะผู้ขอเท่านั้นที่ยกเลิกคำขอได้' }, 403);
+  if (!dar.awaiting_requester) return c.json({ error: 'ยกเลิกได้เฉพาะคำขอที่ถูกส่งกลับให้แก้ไข' }, 409);
+  const [updated] = await db.batch([
+    db.prepare(`UPDATE dars SET status = 'REJECTED', awaiting_requester = 0, reject_comment = 'ผู้ขอยกเลิกคำขอ' WHERE id = ? AND awaiting_requester = 1 RETURNING *`).bind(dar.id),
+    db.prepare('INSERT INTO audit_log (actor_id, action, details) SELECT ?, ?, ? WHERE changes() > 0')
+      .bind(user.id, 'DAR_WITHDRAWN', JSON.stringify({ dar_id: dar.id, doc_code: dar.doc_code })),
+    // Same as a rejection: a periodic review that asked for this DAR is free to be redone.
+    db.prepare(`UPDATE periodic_reviews SET status = 'CANCELLED', decided_at = ${NOW}, decision_comment = 'ผู้ขอยกเลิก DAR'
+      WHERE doc_code = ? AND status = 'AWAITING_ACTION' AND (SELECT status FROM dars WHERE id = ?) = 'REJECTED'`).bind(dar.doc_code, dar.id)
+  ]);
+  if (!updated.results.length) return c.json({ error: 'คำขอนี้ถูกดำเนินการไปแล้ว กรุณาโหลดใหม่' }, 409);
+  return c.json({ dar: updated.results[0] });
+});
+
 app.post('/api/dars/:id/decision', requireAuth, async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
   const body = await c.req.json().catch(() => ({}));
   const comment = typeof body.comment === 'string' ? body.comment.trim() : '';
-  if (body.decision !== 'APPROVE' && body.decision !== 'REJECT') return c.json({ error: 'ผลการพิจารณาต้องเป็น APPROVE หรือ REJECT' }, 400);
-  if (body.decision === 'REJECT' && !comment) return c.json({ error: 'กรุณาระบุเหตุผลที่ไม่อนุมัติ' }, 400);
+  if (!['APPROVE', 'REJECT', 'RETURN'].includes(body.decision)) return c.json({ error: 'ผลการพิจารณาต้องเป็น APPROVE, REJECT หรือ RETURN' }, 400);
+  if (body.decision !== 'APPROVE' && !comment) return c.json({ error: body.decision === 'RETURN' ? 'กรุณาระบุสิ่งที่ต้องแก้ไข' : 'กรุณาระบุเหตุผลที่ไม่อนุมัติ' }, 400);
 
   const dar = await db.prepare('SELECT * FROM dars WHERE id = ?').bind(c.req.param('id')).first();
   if (!dar) return c.json({ error: 'ไม่พบคำขอ' }, 404);
   const stage = STAGE_BY_STATUS[dar.status];
   if (!stage) return c.json({ error: 'คำขอนี้ไม่อยู่ในขั้นตอนพิจารณา' }, 409);
+  if (dar.awaiting_requester) return c.json({ error: 'คำขอนี้ถูกส่งกลับแล้ว รอผู้ขอแก้ไขและยื่นใหม่' }, 409);
   if (user.id !== (stage === 'REVIEW' ? dar.reviewer_id : dar.approver_id)) return c.json({ error: 'คุณไม่ได้รับมอบหมายให้พิจารณาคำขอนี้' }, 403);
   // Re-checked at decision time: the user's level or the matrix may have changed since submission.
   const problem = checkDecisionRights(user, { stage, department: dar.department, requesterId: dar.requester_id, reviewerId: dar.reviewer_id }, await getThresholds(db, dar.doc_type));
   if (problem) return c.json({ error: problem }, 403);
   if (body.decision === 'APPROVE' && dar.type !== 'OBSOLETE' && !dar.file_key) return c.json({ error: 'ผู้ขอยังไม่ได้แนบไฟล์ PDF' }, 409);
+
+  if (body.decision === 'RETURN') {
+    const [returned] = await db.batch([
+      db.prepare(`UPDATE dars SET status = 'PENDING_REVIEW', awaiting_requester = 1, returned_at = ${NOW}, returned_by = ?, return_comment = ?, return_count = return_count + 1, reviewed_at = NULL, approved_at = NULL
+        WHERE id = ? AND status = ? AND awaiting_requester = 0 RETURNING *`).bind(user.id, comment, dar.id, dar.status),
+      db.prepare('INSERT INTO audit_log (actor_id, action, details) SELECT ?, ?, ? WHERE changes() > 0')
+        .bind(user.id, 'DAR_RETURNED', JSON.stringify({ dar_id: dar.id, doc_code: dar.doc_code, stage, comment }))
+    ]);
+    if (!returned.results.length) return c.json({ error: 'คำขอนี้ถูกพิจารณาไปแล้ว กรุณาโหลดใหม่' }, 409);
+    return c.json({ dar: returned.results[0] });
+  }
 
   const next = body.decision === 'REJECT' ? 'REJECTED' : stage === 'REVIEW' ? 'PENDING_APPROVAL' : 'PENDING_DCC';
   const stamp = stage === 'REVIEW' ? 'reviewed_at' : 'approved_at';

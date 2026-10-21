@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { toStoreDar, toTask, submitDarToApi, decideTask, loadDars } from './dars';
+import { toStoreDar, toTask, submitDarToApi, decideTask, loadDars, resubmitDarOnApi, withdrawDarOnApi } from './dars';
 import useStore from '../store/useStore';
 
 const users = [{ id: 'req', name: 'ผู้ขอ' }, { id: 'rev', name: 'ผู้ทบทวน' }, { id: 'app', name: 'ผู้อนุมัติ' }];
@@ -77,14 +77,49 @@ describe('API DAR tasks', () => {
     expect(toTask({ ...row, status: 'COMPLETED' }, users, { id: 'dcc', isDcc: true })).toBeNull();
   });
 
-  it('sends a send-back as REJECT and keeps the page open on refusal', async () => {
+  it('sends a send-back as RETURN and keeps the page open on refusal', async () => {
     useStore.setState({ currentUser: { id: 'rev' }, masterUsers: users, tasks: [toTask(row, users)] });
     const fetch = vi.fn((url, init) => (init?.method === 'POST' ? json(409, { error: 'คำขอนี้ถูกพิจารณาไปแล้ว' }) : json(200, { dars: [] })));
     vi.stubGlobal('fetch', fetch);
     await expect(decideTask('api-dar-7-review', 'RETURN', 'แก้ขั้นตอน')).rejects.toThrow('ถูกพิจารณาไปแล้ว');
     expect(fetch.mock.calls[0][0]).toMatch(/\/api\/dars\/7\/decision$/);
-    expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ decision: 'REJECT', comment: 'แก้ขั้นตอน' });
+    expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ decision: 'RETURN', comment: 'แก้ขั้นตอน' });
     expect(useStore.getState().tasks).toEqual([]); // reloaded, so the stale task is gone
+  });
+});
+
+describe('a DAR sent back to its requester', () => {
+  afterEach(() => vi.unstubAllGlobals());
+  const returned = { ...row, awaiting_requester: 1, returned_at: '2026-10-22T02:00:00.000Z', returned_by: 'rev', return_comment: 'แก้ชื่อ', return_count: 1 };
+
+  it("shows as RETURNED_FOR_REVISION with who and why, and is the requester's task, not the reviewer's", () => {
+    expect(toStoreDar(returned, users)).toMatchObject({ status: 'RETURNED_FOR_REVISION', apiStatus: 'PENDING_REVIEW', returnReason: 'แก้ชื่อ', returnedBy: 'ผู้ทบทวน', awaitingRequester: true });
+    expect(toStoreDar(row, users).status).toBe('UNDER_REVIEW');
+    expect(toTask(returned, users)).toMatchObject({ id: 'api-dar-7-revise', type: 'Revise', assigneeId: 'req', returnReason: 'แก้ชื่อ', returnedBy: 'ผู้ทบทวน' });
+    expect(toTask(row, users)).toMatchObject({ type: 'Review', assigneeId: 'rev' });
+  });
+
+  it('resubmits with the fixed details and the new file, and withdraws', async () => {
+    const fetch = vi.fn((url, init) => (init?.method ? json(200, {}) : json(200, { dars: [] })));
+    vi.stubGlobal('fetch', fetch);
+    useStore.setState({ currentUser: { id: 'req' }, masterUsers: users, dars: [], tasks: [], timeline: [] });
+    const file = new Blob(['%PDF-1.4']);
+    expect(await resubmitDarOnApi({ apiId: 7 }, { name: 'ใหม่', reason: 'เหตุผล', effectiveDate: '2026-12-01', file })).toBe(true);
+    expect(fetch.mock.calls[0][0]).toMatch(/\/api\/dars\/7\/file$/);
+    expect(fetch.mock.calls[1][0]).toMatch(/\/api\/dars\/7\/resubmit$/);
+    expect(JSON.parse(fetch.mock.calls[1][1].body)).toEqual({ name: 'ใหม่', reason: 'เหตุผล', effective_date: '2026-12-01' });
+    expect(await withdrawDarOnApi({ apiId: 7 })).toBe(true);
+    expect(fetch.mock.calls.some(([url]) => /\/api\/dars\/7\/withdraw$/.test(url))).toBe(true);
+
+    vi.stubGlobal('fetch', vi.fn(() => json(409, { error: 'คำขอนี้ไม่ได้ถูกส่งกลับ' })));
+    expect(await resubmitDarOnApi({ apiId: 7 }, { reason: 'x' })).toBe(false);
+  });
+
+  it('puts the return on the DAR timeline', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => json(200, { dars: [returned] })));
+    useStore.setState({ currentUser: { id: 'req' }, masterUsers: users, dars: [], tasks: [], timeline: [] });
+    await loadDars();
+    expect(useStore.getState().timeline.map((t) => [t.action, t.user, t.comment])).toEqual([['Created', 'ผู้ขอ', undefined], ['Returned', 'ผู้ทบทวน', 'แก้ชื่อ']]);
   });
 });
 
