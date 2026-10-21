@@ -48,6 +48,7 @@ export const toStoreDar = (d, users) => {
     reviewer: nameOf(users, d.reviewer_id),
     approver: nameOf(users, d.approver_id),
     requestReason: d.reason,
+    effectiveDate: d.effective_date,
     date: localTime(d.created_at).slice(0, 10),
     createdAt: d.created_at,
     submittedAt: d.created_at,
@@ -183,6 +184,7 @@ export const submitDarToApi = async (dar, file) => {
       name: dar.title,
       access_scope: dar.access_control?.scope === 'GENERAL' ? 'GENERAL' : 'DEPT',
       reason: dar.reason || dar.requestReason,
+      effective_date: dar.effectiveDate || dar.effective_date,
       reviewer_id: reviewerId,
       approver_id: approverId
     }));

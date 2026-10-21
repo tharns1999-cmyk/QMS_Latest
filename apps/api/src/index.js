@@ -224,6 +224,8 @@ app.post('/api/dars', requireAuth, async (c) => {
   const docCode = str('doc_code').toUpperCase();
   if (!DAR_TYPES.includes(type)) return c.json({ error: 'ประเภทคำขอไม่ถูกต้อง' }, 400);
   if (!str('reason')) return c.json({ error: 'กรุณาระบุเหตุผลของคำขอ' }, 400);
+  const effectiveDate = str('effective_date') || null;
+  if (effectiveDate && !(/^\d{4}-\d{2}-\d{2}$/.test(effectiveDate) && !Number.isNaN(Date.parse(effectiveDate)))) return c.json({ error: 'วันที่มีผลบังคับใช้ไม่ถูกต้อง' }, 400);
 
   // NEW takes its metadata from the request and its code from the server; REVISION/OBSOLETE take both from the effective document.
   let doc;
@@ -265,9 +267,9 @@ app.post('/api/dars', requireAuth, async (c) => {
     : ['?', [docCode]];
   try {
     const [inserted] = await db.batch([
-      db.prepare(`INSERT INTO dars (type, doc_code, doc_type, department, revision, name, access_scope, reason, requester_id, reviewer_id, approver_id)
-        VALUES (?, ${codeSql}, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`)
-        .bind(type, ...codeArgs, doc.doc_type, doc.department, doc.revision, doc.name, doc.access_scope, str('reason'), user.id, reviewerId, approverId),
+      db.prepare(`INSERT INTO dars (type, doc_code, doc_type, department, revision, name, access_scope, reason, requester_id, reviewer_id, approver_id, effective_date)
+        VALUES (?, ${codeSql}, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`)
+        .bind(type, ...codeArgs, doc.doc_type, doc.department, doc.revision, doc.name, doc.access_scope, str('reason'), user.id, reviewerId, approverId, effectiveDate),
       db.prepare(`INSERT INTO audit_log (actor_id, action, details)
         SELECT ?, 'DAR_SUBMITTED', json_object('type', type, 'doc_code', doc_code, 'dar_id', id) FROM dars WHERE id = last_insert_rowid()`).bind(user.id)
     ]);
@@ -383,8 +385,8 @@ app.post('/api/dars/:id/publish', requireAuth, async (c) => {
   const statements = dar.type === 'OBSOLETE' ? [retire('OBSOLETE')] : [
     ...(dar.type === 'REVISION' ? [retire('SUPERSEDED')] : []),
     db.prepare(`INSERT INTO documents (id, doc_code, revision, name, doc_type, department, status, access_scope, owner_id, effective_date, file_key)
-      VALUES (?, ?, ?, ?, ?, ?, 'EFFECTIVE', ?, ?, date('now'), ?)`)
-      .bind(documentId, dar.doc_code, dar.revision, dar.name, dar.doc_type, dar.department, dar.access_scope, dar.requester_id, dar.file_key)
+      VALUES (?, ?, ?, ?, ?, ?, 'EFFECTIVE', ?, ?, max(date('now'), COALESCE(date(?), date('now'))), ?)`)
+      .bind(documentId, dar.doc_code, dar.revision, dar.name, dar.doc_type, dar.department, dar.access_scope, dar.requester_id, dar.effective_date, dar.file_key)
   ];
 
   try {
