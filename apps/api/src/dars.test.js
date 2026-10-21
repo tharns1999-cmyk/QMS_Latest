@@ -29,7 +29,7 @@ describe('DAR workflow API', () => {
     proxy = await getPlatformProxy({ persist: { path: '.wrangler/test/v3' } });
     env = { ...proxy.env, JWT_SECRET: 'test-secret' };
     const hash = await hashPassword('dar-pass');
-    const users = [['R-REQ', 'PD', 2, 0], ['R-REV', 'PD', 4, 0], ['R-APP', 'PD', 5, 0], ['R-LOW', 'PD', 3, 0], ['R-DCC', 'DC', 4, 1]];
+    const users = [['R-REQ', 'PD', 2, 0], ['R-REV', 'PD', 4, 0], ['R-APP', 'PD', 5, 0], ['R-LOW', 'PD', 3, 0], ['R-DCC', 'DC', 4, 1], ['R-HRQ', 'HR&GA', 2, 0], ['R-HRV', 'HR&GA', 4, 0], ['R-HRA', 'HR&GA', 5, 0]];
     await env.DB.batch(users.map(([id, dept, level, dcc]) => env.DB.prepare(`INSERT INTO users (id, name, email, password_hash, role, approval_level, primary_department, departments, is_dcc)
       VALUES (?, ?, ?, ?, 'USER', ?, ?, ?, ?)`).bind(id, id, `${id}@test.local`, hash, level, dept, JSON.stringify([dept]), dcc)));
     for (const [id] of users) {
@@ -44,6 +44,14 @@ describe('DAR workflow API', () => {
     const { users } = (await get('/api/users', 'R-REQ')).body;
     expect(users.find((u) => u.id === 'R-REV')).toMatchObject({ approval_level: 4, department: 'PD' });
     expect(JSON.stringify(users)).not.toMatch(/password|failed_logins/);
+  });
+
+  it('numbers a document in a department whose code has an ampersand, like HR&GA', async () => {
+    const hr = { department: 'HR&GA', reviewer_id: 'R-HRV', approver_id: 'R-HRA' };
+    const { status, body } = await post('/api/dars', 'R-HRQ', newDar(hr));
+    expect(status).toBe(201);
+    expect(body.dar.doc_code).toMatch(/^FM-HR&GA-\d\d$/);
+    expect((await post('/api/dars', 'R-HRQ', newDar({ ...hr, department: 'HR-GA' }))).status).toBe(400);
   });
 
   it('refuses a DAR routed to an ineligible reviewer or approver', async () => {

@@ -116,7 +116,7 @@ export const formatDarDocumentDisplay = (dar, documents = []) => {
   let cleanTitle = String(rawTitle || '').replace(/^\[(OBSOLETE|REVISION|NEW|ยกเลิก)\]\s*/i, '').trim();
 
   // If code is empty but cleanTitle looks like an alphanumeric document code (e.g. SOP-QC-01)
-  if (!cleanCode && /^[A-Z]{2,4}-[A-Z0-9]+(-[A-Z0-9]+)?$/i.test(cleanTitle)) {
+  if (!cleanCode && /^[A-Z]{2,4}-[A-Z0-9]+(-[A-Z0-9&]+)?$/i.test(cleanTitle)) {
     cleanCode = cleanTitle;
   }
 
