@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { setUsers, loadMasterData, createUser, setUserStatus, resetUserPassword, saveMatrixEntry } from './masterData';
+import { setUsers, loadMasterData, loadDocumentTypes, loadSla, loadSignatures, createUser, setUserStatus, resetUserPassword, saveMatrixEntry } from './masterData';
 import { knownUsers } from './people';
 import useStore from '../store/useStore';
 
@@ -70,5 +70,18 @@ describe('master data adapter', () => {
       ['POST', '/api/users/u1/reset-password', {}],
       ['PUT', '/api/approval-matrix/SOP', { min_requester_level: 1, required_reviewer_level: 4, required_approver_level: 6 }]
     ]);
+  });
+
+  it('takes document types, SLA days and signatures from the server, and keeps signatures on reloaded users', async () => {
+    vi.stubGlobal('fetch', vi.fn((url) => json(200, url.endsWith('/document-types') ? { documentTypes: [{ code: 'ZZ', nameTh: 'ทดสอบ' }] }
+      : url.endsWith('/sla') ? { sla: { reviewSlaDays: 9 } } : { signatures: [{ user_id: 'a', signature_type: 'DRAWN', initials: 'A', image: 'data:image/png;base64,AA==' }] })));
+    useStore.setState({ currentUser: { id: 'a' } });
+    setUsers([user('a', 'ACTIVE')]);
+    await Promise.all([loadDocumentTypes(), loadSla(), loadSignatures()]);
+    expect(useStore.getState().documentTypes.map((t) => t.code)).toEqual(['ZZ']);
+    expect(useStore.getState().slaSettings.reviewSlaDays).toBe(9);
+    expect(useStore.getState().masterUsers[0]).toMatchObject({ signatureImage: 'data:image/png;base64,AA==', hasRegisteredSignature: true });
+    setUsers([user('a', 'ACTIVE')]); // a reload must not drop it
+    expect(useStore.getState().adminUsers[0].signatureImage).toBe('data:image/png;base64,AA==');
   });
 });

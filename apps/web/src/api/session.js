@@ -5,7 +5,7 @@ import { loadCopies } from './copies';
 import { applyReviews, clearReviews, loadReviews } from './reviews';
 import { clearExternal, isExternalRow, setExternalSources } from './external';
 import { isDarDraft } from '../modules/dcc/utils/darHelper';
-import { toStoreUser, loadUsers, loadMasterData, loadApprovalMatrix } from './masterData';
+import { toStoreUser, loadUsers, loadMasterData, loadApprovalMatrix, loadDocumentTypes, loadSla, loadSignatures } from './masterData';
 
 export const toStoreDocument = (d) => ({
   ...d,
@@ -58,7 +58,8 @@ export const loadDocuments = async () => {
 const start = async (user) => {
   useStore.setState({ currentUser: toStoreUser(user) });
   // Routing previews and pickers read these lists, so they must hold the real people, departments and places, not demo ones.
-  await Promise.all([loadUsers(), loadMasterData(), loadApprovalMatrix()]);
+  await Promise.all([loadUsers(), loadMasterData(), loadApprovalMatrix(), loadDocumentTypes(), loadSla()]);
+  await loadSignatures();
   await Promise.all([loadDocuments(), loadDars(), loadCopies()]);
 };
 

@@ -22,6 +22,9 @@ describe('ApiSessionGate', () => {
       if (url.endsWith('/api/departments')) return json(200, { departments: [{ code: 'QA', name_th: 'ประกันคุณภาพ', name_en: 'QA', status: 'ACTIVE' }] });
       if (url.endsWith('/api/distribution-locations')) return json(200, { locations: [] });
       if (url.endsWith('/api/approval-matrix')) return json(200, { matrix: [{ doc_type: 'SOP', required_reviewer_level: 4 }] });
+      if (url.endsWith('/api/settings/document-types')) return json(200, { documentTypes: null });
+      if (url.endsWith('/api/settings/sla')) return json(200, { sla: null });
+      if (url.endsWith('/api/signatures')) return json(200, { signatures: [] });
       if (url.endsWith('/api/dars')) return json(200, { dars: [] });
       if (url.endsWith('/api/controlled-copies')) return json(200, { copies: [] });
       if (url.endsWith('/api/periodic-reviews')) return json(200, { reviews: [] });
@@ -61,6 +64,9 @@ describe('ApiSessionGate', () => {
       if (url.endsWith('/api/departments')) return json(200, { departments: [{ code: 'QA', name_th: 'ประกันคุณภาพ', name_en: 'QA', status: 'ACTIVE' }] });
       if (url.endsWith('/api/distribution-locations')) return json(200, { locations: [] });
       if (url.endsWith('/api/approval-matrix')) return json(200, { matrix: [] });
+      if (url.endsWith('/api/settings/document-types')) return json(200, { documentTypes: null });
+      if (url.endsWith('/api/settings/sla')) return json(200, { sla: null });
+      if (url.endsWith('/api/signatures')) return json(200, { signatures: [] });
       if (url.endsWith('/api/dars')) return json(200, { dars: [] });
       if (url.endsWith('/api/controlled-copies')) return json(200, { copies: [] });
       if (url.endsWith('/api/periodic-reviews')) return json(200, { reviews: [] });

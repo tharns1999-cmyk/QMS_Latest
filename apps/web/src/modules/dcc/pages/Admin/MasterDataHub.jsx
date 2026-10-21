@@ -677,6 +677,7 @@ const MasterDataHub = () => {
         addDocumentType(payload);
         toast.success(`เพิ่มประเภทเอกสาร "${payload.code}" เรียบร้อยแล้ว`);
       }
+      if (isApiMode) serverData.saveDocumentTypes(useStore.getState().documentTypes);
       setIsTypeModalOpen(false);
     } catch (err) {
       toast.error(err.message || 'เกิดข้อผิดพลาด');
@@ -903,7 +904,12 @@ const MasterDataHub = () => {
         signatureImage: finalSigImage || signatureFormData.signatureImage,
         signatureType: signatureActiveTab
       });
-      toast.success(`บันทึกสินทรัพย์ลายเซ็นของ "${selectedUserForSignature.name}" เรียบร้อยแล้ว`);
+      if (isApiMode) {
+        const saved = await serverData.saveSignature(selectedUserForSignature.id, { ...signatureFormData, signatureType: signatureActiveTab, signatureImage: finalSigImage || signatureFormData.signatureImage });
+        if (!saved) return;
+      } else {
+        toast.success(`บันทึกสินทรัพย์ลายเซ็นของ "${selectedUserForSignature.name}" เรียบร้อยแล้ว`);
+      }
       setIsSignatureModalOpen(false);
     } catch (err) {
       toast.error(err.message || 'เกิดข้อผิดพลาดในการบันทึกลายเซ็น');
@@ -965,6 +971,10 @@ const MasterDataHub = () => {
   const handleSaveAllSlaAndMatrix = (e) => {
     e.preventDefault();
     updateSlaSettings(slaForm);
+    if (isApiMode) {
+      serverData.saveSla(Object.fromEntries(Object.entries(slaForm).map(([k, v]) => [k, Number(v)])));
+      return;
+    }
     toast.success('บันทึกการตั้งค่าสายการอนุมัติและ SLAs เรียบร้อยแล้ว');
   };
 
@@ -1566,7 +1576,10 @@ const MasterDataHub = () => {
                         </td>
                         <td className="py-2 px-3 text-center whitespace-nowrap">
                           <button
-                            onClick={() => toggleDocumentTypeStatus(type.code || type.id)}
+                            onClick={() => {
+                              toggleDocumentTypeStatus(type.code || type.id);
+                              if (isApiMode) serverData.saveDocumentTypes(useStore.getState().documentTypes);
+                            }}
                             className={`px-2 py-0.5 rounded-full text-[11px] font-medium cursor-pointer transition-colors ${
                               type.status !== 'INACTIVE'
                                 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
