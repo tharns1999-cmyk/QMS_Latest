@@ -227,6 +227,11 @@ app.post('/api/dars', requireAuth, async (c) => {
   if (!str('reason')) return c.json({ error: 'กรุณาระบุเหตุผลของคำขอ' }, 400);
   const effectiveDate = str('effective_date') || null;
   if (effectiveDate && !(/^\d{4}-\d{2}-\d{2}$/.test(effectiveDate) && !Number.isNaN(Date.parse(effectiveDate)))) return c.json({ error: 'วันที่มีผลบังคับใช้ไม่ถูกต้อง' }, 400);
+  // Printed copies only for NEW/REVISION; the web sends copy 01 (the owner's office) first.
+  const text = (v, max) => (typeof v === 'string' && v.trim() && v.trim().length <= max ? v.trim() : null);
+  const rawDist = type !== 'OBSOLETE' && Array.isArray(body.distributions) ? body.distributions : [];
+  const distributions = rawDist.map((d) => ({ department: text(d?.department, 20)?.toUpperCase(), location_id: text(d?.location_id, 100), location_name: text(d?.location_name, 200) }));
+  if (distributions.length > 50 || distributions.some((d) => !d.department || !d.location_name)) return c.json({ error: 'จุดแจกจ่ายสำเนาไม่ถูกต้อง' }, 400);
 
   // NEW takes its metadata from the request and its code from the server; REVISION/OBSOLETE take both from the effective document.
   let doc;
@@ -268,9 +273,9 @@ app.post('/api/dars', requireAuth, async (c) => {
     : ['?', [docCode]];
   try {
     const [inserted] = await db.batch([
-      db.prepare(`INSERT INTO dars (type, doc_code, doc_type, department, revision, name, access_scope, reason, requester_id, reviewer_id, approver_id, effective_date)
-        VALUES (?, ${codeSql}, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`)
-        .bind(type, ...codeArgs, doc.doc_type, doc.department, doc.revision, doc.name, doc.access_scope, str('reason'), user.id, reviewerId, approverId, effectiveDate),
+      db.prepare(`INSERT INTO dars (type, doc_code, doc_type, department, revision, name, access_scope, reason, requester_id, reviewer_id, approver_id, effective_date, distributions)
+        VALUES (?, ${codeSql}, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`)
+        .bind(type, ...codeArgs, doc.doc_type, doc.department, doc.revision, doc.name, doc.access_scope, str('reason'), user.id, reviewerId, approverId, effectiveDate, JSON.stringify(distributions)),
       db.prepare(`INSERT INTO audit_log (actor_id, action, details)
         SELECT ?, 'DAR_SUBMITTED', json_object('type', type, 'doc_code', doc_code, 'dar_id', id) FROM dars WHERE id = last_insert_rowid()`).bind(user.id)
     ]);
@@ -392,11 +397,18 @@ export const activateDue = async (db) => {
       continue;
     }
     const retire = (status) => db.prepare("UPDATE documents SET status = ? WHERE doc_code = ? AND status = 'EFFECTIVE'").bind(status, dar.doc_code);
-    const statements = dar.type === 'OBSOLETE' ? [retire('OBSOLETE')] : [
-      ...(dar.type === 'REVISION' ? [retire('SUPERSEDED')] : []),
+    // Copies of the outgoing revision: those in the field must be recalled, an undispatched one is simply void.
+    const recallOld = db.prepare(`UPDATE controlled_copies SET status = CASE status WHEN 'PENDING_ISSUE' THEN 'VOID' ELSE 'PENDING_RECALL' END
+      WHERE doc_code = ? AND status IN ('PENDING_ISSUE', 'DISPATCHED_PENDING_RECEIPT', 'ISSUED_ACTIVE')`).bind(dar.doc_code);
+    const copies = JSON.parse(dar.distributions || '[]').map((d, i) => db.prepare(`INSERT INTO controlled_copies (id, document_id, doc_code, revision, copy_no, department, location_id, location_name)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).bind(crypto.randomUUID(), documentId, dar.doc_code, dar.revision, String(i + 1).padStart(2, '0'), d.department, d.location_id, d.location_name));
+    const statements = dar.type === 'OBSOLETE' ? [retire('OBSOLETE'), recallOld] : [
+      ...(dar.type === 'REVISION' ? [retire('SUPERSEDED'), recallOld] : []),
       db.prepare(`INSERT INTO documents (id, doc_code, revision, name, doc_type, department, status, access_scope, owner_id, effective_date, file_key)
         VALUES (?, ?, ?, ?, ?, ?, 'EFFECTIVE', ?, ?, max(${TODAY_TH}, COALESCE(date(?), ${TODAY_TH})), ?)`)
-        .bind(documentId, dar.doc_code, dar.revision, dar.name, dar.doc_type, dar.department, dar.access_scope, dar.requester_id, dar.effective_date, dar.file_key)
+        .bind(documentId, dar.doc_code, dar.revision, dar.name, dar.doc_type, dar.department, dar.access_scope, dar.requester_id, dar.effective_date, dar.file_key),
+      // After the document: copies reference it.
+      ...copies
     ];
     try {
       await db.batch([
@@ -405,13 +417,56 @@ export const activateDue = async (db) => {
         db.prepare(`UPDATE dars SET status = 'COMPLETED', completed_at = ${NOW}, document_id = ? WHERE id = ? AND status = 'PENDING_DCC'`).bind(documentId, dar.id),
         // No actor: the system acts on the approver's decision and the chosen date.
         db.prepare('INSERT INTO audit_log (actor_id, action, details) SELECT NULL, ?, ? WHERE changes() > 0')
-          .bind(dar.type === 'OBSOLETE' ? 'DOCUMENT_OBSOLETED' : 'DOCUMENT_PUBLISHED', JSON.stringify({ dar_id: dar.id, doc_code: dar.doc_code, revision: dar.revision, automatic: true }))
+          .bind(dar.type === 'OBSOLETE' ? 'DOCUMENT_OBSOLETED' : 'DOCUMENT_PUBLISHED', JSON.stringify({ dar_id: dar.id, doc_code: dar.doc_code, revision: dar.revision, automatic: true, copies_issued: copies.length }))
       ]);
     } catch (err) {
       if (!isLockConflict(err)) throw err;
     }
   }
 };
+
+// Controlled copies: DCC and QMR see all; others see the copies held by their departments.
+app.get('/api/controlled-copies', requireAuth, async (c) => {
+  await activateDue(c.env.DB);
+  const user = c.get('user');
+  const { results } = await c.env.DB.prepare(`SELECT cc.*, d.name AS doc_name, d.doc_type, d.department AS owner_department
+    FROM controlled_copies cc JOIN documents d ON d.id = cc.document_id
+    WHERE ? OR cc.department IN (SELECT value FROM json_each(?)) ORDER BY cc.issued_at DESC, cc.copy_no`)
+    .bind(user.isDcc || user.isQmr ? 1 : 0, JSON.stringify([...user.depts, user.department])).all();
+  return c.json({ copies: results });
+});
+
+// One step in a copy's life: who may take it, and the status it must be in (so a double click is a no-op).
+const COPY_STEPS = {
+  dispatch: { to: 'DISPATCHED_PENDING_RECEIPT', from: 'PENDING_ISSUE', stamp: 'dispatched', action: 'CC_DISPATCHED',
+    refuse: (user) => (user.isDcc ? null : 'เฉพาะ DCC เท่านั้นที่แจกจ่ายสำเนาได้') },
+  receive: { to: 'ISSUED_ACTIVE', from: 'DISPATCHED_PENDING_RECEIPT', stamp: 'received', action: 'CC_RECEIVED',
+    refuse: (user, copy) => (user.approval_level >= 4 && (user.depts.includes(copy.department) || user.department === copy.department)
+      ? null : `เฉพาะระดับ L4 ขึ้นไปของแผนก ${copy.department} เท่านั้นที่ยืนยันรับสำเนาได้`) },
+  recall: { to: 'RECALLED', from: 'PENDING_RECALL', stamp: 'recalled', action: 'CC_RECALLED',
+    refuse: (user) => (user.isDcc ? null : 'เฉพาะ DCC เท่านั้นที่บันทึกการเรียกคืนได้') }
+};
+
+app.post('/api/controlled-copies/:id/:step', requireAuth, async (c) => {
+  const step = Object.hasOwn(COPY_STEPS, c.req.param('step')) ? COPY_STEPS[c.req.param('step')] : null;
+  if (!step) return c.json({ error: 'ไม่พบขั้นตอนนี้' }, 404);
+  const user = c.get('user');
+  const db = c.env.DB;
+  const copy = await db.prepare('SELECT * FROM controlled_copies WHERE id = ?').bind(c.req.param('id')).first();
+  if (!copy) return c.json({ error: 'ไม่พบสำเนา' }, 404);
+  const refused = step.refuse(user, copy);
+  if (refused) return c.json({ error: refused }, 403);
+  const body = await c.req.json().catch(() => ({}));
+  const note = typeof body.note === 'string' ? body.note.trim().slice(0, 500) : '';
+  const [updated] = await db.batch([
+    db.prepare(`UPDATE controlled_copies SET status = ?, ${step.stamp}_at = ${NOW}, ${step.stamp}_by = ? WHERE id = ? AND status = ? RETURNING *`)
+      .bind(step.to, user.id, copy.id, step.from),
+    db.prepare('INSERT INTO audit_log (actor_id, action, details) SELECT ?, ?, ? WHERE changes() > 0')
+      .bind(user.id, step.action, JSON.stringify({ copy_id: copy.id, doc_code: copy.doc_code, revision: copy.revision, copy_no: copy.copy_no, department: copy.department, note }))
+  ]);
+  if (!updated.results.length) return c.json({ error: 'สถานะสำเนาเปลี่ยนไปแล้ว กรุณาโหลดใหม่' }, 409);
+  return c.json({ copy: updated.results[0] });
+});
 
 // Locked accounts are hidden from the directory above, so DCC lists them here to unlock.
 app.get('/api/users/locked', requireAuth, async (c) => {

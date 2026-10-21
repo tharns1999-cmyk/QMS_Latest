@@ -3,6 +3,12 @@
  * Extracted from useStore.js (Phase 4 Refactor)
  */
 import { STANDARD_STATIONS } from '../services/MasterDataService';
+import { isApiMode } from '../../../api/client';
+// Loaded on use: api/copies imports the store, which imports this slice.
+const apiCopies = {
+  stepCopy: (...args) => import('../../../api/copies').then((m) => m.stepCopy(...args)),
+  stepCopies: (...args) => import('../../../api/copies').then((m) => m.stepCopies(...args))
+};
 import { canManageControlledCopy } from '../utils/accessControl';
 import { 
   isSameDepartment, 
@@ -870,7 +876,11 @@ export const createControlledCopySlice = (set, get) => ({
   trackControlledCopyPrint: (copyId) => get().markCopyPrinted(copyId),
 
   // Print Tracking
-  markCopyPrinted: (copyId) => set(state => {
+  // API mode: the server does not record printing; the guard before dispatch uses this browser's flag.
+  markCopyPrinted: (copyId) => isApiMode ? set((state) => {
+    const mark = (list) => (list || []).map((c) => (String(c.id) === String(copyId) ? { ...c, is_printed: true } : c));
+    return { controlledCopyInstances: mark(state.controlledCopyInstances), documentControlledCopies: mark(state.documentControlledCopies) };
+  }) : set(state => {
     const now = new Date().toISOString();
     let targetCopy = null;
 
@@ -1043,7 +1053,7 @@ export const createControlledCopySlice = (set, get) => ({
   distributeCopies: (docIdOrCopyIds, copiesToDispatch) => {
     return get().dispatchControlledCopies(docIdOrCopyIds, copiesToDispatch);
   },
-  dispatchControlledCopy: (copyId) => set((state) => {
+  dispatchControlledCopy: (copyId) => isApiMode ? apiCopies.stepCopy('dispatch', typeof copyId === 'object' ? (copyId?.copyId || copyId?.id) : copyId) : set((state) => {
     const targetId = String(typeof copyId === 'object' ? (copyId?.copyId || copyId?.id || '') : copyId);
     const copies = (state.controlledCopyInstances && state.controlledCopyInstances.length > 0)
       ? state.controlledCopyInstances
@@ -1481,7 +1491,7 @@ export const createControlledCopySlice = (set, get) => ({
   },
 
   // Receipt & Recall Checklist
-  confirmHardcopyReceipt: (copyId, taskId, recipientData = {}) => set((state) => {
+  confirmHardcopyReceipt: (copyId, taskId, recipientData = {}) => isApiMode ? apiCopies.stepCopy('receive', typeof copyId === 'object' ? (copyId?.copyId || copyId?.id) : copyId, recipientData.remarks) : set((state) => {
     // Strict Type Coercion to prevent comparison bugs
     const targetCopyId = String(typeof copyId === 'object' ? (copyId?.copyId || copyId?.id || '') : copyId);
     const targetTaskId = taskId ? String(taskId) : null;
@@ -1710,7 +1720,7 @@ export const createControlledCopySlice = (set, get) => ({
     return get().confirmHardcopyReceipt(instId, taskId, recipientData);
   },
 
-  completeRecallChecklist: (taskId, checkedCopyIds = [], outcome = 'RECALLED_DESTROYED') => set((state) => {
+  completeRecallChecklist: (taskId, checkedCopyIds = [], outcome = 'RECALLED_DESTROYED') => isApiMode ? apiCopies.stepCopies('recall', checkedCopyIds, outcome) : set((state) => {
     const targetTaskId = String(taskId);
     const checkedSet = new Set((checkedCopyIds || []).map(id => String(id)));
     const recalledAt = new Date().toISOString();
@@ -1855,7 +1865,7 @@ export const createControlledCopySlice = (set, get) => ({
     };
   }),
 
-  completeCopyRecallAndArchive: ({ documentCode, collectedCopyIds, dispositionMethod, notes, witnessName, referenceNo, taskId }) => set((state) => {
+  completeCopyRecallAndArchive: ({ documentCode, collectedCopyIds, dispositionMethod, notes, witnessName, referenceNo, taskId }) => isApiMode ? apiCopies.stepCopies('recall', collectedCopyIds || [], [dispositionMethod, witnessName, referenceNo, notes].filter(Boolean).join(' | ')) : set((state) => {
     const isLostVoided = dispositionMethod === 'LOST_VOIDED';
     const collectedSet = new Set((collectedCopyIds || []).map(id => String(id)));
     const recalledAt = new Date().toISOString();
@@ -2820,7 +2830,7 @@ export const createControlledCopySlice = (set, get) => ({
   }),
 
   // Record physical receipt of recalled copy by DCC
-  recordCopyRecalled: (copyId, notes = '') => set((state) => {
+  recordCopyRecalled: (copyId, notes = '') => isApiMode ? apiCopies.stepCopy('recall', copyId, notes) : set((state) => {
     const targetId = String(copyId);
     const copies = (state.controlledCopyInstances && state.controlledCopyInstances.length > 0)
       ? state.controlledCopyInstances

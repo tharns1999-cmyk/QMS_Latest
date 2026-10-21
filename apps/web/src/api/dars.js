@@ -4,6 +4,8 @@ import { apiGet, apiPost, apiUpload } from './client';
 import { loadDocuments } from './session';
 import { resolveReviewer, resolveApprover } from '../modules/dcc/utils/workflowResolver';
 import { isDarDraft } from '../modules/dcc/utils/darHelper';
+import { calculateCopyAllocations } from '../modules/dcc/services/MasterDataService';
+import { distributionsOf, loadCopies } from './copies';
 
 // The pages key their badges and handler logic on the demo status names.
 const STATUS_FROM_API = { PENDING_REVIEW: 'UNDER_REVIEW', PENDING_DCC: 'APPROVED_WAITING_EFFECTIVE' };
@@ -119,7 +121,7 @@ export const toTask = (d, users) => {
 
 export const loadDars = async () => {
   const { dars } = await apiGet('/api/dars');
-  const { masterUsers, currentUser } = useStore.getState();
+  const { masterUsers } = useStore.getState();
   const users = masterUsers || [];
   // Drafts exist only in this browser (the server has no draft status); keep them or opening the list would wipe them.
   const drafts = (useStore.getState().dars || []).filter(isDarDraft);
@@ -128,7 +130,7 @@ export const loadDars = async () => {
     dars: mapped,
     darRequests: mapped,
     timeline: dars.flatMap((d) => toTimeline(d, users)),
-    tasks: dars.map((d) => toTask(d, users, currentUser)).filter(Boolean)
+    tasks: [...dars.map((d) => toTask(d, users)).filter(Boolean), ...(useStore.getState().tasks || []).filter((t) => String(t.id).startsWith('api-cc-'))]
   });
 };
 
@@ -142,7 +144,7 @@ export const decideTask = async (taskId, action, comment) => {
     await apiPost(`/api/dars/${task.darId}/decision`, { decision, comment });
   } finally {
     // A final approval can put the document in force at once, so the register is re-read too.
-    await Promise.all([loadDars(), loadDocuments()]).catch(() => {});
+    await Promise.all([loadDars(), loadDocuments(), loadCopies()]).catch(() => {});
   }
 };
 
@@ -175,6 +177,7 @@ export const submitDarToApi = async (dar, file) => {
       access_scope: dar.access_control?.scope === 'GENERAL' ? 'GENERAL' : 'DEPT',
       reason: dar.reason || dar.requestReason,
       effective_date: dar.effectiveDate || dar.effective_date,
+      distributions: distributionsOf({ type, docType }, calculateCopyAllocations(dar.department, dar.distributions || []).allAllocations),
       reviewer_id: reviewerId,
       approver_id: approverId
     }));

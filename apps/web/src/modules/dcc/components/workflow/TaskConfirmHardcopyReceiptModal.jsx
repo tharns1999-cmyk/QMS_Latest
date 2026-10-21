@@ -45,7 +45,7 @@ const TaskConfirmHardcopyReceiptModal = ({ isOpen, onClose, task }) => {
     }
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (isLevel6) {
       toast.error('ผู้บริหารระดับสูง (Level 6 ขึ้นไป) ไม่มีหน้าที่ตรวจรับสำเนาควบคุมหน้างาน');
@@ -62,7 +62,7 @@ const TaskConfirmHardcopyReceiptModal = ({ isOpen, onClose, task }) => {
 
     setIsSubmitting(true);
     try {
-      confirmHardcopyReceipt(copyId, task.id, {
+      const confirmed = await confirmHardcopyReceipt(copyId, task.id, {
         document_id: docCode,
         copy_id: copyId,
         receiver_user_id: currentUser?.id || currentUser?.empId || 'UNKNOWN_USER',
@@ -72,6 +72,7 @@ const TaskConfirmHardcopyReceiptModal = ({ isOpen, onClose, task }) => {
         timestamp: new Date().toISOString(),
         remarks: remarks || 'Confirmed receipt and physical placement at point of use'
       });
+      if (confirmed === false) return; // API mode: the server refused and said why
       toast.success(`ตรวจรับสำเนา Copy ${copyNo} เรียบร้อยแล้ว`);
       onClose();
     } catch (err) {
