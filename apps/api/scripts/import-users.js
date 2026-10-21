@@ -24,8 +24,9 @@ for (const name of ['emp_id', 'name', 'email', 'department', 'extra_departments'
   }
 }
 
-// QA and QC are one department in this system (the web normalises the same way).
-const dept = (code) => { const upper = code.toUpperCase(); return upper === 'QA' ? 'QC' : upper; };
+// QA and QC are one department, and HR is stored as HR&GA, the same way the web normalises them.
+const ALIASES = { QA: 'QC', HR: 'HR&GA' };
+const dept = (code) => { const upper = code.toUpperCase(); return ALIASES[upper] ?? upper; };
 // No look-alike characters (0/O, 1/l/I); 14 characters clears the 12-character minimum.
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
 const tempPassword = () => Array.from({ length: 14 }, () => ALPHABET[randomInt(ALPHABET.length)]).join('');
