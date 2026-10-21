@@ -15,6 +15,7 @@ describe('API DAR mapping', () => {
     const dar = toStoreDar({ ...row, file_key: 'dars/7/a.pdf' }, users);
     expect(dar).toMatchObject({ id: '7', status: 'UNDER_REVIEW', darNumber: 'DAR-7', reviewerName: 'ผู้ทบทวน', date: '2026-10-21' });
     expect(dar.attachedFile.apiFilePath).toBe('/api/dars/7/file');
+    expect(toStoreDar({ ...row, effective_date: '2027-01-01' }, users).effectiveDate).toBe('2027-01-01');
     expect(toStoreDar({ ...row, status: 'PENDING_DCC' }, users).status).toBe('APPROVED_WAITING_EFFECTIVE');
   });
 

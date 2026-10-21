@@ -100,6 +100,20 @@ describe('DAR workflow API', () => {
     expect(actions).toContain('DOCUMENT_OBSOLETED');
   });
 
+  it('keeps the requested effective date through to the published document, never earlier than today', async () => {
+    expect((await post('/api/dars', 'R-REQ', newDar({ effective_date: '31/12/2027' }))).status).toBe(400);
+    for (const [asked, expected] of [['2099-01-01', '2099-01-01'], ['2001-01-01', new Date().toISOString().slice(0, 10)]]) {
+      const { id, doc_code: code } = (await post('/api/dars', 'R-REQ', newDar({ effective_date: asked }))).body.dar;
+      expect((await get(`/api/dars`, 'R-REQ')).body.dars.find((d) => d.id === id).effective_date).toBe(asked);
+      await upload(id, 'R-REQ');
+      await post(`/api/dars/${id}/decision`, 'R-REV', { decision: 'APPROVE' });
+      await post(`/api/dars/${id}/decision`, 'R-APP', { decision: 'APPROVE' });
+      expect((await post(`/api/dars/${id}/publish`, 'R-DCC')).status).toBe(200);
+      const doc = (await env.DB.prepare('SELECT effective_date FROM documents WHERE doc_code = ?').bind(code).first());
+      expect(doc.effective_date).toBe(expected);
+    }
+  });
+
   it('numbers NEW documents on the server, without collisions or reuse', async () => {
     const codes = (await Promise.all([1, 2, 3].map(() => post('/api/dars', 'R-REQ', newDar({ doc_type: 'SD', doc_code: 'SD-PD-01' })))))
       .map((r) => r.body.dar.doc_code);
