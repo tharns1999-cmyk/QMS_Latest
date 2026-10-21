@@ -28,7 +28,7 @@ const sql = [
     VALUES (${[u.id, u.id, u.name, `${u.id}@t.co`, hash, u.dcc ? 'DCC_ADMIN' : 'GENERAL_USER', u.level, u.dept, JSON.stringify([u.dept])].map((v, i) => (i === 6 ? v : q(v))).join(', ')}, ${u.dcc}, ${u.qmr}, 0);`),
   // Two places per department so a DAR can name where controlled copies go.
   ...Object.keys(DEPARTMENTS).flatMap((dept) => [['สำนักงาน', 'ตู้เอกสารหลัก'], ['หน้างาน', 'จุดใช้งานหน้างาน']]
-    .map(([name, description]) => `INSERT INTO distribution_locations (id, department, name, description) VALUES (${q(`loc-${dept}-${name}`)}, ${q(dept)}, ${q(`${dept} ${name}`)}, ${q(description)});`))
+    .map(([name, description]) => `INSERT INTO distribution_locations (id, department, name, description, is_master) VALUES (${q(`loc-${dept}-${name}`)}, ${q(dept)}, ${q(`${dept} ${name}`)}, ${q(description)}, ${name === 'สำนักงาน' ? 1 : 0});`))
 ];
 // Production asks DCC and L5+ for an authenticator code at sign-in. Locally that would mean a phone for every test account, so it starts off;
 // turn it on in Master Data > Security to try it.
