@@ -42,4 +42,6 @@ export const apiPatch = sendJson('PATCH');
 export const apiPut = sendJson('PUT');
 export const apiUpload = async (path, file) =>
   (await request(path, { method: 'PUT', body: file, headers: { 'Content-Type': 'application/pdf' } })).json();
-export const apiBlob = async (path) => (await request(path)).blob();
+// Why a file is being read; the server writes it to the audit log. Anything else is refused.
+export const FILE_PURPOSE = { VIEW: 'view', DOWNLOAD: 'download' };
+export const apiBlob = async (path, { purpose } = {}) => (await request(purpose ? `${path}${path.includes('?') ? '&' : '?'}purpose=${purpose}` : path)).blob();
