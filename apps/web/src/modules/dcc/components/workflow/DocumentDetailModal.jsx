@@ -149,7 +149,10 @@ export const handleDownloadHistoricalRevision = async (darItem, currentDoc, opti
     const rawObsoleteRev = (darItem.revision && darItem.revision !== '00') 
       ? darItem.revision 
       : (rawTargetRev && rawTargetRev !== '00' ? rawTargetRev : candidateDocRev);
-    const effectiveObsoleteRev = String(rawObsoleteRev).replace(/^Rev\.?/i, '').padStart(2, '0');
+    const storeDars = (() => { try { const st = useStore.getState(); return [...(st.dars || []), ...(st.darRequests || [])]; } catch { return []; } })();
+    const effectiveObsoleteRev = isObsoleteItem
+      ? resolveObsoleteEndRev(darItem, currentDoc, storeDars)
+      : String(rawObsoleteRev).replace(/^Rev\.?/i, '').padStart(2, '0');
 
     const darRevStr = isObsoleteItem 
       ? effectiveObsoleteRev 
