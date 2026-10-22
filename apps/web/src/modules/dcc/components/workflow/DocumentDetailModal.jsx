@@ -62,6 +62,33 @@ export { resolveFullDocumentHistory };
  * Normalizes '01', '1', 1, 'Rev.01', 'Rev. 1' -> '01'
  * Preserves alphanumeric revisions like 'A' -> 'A'
  */
+// DAR history is always newest -> oldest: by DAR year/sequence (DAR-26-004 before 003), then by date.
+const darSeqKey = (d) => {
+  const m = String(d?.dar_no || d?.darNo || d?.id || '').match(/(?:(\d+)\D+)?(\d+)\s*$/);
+  return m ? Number(m[1] || 0) * 100000 + Number(m[2]) : -1;
+};
+export const compareDarNewestFirst = (a, b) => {
+  const k = darSeqKey(b) - darSeqKey(a);
+  if (k) return k;
+  return new Date(b.completedAt || b.createdAt || b.effectiveDate || 0) - new Date(a.completedAt || a.createdAt || a.effectiveDate || 0);
+};
+
+// "สิ้นสุดที่ Rev.XX": the highest revision this code reached, not what the OBSOLETE DAR happened to store.
+const resolveObsoleteEndRev = (dar, doc, allDars = []) => {
+  const code = String(dar?.doc_code || dar?.docCode || dar?.document_code || doc?.code || doc?.document_code || '').toUpperCase();
+  const num = (r) => parseInt(String(r ?? '').replace(/\D/g, ''), 10);
+  const revs = [dar?.revision, doc?.rev, doc?.revision];
+  allDars.forEach((d) => {
+    const c = String(d?.doc_code || d?.docCode || d?.document_code || '').toUpperCase();
+    const t = d?.type || d?.request_type;
+    if (c && c === code && t !== 'OBSOLETE' && !['CANCELLED', 'REJECTED'].includes(String(d.status || '').toUpperCase())) {
+      revs.push(d.target_revision ?? d.targetRevision ?? d.revision ?? d.rev);
+    }
+  });
+  const best = Math.max(0, ...revs.map(num).filter((n) => !isNaN(n)));
+  return String(best).padStart(2, '0');
+};
+
 const normalizeRev = (r) => {
   if (r === undefined || r === null) return '';
   const str = String(r).trim().replace(/^Rev\.?\s*/i, '').trim();
@@ -1323,14 +1350,7 @@ const DocumentDetailModal = ({
 
       if (supersededDars.length > 0) {
         // เรียงลำดับจาก Revision ล่าสุดลงไปหาเก่าสุด (Descending: Rev.01 -> Rev.00)
-        return supersededDars.sort((a, b) => {
-          const revA = parseInt(String(a.target_revision ?? a.targetRevision ?? a.revision ?? a.docRev ?? a.rev ?? '0').replace(/\D/g, ''), 10) || 0;
-          const revB = parseInt(String(b.target_revision ?? b.targetRevision ?? b.revision ?? b.docRev ?? b.rev ?? '0').replace(/\D/g, ''), 10) || 0;
-          if (revB !== revA) {
-            return revB - revA;
-          }
-          return new Date(b.completedAt || b.createdAt || b.effectiveDate || 0) - new Date(a.completedAt || a.createdAt || a.effectiveDate || 0);
-        });
+        return supersededDars.sort(compareDarNewestFirst);
       }
     }
 
@@ -1340,7 +1360,7 @@ const DocumentDetailModal = ({
     if (isDocObsolete) {
       const fullHistory = resolveFullDocumentHistory(doc, allDars);
       if (fullHistory && fullHistory.length > 0) {
-        return fullHistory;
+        return [...fullHistory].sort(compareDarNewestFirst);
       }
     }
 
@@ -1354,15 +1374,7 @@ const DocumentDetailModal = ({
 
     if (filtered.length > 0) {
       // จัดเรียงตามลำดับเวลาจากล่าสุดลงไปหาอดีต (Descending)
-      return filtered.sort((a, b) => {
-        const aIsObsolete = a.type === 'OBSOLETE' || a.request_type === 'OBSOLETE' || a.is_obsolete;
-        const bIsObsolete = b.type === 'OBSOLETE' || b.request_type === 'OBSOLETE' || b.is_obsolete;
-        
-        if (aIsObsolete && !bIsObsolete) return -1;
-        if (!aIsObsolete && bIsObsolete) return 1;
-
-        return new Date(b.createdAt || b.effectiveDate || 0) - new Date(a.createdAt || a.effectiveDate || 0);
-      });
+      return filtered.sort(compareDarNewestFirst);
     }
 
     // 4. Fallback: If no explicit DAR found in store, construct single DAR record for current revision only
@@ -1399,14 +1411,19 @@ const DocumentDetailModal = ({
   // State ควบคุมการกาง/พับ (Collapsible Timeline - ใบแรกกางออกเป็นค่าเริ่มต้น)
   const [expandedDarItems, setExpandedDarItems] = useState([]);
 
+  // Seed the open card once per document; later re-renders/store refreshes must not undo the user's collapse.
+  const seededDarDocRef = useRef(null);
   useEffect(() => {
+    if (seededDarDocRef.current === doc?.id) return;
+    seededDarDocRef.current = doc?.id;
     if (scopedDarHistory && scopedDarHistory.length > 0) {
       const firstId = scopedDarHistory[0].id || scopedDarHistory[0].dar_no || scopedDarHistory[0].darNo || 'dar-0';
       setExpandedDarItems([firstId]);
     } else {
       setExpandedDarItems([]);
+      seededDarDocRef.current = null; // history not loaded yet; seed when it arrives
     }
-  }, [scopedDarHistory]);
+  }, [doc?.id, scopedDarHistory]);
 
   const toggleDarItem = (id) => {
     setExpandedDarItems(prev => 
@@ -2423,7 +2440,7 @@ const DocumentDetailModal = ({
                           const rawObsoleteRev = (dar.revision && dar.revision !== '00') 
                             ? dar.revision 
                             : candidateDocRev;
-                          const effectiveObsoleteRev = String(rawObsoleteRev).replace(/^Rev\.?/i, '').padStart(2, '0');
+                          const effectiveObsoleteRev = isObsoleteItem ? resolveObsoleteEndRev(dar, doc, allDars) : String(rawObsoleteRev).replace(/^Rev\.?/i, '').padStart(2, '0');
 
                           const darRevStr = isObsoleteItem 
                             ? effectiveObsoleteRev 

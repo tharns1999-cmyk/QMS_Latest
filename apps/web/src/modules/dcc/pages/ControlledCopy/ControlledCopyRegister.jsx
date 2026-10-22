@@ -577,7 +577,8 @@ const ControlledCopyRegister = () => {
     if (searchTerm && searchTerm.trim()) {
       setExpandedDocKeys(new Set(filteredActiveDocGroups.map(g => g.key)));
     }
-  }, [searchTerm, filteredActiveDocGroups]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-expand when the search text changes, not on data refresh
+  }, [searchTerm]);
 
   // Tab 5: Audit Trail filter
   const filteredAuditLogs = useMemo(() => {

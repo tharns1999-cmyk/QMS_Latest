@@ -64,7 +64,7 @@ export const resolveProgressiveSignatories = ({
   const isMasterStage = stage === 'MASTER' || 
     dar?.status === 'COMPLETED' || 
     dar?.status === 'APPROVED' ||
-    ((!dar || !dar.id) && (masterDoc?.status === 'ACTIVE' || masterDoc?.status === 'EFFECTIVE' || masterDoc?.status === 'APPROVED'));
+    ((!dar || !dar.id) && /^(ACTIVE|EFFECTIVE|APPROVED|SUPERSEDED|OBSOLETE)/.test(String(masterDoc?.status || '').toUpperCase()));
 
   // Direct pass-through only if masterDoc has explicit full signatories AND we are in master stage
   if (isMasterStage && masterDoc?.signatories && masterDoc.signatories.requester && masterDoc.signatories.reviewer && masterDoc.signatories.approver) {
