@@ -130,26 +130,24 @@ describe('Unified Historical Revisions Vertical Accordion Timeline Test Suite', 
       </MemoryRouter>
     );
 
-    // Tab shows total count of 4 superseded revisions (Rev.03, Rev.02, Rev.01, Rev.00)
+    // Tab shows every DAR of the code: the revision in force plus 4 superseded ones
     const historyTab = screen.getByRole('button', { name: /ประวัติ DAR และการแก้ไข/i });
-    expect(historyTab).toHaveTextContent(/ประวัติ DAR และการแก้ไข \(4\)/i);
+    expect(historyTab).toHaveTextContent(/ประวัติ DAR และการแก้ไข \(5\)/i);
 
     fireEvent.click(historyTab);
 
     // Action bar displays count
-    expect(screen.getByText(/พบทั้งหมด 4 ฉบับ/i)).toBeInTheDocument();
+    expect(screen.getByText(/พบทั้งหมด 5 ฉบับ/i)).toBeInTheDocument();
 
-    // All 4 superseded DARs are present
+    // All 5 DARs are present
+    expect(screen.getByText('DAR-ENG-005')).toBeInTheDocument();
     expect(screen.getByText('DAR-ENG-004')).toBeInTheDocument();
     expect(screen.getByText('DAR-ENG-003')).toBeInTheDocument();
     expect(screen.getByText('DAR-ENG-002')).toBeInTheDocument();
     expect(screen.getByText('DAR-ENG-001')).toBeInTheDocument();
 
-    // Effective Rev.04 DAR is strictly excluded
-    expect(screen.queryByText('DAR-ENG-005')).not.toBeInTheDocument();
-
-    // Default expanded state: latest revision (DAR-ENG-004) is open by default
-    expect(screen.getByText('Hydraulic checklist update Rev.03')).toBeInTheDocument();
+    // Default expanded state: only the newest (DAR-ENG-005) is open
+    expect(screen.queryByText('Hydraulic checklist update Rev.03')).not.toBeInTheDocument();
 
     // Older revision (DAR-ENG-001) is initially collapsed
     expect(screen.queryByText('Genesis Rev.00')).not.toBeInTheDocument();
@@ -288,19 +286,19 @@ describe('Unified Historical Revisions Vertical Accordion Timeline Test Suite', 
 
     // Tab shows exactly 25 superseded revisions
     const historyTab = screen.getByRole('button', { name: /ประวัติ DAR และการแก้ไข/i });
-    expect(historyTab).toHaveTextContent(/ประวัติ DAR และการแก้ไข \(25\)/i);
+    expect(historyTab).toHaveTextContent(/ประวัติ DAR และการแก้ไข \(26\)/i);
 
     fireEvent.click(historyTab);
 
     // Action bar confirms 25 revisions found
-    expect(screen.getByText(/พบทั้งหมด 25 ฉบับ/i)).toBeInTheDocument();
+    expect(screen.getByText(/พบทั้งหมด 26 ฉบับ/i)).toBeInTheDocument();
 
     // Verify latest superseded revision (Rev.24) and oldest (Rev.00) are both in the DOM
     expect(screen.getByText('DAR-MFG-24')).toBeInTheDocument();
     expect(screen.getByText('DAR-MFG-00')).toBeInTheDocument();
 
-    // First item is expanded by default
-    expect(screen.getByText('Detailed modification description for revision 24')).toBeInTheDocument();
+    // Only the newest item (Rev.25, in force) is expanded by default
+    expect(screen.queryByText('Detailed modification description for revision 24')).not.toBeInTheDocument();
 
     // Expand all 25 items
     const toggleAllBtn = screen.getByRole('button', { name: /ขยายทั้งหมด/i });
