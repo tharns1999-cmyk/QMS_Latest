@@ -18,6 +18,7 @@ import {
 import { STANDARD_STATIONS, cleanLocationName } from '../../modules/dcc/services/MasterDataService';
 import { saveFile, resolveRawFileBlob } from '../../modules/dcc/utils/fileStorage';
 import { isSameDepartment } from '../../modules/dcc/utils/taskFilter';
+import { isApiMode } from '../../api/client';
 
 export const createAuthAndOrgSlice = (set, get) => ({
   // State
@@ -554,6 +555,8 @@ export const createAuthAndOrgSlice = (set, get) => ({
   },
 
   hydrateMasterData: async () => {
+    // The server owns the people list; an old copy in this browser would bring back removed or inactive users.
+    if (isApiMode) return;
     try {
       // 3.1 ดึงรายชื่อ MasterUsers ล่าสุดจาก IndexedDB
       const savedUsersRaw = await resolveRawFileBlob('master_users_persistent_data');

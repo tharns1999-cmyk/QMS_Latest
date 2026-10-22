@@ -1,4 +1,5 @@
 import React from 'react';
+import { formatDarNumber } from '../../utils/darNumberGenerator';
 
 /**
  * ฟังก์ชันรวบรวมประวัติทั้งวงจรชีวิตของเอกสาร (Full Document Lifecycle Traceability)
@@ -88,7 +89,7 @@ export default function DocumentHistoryTab({ currentDoc, allDars, onDownload }) 
               <span className="font-bold text-sm">
                 {item.type === 'OBSOLETE' ? `สิ้นสุดที่ Rev.${item.revision}` : `Rev.${item.revision}`}
               </span>
-              <span className="ml-2 text-slate-600 text-sm font-mono">{item.dar_no}</span>
+              <span className="ml-2 text-slate-600 text-sm font-mono">{formatDarNumber(item.dar_no)}</span>
               <span className="ml-2 text-xs px-2 py-0.5 rounded bg-slate-100">{item.type}</span>
             </div>
             {onDownload && (

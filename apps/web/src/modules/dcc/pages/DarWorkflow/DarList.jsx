@@ -8,6 +8,7 @@ import { isDarDraft, isDarRequester, formatDarDocumentDisplay } from '../../util
 import { DarStatusBadge } from '../../components/ui/StatusBadge';
 import { isApiMode } from '../../../../api/client';
 import { loadDars } from '../../../../api/dars';
+import { formatDarNumber } from '../../utils/darNumberGenerator';
 
 const DarList = () => {
   const navigate = useNavigate();
@@ -348,7 +349,7 @@ const DarList = () => {
                       </span>
                     ) : (
                       <span className="font-mono font-bold text-[#0D99FF] text-sm sm:text-[15px] hover:underline">
-                        {dar.darNumber || (String(dar.id).startsWith('draft_') ? 'ฉบับร่าง (Draft)' : dar.id)}
+                        {dar.darNumber ? formatDarNumber(dar.darNumber) : (String(dar.id).startsWith('draft_') ? 'ฉบับร่าง (Draft)' : formatDarNumber(dar.id))}
                       </span>
                     )}
                   </td>

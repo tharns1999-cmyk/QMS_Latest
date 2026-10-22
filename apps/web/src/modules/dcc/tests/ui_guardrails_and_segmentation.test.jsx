@@ -233,8 +233,8 @@ describe('UI Guardrails, Library Segmentation & DAR Audit History Tests', () => 
       fireEvent.click(historyTabBtn);
 
       // Verify DAR items are rendered (strictly scoped to current Rev.02)
-      expect(screen.getByText('DAR-2026-001')).toBeInTheDocument();
-      expect(screen.queryByText('DAR-2026-000')).not.toBeInTheDocument();
+      expect(screen.getByText('DAR-26-001')).toBeInTheDocument();
+      expect(screen.queryByText('DAR-26-000')).not.toBeInTheDocument();
       expect(screen.getByText(/ปรับปรุงขั้นตอนการอบขนมและเพิ่มการบันทึกอุณหภูมิ/i)).toBeInTheDocument();
 
       // Verify Requesters / Reviewers / Approvers

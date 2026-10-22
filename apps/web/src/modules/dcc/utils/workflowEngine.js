@@ -7,6 +7,7 @@
 
 import { isSameDepartment } from './taskFilter';
 import { getApprovalThresholds } from './workflowResolver';
+import { jobTitle } from './signatoryResolver';
 
 export const generateDynamicWorkflow = (requesterUser, docDepartment, allUsers = [], docType, approvalMatrix) => {
   if (!requesterUser || !docDepartment) return [];
@@ -36,7 +37,7 @@ export const generateDynamicWorkflow = (requesterUser, docDepartment, allUsers =
     role: 'REQUESTER',
     userId: requesterUser.id || requesterUser.userId || requesterUser.empId,
     userName: requesterUser.name || requesterUser.fullName || '',
-    position: requesterUser.position || requesterUser.role || '',
+    position: jobTitle(requesterUser.position),
     status: 'COMPLETED',
     timestamp: new Date().toISOString()
   };
@@ -70,7 +71,7 @@ export const generateDynamicWorkflow = (requesterUser, docDepartment, allUsers =
     role: 'REVIEWER',
     userId: reviewerUser?.id || reviewerUser?.userId || null,
     userName: reviewerUser?.name || reviewerUser?.fullName || '',
-    position: reviewerUser?.position || reviewerUser?.role || '',
+    position: jobTitle(reviewerUser?.position),
     status: 'PENDING',
     timestamp: null
   };
@@ -93,7 +94,7 @@ export const generateDynamicWorkflow = (requesterUser, docDepartment, allUsers =
     role: 'APPROVER',
     userId: approverUser?.id || approverUser?.userId || null,
     userName: approverUser?.name || approverUser?.fullName || '',
-    position: approverUser?.position || approverUser?.role || '',
+    position: jobTitle(approverUser?.position),
     status: 'PENDING',
     timestamp: null
   };

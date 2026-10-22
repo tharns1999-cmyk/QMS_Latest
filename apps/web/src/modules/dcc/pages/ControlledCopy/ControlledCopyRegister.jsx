@@ -241,6 +241,7 @@ const ControlledCopyRegister = () => {
         timestamp: l.timestamp || l.createdAt || new Date().toISOString(),
         action: l.action || l.actionType || 'กิจกรรมสำเนา',
         document_code: l.document_code || l.doc_code || l.code || (!isThaiText(l.docTitle) && l.docTitle ? l.docTitle : null) || (!isThaiText(l.title) && l.title ? l.title : null) || '-',
+        revision: l.revision || l.docRev || '',
         copy_number: l.ccNumber || l.copy_no || l.copy_number || '',
         performed_by: l.user || l.actor || l.performed_by || 'DCC Officer',
         details: l.remarks || l.details || l.remark || '-'
@@ -250,6 +251,7 @@ const ControlledCopyRegister = () => {
         timestamp: l.timestamp || new Date().toISOString(),
         action: l.actionType || l.action || 'บันทึกการทำงาน',
         document_code: l.document_code || l.doc_code || l.code || (!isThaiText(l.docTitle) && l.docTitle ? l.docTitle : null) || (!isThaiText(l.title) && l.title ? l.title : null) || l.darNo || '-',
+        revision: l.revision || l.docRev || '',
         copy_number: l.ccNumber || l.copy_no || l.copy_number || '',
         performed_by: l.actor || l.user || 'DCC Officer',
         details: l.details || l.remark || '-'
@@ -2111,7 +2113,7 @@ const ControlledCopyRegister = () => {
                               </span>
                             </td>
                             <td className="py-2.5 px-3 font-mono font-medium text-[#1E1E1E] whitespace-nowrap">
-                              {docStr}{copyStr}
+                              {docStr}{log?.revision ? ` Rev.${String(log.revision).replace(/^rev\.?\s*/i, '')}` : ''}{copyStr}
                             </td>
                             <td className="py-2.5 px-3 whitespace-nowrap">
                               {actorStr}

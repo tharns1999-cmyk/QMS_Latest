@@ -183,7 +183,7 @@ describe('Superseded Revision History Overwrite Fix & Persistence Test Suite', (
     const historyTab = screen.getByRole('button', { name: /ประวัติ DAR/i });
     fireEvent.click(historyTab);
 
-    expect(screen.getByText(/DAR-2026-001/i)).toBeInTheDocument();
+    expect(screen.getByText(/DAR-26-001/i)).toBeInTheDocument();
   });
 
   it('7. DocumentDetailModal for WI-QC-01 Rev.01 displays DAR-2026-002', () => {
@@ -206,7 +206,7 @@ describe('Superseded Revision History Overwrite Fix & Persistence Test Suite', (
     const historyTab = screen.getByRole('button', { name: /ประวัติ DAR/i });
     fireEvent.click(historyTab);
 
-    expect(screen.getByText(/DAR-2026-002/i)).toBeInTheDocument();
+    expect(screen.getByText(/DAR-26-002/i)).toBeInTheDocument();
   });
 
   it('8. DocumentDetailModal for WI-QC-01 Rev.02 displays DAR-2026-003', () => {
@@ -229,7 +229,7 @@ describe('Superseded Revision History Overwrite Fix & Persistence Test Suite', (
     const historyTab = screen.getByRole('button', { name: /ประวัติ DAR/i });
     fireEvent.click(historyTab);
 
-    expect(screen.getByText(/DAR-2026-003/i)).toBeInTheDocument();
+    expect(screen.getByText(/DAR-26-003/i)).toBeInTheDocument();
   });
 
   it('9. Library Superseded tab groups WI-QC-01 into exactly 1 row and footer displays 1 รายการ / 1 รายการ', () => {
@@ -339,8 +339,8 @@ describe('Superseded Revision History Overwrite Fix & Persistence Test Suite', (
     expect(screen.getByText(/พบทั้งหมด 2 ฉบับ/i)).toBeInTheDocument();
 
     // Both DAR-2026-002 (Rev.01) and DAR-2026-001 (Rev.00) are rendered in the unified timeline
-    expect(screen.getByText(/DAR-2026-002/i)).toBeInTheDocument();
-    expect(screen.getByText(/DAR-2026-001/i)).toBeInTheDocument();
+    expect(screen.getByText(/DAR-26-002/i)).toBeInTheDocument();
+    expect(screen.getByText(/DAR-26-001/i)).toBeInTheDocument();
 
     // Criteria 3: Accordion state:
     // First/Latest item (DAR-2026-002) is expanded by default (its reason is visible)

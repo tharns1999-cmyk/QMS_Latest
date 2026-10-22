@@ -4,7 +4,11 @@ import { apiGet, apiPost } from './client';
 import { knownUsers } from './people';
 
 // A damaged copy waits for recall under the same server status as a superseded one; the pages tell them apart.
-const pageStatus = (c) => (c.status === 'PENDING_RECALL' && c.report_kind === 'DAMAGED' ? 'DAMAGED_PENDING_RECALL' : c.status);
+// A recalled copy whose paper has been destroyed or archived is finished, so the recall tab lets go of it.
+const pageStatus = (c) => {
+  if (c.disposed_at) return /STAMP_AND_ARCHIVE/.test(c.disposition || '') ? 'ARCHIVED_OBSOLETE' : 'DESTROYED';
+  return c.status === 'PENDING_RECALL' && c.report_kind === 'DAMAGED' ? 'DAMAGED_PENDING_RECALL' : c.status;
+};
 
 // The register and the receipt page read the demo's copy shape; this maps the API row onto it.
 export const toStoreCopy = (c) => ({
@@ -40,6 +44,9 @@ export const toStoreCopy = (c) => ({
   is_master: false,
   copy_type: 'CONTROLLED',
   status: pageStatus(c),
+  disposed_at: c.disposed_at,
+  recalled_at: c.recalled_at,
+  recalled_by: c.recalled_by,
   is_active_in_field: c.status === 'ISSUED_ACTIVE',
   issue_no: String(c.issue_no || 1).padStart(2, '0'),
   issueNumber: `I${String(c.issue_no || 1).padStart(2, '0')}`,
@@ -113,6 +120,40 @@ export const toCopyTasks = (copies, me) => {
   return tasks;
 };
 
+const ACTION_TH = {
+  CC_DISPATCHED: 'ส่งมอบสำเนาควบคุม', CC_RECEIVED: 'ตรวจรับสำเนาควบคุม', CC_RECALLED: 'บันทึกการเรียกคืนสำเนา', CC_DISPOSED: 'ทำลาย/จัดเก็บสำเนา',
+  CC_ADDITIONAL_REQUESTED: 'ขอสำเนาเพิ่ม', CC_DAMAGED_REPORTED: 'แจ้งสำเนาชำรุด', CC_LOST_REPORTED: 'แจ้งสำเนาสูญหาย',
+  CC_RELOCATE_REQUESTED: 'ขอย้ายจุดติดตั้ง', CC_RELOCATE_APPROVED: 'อนุมัติย้ายจุดติดตั้ง', CC_RELOCATE_REJECTED: 'ไม่อนุมัติย้ายจุดติดตั้ง',
+  CC_RETURN_REQUESTED: 'ขอส่งคืนสำเนา', CC_RETURN_APPROVED: 'อนุมัติรับคืนสำเนา', CC_RETURN_REJECTED: 'ไม่อนุมัติรับคืนสำเนา'
+};
+const DISPOSITION_TH = { DESTROY: 'ทำลาย (Shred/Destroy)', DESTROY_SCRAP: 'ทำลาย (Shred/Destroy)', STAMP_AND_ARCHIVE: 'ประทับตรา OBSOLETE และเก็บเข้าคลังประวัติ' };
+
+// The history tabs read the server's audit trail (DCC and QMR only): one Thai line per event, and the destruction register from CC_DISPOSED.
+const loadCopyTrail = async (copies) => {
+  try {
+    const { entries } = await apiGet('/api/controlled-copies/audit');
+    const parse = (e) => { try { return JSON.parse(e.details) || {}; } catch { return {}; } };
+    const copyById = new Map(copies.map((c) => [c.id, c]));
+    const trailRows = entries.map((e) => {
+      const d = parse(e);
+      const parts = [d.department && `แผนก ${d.department}`, d.method && `วิธี: ${DISPOSITION_TH[d.method] || d.method}`, d.witness && `พยาน: ${d.witness}`,
+        d.reference_no && `อ้างอิง: ${d.reference_no}`, (d.notes || d.reason || d.note) && `หมายเหตุ: ${d.notes || d.reason || d.note}`].filter(Boolean);
+      return { id: `srv-${e.id}`, timestamp: e.at.includes('T') ? e.at : `${e.at.replace(' ', 'T')}Z`, action: ACTION_TH[e.action] || e.action, document_code: d.doc_code || '-',
+        revision: d.revision, copy_number: d.copy_no, user: e.actor_name || 'System', details: parts.join(' | ') || '-', _raw: e.action, _d: d };
+    });
+    const disposed = trailRows.filter((r) => r._raw === 'CC_DISPOSED').map((r) => {
+      const c = copyById.get(r._d.copy_id);
+      const method = r._d.method || (/STAMP_AND_ARCHIVE/.test(r._d.note || '') ? 'STAMP_AND_ARCHIVE' : 'DESTROY');
+      return { id: r.id, copyId: r._d.copy_id, docCode: r.document_code, docTitle: c?.docName || '', revision: r._d.revision, copyNumber: `Copy ${r._d.copy_no}`, copy_no: r._d.copy_no,
+        department: r._d.department || '', location: c?.location || '', dispositionMethod: method, disposedBy: r.user, disposed_by_name: r.user, disposedAt: r.timestamp,
+        witnessName: r._d.witness || '', referenceNo: r._d.reference_no || '', notes: r._d.notes || (r._d.method ? '' : r._d.note) || '' };
+    });
+    return { controlledCopyAuditTrail: trailRows.map(({ _raw, _d, ...row }) => row), copyDispositionRecords: disposed };
+  } catch {
+    return {};
+  }
+};
+
 export const loadCopies = async () => {
   const { copies } = await apiGet('/api/controlled-copies');
   // VOID copies were never printed; they have no place in the register.
@@ -120,7 +161,9 @@ export const loadCopies = async () => {
   // shortcut: printing is remembered in this browser only (the server has no print record); add a print step when audits need it.
   const printed = new Set((controlledCopyInstances || []).filter((c) => c.is_printed).map((c) => c.id));
   const mapped = copies.filter((c) => c.status !== 'VOID').map((c) => ({ ...toStoreCopy(c), is_printed: printed.has(c.id) }));
+  const trail = await loadCopyTrail(mapped);
   useStore.setState({
+    ...trail,
     controlledCopyInstances: mapped,
     documentControlledCopies: mapped,
     tasks: [...(tasks || []).filter((t) => !String(t.id).startsWith('api-cc-')), ...toCopyTasks(mapped, currentUser)]
@@ -138,6 +181,23 @@ export const stepCopy = async (step, copyId, note) => {
   } finally {
     await loadCopies().catch(() => {});
   }
+};
+
+// The last recall step: how the paper was disposed of and who witnessed it travel as their own fields for the audit trail.
+export const disposeCopies = async (copyIds, { method, witness, referenceNo, notes }) => {
+  const note = [method, witness, referenceNo, notes].filter(Boolean).join(' | ');
+  const results = [];
+  for (const id of copyIds) {
+    try {
+      await apiPost(`/api/controlled-copies/${id}/dispose`, { note, method, witness, reference_no: referenceNo, notes });
+      results.push(true);
+    } catch (err) {
+      toast.error(err.message);
+      results.push(false);
+    }
+  }
+  await loadCopies().catch(() => {});
+  return results.every(Boolean);
 };
 
 export const stepCopies = async (step, copyIds, note) => {

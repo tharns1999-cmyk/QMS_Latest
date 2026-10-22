@@ -135,7 +135,7 @@ describe('DocumentDetailModal Figma UI3 Master Overhaul Tests', () => {
     fireEvent.click(historyTab);
 
     // Verify DAR Header
-    expect(screen.getByText('DAR-2026-088')).toBeInTheDocument();
+    expect(screen.getByText('DAR-26-088')).toBeInTheDocument();
     expect(screen.getByText('ขอแก้ไข')).toBeInTheDocument();
 
     // Verify Reason & Description
@@ -143,10 +143,10 @@ describe('DocumentDetailModal Figma UI3 Master Overhaul Tests', () => {
     expect(screen.getByText(/เพิ่มความถี่ในการตรวจ Swab Test และกำหนดจุดวิกฤต CCP ใหม่/i)).toBeInTheDocument();
 
     // Verify 4-step sign-off matrix
-    expect(screen.getByText('บีม (QA Lv.4 Supervisor)')).toBeInTheDocument();
+    expect(screen.getAllByText('บีม (QA Lv.4 Supervisor)')[0]).toBeInTheDocument();
     expect(screen.getByText('กัลยาณี พลไกร (QA Lv.5 Lead)')).toBeInTheDocument();
     expect(screen.getByText('คุณเรย์ (MGMT Lv.6 General Manager)')).toBeInTheDocument();
-    expect(screen.getByText('ต้องรับทราบ')).toBeInTheDocument();
+    expect(screen.getAllByText('ต้องรับทราบ')[0]).toBeInTheDocument();
   });
 
   it('6. Tab 2 renders "ส่งออกประวัติ (CSV)" button and exports valid CSV data with UTF-8 BOM', () => {

@@ -36,6 +36,9 @@ import ReplacementModal from '../../pages/Library/ReplacementModal';
 import RelocateCopyModal from './RelocateCopyModal';
 import ReturnCopyModal from './ReturnCopyModal';
 import { canManageControlledCopy } from '../../utils/accessControl';
+import DarAuditRecord from './DarAuditRecord';
+import { jobTitle } from '../../utils/signatoryResolver';
+import { formatDarNumber } from '../../utils/darNumberGenerator';
 import { 
   getDarReason, 
   getDarDetail, 
@@ -127,7 +130,7 @@ export const handleDownloadHistoricalRevision = async (darItem, currentDoc, opti
     const targetRev = isObsoleteItem ? effectiveObsoleteRev : darRevStr;
 
     const docCode = resolveDocCode(currentDoc) || currentDoc?.code || currentDoc?.document_code || currentDoc?.docNo || currentDoc?.title || 'DOCUMENT';
-    const darNo = darItem.dar_no || darItem.darNo || darItem.id || `DAR-2026-${darRevStr}`;
+    const darNo = formatDarNumber(darItem.dar_no || darItem.darNo || darItem.id || `DAR-2026-${darRevStr}`);
     const effDate = darItem.completedAt || darItem.effectiveDate || darItem.effective_date_requested || darItem.date || darItem.createdAt?.split('T')[0] || '-';
 
     let replacementRev = options.replacedByRev;
@@ -1372,7 +1375,7 @@ const DocumentDetailModal = ({
 
     return [{
       id: resolvedDarId ? resolvedDarId : `DAR-${currentDocCode}-R${rStr}`,
-      dar_no: resolvedDarNo ? resolvedDarNo : `DAR-${new Date(doc.effectiveDate || '2025-01-01').getFullYear() || 2025}-${String((!isNaN(revNum) ? revNum : 0) + 1).padStart(3, '0')}`,
+      dar_no: resolvedDarNo ? formatDarNumber(resolvedDarNo) : `DAR-${String(new Date(doc.effectiveDate || '2025-01-01').getFullYear() || 2025).slice(-2)}-${String((!isNaN(revNum) ? revNum : 0) + 1).padStart(3, '0')}`,
       doc_code: currentDocCode,
       title: doc.name || doc.title || currentDocCode,
       revision: rStr,
@@ -2405,6 +2408,7 @@ const DocumentDetailModal = ({
                           const appName = (getApproverName(dar, timeline) !== '-' ? getApproverName(dar, timeline) : null) || dar.approver_name || dar.approver || dar.approverName || '-';
                           const ackName = (getAckNames(dar, timeline) !== '-' ? getAckNames(dar, timeline) : null) || dar.ack_name || dar.ackNames || (dar.require_ack !== false ? 'ต้องรับทราบ' : 'ไม่ต้องรับทราบ');
 
+                          const userOf = (n) => (masterUsers || []).find((u) => u.name === n || u.fullName === n);
                           const darType = dar.type || dar.request_type || dar.requestType || 'NEW';
                           const darStatus = dar.status || 'EFFECTIVE';
                           const isObsoleteItem = dar.type === 'OBSOLETE' || dar.request_type === 'OBSOLETE' || dar.darType === 'OBSOLETE' || dar.is_obsolete;
@@ -2424,7 +2428,7 @@ const DocumentDetailModal = ({
                           const darRevStr = isObsoleteItem 
                             ? effectiveObsoleteRev 
                             : String(dar.target_revision || dar.targetRevision || dar.docRev || dar.rev || dar.revision || '00').replace(/^Rev\.?/i, '').padStart(2, '0');
-                          const darNo = dar.dar_no || dar.darNo || dar.id || `DAR-2026-${darRevStr}`;
+                          const darNo = formatDarNumber(dar.dar_no || dar.darNo || dar.id || `DAR-2026-${darRevStr}`);
                           const effDate = dar.completedAt || dar.effectiveDate || dar.effective_date_requested || dar.date || dar.createdAt?.split('T')[0] || '-';
 
                           const handleDownloadHistoricalPdf = async () => {
@@ -2552,31 +2556,21 @@ const DocumentDetailModal = ({
                                 {/* Collapsible Body */}
                                 {isExpanded && (
                                   <div className="border-t border-slate-100 p-4 transition-all duration-200 animate-in slide-in-from-top-2 fade-in">
-                                  {/* Reason & Change Details */}
-                                  <div className="bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg p-3 space-y-2 text-xs sm:text-sm min-w-0 max-w-full overflow-hidden">
-                                    <div className="min-w-0 w-full space-y-0.5">
-                                      <span className="font-bold text-[#374151] block text-xs">
-                                        {String(reasonInfo?.title || 'เหตุผลในการร้องขอ').replace(/[:\s]+$/, '')}:
-                                      </span>
-                                      <p className="text-[#1E293B] font-normal leading-relaxed break-words break-all [overflow-wrap:anywhere] whitespace-pre-wrap text-xs sm:text-sm">
-                                        {reasonText}
-                                      </p>
-                                    </div>
-                                    <div className="min-w-0 w-full space-y-0.5 pt-2 border-t border-[#EDF2F7]">
-                                      <span className="font-bold text-[#374151] block text-xs">
-                                        {String(detailInfo?.title || 'รายละเอียดการเปลี่ยนแปลง / แผนรองรับ').replace(/[:\s]+$/, '')}:
-                                      </span>
-                                      <p className="text-[#475569] leading-relaxed break-words break-all [overflow-wrap:anywhere] whitespace-pre-wrap text-xs sm:text-sm">
-                                        {detailText}
-                                      </p>
-                                    </div>
-                                  </div>
+                                  <DarAuditRecord
+                                    dar={dar}
+                                    darType={darType}
+                                    requesterName={reqName}
+                                    requesterDept={dar.department || dar.dept || userOf(reqName)?.department}
+                                    previousRev={String(Math.max(parseInt(darRevStr, 10) - 1, 0)).padStart(2, '0')}
+                                    currentRev={darRevStr}
+                                  />
 
                                   {/* Compact 4-Stage Approval Workflow Grid with Timestamps */}
                                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-3 pt-3 border-t border-[#F1F5F9] bg-[#FAFAFA] p-2.5 rounded-lg text-xs">
                                     <div className="min-w-0">
                                       <p className="text-[#64748B] font-medium text-[11px]">1. ผู้ร้องขอ (Requester)</p>
                                       <p className="font-bold text-[#1E293B] mt-0.5 truncate text-xs">{reqName}</p>
+                                      <p className="text-[10px] text-slate-500 truncate">{jobTitle(userOf(reqName)?.position) || '-'}</p>
                                       <p className="text-[10px] font-mono text-slate-500 mt-0.5 flex items-center gap-1">
                                         <Clock size={10} className="text-[#0D99FF] shrink-0" />
                                         <span>{getWorkflowStepTimestamp(dar, 'REQUEST', timeline)}</span>
@@ -2585,6 +2579,7 @@ const DocumentDetailModal = ({
                                     <div className="min-w-0">
                                       <p className="text-[#64748B] font-medium text-[11px]">2. ผู้ทบทวน (Reviewer)</p>
                                       <p className="font-bold text-[#1E293B] mt-0.5 truncate text-xs">{revName}</p>
+                                      <p className="text-[10px] text-slate-500 truncate">{jobTitle(userOf(revName)?.position) || '-'}</p>
                                       <p className="text-[10px] font-mono text-slate-500 mt-0.5 flex items-center gap-1">
                                         <Clock size={10} className="text-[#0D99FF] shrink-0" />
                                         <span>{getWorkflowStepTimestamp(dar, 'REVIEW', timeline)}</span>
@@ -2593,6 +2588,7 @@ const DocumentDetailModal = ({
                                     <div className="min-w-0">
                                       <p className="text-[#64748B] font-medium text-[11px]">3. ผู้อนุมัติ (Approver)</p>
                                       <p className="font-bold text-[#1E293B] mt-0.5 truncate text-xs">{appName}</p>
+                                      <p className="text-[10px] text-slate-500 truncate">{jobTitle(userOf(appName)?.position) || '-'}</p>
                                       <p className="text-[10px] font-mono text-slate-500 mt-0.5 flex items-center gap-1">
                                         <Clock size={10} className="text-[#0D99FF] shrink-0" />
                                         <span>{getWorkflowStepTimestamp(dar, 'APPROVE', timeline)}</span>

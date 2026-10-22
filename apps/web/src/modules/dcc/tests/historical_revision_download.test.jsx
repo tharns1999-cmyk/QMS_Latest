@@ -262,7 +262,7 @@ describe('Historical Revision Download & Stamping Test Suite (ISO 9001 Clause 7.
     fireEvent.click(historyTab);
 
     // Check historical DAR-2026-004 is displayed
-    expect(screen.getByText('DAR-2026-004')).toBeInTheDocument();
+    expect(screen.getByText('DAR-26-004')).toBeInTheDocument();
 
     // Find download button for Rev.02
     const downloadBtns = screen.getAllByTitle(/ดาวน์โหลด Archive PDF/i);

@@ -184,6 +184,7 @@ const ExternalDocActionModal = ({ task, onClose, layoutId }) => {
     return {
       ...baseDoc,
       ...(attachedFile ? { attachedFile, file: attachedFile, attachment: attachedFile } : {}),
+      ...(req?.apiFilePath ? { apiFilePath: req.apiFilePath } : {}),
       ...(fileId ? { fileId } : {}),
       ...(fileName ? { fileName } : {})
     };
@@ -198,6 +199,29 @@ const ExternalDocActionModal = ({ task, onClose, layoutId }) => {
       (doc?.edCode && r.edCode === doc.edCode)
     ) || null;
   }, [externalRequests, task, doc]);
+
+  // Real request type comes from the request itself; the task's extAction is only a fallback
+  const rawReqType = String(request?.requestType || request?.type || task.extAction || "NEW").toUpperCase();
+  const reqType = rawReqType === "UPDATE" ? "REVISION" : rawReqType === "REGISTER" ? "NEW" : rawReqType;
+
+  // For a revision, preview the file/edition submitted with this request, not the old master record
+  const previewDoc = useMemo(() => {
+    if (reqType !== "REVISION" || !request) return doc;
+    const newEdition = request.sourceVersion || request.edition || doc?.sourceVersion || doc?.edition;
+    const reqFile = request.attachedFile || null;
+    const reqFileId = request.rawFileId || reqFile?.rawFileId || request.fileId || reqFile?.fileId || null;
+    const { rawFileId: _r, fileId: _f, fileStorageKey: _k, attachedFile: _a, file: _fl, attachment: _at, apiFilePath: _p, ...rest } = doc || {};
+    return {
+      ...rest,
+      sourceVersion: newEdition,
+      edition: newEdition,
+      ...(request.effectiveDate ? { effectiveDate: request.effectiveDate } : {}),
+      ...(reqFile ? { attachedFile: reqFile, file: reqFile, attachment: reqFile } : {}),
+      ...(reqFileId ? { rawFileId: reqFileId, fileId: reqFileId } : {}),
+      ...(request.fileStorageKey || reqFile?.fileStorageKey ? { fileStorageKey: request.fileStorageKey || reqFile.fileStorageKey } : {}),
+      ...(request.apiFilePath ? { apiFilePath: request.apiFilePath } : {}),
+    };
+  }, [doc, request, reqType]);
 
   const edCode    = doc?.edCode || doc?.doc_code || doc?.docNo || task.docCode || "ED-???";
   const reqCode   = request?.requestId || request?.requestNo || request?.id || `EDR-${edCode}`;
@@ -339,7 +363,7 @@ const ExternalDocActionModal = ({ task, onClose, layoutId }) => {
                 <span className="text-xs font-semibold px-2 py-0.5 rounded-lg bg-slate-100 text-slate-600 border border-slate-200">{hp.sub}</span>
                 <span className="text-[11px] font-mono font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-lg border border-indigo-100">{reqCode}</span>
                 <span className="text-slate-300">·</span>
-                <TypeBadge type={task.extAction === "UPDATE" ? "REVISION" : task.extAction || "NEW"} />
+                <TypeBadge type={reqType} />
               </div>
             </div>
           </div>
@@ -536,7 +560,7 @@ const ExternalDocActionModal = ({ task, onClose, layoutId }) => {
                       <div>
                         <p className="text-[11px] font-medium text-slate-400 mb-0.5">ประเภทคำร้อง</p>
                         <div>
-                          <TypeBadge type={task.extAction === "UPDATE" ? "REVISION" : task.extAction || "NEW"} />
+                          <TypeBadge type={reqType} />
                         </div>
                       </div>
                     </div>
@@ -677,7 +701,7 @@ const ExternalDocActionModal = ({ task, onClose, layoutId }) => {
         </div>
       </motion.div>
 
-      <ExternalDocPreviewModal isOpen={isPreviewOpen} onClose={() => setIsPreviewOpen(false)} document={doc} />
+      <ExternalDocPreviewModal isOpen={isPreviewOpen} onClose={() => setIsPreviewOpen(false)} document={previewDoc} />
 
       <ActionConfirmModal
         isOpen={showConfirm}

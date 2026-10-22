@@ -148,10 +148,10 @@ describe('Fix Full Document Lifecycle Traceability for OBSOLETE Documents (Retai
     expect(screen.getByText(/พบทั้งหมด 4 ฉบับ/i)).toBeInTheDocument();
 
     // Displays all items
-    expect(screen.getByText('DAR-2026-004')).toBeInTheDocument();
-    expect(screen.getByText('DAR-2026-003')).toBeInTheDocument();
-    expect(screen.getByText('DAR-2025-080')).toBeInTheDocument();
-    expect(screen.getByText('DAR-2025-001')).toBeInTheDocument();
+    expect(screen.getByText('DAR-26-004')).toBeInTheDocument();
+    expect(screen.getByText('DAR-26-003')).toBeInTheDocument();
+    expect(screen.getByText('DAR-25-080')).toBeInTheDocument();
+    expect(screen.getByText('DAR-25-001')).toBeInTheDocument();
 
     // Verify badges
     expect(screen.getByText(/สิ้นสุดที่ Rev\.02/i)).toBeInTheDocument();
@@ -169,10 +169,10 @@ describe('Fix Full Document Lifecycle Traceability for OBSOLETE Documents (Retai
     );
 
     expect(screen.getByText(/พบทั้งหมด 4 ฉบับ/i)).toBeInTheDocument();
-    expect(screen.getByText('DAR-2026-004')).toBeInTheDocument();
-    expect(screen.getByText('DAR-2026-003')).toBeInTheDocument();
-    expect(screen.getByText('DAR-2025-080')).toBeInTheDocument();
-    expect(screen.getByText('DAR-2025-001')).toBeInTheDocument();
+    expect(screen.getByText('DAR-26-004')).toBeInTheDocument();
+    expect(screen.getByText('DAR-26-003')).toBeInTheDocument();
+    expect(screen.getByText('DAR-25-080')).toBeInTheDocument();
+    expect(screen.getByText('DAR-25-001')).toBeInTheDocument();
   });
 
   it('4. Historical revision download stamps SUPERSEDED for past revisions (Rev.00, Rev.01) and formats filename', async () => {

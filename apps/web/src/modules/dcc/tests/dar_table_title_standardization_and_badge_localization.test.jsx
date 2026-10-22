@@ -128,7 +128,7 @@ describe('DAR Table Title Standardization, [OBSOLETE] Strip, & Status Badge Loca
       );
 
       // Verify DAR-2026-004 row is present
-      expect(screen.getByText('DAR-2026-004')).toBeInTheDocument();
+      expect(screen.getByText('DAR-26-004')).toBeInTheDocument();
 
       // Ensure "[OBSOLETE]" is NOT in any document cell text
       expect(screen.queryByText(/\[OBSOLETE\]/i)).not.toBeInTheDocument();
@@ -170,7 +170,7 @@ describe('DAR Table Title Standardization, [OBSOLETE] Strip, & Status Badge Loca
       );
 
       // Verify DAR-2026-004 row is present
-      expect(screen.getByText('DAR-2026-004')).toBeInTheDocument();
+      expect(screen.getByText('DAR-26-004')).toBeInTheDocument();
 
       // Ensure "[OBSOLETE]" text is NOT displayed anywhere
       expect(screen.queryByText(/\[OBSOLETE\]/i)).not.toBeInTheDocument();

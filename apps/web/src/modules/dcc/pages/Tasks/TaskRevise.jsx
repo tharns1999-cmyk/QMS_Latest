@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { isApiMode } from '../../../../api/client';
+import ExternalDocFormModal from '../ExternalDocs/ExternalDocFormModal';
 import { resubmitDarOnApi, withdrawDarOnApi } from '../../../../api/dars';
 
 const TaskRevise = () => {
@@ -119,6 +120,13 @@ const TaskRevise = () => {
     } : null);
   }, [dar, task, rawId]);
 
+  // Memoised: the form re-hydrates whenever documentToEdit changes identity, so a fresh object each render would loop.
+  const externalRevision = useMemo(() => {
+    if (!isApiMode || task?.origin !== 'EXTERNAL' || !task?.darId) return null;
+    const req = (externalRequests || []).find((r) => r.darId === String(task.darId));
+    return req ? { ...req, id: req.docId, returnReason: task.returnReason || req.returnReason } : null;
+  }, [externalRequests, task]);
+
   const [formData, setFormData] = useState({
     title: resolvedDar?.title || '',
     requestDetail: resolvedDar?.requestDetail || '',
@@ -135,6 +143,18 @@ const TaskRevise = () => {
       }));
     }
   }, [resolvedDar]);
+
+  // A returned external request needs the full external-document form, not the short DAR one.
+  if (externalRevision) {
+    return (
+      <ExternalDocFormModal
+        isOpen
+        onClose={() => navigate('/dcc/tasks')}
+        documentToEdit={externalRevision}
+        resubmitTaskId={task.id}
+      />
+    );
+  }
 
   if (!task && !resolvedDar) {
     return (
