@@ -7,8 +7,39 @@ import toast from 'react-hot-toast';
 import { resolveFileBlob } from '../../utils/fileStorage';
 import { stampExternalDocumentTopRight } from '../../utils/pdfStamper';
 
-const ExternalDocPreviewModal = ({ isOpen, onClose, document: doc }) => {
+// A render crash inside the viewer must never unmount it: show the error and wait for the user to press X.
+class PreviewBoundary extends React.Component {
+  state = { error: null };
+  static getDerivedStateFromError(error) { return { error }; }
+  componentDidCatch(error) { console.error('ExternalDocPreviewModal crashed:', error); }
+  render() {
+    if (!this.state.error) return this.props.children;
+    return (
+      <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-950/75">
+        <div className="bg-white rounded-2xl p-6 max-w-md w-full text-center space-y-3 shadow-2xl">
+          <ShieldAlert size={28} className="mx-auto text-rose-500" />
+          <p className="font-semibold text-slate-800 text-sm">แสดงตัวอย่างเอกสารไม่สำเร็จ</p>
+          <p className="text-xs text-slate-500 break-words">{String(this.state.error?.message || this.state.error)}</p>
+          <button type="button" onClick={this.props.onClose} className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-semibold cursor-pointer">ปิด</button>
+        </div>
+      </div>
+    );
+  }
+}
+
+const ExternalDocPreviewModalInner = ({ isOpen, onClose, document: liveDoc }) => {
   const { currentUser, logExternalDownload } = useStore();
+
+  // Freeze the document while the viewer is open: store refreshes / parent re-renders hand us
+  // new object identities, which must not restart the PDF load or blank the viewer mid-read.
+  const snapRef = useRef(null);
+  const liveEdition = liveDoc?.edition || liveDoc?.sourceVersion;
+  if (!isOpen || !liveDoc) {
+    snapRef.current = null;
+  } else if (!snapRef.current || snapRef.current.id !== liveDoc.id || (snapRef.current.edition || snapRef.current.sourceVersion) !== liveEdition) {
+    snapRef.current = liveDoc;
+  }
+  const doc = snapRef.current;
 
   const docCode = doc?.edCode || doc?.doc_code || doc?.docNo || doc?.id || 'ED-DOC-001';
   const uDept = currentUser?.department || 'QA';
@@ -16,6 +47,7 @@ const ExternalDocPreviewModal = ({ isOpen, onClose, document: doc }) => {
   const [pdfBlobUrl, setPdfBlobUrl] = useState(null);
   const [loadingPdf, setLoadingPdf] = useState(false);
   const [pdfBroken, setPdfBroken] = useState(false);
+  const [loadError, setLoadError] = useState(null);
   const blobUrlRef = useRef(null);
   const stampedPdfBytesRef = useRef(null);
   const currentDocKeyRef = useRef(null);
@@ -33,6 +65,7 @@ const ExternalDocPreviewModal = ({ isOpen, onClose, document: doc }) => {
       setPdfBlobUrl(null);
       setLoadingPdf(false);
       setPdfBroken(false);
+      setLoadError(null);
       return;
     }
 
@@ -42,12 +75,13 @@ const ExternalDocPreviewModal = ({ isOpen, onClose, document: doc }) => {
     const docKey = `${doc.id || ''}_${doc.edCode || doc.doc_code || doc.docNo || ''}_${editionKey}_${fileStorageKey || ''}_${rawFileId || ''}`;
 
     // Skip re-processing if already stamped and loaded for the exact same document
-    if (currentDocKeyRef.current === docKey && blobUrlRef.current && pdfBlobUrl) {
+    if (currentDocKeyRef.current === docKey && blobUrlRef.current) {
       return;
     }
 
     setLoadingPdf(true);
     setPdfBroken(false);
+    setLoadError(null);
     const isSupersededOrObsolete = Boolean(
       doc.status === 'SUPERSEDED' ||
       doc.status === 'SUPERSEDED_ARCHIVED' ||
@@ -146,6 +180,8 @@ const ExternalDocPreviewModal = ({ isOpen, onClose, document: doc }) => {
     }).catch(err => {
       console.error('Error loading PDF blob:', err);
       if (!isCancelled) {
+        // The API refuses with a reason (e.g. superseded files are DCC/QMR only); show it instead of claiming no file exists.
+        setLoadError(err?.message || 'โหลดไฟล์ไม่สำเร็จ');
         if (blobUrlRef.current) {
           URL.revokeObjectURL(blobUrlRef.current);
           blobUrlRef.current = null;
@@ -160,7 +196,7 @@ const ExternalDocPreviewModal = ({ isOpen, onClose, document: doc }) => {
     return () => {
       isCancelled = true;
     };
-  }, [isOpen, doc, docCode, pdfBlobUrl]);
+  }, [isOpen, doc, docCode]);
 
   useEffect(() => {
     return () => {
@@ -265,13 +301,13 @@ const ExternalDocPreviewModal = ({ isOpen, onClose, document: doc }) => {
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-[70] flex items-center justify-center p-2 sm:p-4 md:p-6 bg-slate-950/75 backdrop-blur-md overflow-hidden">
+      <div onClick={(e) => e.stopPropagation()} className="fixed inset-0 z-[70] flex items-center justify-center p-2 sm:p-4 md:p-6 bg-slate-950/75 backdrop-blur-md overflow-hidden">
         {/* Backdrop */}
         <motion.div 
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          onClick={onClose}
+          onClick={(e) => { e.stopPropagation(); onClose(); }}
           className="fixed inset-0"
         />
         
@@ -281,6 +317,8 @@ const ExternalDocPreviewModal = ({ isOpen, onClose, document: doc }) => {
           animate={{ scale: 1, opacity: 1, y: 0 }}
           exit={{ scale: 0.96, opacity: 0, y: 12 }}
           transition={{ type: "spring", stiffness: 340, damping: 32 }}
+          onClick={(e) => e.stopPropagation()}
+          onWheel={(e) => e.stopPropagation()}
           className="relative w-[95vw] max-w-7xl 2xl:max-w-[1536px] h-[92vh] max-h-[960px] min-h-[580px] bg-white rounded-2xl shadow-2xl border border-slate-200/90 flex flex-col overflow-hidden z-10 my-auto"
         >
           {/* Header (Compact & High Information Density) */}
@@ -407,8 +445,8 @@ const ExternalDocPreviewModal = ({ isOpen, onClose, document: doc }) => {
                   <ShieldAlert size={28} />
                 </div>
                 <div className="space-y-1">
-                  <p className="text-slate-200 font-semibold text-sm">{pdfBroken ? 'เปิดไฟล์ PDF ไม่ได้ (ไฟล์เสียหรือไม่ใช่ PDF จริง)' : 'ไม่พบไฟล์ต้นฉบับจริง (No original file attached)'}</p>
-                  <p className="text-slate-400 text-xs">{pdfBroken ? 'กรุณาให้ผู้ขึ้นทะเบียนอัปโหลดไฟล์ PDF ที่เปิดอ่านได้อีกครั้ง' : 'เอกสารนี้อาจถูกบันทึกโดยไม่มีไฟล์แนบ หรือไฟล์อยู่ในคลังข้อมูลที่ถูกย้าย'}</p>
+                  <p className="text-slate-200 font-semibold text-sm">{loadError ? 'เปิดไฟล์ไม่ได้' : pdfBroken ? 'เปิดไฟล์ PDF ไม่ได้ (ไฟล์เสียหรือไม่ใช่ PDF จริง)' : 'ไม่พบไฟล์ต้นฉบับจริง (No original file attached)'}</p>
+                  <p className="text-slate-400 text-xs">{loadError ? loadError : pdfBroken ? 'กรุณาให้ผู้ขึ้นทะเบียนอัปโหลดไฟล์ PDF ที่เปิดอ่านได้อีกครั้ง' : 'เอกสารนี้อาจถูกบันทึกโดยไม่มีไฟล์แนบ หรือไฟล์อยู่ในคลังข้อมูลที่ถูกย้าย'}</p>
                 </div>
               </div>
             )}
@@ -418,5 +456,11 @@ const ExternalDocPreviewModal = ({ isOpen, onClose, document: doc }) => {
     </AnimatePresence>
   );
 };
+
+const ExternalDocPreviewModal = (props) => (
+  <PreviewBoundary onClose={props.onClose}>
+    <ExternalDocPreviewModalInner {...props} />
+  </PreviewBoundary>
+);
 
 export default ExternalDocPreviewModal;
