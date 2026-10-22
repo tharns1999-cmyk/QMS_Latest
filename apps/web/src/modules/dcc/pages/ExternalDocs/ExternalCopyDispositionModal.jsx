@@ -66,7 +66,7 @@ const ExternalCopyDispositionModal = ({
     }
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (selectedCopyIds.length === 0) {
       toast.error('กรุณาเลือกสำเนาที่ต้องการบันทึกการจัดการอย่างน้อย 1 เล่ม');
@@ -86,7 +86,8 @@ const ExternalCopyDispositionModal = ({
       };
 
       // Record disposition for selected copies
-      recordExternalCopyDisposition(doc.id, selectedCopyIds, payload);
+      // API mode returns false when any copy was refused (the API already showed why); demo mode returns nothing.
+      if (await recordExternalCopyDisposition(doc.id, selectedCopyIds, payload) === false) return;
 
       const actionText = dispositionAction === 'SHREDDED' 
         ? 'ทำลายทิ้ง (Shred / Destroy)' 

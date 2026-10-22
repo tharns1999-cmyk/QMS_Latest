@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import toast from 'react-hot-toast';
 import useStore from '../../../../store/useStore';
 import { 
   Download, 
@@ -15,7 +16,7 @@ import {
   Activity
 } from 'lucide-react';
 import dayjs from 'dayjs';
-import { isApiMode } from '../../../../api/client';
+import { isApiMode, apiGet } from '../../../../api/client';
 import ApiAdminPanel from './ApiAdminPanel';
 import { TablePagination } from '../../../../shared/components/common/TablePagination';
 import { useTablePagination } from '../../../../shared/hooks/useTablePagination';
@@ -40,6 +41,13 @@ const ActionLog = () => {
     currentUser?.role === 'SUPER_ADMIN' ||
     currentUser?.isDccAdmin
   );
+
+  // API mode: the server's audit log is the record; the browser-side logs below only exist in demo mode.
+  const [serverRows, setServerRows] = useState([]);
+  useEffect(() => {
+    if (!isApiMode || !isDccAdmin) return;
+    apiGet('/api/audit-log?limit=1000').then((r) => setServerRows(r.entries || []), (err) => toast.error(err.message));
+  }, [isDccAdmin]);
 
   // --- Safe Extraction Helpers (Guaranteed string return, zero React 19 child crash) ---
 
@@ -120,6 +128,14 @@ const ActionLog = () => {
 
   // --- Aggregate & Normalize All System Activity Streams ---
   const allNormalizedLogs = useMemo(() => {
+    if (isApiMode) {
+      const categoryOf = (a) => (a.startsWith('DAR_') ? 'DAR' : a.startsWith('CC_') ? 'CONTROLLED_COPY' : a.startsWith('PERIODIC_REVIEW_') ? 'PERIODIC_REVIEW' : 'SYSTEM');
+      return serverRows.map((r) => ({
+        id: `srv-${r.id}`, rawDate: r.at, timestamp: r.at, created_at: r.at, createdAt: r.at, date: r.at,
+        actionType: r.action, action: r.action, actor: r.actor_name || r.actor_id || 'System', actorRole: r.actor_email || '',
+        details: r.details || '-', category: categoryOf(r.action)
+      }));
+    }
     const combined = [];
 
     // 1. Primary Action Log
@@ -157,7 +173,8 @@ const ActionLog = () => {
       controlledCopyAuditTrail.forEach((l, idx) => {
         if (!l) return;
         const copyInfo = l.copy_number || l.ccNumber ? ` (Copy ${l.copy_number || l.ccNumber})` : '';
-        const docInfo = l.document_code || l.docTitle || l.doc_code || '';
+        const rev = l.revision || l.docRev;
+        const docInfo = `${l.document_code || l.docTitle || l.doc_code || ''}${rev ? ` Rev.${String(rev).replace(/^rev\.?\s*/i, '')}` : ''}`;
         const rawTime = l.timestamp || l.created_at || l.createdAt || l.date || l.time || l.rawDate || new Date().toISOString();
 
         combined.push({
@@ -235,7 +252,7 @@ const ActionLog = () => {
     }
 
     return unique.sort((a, b) => new Date(b.rawDate || 0) - new Date(a.rawDate || 0));
-  }, [actionLog, controlledCopyAuditTrail, externalAuditTrail, timeline]);
+  }, [actionLog, controlledCopyAuditTrail, externalAuditTrail, timeline, serverRows]);
 
   // --- Filtering ---
   const filteredLogs = useMemo(() => {
