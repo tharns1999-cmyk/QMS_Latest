@@ -16,6 +16,7 @@
   // Local development: `npx wrangler dev --var ALLOWED_ORIGIN:http://localhost:5173`.
   // 00:05 Thailand time: approved documents whose effective date has come take effect.
   "triggers": { "crons": ["5 17 * * *"] },
+  "observability": { "enabled": true },
   "vars": { "ALLOWED_ORIGIN": "https://qms-web.qms-api.workers.dev" },
 
   // The block above is the UAT stack on the personal Cloudflare account. Everything below is the company account's
@@ -35,6 +36,7 @@
       ],
       "r2_buckets": [{ "binding": "FILES", "bucket_name": "qms-files" }],
       "triggers": { "crons": ["5 17 * * *"] },
+      "observability": { "enabled": true },
       "vars": { "ALLOWED_ORIGIN": "REPLACE_WITH_COMPANY_WEB_ORIGIN" }
       // Company domain: add "routes": [{ "pattern": "qms-api.company.com", "custom_domain": true }] once the zone is on the company account.
     }
