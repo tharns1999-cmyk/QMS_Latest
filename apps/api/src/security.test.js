@@ -107,9 +107,14 @@ describe('security hardening', () => {
     const page2 = await (await call('GET', `/api/audit-log?action=LOGIN&limit=2&before_id=${logins.next_before_id}`, dcc)).json();
     expect(page2.entries.every((e) => e.id < logins.next_before_id)).toBe(true);
 
-    const today = new Date().toISOString().slice(0, 10);
+    const today = new Date(Date.now() + 7 * 3600e3).toISOString().slice(0, 10); // a Thailand day, like the filter
     const inRange = await (await call('GET', `/api/audit-log?from=${today}&to=${today}&action=LOGIN&limit=1`, dcc)).json();
     expect(inRange.entries).toHaveLength(1);
+    // 17:00 UTC is already the next Thailand day: a row stamped then belongs to tomorrow's filter, not today's.
+    await env.DB.prepare("INSERT INTO audit_log (at, actor_id, action, details) VALUES ('2030-01-01T17:30:00.000Z', NULL, 'TZ_PROBE', '{}')").run();
+    const probe = (d) => call('GET', `/api/audit-log?from=${d}&to=${d}&action=TZ_PROBE`, dcc).then((r) => r.json());
+    expect((await probe('2030-01-01')).entries).toHaveLength(0);
+    expect((await probe('2030-01-02')).entries).toHaveLength(1);
     expect((await (await call('GET', '/api/audit-log?to=2000-01-01', dcc)).json()).entries).toHaveLength(0);
 
     await env.DB.prepare("INSERT INTO audit_log (actor_id, action, details) VALUES (NULL, 'LOGIN_FAILED', ?)").bind('=HYPERLINK("http://evil")').run();

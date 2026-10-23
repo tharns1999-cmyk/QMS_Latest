@@ -1376,7 +1376,8 @@ app.get('/api/audit-log', requireAuth, async (c) => {
   if ((from && !DATE.test(from)) || (to && !DATE.test(to))) return c.json({ error: 'วันที่ต้องอยู่ในรูปแบบ YYYY-MM-DD' }, 400);
   const limit = Math.min(Math.max(Number(c.req.query('limit')) || 1000, 1), MAX_AUDIT_ROWS);
 
-  const filters = [[from, 'a.at >= ?'], [to, "a.at < date(?, '+1 day')"], [action, 'a.action = ?'], [beforeId, 'a.id < ?']].filter(([value]) => value);
+  // Days are Thailand days (UTC+7); `at` is stored in UTC, so a day starts at 17:00 UTC the evening before.
+  const filters = [[from, "a.at >= strftime('%Y-%m-%dT%H:%M:%fZ', ?, '-7 hours')"], [to, "a.at < strftime('%Y-%m-%dT%H:%M:%fZ', ?, '+1 day', '-7 hours')"], [action, 'a.action = ?'], [beforeId, 'a.id < ?']].filter(([value]) => value);
   const { results } = await c.env.DB.prepare(
     `SELECT a.id, a.at, a.actor_id, u.name AS actor_name, u.email AS actor_email, a.action, a.details
      FROM audit_log a LEFT JOIN users u ON u.id = a.actor_id
