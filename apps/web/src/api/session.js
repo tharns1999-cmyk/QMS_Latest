@@ -73,14 +73,22 @@ const signedIn = async ({ token, user }) => {
   return user;
 };
 
+// The server hands back a signed token when the person asks to remember this browser; it only skips the code, never the password.
+const TRUSTED_DEVICE_KEY = 'qms-trusted-device';
+const readTrustedDevice = () => { try { return localStorage.getItem(TRUSTED_DEVICE_KEY); } catch { return null; } };
+const keepTrustedDevice = (token) => { try { localStorage.setItem(TRUSTED_DEVICE_KEY, token); } catch { /* the code is simply asked again next time */ } };
+
 // Resolves to the user, or to { twoFactorChallenge } when the server wants the second step (see verifyTwoFactor).
 export const login = async (email, password) => {
-  const result = await apiPost('/api/auth/login', { email, password });
+  const result = await apiPost('/api/auth/login', { email, password, trusted_device: readTrustedDevice() });
   return result.twoFactorRequired ? { twoFactorChallenge: result.challenge } : signedIn(result);
 };
 
-export const verifyTwoFactor = async (challenge, { code, recoveryCode }) =>
-  signedIn(await apiPost('/api/auth/2fa/verify', { challenge, code, recovery_code: recoveryCode }));
+export const verifyTwoFactor = async (challenge, { code, recoveryCode, trustDevice = false }) => {
+  const result = await apiPost('/api/auth/2fa/verify', { challenge, code, recovery_code: recoveryCode, trust_device: trustDevice });
+  if (result.trustedDevice) keepTrustedDevice(result.trustedDevice);
+  return signedIn(result);
+};
 
 export const startTwoFactorSetup = () => apiPost('/api/auth/2fa/setup');
 export const confirmTwoFactorSetup = (code) => apiPost('/api/auth/2fa/confirm', { code });

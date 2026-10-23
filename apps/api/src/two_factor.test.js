@@ -30,7 +30,7 @@ describe('two-factor sign-in', () => {
     env = { ...proxy.env, JWT_SECRET: 'test-secret' };
     const hash = await hashPassword(PASSWORD);
     // Department TFX is this file's own. id, level, dcc
-    const users = [['TF-DCC', 3, 1], ['TF-L5', 5, 0], ['TF-L3', 3, 0], ['TF-E1', 2, 0], ['TF-E2', 2, 0], ['TF-E3', 2, 0], ['TF-E4', 2, 0], ['TF-E5', 2, 0]];
+    const users = [['TF-DCC', 3, 1], ['TF-L5', 5, 0], ['TF-L3', 3, 0], ['TF-E1', 2, 0], ['TF-E2', 2, 0], ['TF-E3', 2, 0], ['TF-E4', 2, 0], ['TF-E5', 2, 0], ['TF-E6', 2, 0]];
     await env.DB.batch([
       env.DB.prepare("INSERT OR IGNORE INTO departments (code, name_th) VALUES ('TFX', 'x')"),
       ...users.map(([id, level, dcc]) => env.DB.prepare(`INSERT INTO users (id, name, email, password_hash, role, approval_level, primary_department, departments, is_dcc)
@@ -41,6 +41,7 @@ describe('two-factor sign-in', () => {
   afterAll(async () => {
     // The shared test database starts with the policy off; put it back for whichever file runs next.
     await env.DB.prepare("UPDATE settings SET value = '0' WHERE key IN ('two_factor_min_level', 'two_factor_for_dcc')").run();
+    await env.DB.prepare("DELETE FROM settings WHERE key = 'two_factor_trust_days'").run();
     await proxy?.dispose();
   });
 
@@ -52,12 +53,13 @@ describe('two-factor sign-in', () => {
     expect((await send('PUT', '/api/settings/security', dcc, { twoFactorMinLevel: 9, twoFactorForDcc: true })).status).toBe(400);
     expect((await send('PUT', '/api/settings/security', dcc, { twoFactorMinLevel: '5', twoFactorForDcc: true })).status).toBe(400);
     expect((await send('PUT', '/api/settings/security', dcc, { twoFactorMinLevel: 5 })).status).toBe(400);
-    expect((await send('GET', '/api/settings/security', dcc)).body).toEqual({ twoFactorMinLevel: 0, twoFactorForDcc: false });
+    expect((await send('GET', '/api/settings/security', dcc)).body).toEqual({ twoFactorMinLevel: 0, twoFactorForDcc: false, twoFactorTrustDays: 30 });
+    expect((await send('PUT', '/api/settings/security', dcc, { twoFactorMinLevel: 5, twoFactorForDcc: true, twoFactorTrustDays: 400 })).status).toBe(400);
 
     const saved = await send('PUT', '/api/settings/security', dcc, { twoFactorMinLevel: 5, twoFactorForDcc: true });
-    expect(saved.body).toEqual({ twoFactorMinLevel: 5, twoFactorForDcc: true });
+    expect(saved.body).toEqual({ twoFactorMinLevel: 5, twoFactorForDcc: true, twoFactorTrustDays: 30 });
     const row = await env.DB.prepare("SELECT details FROM audit_log WHERE action = 'SECURITY_SETTINGS_UPDATED' ORDER BY id DESC").first();
-    expect(JSON.parse(row.details)).toEqual({ before: { twoFactorMinLevel: 0, twoFactorForDcc: false }, after: { twoFactorMinLevel: 5, twoFactorForDcc: true } });
+    expect(JSON.parse(row.details)).toEqual({ before: { twoFactorMinLevel: 0, twoFactorForDcc: false, twoFactorTrustDays: 30 }, after: { twoFactorMinLevel: 5, twoFactorForDcc: true, twoFactorTrustDays: 30 } });
   });
 
   it('whoever the policy names must set it up first, and can do nothing else until they have', async () => {
@@ -134,6 +136,38 @@ describe('two-factor sign-in', () => {
     expect((await send('POST', '/api/auth/2fa/verify', null, { challenge: again.body.challenge, code: await codeNow(secret, 1) })).status).toBe(401);
     const row = await env.DB.prepare("SELECT details FROM audit_log WHERE action = 'LOGIN' AND actor_id = 'TF-E2' ORDER BY id DESC").first();
     expect(JSON.parse(row.details)).toEqual({ twoFactor: 'app' });
+  });
+
+  it('a remembered device skips the code until the DCC turns it off, the password changes or the setup is reset', async () => {
+    const { secret } = await enroll('TF-E6');
+    const asked = await login('TF-E6');
+    const done = await send('POST', '/api/auth/2fa/verify', null, { challenge: asked.body.challenge, code: await codeNow(secret, 1), trust_device: true });
+    expect(done.body.trustedDevice).toBeTruthy();
+    // Without asking to be remembered nothing is handed out.
+    const plain = await send('POST', '/api/auth/2fa/verify', null, { challenge: (await login('TF-E6')).body.challenge, code: await codeNow(secret, 2) });
+    expect(plain.body.trustedDevice).toBeUndefined();
+
+    const withDevice = (id, trusted_device) => send('POST', '/api/auth/login', null, { email: `${id}@tf.local`, password: PASSWORD, trusted_device });
+    const skipped = await withDevice('TF-E6', done.body.trustedDevice);
+    expect(skipped.body.token).toBeTruthy();
+    const row = await env.DB.prepare("SELECT details FROM audit_log WHERE action = 'LOGIN' AND actor_id = 'TF-E6' ORDER BY id DESC").first();
+    expect(JSON.parse(row.details)).toEqual({ twoFactor: 'trusted_device' });
+    // The wrong password is still refused, and another person's device or a session token is not a device.
+    expect((await send('POST', '/api/auth/login', null, { email: 'TF-E6@tf.local', password: 'wrong-password-1', trusted_device: done.body.trustedDevice })).status).toBe(401);
+    expect((await withDevice('TF-E2', done.body.trustedDevice)).body.twoFactorRequired).toBe(true);
+    expect((await withDevice('TF-E6', done.body.token)).body.twoFactorRequired).toBe(true);
+
+    // The DCC is not set up here, so the setting is changed directly rather than through the gated endpoint.
+    const setDays = (n) => env.DB.prepare("INSERT INTO settings (key, value) VALUES ('two_factor_trust_days', ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value").bind(String(n)).run();
+    await setDays(0);
+    expect((await withDevice('TF-E6', done.body.trustedDevice)).body.twoFactorRequired).toBe(true);
+    expect((await send('POST', '/api/auth/2fa/verify', null, { challenge: (await login('TF-E6')).body.challenge, code: await codeNow(secret, 3), trust_device: true })).body.trustedDevice).toBeUndefined();
+    await setDays(30);
+    expect((await withDevice('TF-E6', done.body.trustedDevice)).body.token).toBeTruthy();
+
+    await new Promise((r) => setTimeout(r, 1100)); // tokens are stamped to the second
+    await env.DB.prepare('UPDATE users SET password_changed_at = ? WHERE id = ?').bind(Math.floor(Date.now() / 1000), 'TF-E6').run();
+    expect((await withDevice('TF-E6', done.body.trustedDevice)).body.twoFactorRequired).toBe(true);
   });
 
   it('a recovery code works once, in any case and with or without the dash', async () => {
