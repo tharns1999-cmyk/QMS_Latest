@@ -121,6 +121,9 @@ export const getBangkokFormattedDate = (dateInput = new Date()) => {
  * Step 2 (Watermark Layer): Stamp large diagonal watermark (e.g. UNCONTROLLED COPY ~50pt) using drawIsoDiagonalWatermark.
  * Step 3: Returns the finalized PDF bytes.
  */
+// A revision keeps its sign-off table for life: superseded/obsolete copies are stamped with signatures first, the lifecycle watermark goes on top.
+const SIGNED_OFF_STATUS = /^(ACTIVE|EFFECTIVE|APPROVED|SUPERSEDED|OBSOLETE)/;
+
 export const prepareMasterPdfForDownload = async ({ 
   document: docInput, 
   dar, 
@@ -151,7 +154,7 @@ export const prepareMasterPdfForDownload = async ({
 
   // 2. ตรวจสอบและประทับตารางลายเซ็น 3x3 หากเป็นเอกสารที่ผ่านการอนุมัติแล้ว
   const statusUpper = String(document.status || dar?.status || 'ACTIVE').toUpperCase();
-  const isApproved = ['ACTIVE', 'APPROVED', 'EFFECTIVE'].includes(statusUpper) || 
+  const isApproved = SIGNED_OFF_STATUS.test(statusUpper) || 
                      dar?.status === 'APPROVED' || 
                      document.stage === 'MASTER' || 
                      dar?.stage === 'MASTER';
@@ -405,7 +408,7 @@ export class UniversalWatermarkService {
     let rawPdfBytes = await this.resolveRawPdfBytes(doc, meta);
 
     const statusUpper = String(doc.status || meta.status || 'ACTIVE').toUpperCase();
-    const isMasterDoc = statusUpper === 'ACTIVE' || statusUpper === 'EFFECTIVE' || statusUpper === 'APPROVED' || doc.stage === 'MASTER' || meta.stage === 'MASTER';
+    const isMasterDoc = SIGNED_OFF_STATUS.test(statusUpper) || doc.stage === 'MASTER' || meta.stage === 'MASTER';
     const docCode = doc.document_code || doc.doc_code || doc.edCode || doc.title || meta.docCode || 'DOCUMENT';
     const docTitle = doc.docTitle || doc.docName || doc.name || (doc.title !== docCode ? doc.title : '') || meta.docTitle || '';
     const isInternal = !doc.isExternal && doc.docType !== 'ED' && !String(docCode).startsWith('ED-') && !String(docCode).startsWith('EXT-');
@@ -512,7 +515,7 @@ export class UniversalWatermarkService {
     // Sequential Stamping Pipeline:
     // Step 1 (Signatures Burn-in): If master document is ACTIVE, EFFECTIVE, APPROVED, or stage === 'MASTER'
     const statusUpper = String(doc.status || meta.status || 'ACTIVE').toUpperCase();
-    const isMasterDoc = statusUpper === 'ACTIVE' || statusUpper === 'EFFECTIVE' || statusUpper === 'APPROVED' || doc.stage === 'MASTER' || meta.stage === 'MASTER';
+    const isMasterDoc = SIGNED_OFF_STATUS.test(statusUpper) || doc.stage === 'MASTER' || meta.stage === 'MASTER';
     const isInternal = !doc.isExternal && doc.docType !== 'ED' && !String(docCode).startsWith('ED-') && !String(docCode).startsWith('EXT-');
 
     if (isMasterDoc && isInternal) {

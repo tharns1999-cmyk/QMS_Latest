@@ -73,11 +73,11 @@ describe('copy requests', () => {
     expect(await requestAdditionalCopies('d1', [{ departmentId: 'QC', station_id: 'QC-1', locationName: 'คลัง 1' }], 'ขยายไลน์')).toBe(true);
     expect(sent(0)).toEqual(['/api/documents/d1/additional-copies', { reason: 'ขยายไลน์', locations: [{ department: 'QC', location_id: 'QC-1', location_name: 'คลัง 1' }] }]);
     await reportCopyDamagedOrLost('c1', 'LOST', 'หาย');
-    expect(sent(2)).toEqual(['/api/controlled-copies/c1/report', { type: 'LOST', reason: 'หาย' }]);
+    expect(sent(3)).toEqual(['/api/controlled-copies/c1/report', { type: 'LOST', reason: 'หาย' }]);
     await requestCopyRelocation('c1', { newLocation: 'คลัง C', newDepartment: 'PD', reason: 'ย้าย' });
-    expect(sent(4)).toEqual(['/api/controlled-copies/c1/relocate', { reason: 'ย้าย', new_location_name: 'คลัง C', new_department: 'PD' }]);
+    expect(sent(6)).toEqual(['/api/controlled-copies/c1/relocate', { reason: 'ย้าย', new_location_name: 'คลัง C', new_department: 'PD' }]);
     await requestCopyReturn('c1', { reason: 'คืน', returnDate: '2026-11-01' });
-    expect(sent(6)).toEqual(['/api/controlled-copies/c1/return', { reason: 'คืน', return_date: '2026-11-01' }]);
+    expect(sent(9)).toEqual(['/api/controlled-copies/c1/return', { reason: 'คืน', return_date: '2026-11-01' }]);
 
     vi.stubGlobal('fetch', vi.fn(() => json(403, { error: 'ไม่ใช่แผนกของคุณ' })));
     expect(await requestCopyReturn('c1', { reason: 'คืน' })).toBe(false);
@@ -91,7 +91,7 @@ describe('copy requests', () => {
     expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ decision: 'APPROVE', note: 'ok', disposition: 'DESTROY', witness: 'สมชาย' });
     useStore.setState({ tasks: [{ id: 'api-cc-return-c9', copyId: 'c9' }] }); // the reload above dropped it
     await decideCopyRequest('api-cc-return-c9', 'REJECT', { rejectReason: 'ยังไม่พร้อม' });
-    expect(JSON.parse(fetch.mock.calls[2][1].body)).toMatchObject({ decision: 'REJECT', note: 'ยังไม่พร้อม' });
+    expect(JSON.parse(fetch.mock.calls[3][1].body)).toMatchObject({ decision: 'REJECT', note: 'ยังไม่พร้อม' });
     expect(await decideCopyRequest('missing', 'APPROVE')).toBe(false);
   });
 });

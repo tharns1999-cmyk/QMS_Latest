@@ -97,7 +97,7 @@ const act = async (run, refresh, success) => {
   }
 };
 
-const userBody = (f) => ({ name: f.name, email: f.email, empId: f.empId || undefined, department: f.department, depts: f.depts, approval_level: Number(f.approval_level), isDcc: f.isDcc, isQmr: f.isQmr });
+const userBody = (f) => ({ name: f.name, email: f.email, empId: f.empId || undefined, position: f.position ?? '', department: f.department, depts: f.depts, approval_level: Number(f.approval_level), isDcc: f.isDcc, isQmr: f.isQmr });
 
 export const createUser = (form) => act(() => apiPost('/api/users', userBody(form)), [loadUsers], 'เพิ่มผู้ใช้แล้ว');
 export const updateUser = (id, form, status) => act(() => apiPatch(`/api/users/${id}`, { ...userBody(form), ...(status && { status }) }), [loadUsers], 'บันทึกแล้ว');

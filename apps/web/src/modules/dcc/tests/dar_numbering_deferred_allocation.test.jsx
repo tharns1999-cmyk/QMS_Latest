@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import useStore, { generateInternalDarNumber } from '../../../store/useStore';
 
-describe('DAR Numbering Format DAR-YYYY-XXX & Deferred Allocation on Submit', () => {
+describe('DAR Numbering Format DAR-YY-XXX & Deferred Allocation on Submit', () => {
   beforeEach(() => {
     useStore.setState({
       dars: [],
@@ -29,18 +29,18 @@ describe('DAR Numbering Format DAR-YYYY-XXX & Deferred Allocation on Submit', ()
   });
 
   describe('1. generateInternalDarNumber Utility', () => {
-    it('generates DAR-2026-001 for empty DAR list', () => {
+    it('generates DAR-26-001 for empty DAR list', () => {
       const darNo = generateInternalDarNumber([], 2026);
-      expect(darNo).toBe('DAR-2026-001');
+      expect(darNo).toBe('DAR-26-001');
     });
 
-    it('increments sequence sequentially (DAR-2026-002, DAR-2026-003)', () => {
+    it('increments sequence sequentially (DAR-26-002, DAR-26-003)', () => {
       const existing = [
         { id: 'DAR-2026-001', darNumber: 'DAR-2026-001', status: 'COMPLETED' },
         { id: 'DAR-2026-002', darNumber: 'DAR-2026-002', status: 'UNDER_REVIEW' }
       ];
       const nextNo = generateInternalDarNumber(existing, 2026);
-      expect(nextNo).toBe('DAR-2026-003');
+      expect(nextNo).toBe('DAR-26-003');
     });
 
     it('strictly ignores draft DARs without allocating or skipping numbers', () => {
@@ -50,7 +50,7 @@ describe('DAR Numbering Format DAR-YYYY-XXX & Deferred Allocation on Submit', ()
         { id: 'draft_1725600001_xyz', darNumber: null, isDraft: true, status: 'DRAFT' }
       ];
       const nextNo = generateInternalDarNumber(existing, 2026);
-      expect(nextNo).toBe('DAR-2026-002');
+      expect(nextNo).toBe('DAR-26-002');
     });
 
     it('resets counter to 001 for a new calendar year', () => {
@@ -58,8 +58,8 @@ describe('DAR Numbering Format DAR-YYYY-XXX & Deferred Allocation on Submit', ()
         { id: 'DAR-2025-089', darNumber: 'DAR-2025-089', status: 'COMPLETED' },
         { id: 'DAR-2025-090', darNumber: 'DAR-2025-090', status: 'COMPLETED' }
       ];
-      const next2026 = generateInternalDarNumber(existing, 2026);
-      expect(next2026).toBe('DAR-2026-001');
+      const next26 = generateInternalDarNumber(existing, 2026);
+      expect(next26).toBe('DAR-26-001');
     });
   });
 
@@ -83,9 +83,9 @@ describe('DAR Numbering Format DAR-YYYY-XXX & Deferred Allocation on Submit', ()
   });
 
   describe('3. Store submitDar / addDar - Formal Allocation on Submit', () => {
-    it('allocates official DAR-YYYY-XXX on submission and records DAR_SUBMITTED action log', () => {
+    it('allocates official DAR-YY-XXX on submission and records DAR_SUBMITTED action log', () => {
       const { submitDar } = useStore.getState();
-      const currentYear = new Date().getFullYear();
+      const currentYear = new Date().getFullYear().toString().slice(-2);
 
       submitDar({
         title: 'Standard Operating Procedure for Quality Control',

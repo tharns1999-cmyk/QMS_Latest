@@ -13,6 +13,7 @@ import { isDarDraft, isDarRequester, formatDarDocumentDisplay } from '../../util
 import { DarStatusBadge } from '../../components/ui/StatusBadge';
 import DashboardHeader from './components/DashboardHeader';
 import { isMyDepartment } from '../../services/darService';
+import { formatDarNumber } from '../../utils/darNumberGenerator';
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -836,7 +837,7 @@ const Dashboard = () => {
                             }
                           }}
                         >
-                          {dar.darNumber || dar.dar_no || dar.darNo || (isDarDraft(dar) ? 'ฉบับร่าง (Draft)' : (dar.id || '-'))}
+                          {formatDarNumber(dar.darNumber || dar.dar_no || dar.darNo) !== '-' ? formatDarNumber(dar.darNumber || dar.dar_no || dar.darNo) : (isDarDraft(dar) ? 'ฉบับร่าง (Draft)' : formatDarNumber(dar.id))}
                         </span>
                       )}
                     </td>

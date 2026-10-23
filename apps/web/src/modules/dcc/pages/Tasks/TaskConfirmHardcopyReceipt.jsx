@@ -92,7 +92,7 @@ const TaskConfirmHardcopyReceipt = () => {
         actor_primary_department: currentUser?.primary_department || currentUser?.department || 'UNKNOWN_DEPT',
         task_department: dept,
         timestamp: new Date().toISOString(),
-        remarks: remarks || 'Confirmed hardcopy receipt and physical placement at point of use'
+        remarks: remarks || 'ตรวจรับสำเนาและวางไว้ที่จุดใช้งานเรียบร้อย'
       });
 
       if (confirmed === false) { setIsSubmitting(false); return; } // API mode: the server refused and said why

@@ -63,7 +63,7 @@ describe('TaskApprove & TaskReview Runtime Verification (Zero WSOD & No motion e
     );
 
     expect(screen.getByText('อนุมัติเอกสาร')).toBeDefined();
-    expect(screen.getByText('DAR-2026-001')).toBeDefined();
+    expect(screen.getByText('DAR-26-001')).toBeDefined();
     expect(screen.getByText('เอกสารฉบับเต็ม')).toBeDefined();
   });
 
@@ -90,7 +90,7 @@ describe('TaskApprove & TaskReview Runtime Verification (Zero WSOD & No motion e
     );
 
     expect(screen.getByText('ทบทวนเอกสาร')).toBeDefined();
-    expect(screen.getByText('DAR-2026-001')).toBeDefined();
+    expect(screen.getByText('DAR-26-001')).toBeDefined();
   });
 
   it('displays Forward to DCC card and does NOT self-target to Khun Ray in TaskApprove confirmation modal', () => {

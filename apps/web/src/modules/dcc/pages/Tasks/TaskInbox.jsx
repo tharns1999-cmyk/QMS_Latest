@@ -39,6 +39,7 @@ import { useTablePagination } from '../../../../shared/hooks/useTablePagination'
 import { isActionableTask, isSameDepartment, isDccAdmin, isDccExclusiveTask, isLevel6Plus, isReceiptTask, userMatchesDepartment, normalizeCanonicalDept } from '../../utils/taskFilter';
 import { getDeptNameTh } from '../../config/qmsRegistry';
 import { getDeptBadgeStyle } from '../../../../shared/utils/departmentColors';
+import { formatDarNumber } from '../../utils/darNumberGenerator';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Date Formatter (null-safe)
@@ -553,12 +554,12 @@ export const resolveReasonSnippet = (task, matchedDar) => {
 // Helper: Resolve Monospace DAR ID
 // ─────────────────────────────────────────────────────────────────────────────
 export const resolveDarIdentifier = (task, matchedDar) => {
-  if (matchedDar?.darNo) return matchedDar.darNo;
-  if (matchedDar?.darNumber) return matchedDar.darNumber;
-  if (task?.darNo) return task.darNo;
-  if (task?.darId && String(task.darId).startsWith('DAR-')) return task.darId;
-  if (task?.referenceType === 'INTERNAL_DAR' && task.referenceId && String(task.referenceId).startsWith('DAR-')) return task.referenceId;
-  if (task?.metadata?.darNo) return task.metadata.darNo;
+  if (matchedDar?.darNo) return formatDarNumber(matchedDar.darNo);
+  if (matchedDar?.darNumber) return formatDarNumber(matchedDar.darNumber);
+  if (task?.darNo) return formatDarNumber(task.darNo);
+  if (task?.darId && String(task.darId).startsWith('DAR-')) return formatDarNumber(task.darId);
+  if (task?.referenceType === 'INTERNAL_DAR' && task.referenceId && String(task.referenceId).startsWith('DAR-')) return formatDarNumber(task.referenceId);
+  if (task?.metadata?.darNo) return formatDarNumber(task.metadata.darNo);
   return null;
 };
 

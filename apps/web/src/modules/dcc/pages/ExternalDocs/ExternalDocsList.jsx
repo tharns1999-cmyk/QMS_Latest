@@ -111,6 +111,8 @@ export const stackMatchesSearch = (stack, term) => {
 const TAB_GENERAL = 'GENERAL';
 const TAB_MY_DEPT = 'MY_DEPT';
 const TAB_DISTRIBUTED = 'DISTRIBUTED';
+// DCC only: the whole register, every department and every status (ISO 9001 7.5.3).
+const TAB_ALL_DEPTS = 'ALL_DEPTS';
 
 // Official Lifecycle Statuses for Master External Document Library (ISO 9001:2015 Clause 7.5.3.2)
 export const OFFICIAL_LIFECYCLE_STATUSES = [
@@ -154,8 +156,20 @@ const ExternalDocsList = () => {
     resetPendingReviewIntent
   } = useStore();
   
-  // Level 1: Main Category Tabs (GENERAL, MY_DEPT, DISTRIBUTED)
-  const [activeMainTab, setActiveMainTab] = useState(TAB_MY_DEPT);
+  const isDccAdmin = Boolean(
+    currentUser?.role === 'DCC' || 
+    currentUser?.role === 'DCC_ADMIN' || 
+    currentUser?.isDccAdmin || 
+    currentUser?.isDcc || 
+    currentUser?.role === 'ADMIN'
+  );
+
+  // Level 1: Main Category Tabs (ALL_DEPTS for DCC, GENERAL, MY_DEPT, DISTRIBUTED)
+  const [chosenMainTab, setActiveMainTab] = useState(isDccAdmin ? TAB_ALL_DEPTS : TAB_MY_DEPT);
+  // Derived, so a non-DCC user can never be left on the DCC tab (e.g. after the signed-in user changes).
+  const activeMainTab = chosenMainTab === TAB_ALL_DEPTS && !isDccAdmin ? TAB_MY_DEPT : chosenMainTab;
+  // Only these tabs offer the Active / Superseded / Obsolete sub-tabs; the reader tabs show effective documents only.
+  const showsStatusTabs = activeMainTab === TAB_MY_DEPT || activeMainTab === TAB_ALL_DEPTS;
   
   const [searchTerm, setSearchTerm] = useState('');
   // Level 2: 4 Status Filter Pills: ACTIVE, SUPERSEDED, OBSOLETE, ALL (default: ACTIVE)
@@ -210,13 +224,6 @@ const ExternalDocsList = () => {
   const autoOpenUpdate = searchParams.get('autoOpenUpdate') === 'true' || location.state?.autoOpenUpdate === true;
   const autoOpenObsolete = searchParams.get('autoOpenObsolete') === 'true' || location.state?.autoOpenObsolete === true;
 
-  const isDccAdmin = Boolean(
-    currentUser?.role === 'DCC' || 
-    currentUser?.role === 'DCC_ADMIN' || 
-    currentUser?.isDccAdmin || 
-    currentUser?.isDcc || 
-    currentUser?.role === 'ADMIN'
-  );
   const isAdmin = isDccAdmin;
   const uDept = currentUser?.department || currentUser?.dept || 'QA';
 
@@ -358,11 +365,9 @@ const ExternalDocsList = () => {
 
   const isOwnerDept = useCallback((doc) => {
     if (!doc) return false;
-    // DCC controls the whole register (ISO 7.5.3): every dept's non-general doc belongs in "My Dept"
-    if (isDccAdmin && !isGeneralDoc(doc)) return true;
     const docDept = doc.department || doc.dept || doc.owner_dept || extractDeptCode(getDocCode(doc));
     return userDepts.includes(docDept) || userDepts.some(ud => deptMatches(ud, docDept));
-  }, [userDepts, deptMatches, isDccAdmin]);
+  }, [userDepts, deptMatches]);
 
   const canManageDoc = (doc) => {
     if (!doc) return false;
@@ -585,6 +590,7 @@ const ExternalDocsList = () => {
   }, [docMasterMap, isOwnerDept, hasDistributedCopyToUserDept]);
 
   const myDeptDocsCount = countMyDept;
+  const allDeptsDocsCount = [...docMasterMap.values()].filter(info => info.masterStatus === 'ACTIVE').length;
   const generalDocsCount = countGeneral;
   const distributedDocsCount = countDistributed;
 
@@ -731,7 +737,7 @@ const ExternalDocsList = () => {
   const filteredStacks = useMemo(() => {
     return docStacks.filter(stack => {
       // 1. Status Filter in MY_DEPT (or Active in other main tabs)
-      if (activeMainTab !== TAB_MY_DEPT) {
+      if (!showsStatusTabs) {
         if (stack.stackStatus !== 'ACTIVE') return false;
       } else {
         if (statusFilter === 'ACTIVE') {
@@ -763,7 +769,7 @@ const ExternalDocsList = () => {
 
       return true;
     });
-  }, [docStacks, activeMainTab, statusFilter, deptFilter, scopeFilter, searchTerm, deptMatches]);
+  }, [docStacks, showsStatusTabs, statusFilter, deptFilter, scopeFilter, searchTerm, deptMatches]);
 
   // Sorted Parent Document Stacks for Data Grid
   const displayStacks = useMemo(() => {
@@ -1257,6 +1263,31 @@ const ExternalDocsList = () => {
         <div className="flex flex-wrap items-center gap-3 shrink-0">
           {/* 3 Scope Tabs: Minimal Segmented Pills */}
           <div className="flex items-center gap-1 p-1 bg-slate-100/90 rounded-lg overflow-x-auto shrink-0 text-xs">
+            {isDccAdmin && (
+              <button
+                type="button"
+                title="ทะเบียนเอกสารภายนอกทุกแผนก ทุกสถานะ (เฉพาะ DCC)"
+                aria-label="ทุกแผนก (DCC)"
+                onClick={() => {
+                  setActiveMainTab(TAB_ALL_DEPTS);
+                  setStatusFilter('ACTIVE');
+                }}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-semibold transition-all cursor-pointer whitespace-nowrap ${
+                  activeMainTab === TAB_ALL_DEPTS
+                    ? 'bg-white text-slate-900 border border-slate-200/80 shadow-2xs font-bold'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/50 border border-transparent'
+                }`}
+              >
+                <Layers size={13} className={activeMainTab === TAB_ALL_DEPTS ? 'text-blue-600' : 'text-slate-400'} />
+                <span>ทุกแผนก (DCC)</span>
+                <span className={`px-1.5 py-0.2 rounded-full text-[11px] font-mono font-bold ${
+                  activeMainTab === TAB_ALL_DEPTS ? 'bg-blue-50 text-blue-700 border border-blue-200/80' : 'bg-slate-200/80 text-slate-600'
+                }`}>
+                  {allDeptsDocsCount}
+                </span>
+              </button>
+            )}
+
             {/* Tab 1: เอกสารทั่วไป */}
             <button
               type="button"
@@ -1475,7 +1506,7 @@ const ExternalDocsList = () => {
           </div>
 
           {/* แถวที่ 2: Compact Segmented Pill Control (แสดงเฉพาะเมื่อเลือกแท็บ 'เอกสารในแผนกฉัน' ตามมาตรฐาน ISO) */}
-          {activeMainTab === TAB_MY_DEPT ? (
+          {showsStatusTabs ? (
             <div className="pt-2.5 border-t border-[#F1F5F9] flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
               {/* Responsive Scrollable & Wrap Capsule Pill Container */}
               <div className="w-full sm:w-auto overflow-x-auto scrollbar-hide py-0.5">

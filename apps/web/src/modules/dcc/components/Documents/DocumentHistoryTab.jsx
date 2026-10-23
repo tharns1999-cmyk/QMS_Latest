@@ -1,4 +1,5 @@
 import React from 'react';
+import { formatDarNumber } from '../../utils/darNumberGenerator';
 
 /**
  * ฟังก์ชันรวบรวมประวัติทั้งวงจรชีวิตของเอกสาร (Full Document Lifecycle Traceability)
@@ -9,64 +10,43 @@ import React from 'react';
  * @param {Array} allDars - รายการคำร้อง DARs ทั้งหมดในระบบ
  * @returns {Array} รายการประวัติเรียงลำดับจากล่าสุดไปหาเก่าสุด (OBSOLETE -> Rev สูงสุด -> Rev.00)
  */
-export const resolveFullDocumentHistory = (currentDoc, allDars = []) => {
+export const resolveFullDocumentHistory = (currentDoc, allDars = [], matchedDars = null) => {
   if (!currentDoc) return [];
 
   const docCode = currentDoc.code || currentDoc.document_code;
 
-  // 1. ดึง DARs จริงจากระบบที่ตรงกับรหัสเอกสารนี้
-  const realDars = allDars.filter(d => 
+  // 1. DARs จริงของรหัสเอกสารนี้ (ผู้เรียกที่จับคู่เองแล้วส่งมาได้) แสดงครบทุกใบ แม้ Rev เดียวกัน
+  const realDars = matchedDars || allDars.filter(d =>
     (d.document_code === docCode || d.doc_code === docCode)
   );
 
-  // 2. ดึงประวัติย้อนหลังที่ฝังอยู่ในตัวเอกสาร
-  const embeddedHistory = (currentDoc.revision_history || []).map(item => ({
-    ...item,
-    isEmbedded: true
-  }));
+  // 2. ประวัติย้อนหลังที่ฝังอยู่ในตัวเอกสาร ใช้เติมเฉพาะ Rev ที่ไม่มี DAR จริงรองรับ
+  const revOf = (item) => String(item.target_revision ?? item.revision ?? '00').padStart(2, '0');
+  const kindOf = (item) => (item.type === 'OBSOLETE' || item.action_type === 'OBSOLETE' ? 'OBSOLETE' : 'NORMAL');
+  const covered = new Set(realDars.map(d => `${kindOf(d)}_${revOf(d)}`));
+  const embeddedHistory = (currentDoc.revision_history || [])
+    .filter(item => !covered.has(`${kindOf(item)}_${revOf(item)}`))
+    .map(item => ({ ...item, isEmbedded: true }));
 
-  // 3. รวมสองแหล่งเข้าด้วยกัน
-  const rawPool = [...realDars, ...embeddedHistory];
-
-  // 4. สร้าง Map คัดกรองแบบ Unique Key
-  // Key format: "REVISION_01", "NEW_00", "OBSOLETE_02"
-  const historyMap = new Map();
-
-  rawPool.forEach(item => {
-    const rev = String(item.target_revision ?? item.revision ?? '00').padStart(2, '0');
-    const isObsolete = item.type === 'OBSOLETE' || item.action_type === 'OBSOLETE';
-    const groupKey = isObsolete ? `OBSOLETE_${rev}` : `NORMAL_${rev}`;
-
-    const existing = historyMap.get(groupKey);
-
-    if (!existing) {
-      historyMap.set(groupKey, item);
-    } else {
-      // Priority Rule: หากตัวหนึ่งเป็น Real DAR (มี dar_no จริง ไม่ใช่ DAR-REV-) ให้แทนที่ตัวจำลองทันที
-      const isCurrentReal = item.dar_no && !item.dar_no.startsWith('DAR-REV-') && !item.dar_no.startsWith('HIST-');
-      const isExistingSynthetic = existing.dar_no && (existing.dar_no.startsWith('DAR-REV-') || existing.dar_no.startsWith('HIST-'));
-
-      if (isCurrentReal || isExistingSynthetic) {
-        historyMap.set(groupKey, item);
-      }
-    }
+  // 3. ฝังกันซ้ำกันเอง (หนึ่งรายการต่อ Rev/ชนิด) แต่ DAR จริงไม่ถูกรวม
+  const seenEmbedded = new Set();
+  const uniqueEmbedded = embeddedHistory.filter(item => {
+    const key = `${kindOf(item)}_${revOf(item)}`;
+    if (seenEmbedded.has(key)) return false;
+    seenEmbedded.add(key);
+    return true;
   });
 
-  // 5. แปลงกลับเป็น Array และจัดเรียงลำดับ
-  const deduplicatedList = Array.from(historyMap.values());
-
-  return deduplicatedList.sort((a, b) => {
-    const isAObsolete = a.type === 'OBSOLETE' || a.action_type === 'OBSOLETE';
-    const isBObsolete = b.type === 'OBSOLETE' || b.action_type === 'OBSOLETE';
+  return [...realDars, ...uniqueEmbedded].sort((a, b) => {
+    const isAObsolete = kindOf(a) === 'OBSOLETE';
+    const isBObsolete = kindOf(b) === 'OBSOLETE';
 
     // OBSOLETE ต้องอยู่บนสุดเสมอ
     if (isAObsolete && !isBObsolete) return -1;
     if (!isAObsolete && isBObsolete) return 1;
 
     // นอกนั้นเรียงตาม Revision จากมากไปน้อย (ล่าสุดอยู่บน)
-    const revA = Number.parseInt(a.target_revision ?? a.revision ?? 0, 10);
-    const revB = Number.parseInt(b.target_revision ?? b.revision ?? 0, 10);
-    return revB - revA;
+    return Number.parseInt(revOf(b), 10) - Number.parseInt(revOf(a), 10);
   });
 };
 
@@ -88,7 +68,7 @@ export default function DocumentHistoryTab({ currentDoc, allDars, onDownload }) 
               <span className="font-bold text-sm">
                 {item.type === 'OBSOLETE' ? `สิ้นสุดที่ Rev.${item.revision}` : `Rev.${item.revision}`}
               </span>
-              <span className="ml-2 text-slate-600 text-sm font-mono">{item.dar_no}</span>
+              <span className="ml-2 text-slate-600 text-sm font-mono">{formatDarNumber(item.dar_no)}</span>
               <span className="ml-2 text-xs px-2 py-0.5 rounded bg-slate-100">{item.type}</span>
             </div>
             {onDownload && (

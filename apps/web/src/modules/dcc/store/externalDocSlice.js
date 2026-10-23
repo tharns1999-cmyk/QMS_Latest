@@ -1231,7 +1231,10 @@ export const createExternalDocSlice = (set, get) => ({
   },
 
   // ─── External Document Controlled Copy Disposition Handler ────────────────
-  recordExternalCopyDisposition: (docId, copyNumber, dispositionData = {}) => isApiMode ? notYetOnApi() : set((state) => {
+  recordExternalCopyDisposition: (docId, copyNumber, dispositionData = {}) => isApiMode ? import('../../../api/copies').then((m) => m.disposeCopies([].concat(copyNumber), {
+    method: dispositionData.dispositionAction === 'SHREDDED' ? 'DESTROY' : 'STAMP_AND_ARCHIVE',
+    witness: dispositionData.witnessName, referenceNo: dispositionData.referenceNo, notes: dispositionData.notes
+  })) : set((state) => {
     const {
       dispositionAction = 'SHREDDED', // 'SHREDDED' | 'STAMPED_VOID'
       recalledAt = new Date().toISOString(),

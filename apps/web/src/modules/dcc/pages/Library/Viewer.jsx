@@ -76,7 +76,7 @@ const Viewer = () => {
               status === 'OBSOLETE' ||
               status === 'OBSOLETE_ARCHIVED'
             );
-            const isMasterDoc = !isSupersededOrObsolete && (status === 'ACTIVE' || status === 'EFFECTIVE' || status === 'APPROVED');
+            const isMasterDoc = isSupersededOrObsolete || status === 'ACTIVE' || status === 'EFFECTIVE' || status === 'APPROVED';
             const isInternal = !doc.isExternal && doc.docType !== 'ED' && !String(doc.title || doc.docCode || '').startsWith('ED-') && !String(doc.title || doc.docCode || '').startsWith('EXT-');
 
             // Only run JIT stamping if the document is an active Master Doc and has NOT been stamped yet
@@ -102,7 +102,7 @@ const Viewer = () => {
                 displayBlob = new Blob([stampedBytes], { type: 'application/pdf' });
 
                 // Pre-bake and cache into Store & IndexedDB so future opens are 100% instant!
-                if (store.finalizeAndPublishMaster && (doc.darId || relatedDar?.id)) {
+                if (!isSupersededOrObsolete && store.finalizeAndPublishMaster && (doc.darId || relatedDar?.id)) {
                   store.finalizeAndPublishMaster(doc.darId || relatedDar?.id).catch(() => {});
                 }
               } catch (stampErr) {

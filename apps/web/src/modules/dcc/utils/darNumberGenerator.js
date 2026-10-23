@@ -1,31 +1,38 @@
 /**
- * Utility for generating internal DAR running numbers in the format: DAR-YYYY-XXX
- * (e.g. DAR-2026-001, DAR-2026-002)
+ * DAR running numbers are DAR-YY-XXX (e.g. DAR-26-001): two-digit year, then a 3-digit number that restarts each year.
  */
 
+const yy = (year) => String(year).slice(-2);
+
+/** Show any stored DAR reference (3, DAR-4, DAR-2026-003, DAR-26-003) as DAR-YY-XXX. */
+export const formatDarNumber = (idOrNum, year = new Date().getFullYear()) => {
+  if (idOrNum === undefined || idOrNum === null || idOrNum === '') return '-';
+  const raw = String(idOrNum).trim();
+  if (/^DAR-\d{2}-\d{3,}$/.test(raw)) return raw;
+  const longYear = raw.match(/^DAR-(\d{4})-(\d+)$/i);
+  if (longYear) return `DAR-${yy(longYear[1])}-${longYear[2].padStart(3, '0')}`;
+  const cleanNum = raw.replace(/^DAR-?/i, '');
+  if (!/^\d+$/.test(cleanNum)) return raw;
+  return `DAR-${yy(year)}-${cleanNum.padStart(3, '0')}`;
+};
+
 export const generateInternalDarNumber = (existingDars = [], targetYear = new Date().getFullYear()) => {
-  const prefix = `DAR-${targetYear}-`;
+  const prefix = `DAR-${yy(targetYear)}-`;
+  // Numbers stored before the YY format (DAR-2026-001) still count toward the same year.
+  const sequenceOf = (value) => {
+    const text = formatDarNumber(value, targetYear);
+    return text.startsWith(prefix) ? parseInt(text.slice(prefix.length), 10) || 0 : null;
+  };
 
-  const currentYearNumbers = (existingDars || [])
-    .filter(dar => {
-      if (!dar) return false;
-      if (typeof dar === 'string') {
-        return dar.startsWith(prefix);
-      }
-      if (dar.isDraft || dar.status === 'DRAFT') {
-        return false;
-      }
-      const num = dar.darNumber || dar.dar_no || dar.darNo || (dar.id && String(dar.id).startsWith(prefix) ? dar.id : null);
-      return num && String(num).startsWith(prefix);
+  const used = (existingDars || [])
+    .map((dar) => {
+      if (!dar) return null;
+      if (typeof dar === 'string') return sequenceOf(dar);
+      if (dar.isDraft || dar.status === 'DRAFT') return null;
+      const num = dar.darNumber || dar.dar_no || dar.darNo || dar.id;
+      return num && /^DAR-/i.test(String(num)) ? sequenceOf(num) : null;
     })
-    .map(dar => {
-      const num = typeof dar === 'string' ? dar : (dar.darNumber || dar.dar_no || dar.darNo || dar.id);
-      const parts = String(num).split('-');
-      return parseInt(parts[2], 10) || 0;
-    });
+    .filter((n) => n !== null);
 
-  const nextSequence = currentYearNumbers.length > 0 ? Math.max(...currentYearNumbers) + 1 : 1;
-  const paddedSequence = String(nextSequence).padStart(3, '0');
-
-  return `${prefix}${paddedSequence}`;
+  return `${prefix}${String((used.length ? Math.max(...used) : 0) + 1).padStart(3, '0')}`;
 };

@@ -5,6 +5,7 @@ import { loadDocuments } from './session';
 import { loadUsers } from './masterData';
 import { resolveReviewer, resolveApprover } from '../modules/dcc/utils/workflowResolver';
 import { isDarDraft } from '../modules/dcc/utils/darHelper';
+import { formatDarNumber } from '../modules/dcc/utils/darNumberGenerator';
 import { calculateCopyAllocations } from '../modules/dcc/services/MasterDataService';
 import { distributionsOf, loadCopies } from './copies';
 import { isExternalRow, setExternalSources } from './external';
@@ -49,7 +50,7 @@ export const toStoreDar = (d, users) => {
     returnReason: d.return_comment,
     returnedBy: d.returned_by ? nameOf(users, d.returned_by) : undefined,
     returnDate: d.returned_at ? localTime(d.returned_at) : undefined,
-    darNumber: `DAR-${d.id}`,
+    darNumber: formatDarNumber(d.dar_no || d.id, d.created_at ? new Date(d.created_at).getFullYear() : undefined),
     title: d.name,
     docCode: d.doc_code,
     docIdInput: d.doc_code,
@@ -173,16 +174,18 @@ export const decideTask = async (taskId, action, comment) => {
 
 // API-mode twin of darSlice.submitDar: returns the stored DAR, or null after showing the server's reason.
 export const submitDarToApi = async (dar, file) => {
-  const { currentUser: user, masterUsers, reviewUsers, approveUsers } = useStore.getState();
+  const { currentUser: user, masterUsers, reviewUsers, approveUsers, approvalMatrix } = useStore.getState();
   const type = TYPE_TO_API[String(dar.type).toUpperCase()] || dar.type;
   const docCode = dar.document_code || dar.docCode || dar.doc_code;
   const docType = dar.docType || String(docCode || '').split('-')[0];
   const idOf = (r) => r?.id ?? r;
+  // Route by the document's department (not the requester's) and by the matrix the DCC maintains.
+  const dept = dar.department || user.department;
   // Same routing the form previewed: the New form passes its steps, the others preview with workflowResolver.
   const hasSteps = dar.workflowSteps?.length > 0;
   const stepUser = (role) => dar.workflowSteps.find((s) => s.role === role)?.userId;
-  const reviewerId = hasSteps ? stepUser('REVIEWER') : idOf(resolveReviewer(user.id, user.department, masterUsers, reviewUsers || masterUsers, docType));
-  const approverId = hasSteps ? stepUser('APPROVER') : idOf(resolveApprover(user.id, reviewerId, user.department, masterUsers, approveUsers || masterUsers, docType));
+  const reviewerId = hasSteps ? stepUser('REVIEWER') : idOf(resolveReviewer(user.id, dept, masterUsers, reviewUsers || masterUsers, docType, approvalMatrix));
+  const approverId = hasSteps ? stepUser('APPROVER') : idOf(resolveApprover(user.id, reviewerId, dept, masterUsers, approveUsers || masterUsers, docType, approvalMatrix));
 
   if (!reviewerId || !approverId) {
     toast.error(`ไม่พบ${reviewerId ? 'ผู้อนุมัติ' : 'ผู้ทบทวน'}ที่มีสิทธิ์ตาม Approval Matrix สำหรับเอกสารประเภท ${docType} กรุณาติดต่อ DCC`);

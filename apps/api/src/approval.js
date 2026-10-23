@@ -18,7 +18,7 @@ const isCrossOrgAuthority = (user) =>
  * Returns null when `user` may record a REVIEW or APPROVE decision on a document, otherwise the reason in Thai.
  * `user` is the shape returned by requireAuth; `thresholds` is a getThresholds() row.
  */
-export function checkDecisionRights(user, { stage, department, requesterId, reviewerId }, thresholds) {
+export function checkDecisionRights(user, { stage, department, requesterId, reviewerId, anyDepartment = false }, thresholds) {
   if (stage !== 'REVIEW' && stage !== 'APPROVE') return 'ขั้นตอนไม่ถูกต้อง';
   if (user.id === requesterId) return 'ผู้ขอไม่สามารถทบทวนหรืออนุมัติคำขอของตนเองได้';
   if (stage === 'APPROVE' && user.id === reviewerId) return 'ผู้ทบทวนไม่สามารถอนุมัติเอกสารที่ตนทบทวนได้';
@@ -27,7 +27,8 @@ export function checkDecisionRights(user, { stage, department, requesterId, revi
   const required = stage === 'REVIEW' ? thresholds.required_reviewer_level : thresholds.required_approver_level;
   if (user.approval_level < required) return `ต้องมีระดับอนุมัติ L${required} ขึ้นไป`;
 
-  if (!user.depts.includes(department) && user.department !== department && !isCrossOrgAuthority(user)) {
+  // External documents may be reviewed and approved by people from any department.
+  if (!anyDepartment && !user.depts.includes(department) && user.department !== department && !isCrossOrgAuthority(user)) {
     return 'ต้องเป็นสมาชิกแผนกเจ้าของเอกสาร';
   }
   return null;

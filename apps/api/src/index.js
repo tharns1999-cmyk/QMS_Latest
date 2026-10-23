@@ -43,6 +43,7 @@ const toPublicUser = (row, policy) => ({
   name: row.name,
   email: row.email,
   role: row.role,
+  position: row.position || '',
   approval_level: row.approval_level,
   department: row.primary_department,
   depts: JSON.parse(row.departments),
@@ -338,7 +339,7 @@ app.post('/api/dars', requireAuth, async (c) => {
   const { results } = await db.prepare("SELECT * FROM users WHERE id IN (?, ?) AND status = 'ACTIVE'").bind(reviewerId, approverId).all();
   const find = (id) => results.find((u) => u.id === id);
   if (!find(reviewerId) || !find(approverId)) return c.json({ error: `ไม่พบผู้ทบทวนหรือผู้อนุมัติที่ใช้งานอยู่ (${!find(reviewerId) ? `ผู้ทบทวน "${reviewerId}"` : `ผู้อนุมัติ "${approverId}"`}) กรุณารีเฟรชหน้าแล้วลองใหม่` }, 400);
-  const decision = { department: doc.department, requesterId: user.id, reviewerId };
+  const decision = { department: doc.department, requesterId: user.id, reviewerId, anyDepartment: isExternal };
   const problem = checkDecisionRights(toPublicUser(find(reviewerId)), { ...decision, stage: 'REVIEW' }, thresholds)
     ?? checkDecisionRights(toPublicUser(find(approverId)), { ...decision, stage: 'APPROVE' }, thresholds);
   if (problem) return c.json({ error: problem }, 400);
@@ -358,23 +359,28 @@ app.post('/api/dars', requireAuth, async (c) => {
       db.prepare(`INSERT INTO audit_log (actor_id, action, details)
         SELECT ?, 'DAR_SUBMITTED', json_object('type', type, 'doc_code', doc_code, 'dar_id', id) FROM dars WHERE id = last_insert_rowid()`).bind(user.id)
     ]);
-    return c.json({ dar: inserted.results[0] }, 201);
+    const dar = await db.prepare(`SELECT dars.*, ${DAR_NO_SQL} FROM dars WHERE id = ?`).bind(inserted.results[0].id).first();
+    return c.json({ dar }, 201);
   } catch (err) {
     if (isLockConflict(err)) return c.json({ error: 'เอกสารนี้มีคำขอ DAR ที่ยังดำเนินการอยู่' }, 409);
     throw err;
   }
 });
 
+// DAR-YY-XXX: the running number restarts each year; ids only grow, so the rank within the year never changes.
+const DAR_NO_SQL = `'DAR-' || substr(dars.created_at, 3, 2) || '-' || printf('%03d', (SELECT COUNT(*) FROM dars d2 WHERE substr(d2.created_at, 1, 4) = substr(dars.created_at, 1, 4) AND d2.id <= dars.id)) AS dar_no,
+  CASE WHEN dars.doc_type = 'ED' THEN 'EDR-' || substr(dars.created_at, 3, 2) || '-' || printf('%03d', (SELECT COUNT(*) FROM dars d2 WHERE d2.doc_type = 'ED' AND substr(d2.created_at, 1, 4) = substr(dars.created_at, 1, 4) AND d2.id <= dars.id)) END AS edr_no`;
+
 app.get('/api/dars', requireAuth, async (c) => {
   await activateDue(c.env.DB);
   const status = c.req.query('status')?.toUpperCase();
-  const { results } = await c.env.DB.prepare(`SELECT * FROM dars WHERE (? IS NULL OR status = ?) AND ${DAR_VISIBLE_TO} ORDER BY id DESC`)
+  const { results } = await c.env.DB.prepare(`SELECT dars.*, ${DAR_NO_SQL} FROM dars WHERE (? IS NULL OR status = ?) AND ${DAR_VISIBLE_TO} ORDER BY id DESC`)
     .bind(status ?? null, status ?? null, ...darVisibilityArgs(c.get('user'))).all();
   return c.json({ dars: results });
 });
 
 app.get('/api/dars/:id', requireAuth, async (c) => {
-  const dar = await c.env.DB.prepare(`SELECT * FROM dars WHERE id = ? AND ${DAR_VISIBLE_TO}`).bind(c.req.param('id'), ...darVisibilityArgs(c.get('user'))).first();
+  const dar = await c.env.DB.prepare(`SELECT dars.*, ${DAR_NO_SQL} FROM dars WHERE id = ? AND ${DAR_VISIBLE_TO}`).bind(c.req.param('id'), ...darVisibilityArgs(c.get('user'))).first();
   return dar ? c.json({ dar }) : c.json({ error: 'ไม่พบคำขอ' }, 404);
 });
 
@@ -431,9 +437,29 @@ app.post('/api/dars/:id/resubmit', requireAuth, async (c) => {
   if (dar.type !== 'OBSOLETE' && !dar.file_key) return c.json({ error: 'กรุณาแนบไฟล์ PDF ก่อนยื่นใหม่' }, 409);
   // The name of an existing document is not the requester's to change on a withdrawal.
   const name = dar.type === 'OBSOLETE' ? null : text('name', 300);
+  // The requester may also swap the signers, and for an external document restate its source, edition, review cycle and access.
+  const reviewerId = text('reviewer_id', 100) ?? dar.reviewer_id;
+  const approverId = text('approver_id', 100) ?? dar.approver_id;
+  if (reviewerId !== dar.reviewer_id || approverId !== dar.approver_id) {
+    const { results } = await db.prepare("SELECT * FROM users WHERE id IN (?, ?) AND status = 'ACTIVE'").bind(reviewerId, approverId).all();
+    const find = (id) => results.find((u) => u.id === id);
+    if (!find(reviewerId) || !find(approverId)) return c.json({ error: 'ไม่พบผู้ทบทวนหรือผู้อนุมัติที่ใช้งานอยู่' }, 400);
+    const thresholds = await getThresholds(db, dar.doc_type, dar.type);
+    const decision = { department: dar.department, requesterId: user.id, reviewerId, anyDepartment: dar.doc_type === 'ED' };
+    const problem = checkDecisionRights(toPublicUser(find(reviewerId)), { ...decision, stage: 'REVIEW' }, thresholds)
+      ?? checkDecisionRights(toPublicUser(find(approverId)), { ...decision, stage: 'APPROVE' }, thresholds);
+    if (problem) return c.json({ error: problem }, 400);
+  }
+  const isExternal = dar.doc_type === 'ED' && dar.type !== 'OBSOLETE';
+  const cycle = Number(body.review_cycle_months);
+  if (isExternal && body.review_cycle_months != null && !(Number.isInteger(cycle) && cycle >= 1 && cycle <= 120)) return c.json({ error: 'รอบการทบทวนต้องเป็นจำนวนเดือน 1-120' }, 400);
+  const scope = isExternal && dar.type === 'NEW' && ['GENERAL', 'DEPT'].includes(String(body.access_scope).toUpperCase()) ? String(body.access_scope).toUpperCase() : null;
   const [updated] = await db.batch([
-    db.prepare(`UPDATE dars SET awaiting_requester = 0, name = COALESCE(?, name), reason = COALESCE(?, reason), effective_date = COALESCE(?, effective_date)
-      WHERE id = ? AND awaiting_requester = 1 RETURNING *`).bind(name, text('reason', 2000), date, dar.id),
+    db.prepare(`UPDATE dars SET awaiting_requester = 0, name = COALESCE(?, name), reason = COALESCE(?, reason), effective_date = COALESCE(?, effective_date),
+      reviewer_id = ?, approver_id = ?, ext_issuer = COALESCE(?, ext_issuer), ext_edition = COALESCE(?, ext_edition),
+      review_cycle_months = COALESCE(?, review_cycle_months), access_scope = COALESCE(?, access_scope)
+      WHERE id = ? AND awaiting_requester = 1 RETURNING *`).bind(name, text('reason', 2000), date, reviewerId, approverId,
+      isExternal ? text('issuer', 200) : null, isExternal ? text('edition', 100) : null, isExternal && body.review_cycle_months != null ? cycle : null, scope, dar.id),
     db.prepare('INSERT INTO audit_log (actor_id, action, details) SELECT ?, ?, ? WHERE changes() > 0')
       .bind(user.id, 'DAR_RESUBMITTED', JSON.stringify({ dar_id: dar.id, doc_code: dar.doc_code, return_count: dar.return_count }))
   ]);
@@ -475,7 +501,7 @@ app.post('/api/dars/:id/decision', requireAuth, async (c) => {
   if (dar.awaiting_requester) return c.json({ error: 'คำขอนี้ถูกส่งกลับแล้ว รอผู้ขอแก้ไขและยื่นใหม่' }, 409);
   if (user.id !== (stage === 'REVIEW' ? dar.reviewer_id : dar.approver_id)) return c.json({ error: 'คุณไม่ได้รับมอบหมายให้พิจารณาคำขอนี้' }, 403);
   // Re-checked at decision time: the user's level or the matrix may have changed since submission.
-  const problem = checkDecisionRights(user, { stage, department: dar.department, requesterId: dar.requester_id, reviewerId: dar.reviewer_id }, await getThresholds(db, dar.doc_type, dar.type));
+  const problem = checkDecisionRights(user, { stage, department: dar.department, requesterId: dar.requester_id, reviewerId: dar.reviewer_id, anyDepartment: dar.doc_type === 'ED' }, await getThresholds(db, dar.doc_type, dar.type));
   if (problem) return c.json({ error: problem }, 403);
   if (body.decision === 'APPROVE' && dar.type !== 'OBSOLETE' && !dar.file_key) return c.json({ error: 'ผู้ขอยังไม่ได้แนบไฟล์ PDF' }, 409);
 
@@ -573,6 +599,17 @@ export const activateDue = async (db) => {
 };
 
 // Controlled copies: DCC and QMR see all; others see the copies held by their departments.
+// The copy trail for the register's history tabs. Unlike /api/audit-log it is not itself written to the audit log, so the page may re-read it freely.
+app.get('/api/controlled-copies/audit', requireAuth, async (c) => {
+  const user = c.get('user');
+  if (!user.isDcc && !user.isQmr) return c.json({ entries: [] });
+  const { results } = await c.env.DB.prepare(
+    `SELECT a.id, a.at, u.name AS actor_name, a.action, a.details FROM audit_log a LEFT JOIN users u ON u.id = a.actor_id
+     WHERE substr(a.action, 1, 3) = 'CC_' ORDER BY a.id DESC LIMIT 1000`
+  ).all();
+  return c.json({ entries: results });
+});
+
 app.get('/api/controlled-copies', requireAuth, async (c) => {
   await activateDue(c.env.DB);
   const user = c.get('user');
@@ -723,6 +760,29 @@ const COPY_STEPS = {
   recall: { to: 'RECALLED', from: 'PENDING_RECALL', stamp: 'recalled', action: 'CC_RECALLED',
     refuse: (user) => (user.isDcc ? null : 'เฉพาะ DCC เท่านั้นที่บันทึกการเรียกคืนได้') }
 };
+
+// The last step of a recall: the paper DCC already holds is destroyed or stamped and archived. A copy may arrive here still
+// waiting for recall (DCC ticks receipt and disposes in one go), so it is taken as received first.
+app.post('/api/controlled-copies/:id/dispose', requireAuth, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  if (!user.isDcc) return c.json({ error: 'เฉพาะ DCC เท่านั้นที่บันทึกการทำลาย/จัดเก็บสำเนาได้' }, 403);
+  const copy = await loadCopy(db, c.req.param('id'));
+  if (!copy) return c.json({ error: 'ไม่พบสำเนา' }, 404);
+  const body = await c.req.json().catch(() => ({}));
+  const note = typeof body.note === 'string' ? body.note.trim().slice(0, 500) : '';
+  // How the paper was disposed of and who watched, kept as their own fields so the audit trail and the destruction register can show them.
+  const field = (k) => (typeof body[k] === 'string' ? body[k].trim().slice(0, 200) : '');
+  const [updated] = await db.batch([
+    db.prepare(`UPDATE controlled_copies SET status = 'RECALLED', recalled_at = COALESCE(recalled_at, ${NOW}), recalled_by = COALESCE(recalled_by, ?),
+      disposed_at = ${NOW}, disposed_by = ?, disposition = ? WHERE id = ? AND status IN ('PENDING_RECALL', 'RECALLED') AND disposed_at IS NULL RETURNING *`)
+      .bind(user.id, user.id, note || null, copy.id),
+    db.prepare('INSERT INTO audit_log (actor_id, action, details) SELECT ?, ?, ? WHERE changes() > 0')
+      .bind(user.id, 'CC_DISPOSED', JSON.stringify({ copy_id: copy.id, doc_code: copy.doc_code, revision: copy.revision, copy_no: copy.copy_no, department: copy.department, note, method: field('method'), witness: field('witness'), reference_no: field('reference_no'), notes: field('notes') }))
+  ]);
+  if (!updated.results.length) return c.json({ error: 'สำเนานี้ถูกทำลาย/จัดเก็บไปแล้ว หรือยังไม่อยู่ในขั้นเรียกคืน กรุณาโหลดใหม่' }, 409);
+  return c.json({ copy: updated.results[0] });
+});
 
 app.post('/api/controlled-copies/:id/:step', requireAuth, async (c) => {
   const step = Object.hasOwn(COPY_STEPS, c.req.param('step')) ? COPY_STEPS[c.req.param('step')] : null;
@@ -939,7 +999,8 @@ const userFields = async (db, body, current = {}) => {
   const empId = body.empId === undefined ? current.emp_id ?? null : clean(body.empId, 50);
   const dcc = body.isDcc === undefined ? current.is_dcc === 1 : Boolean(body.isDcc);
   const qmr = body.isQmr === undefined ? current.is_qmr === 1 : Boolean(body.isQmr);
-  return { name, email, level, primary, depts, empId, dcc, qmr };
+  const position = body.position === undefined ? current.position ?? '' : clean(body.position, 200) ?? '';
+  return { name, email, level, primary, depts, empId, position, dcc, qmr };
 };
 
 // Everyone, including deactivated and locked accounts, for the management page.
@@ -959,9 +1020,9 @@ app.post('/api/users', requireAuth, async (c) => {
   const password = tempPassword();
   try {
     await db.batch([
-      db.prepare(`INSERT INTO users (id, emp_id, name, email, password_hash, role, approval_level, primary_department, departments, is_dcc, is_qmr, must_change_password)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`)
-        .bind(id, f.empId, f.name, f.email, await hashPassword(password), roleOf(f.dcc), f.level, f.primary, JSON.stringify(f.depts), f.dcc ? 1 : 0, f.qmr ? 1 : 0),
+      db.prepare(`INSERT INTO users (id, emp_id, name, email, password_hash, role, position, approval_level, primary_department, departments, is_dcc, is_qmr, must_change_password)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`)
+        .bind(id, f.empId, f.name, f.email, await hashPassword(password), roleOf(f.dcc), f.position, f.level, f.primary, JSON.stringify(f.depts), f.dcc ? 1 : 0, f.qmr ? 1 : 0),
       audit(db, c.get('user').id, 'USER_CREATED', { user_id: id, email: f.email, level: f.level, department: f.primary, depts: f.depts, isDcc: f.dcc, isQmr: f.qmr })
     ]);
   } catch (err) {
@@ -987,15 +1048,15 @@ app.patch('/api/users/:id', requireAuth, async (c) => {
   if (status === 'LOCKED' && before.status !== 'LOCKED') return c.json({ error: 'ไม่สามารถตั้งสถานะล็อกด้วยตนเองได้' }, 400);
   // An admin cannot lock themselves out of the admin pages.
   if (before.id === actor.id && (!f.dcc || status !== 'ACTIVE')) return c.json({ error: 'ไม่สามารถปิดบัญชีหรือถอนสิทธิ์ DCC ของตนเองได้' }, 400);
-  const after = { name: f.name, email: f.email, emp_id: f.empId, approval_level: f.level, department: f.primary, depts: f.depts, isDcc: f.dcc, isQmr: f.qmr, status };
+  const after = { name: f.name, email: f.email, emp_id: f.empId, position: f.position, approval_level: f.level, department: f.primary, depts: f.depts, isDcc: f.dcc, isQmr: f.qmr, status };
   try {
     await db.batch([
-      db.prepare(`UPDATE users SET name = ?, email = ?, emp_id = ?, approval_level = ?, primary_department = ?, departments = ?, is_dcc = ?, is_qmr = ?, role = ?,
+      db.prepare(`UPDATE users SET name = ?, email = ?, emp_id = ?, position = ?, approval_level = ?, primary_department = ?, departments = ?, is_dcc = ?, is_qmr = ?, role = ?,
         status = ?, failed_logins = CASE WHEN ? = 'ACTIVE' THEN 0 ELSE failed_logins END WHERE id = ?`)
-        .bind(f.name, f.email, f.empId, f.level, f.primary, JSON.stringify(f.depts), f.dcc ? 1 : 0, f.qmr ? 1 : 0, roleOf(f.dcc), status, status, before.id),
+        .bind(f.name, f.email, f.empId, f.position, f.level, f.primary, JSON.stringify(f.depts), f.dcc ? 1 : 0, f.qmr ? 1 : 0, roleOf(f.dcc), status, status, before.id),
       audit(db, actor.id, 'USER_UPDATED', {
         user_id: before.id,
-        before: { name: before.name, email: before.email, emp_id: before.emp_id, approval_level: before.approval_level, department: before.primary_department, depts: JSON.parse(before.departments), isDcc: before.is_dcc === 1, isQmr: before.is_qmr === 1, status: before.status },
+        before: { name: before.name, email: before.email, emp_id: before.emp_id, position: before.position, approval_level: before.approval_level, department: before.primary_department, depts: JSON.parse(before.departments), isDcc: before.is_dcc === 1, isQmr: before.is_qmr === 1, status: before.status },
         after
       })
     ]);

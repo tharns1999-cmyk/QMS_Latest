@@ -5,7 +5,7 @@ import useStore from '../store/useStore';
 
 const json = (status, body) => Promise.resolve(new Response(JSON.stringify(body), { status }));
 const user = (id, status, extra = {}) => ({ id, name: id, email: `${id}@x.local`, approval_level: 3, department: 'QC', depts: ['QC'], isDcc: false, isQmr: false, status, ...extra });
-const form = { name: 'สมศรี', email: 'a@b.c', empId: '', department: 'QC', depts: ['QC'], approval_level: '4', isDcc: false, isQmr: true };
+const form = { name: 'สมศรี', email: 'a@b.c', empId: '', position: 'หัวหน้าฝ่ายควบคุมคุณภาพ', department: 'QC', depts: ['QC'], approval_level: '4', isDcc: false, isQmr: true };
 
 describe('master data adapter', () => {
   afterEach(() => vi.unstubAllGlobals());
@@ -42,7 +42,7 @@ describe('master data adapter', () => {
     useStore.setState({ currentUser: { id: 'a', isDcc: true } });
     const result = await createUser(form);
     expect(result.temporaryPassword).toBe('Abcdefgh234567');
-    expect(calls[0]).toEqual(['POST', '/api/users', { name: 'สมศรี', email: 'a@b.c', department: 'QC', depts: ['QC'], approval_level: 4, isDcc: false, isQmr: true }]);
+    expect(calls[0]).toEqual(['POST', '/api/users', { name: 'สมศรี', email: 'a@b.c', position: 'หัวหน้าฝ่ายควบคุมคุณภาพ', department: 'QC', depts: ['QC'], approval_level: 4, isDcc: false, isQmr: true }]);
     expect(calls[1][1]).toBe('/api/admin/users'); // DCC reloads the full list
     expect(useStore.getState().adminUsers.map((u) => u.id)).toEqual(['n']);
   });

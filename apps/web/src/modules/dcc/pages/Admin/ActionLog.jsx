@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import toast from 'react-hot-toast';
 import useStore from '../../../../store/useStore';
 import { 
   Download, 
@@ -15,10 +16,38 @@ import {
   Activity
 } from 'lucide-react';
 import dayjs from 'dayjs';
-import { isApiMode } from '../../../../api/client';
+import { isApiMode, apiGet } from '../../../../api/client';
 import ApiAdminPanel from './ApiAdminPanel';
 import { TablePagination } from '../../../../shared/components/common/TablePagination';
 import { useTablePagination } from '../../../../shared/hooks/useTablePagination';
+
+// Server audit rows carry a code and a JSON blob; show them the way a reader says them.
+const ACTION_TH = {
+  LOGIN: 'เข้าสู่ระบบ', LOGIN_FAILED: 'เข้าสู่ระบบไม่สำเร็จ', PASSWORD_CHANGED: 'เปลี่ยนรหัสผ่าน', USER_PASSWORD_RESET: 'รีเซ็ตรหัสผ่านผู้ใช้',
+  USER_CREATED: 'สร้างผู้ใช้', USER_UPDATED: 'แก้ไขผู้ใช้', USER_UNLOCKED: 'ปลดล็อกผู้ใช้', TWO_FACTOR_RESET: 'รีเซ็ต 2FA', SIGNATURE_UPDATED: 'อัปเดตลายเซ็น',
+  DAR_SUBMITTED: 'ยื่นคำขอ DAR', DAR_FILE_ATTACHED: 'แนบไฟล์ DAR', DAR_REVIEWED: 'ทบทวน DAR', DAR_APPROVED: 'อนุมัติ DAR', DAR_REJECTED: 'ไม่อนุมัติ DAR',
+  DAR_RETURNED: 'ส่งคำขอกลับแก้ไข', DAR_RESUBMITTED: 'ยื่นคำขอใหม่อีกครั้ง', DAR_WITHDRAWN: 'ถอนคำขอ DAR',
+  DOCUMENT_PUBLISHED: 'ประกาศใช้เอกสาร', DOCUMENT_OBSOLETED: 'ยกเลิกเอกสาร', DOCUMENT_VIEWED: 'เปิดดูไฟล์เอกสาร', DOCUMENT_DOWNLOADED: 'ดาวน์โหลดไฟล์เอกสาร', DOCUMENT_ACKNOWLEDGED: 'รับทราบเอกสาร',
+  CC_ADDITIONAL_REQUESTED: 'ขอสำเนาควบคุมเพิ่ม', CC_RECALLED: 'เรียกคืนสำเนาควบคุม', CC_DISPOSED: 'ทำลาย/จัดเก็บสำเนาควบคุม',
+  PERIODIC_REVIEW_SUBMITTED: 'ยื่นทบทวนตามรอบ', PERIODIC_REVIEW_APPROVED: 'อนุมัติทบทวนตามรอบ', PERIODIC_REVIEW_REJECTED: 'ไม่อนุมัติทบทวนตามรอบ',
+  APPROVAL_MATRIX_UPDATED: 'แก้ไขสายอนุมัติ', DOCUMENT_TYPES_UPDATED: 'แก้ไขประเภทเอกสาร', SECURITY_SETTINGS_UPDATED: 'แก้ไขตั้งค่าความปลอดภัย', SLA_SETTINGS_UPDATED: 'แก้ไขตั้งค่า SLA',
+  DEPARTMENT_CREATED: 'สร้างแผนก', DEPARTMENT_UPDATED: 'แก้ไขแผนก', LOCATION_CREATED: 'สร้างจุดแจกจ่าย', LOCATION_UPDATED: 'แก้ไขจุดแจกจ่าย', AUDIT_LOG_EXPORTED: 'ส่งออก Audit Log'
+};
+const DETAIL_TH = {
+  doc_code: 'เอกสาร', revision: 'Rev', dar_id: 'DAR #', type: 'ประเภท', status: 'สถานะ', copy_no: 'สำเนาเล่มที่', department: 'แผนก',
+  method: 'วิธีทำลาย', witness: 'พยาน', reference_no: 'เลขอ้างอิง', note: 'หมายเหตุ', notes: 'หมายเหตุ', comment: 'ความเห็น', rows: 'จำนวนแถว', bytes: 'ขนาด (ไบต์)'
+};
+const VALUE_TH = {
+  NEW: 'ขอใหม่', REVISION: 'แก้ไข', OBSOLETE: 'ยกเลิก', EFFECTIVE: 'มีผลบังคับใช้', SUPERSEDED: 'ตกรุ่น', DESTROY: 'ทำลาย', STAMP_AND_ARCHIVE: 'ประทับตราและเก็บเข้าคลัง'
+};
+const describeDetails = (raw) => {
+  let obj;
+  try { obj = JSON.parse(raw); } catch { return raw || '-'; }
+  const parts = Object.entries(obj || {})
+    .filter(([k, v]) => DETAIL_TH[k] && v !== null && v !== '')
+    .map(([k, v]) => `${DETAIL_TH[k]} ${VALUE_TH[v] || v}`);
+  return parts.length ? parts.join(' · ') : '-';
+};
 
 const ActionLog = () => {
   const { 
@@ -40,6 +69,13 @@ const ActionLog = () => {
     currentUser?.role === 'SUPER_ADMIN' ||
     currentUser?.isDccAdmin
   );
+
+  // API mode: the server's audit log is the record; the browser-side logs below only exist in demo mode.
+  const [serverRows, setServerRows] = useState([]);
+  useEffect(() => {
+    if (!isApiMode || !isDccAdmin) return;
+    apiGet('/api/audit-log?limit=1000').then((r) => setServerRows(r.entries || []), (err) => toast.error(err.message));
+  }, [isDccAdmin]);
 
   // --- Safe Extraction Helpers (Guaranteed string return, zero React 19 child crash) ---
 
@@ -120,6 +156,14 @@ const ActionLog = () => {
 
   // --- Aggregate & Normalize All System Activity Streams ---
   const allNormalizedLogs = useMemo(() => {
+    if (isApiMode) {
+      const categoryOf = (a) => (a.startsWith('DAR_') ? 'DAR' : a.startsWith('CC_') ? 'CONTROLLED_COPY' : a.startsWith('PERIODIC_REVIEW_') ? 'PERIODIC_REVIEW' : 'SYSTEM');
+      return serverRows.map((r) => ({
+        id: `srv-${r.id}`, rawDate: r.at, timestamp: r.at, created_at: r.at, createdAt: r.at, date: r.at,
+        actionType: r.action, actionLabel: ACTION_TH[r.action], action: r.action, actor: r.actor_name || r.actor_id || 'System', actorRole: r.actor_email || '',
+        details: describeDetails(r.details), category: categoryOf(r.action)
+      }));
+    }
     const combined = [];
 
     // 1. Primary Action Log
@@ -157,7 +201,8 @@ const ActionLog = () => {
       controlledCopyAuditTrail.forEach((l, idx) => {
         if (!l) return;
         const copyInfo = l.copy_number || l.ccNumber ? ` (Copy ${l.copy_number || l.ccNumber})` : '';
-        const docInfo = l.document_code || l.docTitle || l.doc_code || '';
+        const rev = l.revision || l.docRev;
+        const docInfo = `${l.document_code || l.docTitle || l.doc_code || ''}${rev ? ` Rev.${String(rev).replace(/^rev\.?\s*/i, '')}` : ''}`;
         const rawTime = l.timestamp || l.created_at || l.createdAt || l.date || l.time || l.rawDate || new Date().toISOString();
 
         combined.push({
@@ -235,7 +280,7 @@ const ActionLog = () => {
     }
 
     return unique.sort((a, b) => new Date(b.rawDate || 0) - new Date(a.rawDate || 0));
-  }, [actionLog, controlledCopyAuditTrail, externalAuditTrail, timeline]);
+  }, [actionLog, controlledCopyAuditTrail, externalAuditTrail, timeline, serverRows]);
 
   // --- Filtering ---
   const filteredLogs = useMemo(() => {
@@ -437,8 +482,9 @@ const ActionLog = () => {
                       {/* Action Type Badge */}
                       <td className="py-3.5 px-4 whitespace-nowrap">
                         <span className="badge-system font-mono text-xs font-bold text-[#0D99FF] bg-[#E5F4FF] border border-[#B8E1FF] px-2.5 py-1 rounded-md">
-                          {actType}
+                          {log.actionLabel || actType}
                         </span>
+                        {log.actionLabel && <div className="font-mono text-[10px] text-[#94A3B8] mt-1">{actType}</div>}
                       </td>
 
                       {/* User & Role */}

@@ -70,7 +70,7 @@ const TaskConfirmHardcopyReceiptModal = ({ isOpen, onClose, task }) => {
         actor_primary_department: currentUser?.primary_department || currentUser?.department || 'UNKNOWN_DEPT',
         task_department: dept,
         timestamp: new Date().toISOString(),
-        remarks: remarks || 'Confirmed receipt and physical placement at point of use'
+        remarks: remarks || 'ตรวจรับสำเนาและวางไว้ที่จุดใช้งานเรียบร้อย'
       });
       if (confirmed === false) return; // API mode: the server refused and said why
       toast.success(`ตรวจรับสำเนา Copy ${copyNo} เรียบร้อยแล้ว`);

@@ -163,7 +163,7 @@ describe('Master Architectural Blueprint: Materialize Approved DAR to Master Doc
     );
 
     expect(screen.getByText('อนุมัติเอกสาร')).toBeDefined();
-    expect(screen.getByText('DAR-2026-001')).toBeDefined();
+    expect(screen.getByText('DAR-26-001')).toBeDefined();
 
     // Click Approve button
     const approveBtn = screen.getByRole('button', { name: /อนุมัติ \(Approve\)/i });

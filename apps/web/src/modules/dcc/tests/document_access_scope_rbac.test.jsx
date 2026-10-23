@@ -183,13 +183,13 @@ describe('Document Confidentiality & Access Scope RBAC', () => {
         </BrowserRouter>
       );
 
-      // DCC Admin sees every dept's DEPT_ONLY/RESTRICTED doc in "My Dept"...
+      // DCC opens on "ทุกแผนก": every dept's doc of every access scope, in one list
       expect(screen.getByText('WI-PD-999')).toBeInTheDocument();
       expect(screen.getByText('POL-EXEC-001')).toBeInTheDocument();
-      expect(screen.queryByText('SOP-MKT-001')).not.toBeInTheDocument();
-      // ...and other depts' GENERAL docs in the General tab (tabs stay mutually exclusive)
-      fireEvent.click(screen.getByRole('button', { name: /เอกสารทั่วไป/ }));
       expect(screen.getByText('SOP-MKT-001')).toBeInTheDocument();
+      // "ในแผนกฉัน" means the DCC's own department again, not other depts' documents
+      fireEvent.click(screen.getByRole('button', { name: 'เอกสารในแผนกฉัน' }));
+      expect(screen.queryByText('WI-PD-999')).not.toBeInTheDocument();
     });
   });
 });

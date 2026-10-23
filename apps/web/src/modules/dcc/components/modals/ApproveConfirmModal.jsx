@@ -1,5 +1,6 @@
 import React from 'react';
 import { CheckCircle2, X } from 'lucide-react';
+import { formatDarNumber } from '../../utils/darNumberGenerator';
 
 /**
  * ApproveConfirmModal
@@ -57,7 +58,7 @@ export default function ApproveConfirmModal({
             <div className="space-y-1.5">
               <div className="flex justify-between">
                 <span className="text-slate-400">รหัสคำร้อง:</span>
-                <span className="font-semibold text-slate-800">{dar.darNumber || dar.darNo || dar.id || '-'}</span>
+                <span className="font-semibold text-slate-800">{formatDarNumber(dar.darNumber || dar.darNo || dar.id)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-400">ชื่อเอกสาร:</span>

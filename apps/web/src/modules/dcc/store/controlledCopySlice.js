@@ -8,6 +8,7 @@ import { isApiMode } from '../../../api/client';
 const apiCopies = {
   stepCopy: (...args) => import('../../../api/copies').then((m) => m.stepCopy(...args)),
   stepCopies: (...args) => import('../../../api/copies').then((m) => m.stepCopies(...args)),
+  disposeCopies: (...args) => import('../../../api/copies').then((m) => m.disposeCopies(...args)),
   call: (name, ...args) => import('../../../api/copies').then((m) => m[name](...args))
 };
 import { canManageControlledCopy } from '../utils/accessControl';
@@ -1703,15 +1704,7 @@ export const createControlledCopySlice = (set, get) => ({
       tasks: cleanupDccTasks(finalTasks, newCopies, [...(state.documents || []), ...(updatedExternalDocs || [])]),
       controlledCopyAuditTrail: [auditLog, ...(state.controlledCopyAuditTrail || [])],
       physicalCopyAuditLogs: [auditLog, ...(state.physicalCopyAuditLogs || [])],
-      notifications: [notif, ...state.notifications],
-      actionLog: [{
-        id: `LOG-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        actionType: 'PHYSICAL_COPY_RECEIVED',
-        actor: confirmedBy,
-        actorUserId: actorUserId,
-        details: `Confirmed physical hardcopy receipt for copy ${resolvedCopyId} (${docId}) by dept ${targetDept}`,
-        timestamp: confirmedAt
-      }, ...(state.actionLog || [])]
+      notifications: [notif, ...state.notifications]
     };
   }),
 
@@ -1868,7 +1861,7 @@ export const createControlledCopySlice = (set, get) => ({
     };
   }),
 
-  completeCopyRecallAndArchive: ({ documentCode, collectedCopyIds, dispositionMethod, notes, witnessName, referenceNo, taskId }) => isApiMode ? apiCopies.stepCopies('recall', collectedCopyIds || [], [dispositionMethod, witnessName, referenceNo, notes].filter(Boolean).join(' | ')) : set((state) => {
+  completeCopyRecallAndArchive: ({ documentCode, collectedCopyIds, dispositionMethod, notes, witnessName, referenceNo, taskId }) => isApiMode ? apiCopies.disposeCopies(collectedCopyIds || [], { method: dispositionMethod, witness: witnessName, referenceNo, notes }) : set((state) => {
     const isLostVoided = dispositionMethod === 'LOST_VOIDED';
     const collectedSet = new Set((collectedCopyIds || []).map(id => String(id)));
     const recalledAt = new Date().toISOString();
@@ -1995,7 +1988,7 @@ export const createControlledCopySlice = (set, get) => ({
       user: recalledBy,
       action: auditAction,
       docTitle: documentCode,
-      remarks: `DCC ทำการ ${dispLabel} สำหรับเอกสาร ${documentCode} จำนวน ${collectedSet.size} ชุด ${notes ? `(${notes})` : ''}`
+      remarks: `DCC ทำการ ${dispLabel} สำหรับเอกสาร ${documentCode} จำนวน ${collectedSet.size} ชุด${witnessName ? ` | พยาน: ${witnessName}` : ''}${referenceNo ? ` | อ้างอิง: ${referenceNo}` : ''}${notes ? ` | หมายเหตุ: ${notes}` : ''}`
     };
 
     const actionLogEntry = {

@@ -46,6 +46,7 @@ const DarObsoleteForm = () => {
     deleteDar, 
     masterUsers, 
     reviewUsers, 
+    approvalMatrix,
     documents, 
     dars, 
     darRequests, 
@@ -366,7 +367,7 @@ const DarObsoleteForm = () => {
       requesterId: currentUser?.id,
       requester_id: currentUser?.id,
       requester_name: currentUser?.name,
-      department: currentUser?.department || formData.department,
+      department: selectedDoc?.department || selectedDoc?.dept || selectedDoc?.owner_department || currentUser?.department || formData.department,
       date: formData.date || new Date().toISOString().split('T')[0],
       docIdRef: formData.docId,
       doc_id: formData.docId,
@@ -960,10 +961,11 @@ const DarObsoleteForm = () => {
       {(() => {
         const resolvedRevId = resolveReviewer(
           currentUser?.id, 
-          currentUser?.department || 'PD', 
+          selectedDoc?.department || currentUser?.department || 'PD', 
           masterUsers || [], 
           reviewUsers || masterUsers || [], 
-          formData.docType || formData.targetDocType
+          formData.docType || formData.targetDocType,
+          approvalMatrix
         )?.id;
         const resolvedReviewerObj = (masterUsers || []).find(u => u && u.id === resolvedRevId);
 

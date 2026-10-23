@@ -18,6 +18,7 @@ describe('external document mapping', () => {
   it('turns a request into a request record with signoffs, and the current stage into a task for the signer', () => {
     const request = toStoreExternalRequest(dar, 'dar-5', users);
     expect(request).toMatchObject({ requestNo: 'EDR-5', status: 'PENDING_EXT_REVIEW', requestType: 'NEW', reviewerName: 'ผู้ทบทวน', docId: 'dar-5' });
+    expect(toStoreExternalRequest({ ...dar, edr_no: 'EDR-26-001' }, 'dar-5', users)).toMatchObject({ requestNo: 'EDR-26-001', requestId: 'EDR-26-001', id: 'EDR-5' });
     expect(request.signoffs.map((s) => s.status)).toEqual(['COMPLETED', 'PENDING', 'WAITING']);
     expect(toExternalTask(dar, 'dar-5', users)).toMatchObject({ type: 'EXT_REVIEW', assigneeId: 'rev', referenceType: 'EXTERNAL_DOC', referenceId: 'dar-5', darId: '5' });
     expect(toExternalTask({ ...dar, status: 'PENDING_APPROVAL', reviewed_at: 'x' }, 'dar-5', users)).toMatchObject({ type: 'EXT_APPROVAL', assigneeId: 'app' });

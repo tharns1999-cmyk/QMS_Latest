@@ -52,12 +52,15 @@ const toPendingDoc = (r, users) => ({
   reviewerId: r.reviewer_id, reviewerName: nameOf(users, r.reviewer_id),
   approverId: r.approver_id, approverName: nameOf(users, r.approver_id),
   effectiveDate: r.effective_date,
-  requestId: `EDR-${r.id}`, edrNumber: `EDR-${r.id}`,
+  requestId: edrNo(r), edrNumber: edrNo(r),
   createdAt: r.created_at,
   apiFilePath: r.file_key ? `/api/dars/${r.id}/file` : null,
   attachedFile: r.file_key ? { name: `${r.doc_code}.pdf`, type: 'application/pdf', apiFilePath: `/api/dars/${r.id}/file` } : null,
   distributions: [], controlledCopies: []
 });
+
+// The server numbers external requests EDR-YY-XXX; the bare id is only a fallback for rows without it.
+const edrNo = (r) => r.edr_no || `EDR-${r.id}`;
 
 const signoff = (step, stepName, role, userId, users, status, date, comment) => ({ step, stepName, role, userId, userName: nameOf(users, userId) || '-', status, date, comment: comment || null });
 
@@ -66,9 +69,10 @@ export const toStoreExternalRequest = (r, docId, users) => {
   const approve = r.approved_at ? 'COMPLETED' : r.status === 'REJECTED' && r.reviewed_at ? 'REJECTED' : 'WAITING';
   return {
     ...edFields(r),
-    id: `EDR-${r.id}`, requestId: `EDR-${r.id}`, requestNo: `EDR-${r.id}`, edrNumber: `EDR-${r.id}`,
+    id: `EDR-${r.id}`, requestId: edrNo(r), requestNo: edrNo(r), edrNumber: edrNo(r),
     docId, documentId: docId, externalDocId: docId, documentCode: r.doc_code, darId: String(r.id),
     requestType: r.type, rev: r.revision,
+    acknowledgees: (() => { try { return JSON.parse(r.ack_user_ids || '[]'); } catch { return []; } })(),
     effectiveDate: r.effective_date,
     requesterId: r.requester_id, requesterName: nameOf(users, r.requester_id), requesterDepartment: r.department,
     reviewerId: r.reviewer_id, reviewerName: nameOf(users, r.reviewer_id),
@@ -82,7 +86,8 @@ export const toStoreExternalRequest = (r, docId, users) => {
       signoff('REVIEW', 'ทบทวนเอกสาร', 'ผู้ทบทวน', r.reviewer_id, users, review, r.reviewed_at, review === 'REJECTED' ? r.reject_comment : null),
       signoff('APPROVE', 'อนุมัติเอกสาร', 'ผู้อนุมัติ', r.approver_id, users, approve, r.approved_at, approve === 'REJECTED' ? r.reject_comment : null)
     ],
-    apiFilePath: r.file_key ? `/api/dars/${r.id}/file` : null
+    apiFilePath: r.file_key ? `/api/dars/${r.id}/file` : null,
+    attachedFile: r.file_key ? { name: `${r.doc_code}.pdf`, type: 'application/pdf', apiFilePath: `/api/dars/${r.id}/file` } : null
   };
 };
 
@@ -132,6 +137,31 @@ export const clearExternal = () => {
   useStore.setState({ externalDocuments: [], externalRequests: [] });
 };
 
+// The requester's side of a returned external request: restate the details (and optionally the file), then send it back to review.
+export const resubmitExternalToApi = async ({ payload, fileBlob, darId }) => {
+  try {
+    if (fileBlob) await apiUpload(`/api/dars/${darId}/file`, fileBlob);
+    await apiPost(`/api/dars/${darId}/resubmit`, {
+      name: payload.title,
+      reason: payload.reason || payload.changeReason,
+      effective_date: payload.effectiveDate,
+      reviewer_id: payload.reviewerId,
+      approver_id: payload.approverId,
+      issuer: payload.issuer || payload.source,
+      edition: payload.sourceVersion || payload.edition,
+      review_cycle_months: payload.reviewCycleMonths,
+      access_scope: String(payload.accessScope || 'General').toUpperCase() === 'GENERAL' ? 'GENERAL' : 'DEPT'
+    });
+    return true;
+  } catch (err) {
+    toast.error(err.message, { duration: 8000 });
+    return false;
+  } finally {
+    const { loadDars } = await import('./dars');
+    await loadDars().catch(() => {});
+  }
+};
+
 // Submits a new registration, a new edition, or (with isObsolete) a withdrawal. Returns false after showing the server's reason.
 export const submitExternalToApi = async ({ payload, fileBlob, documentToEdit, isObsolete = false }) => {
   const { currentUser: user } = useStore.getState();
@@ -168,7 +198,7 @@ export const submitExternalToApi = async ({ payload, fileBlob, documentToEdit, i
     const { loadDars } = await import('./dars');
     const { loadDocuments } = await import('./session');
     await Promise.all([loadDars(), loadDocuments(), loadCopies()]).catch(() => {});
-    return { ...dar, requestNo: `EDR-${dar.id}` };
+    return { ...dar, requestNo: edrNo(dar) };
   } catch (err) {
     toast.error(err.message, { duration: 8000 });
     return false;

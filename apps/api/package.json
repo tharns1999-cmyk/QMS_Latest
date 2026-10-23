@@ -8,6 +8,8 @@
     "deploy": "wrangler deploy",
     "db:migrate:local": "wrangler d1 migrations apply DB --local",
     "db:migrate:remote": "wrangler d1 migrations apply DB --remote",
+    "db:migrate:production": "wrangler d1 migrations apply DB --remote --env production",
+    "deploy:production": "wrangler deploy --env production",
     "db:seed:local": "node scripts/seed-local.js && wrangler d1 execute DB --local --file .wrangler/seed-local.sql",
     "test": "vitest run"
   },

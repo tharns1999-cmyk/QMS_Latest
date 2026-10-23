@@ -6,14 +6,14 @@ const users = [{ id: 'req', name: 'ผู้ขอ' }, { id: 'rev', name: 'ผ�
 const row = {
   id: 7, type: 'NEW', doc_code: 'WI-QA-001', doc_type: 'WI', department: 'QA', revision: '00', name: 'ล้างมือ',
   access_scope: 'DEPT', reason: 'เริ่มใช้', status: 'PENDING_REVIEW', requester_id: 'req', reviewer_id: 'rev', approver_id: 'app',
-  reviewed_at: null, approved_at: null, completed_at: null, reject_comment: null, file_key: null, created_at: '2026-10-21T01:02:03.000Z'
+  reviewed_at: null, approved_at: null, completed_at: null, reject_comment: null, file_key: null, created_at: '2026-10-21T01:02:03.000Z', dar_no: 'DAR-26-001'
 };
 const json = (status, body) => Promise.resolve(new Response(JSON.stringify(body), { status }));
 
 describe('API DAR mapping', () => {
   it('maps API rows to the demo shape the DAR pages read', () => {
     const dar = toStoreDar({ ...row, file_key: 'dars/7/a.pdf' }, users);
-    expect(dar).toMatchObject({ id: '7', status: 'UNDER_REVIEW', darNumber: 'DAR-7', reviewerName: 'ผู้ทบทวน', date: '2026-10-21' });
+    expect(dar).toMatchObject({ id: '7', status: 'UNDER_REVIEW', darNumber: 'DAR-26-001', reviewerName: 'ผู้ทบทวน', date: '2026-10-21' });
     expect(dar.attachedFile.apiFilePath).toBe('/api/dars/7/file');
     expect(toStoreDar({ ...row, effective_date: '2027-01-01' }, users).effectiveDate).toBe('2027-01-01');
     expect(toStoreDar({ ...row, status: 'PENDING_DCC' }, users).status).toBe('APPROVED_WAITING_EFFECTIVE');

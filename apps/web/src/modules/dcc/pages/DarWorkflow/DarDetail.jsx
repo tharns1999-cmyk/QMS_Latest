@@ -26,6 +26,7 @@ import { getDarReason, getDarDetail, getDarDocInfo, isDarDraft, isDarRequester }
 import DarReviewModal from '../../components/workflow/DarReviewModal';
 import FileViewerModal from '../../components/modals/FileViewerModal';
 import { UniversalWatermarkService, resolveWatermarkConfig } from '../../services/UniversalWatermarkService';
+import { formatDarNumber } from '../../utils/darNumberGenerator';
 
 const DarDetail = () => {
   const { id } = useParams();
@@ -155,7 +156,7 @@ const DarDetail = () => {
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <span className="font-mono font-bold text-slate-900 text-lg tracking-tight">
-                {dar.darNumber || (dar.isDraft || dar.status === 'DRAFT' || String(dar.id).startsWith('draft_') ? 'ยังไม่ได้ระบุ (Draft)' : dar.id)}
+                {dar.darNumber ? formatDarNumber(dar.darNumber) : (dar.isDraft || dar.status === 'DRAFT' || String(dar.id).startsWith('draft_') ? 'ยังไม่ได้ระบุ (Draft)' : formatDarNumber(dar.id))}
               </span>
               <span className={`px-2 py-0.5 rounded-md text-[11px] font-semibold uppercase ${
                 dar.type === 'OBSOLETE'

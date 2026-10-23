@@ -127,6 +127,22 @@ describe('controlled copy requests', () => {
     expect(done.decision_note).toBe('DESTROY | พยาน: สมชาย | ทำลายแล้ว');
   });
 
+  it('a recalled copy is disposed once; DCC may dispose a copy it already received or one still waiting', async () => {
+    const { byNo } = await inField();
+    const id = (n) => byNo[n].id;
+    await post(`/api/controlled-copies/${id('02')}/return`, 'Q-BHEAD', { reason: 'คืน' });
+    await post(`/api/controlled-copies/${id('02')}/decide`, 'Q-DCC', { decision: 'APPROVE' });
+    expect((await post(`/api/controlled-copies/${id('02')}/dispose`, 'Q-BHEAD', {})).status).toBe(403);
+    const done = (await post(`/api/controlled-copies/${id('02')}/dispose`, 'Q-DCC', { note: 'DESTROY | สมชาย' })).body.copy;
+    expect(done).toMatchObject({ status: 'RECALLED', disposed_by: 'Q-DCC', disposition: 'DESTROY | สมชาย' });
+    expect(done.disposed_at).toBeTruthy();
+    expect((await post(`/api/controlled-copies/${id('02')}/dispose`, 'Q-DCC', {})).status).toBe(409); // already done
+    const trail = (await request('GET', '/api/controlled-copies/audit', 'Q-DCC')).body.entries;
+    expect(trail.some((e) => e.action === 'CC_DISPOSED' && JSON.parse(e.details).revision !== undefined)).toBe(true);
+    expect((await request('GET', '/api/controlled-copies/audit', 'Q-BHEAD')).body.entries).toEqual([]);
+    expect((await post(`/api/controlled-copies/${id('03')}/dispose`, 'Q-DCC', {})).status).toBe(409); // still in the field
+  });
+
   it('a new revision recalls copies that were waiting on a request, and every step is audited', async () => {
     const { code, documentId, byNo } = await inField();
     await post(`/api/controlled-copies/${byNo['02'].id}/relocate`, 'Q-BHEAD', { reason: 'ย้าย', new_location_name: 'คลัง E' });

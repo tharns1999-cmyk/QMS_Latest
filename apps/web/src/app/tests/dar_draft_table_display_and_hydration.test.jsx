@@ -109,7 +109,7 @@ describe('DAR Draft Display, Layout Anti-Collision, and Form Hydration Tests', (
       expect(screen.queryByText('draft_1725600000_xyz789')).not.toBeInTheDocument();
 
       // Verify completed DAR displays official DAR number
-      expect(screen.getByText('DAR-2026-001')).toBeInTheDocument();
+      expect(screen.getByText('DAR-26-001')).toBeInTheDocument();
     });
 
     it('renders "ฉบับร่าง (Draft)" badge and hides technical id in DarList', () => {
@@ -127,7 +127,7 @@ describe('DAR Draft Display, Layout Anti-Collision, and Form Hydration Tests', (
       expect(screen.queryByText('draft_1725600000_xyz789')).not.toBeInTheDocument();
 
       // Verify completed DAR displays official DAR number
-      expect(screen.getByText('DAR-2026-001')).toBeInTheDocument();
+      expect(screen.getByText('DAR-26-001')).toBeInTheDocument();
     });
 
     it('prevents table column collision with min-width and scrollable container in Dashboard & DarList', () => {

@@ -262,11 +262,13 @@ describe('Historical Revision Download & Stamping Test Suite (ISO 9001 Clause 7.
     fireEvent.click(historyTab);
 
     // Check historical DAR-2026-004 is displayed
-    expect(screen.getByText('DAR-2026-004')).toBeInTheDocument();
+    expect(screen.getByText('DAR-26-004')).toBeInTheDocument();
 
     // Find download button for Rev.02
     const downloadBtns = screen.getAllByTitle(/ดาวน์โหลด Archive PDF/i);
     expect(downloadBtns.length).toBeGreaterThan(0);
+    // The list now also holds the revision in force (Rev.03); pick the Rev.02 row
+    const rev02Btn = screen.getByTitle(/ดาวน์โหลด Archive PDF Rev\.02/i);
 
     // Spy on DOM click to intercept filename
     const clickedAnchors = [];
@@ -280,7 +282,7 @@ describe('Historical Revision Download & Stamping Test Suite (ISO 9001 Clause 7.
     });
 
     // Click download on Rev.02 row
-    fireEvent.click(downloadBtns[0]);
+    fireEvent.click(rev02Btn);
 
     await waitFor(() => {
       expect(clickedAnchors.length).toBeGreaterThan(0);

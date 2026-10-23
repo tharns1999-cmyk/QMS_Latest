@@ -353,7 +353,9 @@ const MasterList = () => {
       });
     });
 
-    return Array.from(groupMap.values()).map(group => {
+    // A code whose master is no longer active (e.g. made OBSOLETE) belongs to the Obsolete tab only.
+    const activeCodes = new Set(activeDocs.map(d => (d.code || d.document_code || d.doc_code || d.title || '').trim().toUpperCase()));
+    return Array.from(groupMap.values()).filter(group => activeCodes.has(group.code)).map(group => {
       // In SUPERSEDED view, ensure no active revision slips into superseded list
       group.revisions = group.revisions.filter(r => !activeDocIds.has(r.id));
       group.revisions.sort((a, b) => 

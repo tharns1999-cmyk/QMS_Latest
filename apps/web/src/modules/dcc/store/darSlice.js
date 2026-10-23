@@ -726,7 +726,7 @@ export const createDarSlice = (set, get) => ({
       return submitDarToApi(dar, rawFile || dar.file);
     }
     const finalDar = { ...dar, isDraft: false };
-    const darId = finalDar.darNumber || finalDar.id || `DAR-${new Date().getFullYear()}-${String(get().dars.length + 1).padStart(3, '0')}`;
+    const darId = finalDar.darNumber || finalDar.id || `DAR-${String(new Date().getFullYear()).slice(-2)}-${String(get().dars.length + 1).padStart(3, '0')}`;
     const fileId = finalDar.fileId || `file-${darId}-${Date.now()}`;
     
     // 1. สกัดหาไฟล์จริงจากทุกช่องทางที่เป็นไปได้
