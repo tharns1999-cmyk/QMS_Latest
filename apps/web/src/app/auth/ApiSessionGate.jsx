@@ -11,6 +11,7 @@ const stateFor = (user) => (user?.mustChangePassword ? 'change' : user?.mustSetU
 const TwoFactorStep = ({ challenge, onUser, onBack }) => {
   const [code, setCode] = useState('');
   const [recovery, setRecovery] = useState(false);
+  const [trustDevice, setTrustDevice] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -19,7 +20,7 @@ const TwoFactorStep = ({ challenge, onUser, onBack }) => {
     setBusy(true);
     setError('');
     try {
-      onUser(await verifyTwoFactor(challenge, recovery ? { recoveryCode: code } : { code: code.replace(/\s/g, '') }));
+      onUser(await verifyTwoFactor(challenge, { ...(recovery ? { recoveryCode: code } : { code: code.replace(/\s/g, '') }), trustDevice }));
     } catch (err) {
       setError(err.message);
       setBusy(false);
@@ -37,6 +38,9 @@ const TwoFactorStep = ({ challenge, onUser, onBack }) => {
           {recovery ? 'รหัสสำรอง' : 'รหัส 6 หลัก'}
           <input required autoFocus inputMode={recovery ? 'text' : 'numeric'} autoComplete="one-time-code" value={code} onChange={(e) => setCode(e.target.value)}
             className="mt-1 w-full h-9 px-3 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500" />
+        </label>
+        <label className="flex items-center gap-2 text-xs text-slate-600">
+          <input type="checkbox" checked={trustDevice} onChange={(e) => setTrustDevice(e.target.checked)} />จดจำอุปกรณ์นี้ (ไม่ต้องกรอกรหัสอีกระยะหนึ่ง) — ใช้เฉพาะเครื่องส่วนตัว
         </label>
         {error && <p role="alert" className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">{error}</p>}
         <button type="submit" disabled={busy}

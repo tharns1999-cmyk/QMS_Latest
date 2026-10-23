@@ -102,15 +102,15 @@ describe('API master data page', () => {
   });
 
   it('edits the two-factor policy from the values the server holds', async () => {
-    api.getSecurityPolicy.mockResolvedValue({ twoFactorMinLevel: 5, twoFactorForDcc: true });
-    api.saveSecurityPolicy.mockResolvedValue({ twoFactorMinLevel: 4, twoFactorForDcc: false });
+    api.getSecurityPolicy.mockResolvedValue({ twoFactorMinLevel: 5, twoFactorForDcc: true, twoFactorTrustDays: 30 });
+    api.saveSecurityPolicy.mockResolvedValue({ twoFactorMinLevel: 4, twoFactorForDcc: false, twoFactorTrustDays: 30 });
     render(<ApiMasterData />);
     fireEvent.click(screen.getByRole('tab', { name: 'ความปลอดภัย' }));
     const level = await screen.findByDisplayValue('L5 ขึ้นไป');
     fireEvent.change(level, { target: { value: '4' } });
     fireEvent.click(screen.getByLabelText(/บังคับบัญชี DCC/));
     fireEvent.click(screen.getByRole('button', { name: 'บันทึก' }));
-    await waitFor(() => expect(api.saveSecurityPolicy).toHaveBeenCalledWith({ twoFactorMinLevel: 4, twoFactorForDcc: false }));
+    await waitFor(() => expect(api.saveSecurityPolicy).toHaveBeenCalledWith({ twoFactorMinLevel: 4, twoFactorForDcc: false, twoFactorTrustDays: 30 }));
     expect(await screen.findByDisplayValue('L4 ขึ้นไป')).toBeInTheDocument();
   });
 });

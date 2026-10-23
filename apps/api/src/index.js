@@ -18,6 +18,8 @@ const TWO_FACTOR_PURPOSE = '2fa';
 const TWO_FACTOR_ISSUER = 'QMS Portal';
 const CHALLENGE_TTL_SECONDS = 5 * 60;
 const RECOVERY_CODE_COUNT = 8;
+const TRUSTED_DEVICE_PURPOSE = 'trusted_device';
+const DEFAULT_TRUST_DAYS = 30;
 
 const app = new Hono();
 
@@ -31,9 +33,14 @@ const audit = (db, actorId, action, details) =>
 
 // Who must use two-factor is read from the settings table (the DCC edits it), so nothing about levels or roles is fixed here.
 const loadSecurityPolicy = async (db) => {
-  const { results } = await db.prepare("SELECT key, value FROM settings WHERE key IN ('two_factor_min_level', 'two_factor_for_dcc')").all();
+  const { results } = await db.prepare("SELECT key, value FROM settings WHERE key IN ('two_factor_min_level', 'two_factor_for_dcc', 'two_factor_trust_days')").all();
   const value = Object.fromEntries(results.map((r) => [r.key, r.value]));
-  return { twoFactorMinLevel: Number(value.two_factor_min_level) || 0, twoFactorForDcc: value.two_factor_for_dcc === '1' };
+  return {
+    twoFactorMinLevel: Number(value.two_factor_min_level) || 0,
+    twoFactorForDcc: value.two_factor_for_dcc === '1',
+    // How many days a device the person chose to remember skips the code; 0 turns remembering off.
+    twoFactorTrustDays: value.two_factor_trust_days === undefined ? DEFAULT_TRUST_DAYS : Number(value.two_factor_trust_days)
+  };
 };
 const twoFactorRequired = (row, policy) => (policy.twoFactorForDcc && row.is_dcc === 1) || (policy.twoFactorMinLevel > 0 && row.approval_level >= policy.twoFactorMinLevel);
 
@@ -58,6 +65,16 @@ const toPublicUser = (row, policy) => ({
 const issueChallenge = (secret, userId) => {
   const now = Math.floor(Date.now() / 1000);
   return sign({ sub: userId, purpose: TWO_FACTOR_PURPOSE, iat: now, exp: now + CHALLENGE_TTL_SECONDS }, secret, 'HS256');
+};
+
+// A remembered device holds a signed token; a password change or a two-factor reset (both move password_changed_at) voids it.
+const issueTrustedDevice = (secret, userId, days) => {
+  const now = Math.floor(Date.now() / 1000);
+  return sign({ sub: userId, purpose: TRUSTED_DEVICE_PURPOSE, iat: now, exp: now + days * 24 * 60 * 60 }, secret, 'HS256');
+};
+const isTrustedDevice = async (secret, token, user) => {
+  const payload = typeof token === 'string' ? await verify(token, secret, 'HS256').catch(() => null) : null;
+  return payload?.purpose === TRUSTED_DEVICE_PURPOSE && payload.sub === user.id && payload.iat >= user.password_changed_at;
 };
 
 // Recovery codes look like ABCDE-FGHJK; only a hash of the normalised form is stored.
@@ -115,13 +132,15 @@ app.post('/api/auth/login', async (c) => {
   if (user.status === 'LOCKED') return c.json({ error: 'บัญชีถูกล็อก กรุณาติดต่อ DCC' }, 423);
   if (user.status !== 'ACTIVE') return c.json({ error: 'บัญชีถูกปิดใช้งาน' }, 403);
   // Anyone who has set up two-factor is asked for the second step, whether or not the policy requires it of them.
-  if (user.totp_confirmed_at) return c.json({ twoFactorRequired: true, challenge: await issueChallenge(c.env.JWT_SECRET, user.id) });
+  const policy = await loadSecurityPolicy(db);
+  const trusted = user.totp_confirmed_at && policy.twoFactorTrustDays > 0 && await isTrustedDevice(c.env.JWT_SECRET, body.trusted_device, user);
+  if (user.totp_confirmed_at && !trusted) return c.json({ twoFactorRequired: true, challenge: await issueChallenge(c.env.JWT_SECRET, user.id) });
 
   await db.batch([
     db.prepare('UPDATE users SET failed_logins = 0 WHERE id = ?').bind(user.id),
-    audit(db, user.id, 'LOGIN', {})
+    audit(db, user.id, 'LOGIN', trusted ? { twoFactor: 'trusted_device' } : {})
   ]);
-  return c.json({ token: await issueToken(c.env.JWT_SECRET, user.id), user: toPublicUser(user, await loadSecurityPolicy(db)) });
+  return c.json({ token: await issueToken(c.env.JWT_SECRET, user.id), user: toPublicUser(user, policy) });
 });
 
 const PASSWORD_CHANGE_PATHS = ['/api/auth/me', '/api/auth/change-password'];
@@ -1216,7 +1235,10 @@ app.post('/api/auth/2fa/verify', async (c) => {
     db.prepare('UPDATE users SET failed_logins = 0 WHERE id = ?').bind(user.id),
     audit(db, user.id, 'LOGIN', { twoFactor: recovery ? 'recovery_code' : 'app' })
   ]);
-  return c.json({ token: await issueToken(c.env.JWT_SECRET, user.id), user: toPublicUser(user, await loadSecurityPolicy(db)) });
+  const policy = await loadSecurityPolicy(db);
+  const trustedDevice = body.trust_device === true && policy.twoFactorTrustDays > 0
+    ? await issueTrustedDevice(c.env.JWT_SECRET, user.id, policy.twoFactorTrustDays) : undefined;
+  return c.json({ token: await issueToken(c.env.JWT_SECRET, user.id), user: toPublicUser(user, policy), ...(trustedDevice && { trustedDevice }) });
 });
 
 // Setting up: the person gets a secret to add to their app, then proves it works by typing a code.
@@ -1279,14 +1301,18 @@ app.put('/api/settings/security', requireAuth, async (c) => {
   const level = body.twoFactorMinLevel;
   if (!(Number.isInteger(level) && level >= 0 && level <= 8)) return c.json({ error: 'ระดับต้องเป็นจำนวนเต็ม 0-8 (0 = ไม่บังคับตามระดับ)' }, 400);
   if (typeof body.twoFactorForDcc !== 'boolean') return c.json({ error: 'กรุณาระบุว่าบังคับ DCC หรือไม่' }, 400);
+  const days = body.twoFactorTrustDays;
+  if (days !== undefined && !(Number.isInteger(days) && days >= 0 && days <= 365)) return c.json({ error: 'จำนวนวันต้องเป็นจำนวนเต็ม 0-365 (0 = ถามรหัสทุกครั้ง)' }, 400);
   const db = c.env.DB;
   const before = await loadSecurityPolicy(db);
+  const after = { twoFactorMinLevel: level, twoFactorForDcc: body.twoFactorForDcc, twoFactorTrustDays: days ?? before.twoFactorTrustDays };
   const save = (key, value) => db.prepare(`INSERT INTO settings (key, value, updated_by) VALUES (?, ?, ?)
     ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = ${NOW}, updated_by = excluded.updated_by`).bind(key, value, c.get('user').id);
   await db.batch([
     save('two_factor_min_level', String(level)),
     save('two_factor_for_dcc', body.twoFactorForDcc ? '1' : '0'),
-    audit(db, c.get('user').id, 'SECURITY_SETTINGS_UPDATED', { before, after: { twoFactorMinLevel: level, twoFactorForDcc: body.twoFactorForDcc } })
+    save('two_factor_trust_days', String(after.twoFactorTrustDays)),
+    audit(db, c.get('user').id, 'SECURITY_SETTINGS_UPDATED', { before, after })
   ]);
   return c.json(await loadSecurityPolicy(db));
 });

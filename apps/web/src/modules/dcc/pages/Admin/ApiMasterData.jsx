@@ -311,6 +311,9 @@ export const SecurityTab = () => {
         </select>
       </Field>
       <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={policy.twoFactorForDcc} onChange={(e) => setPolicy({ ...policy, twoFactorForDcc: e.target.checked })} />บังคับบัญชี DCC ทุกคน (ไม่ว่าระดับใด)</label>
+      <Field label="จดจำอุปกรณ์ที่ยืนยันแล้ว (วัน, 0 = ถามรหัสทุกครั้งที่เข้าระบบ)">
+        <input type="number" min={0} max={365} className={input} value={policy.twoFactorTrustDays} onChange={(e) => setPolicy({ ...policy, twoFactorTrustDays: Number(e.target.value) })} />
+      </Field>
       <p className="text-xs text-slate-500">ผู้ที่ถูกบังคับต้องตั้งค่าแอปตอนเข้าระบบครั้งถัดไป ถ้าโทรศัพท์หายและไม่มีรหัสสำรอง ให้ DCC กด "รีเซ็ต 2FA" ที่แท็บผู้ใช้ (ถ้า DCC เป็นคนเดียว จึงควรมี DCC สำรองอีกคน)</p>
       <button type="submit" className={primary}>บันทึก</button>
     </form>
