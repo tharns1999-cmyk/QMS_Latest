@@ -345,8 +345,8 @@ const AssetRegisterPageInner = () => {
       case 'ANNUAL_PLAN':
         return {
           breadcrumb: 'แผนการทวนสอบประจำปี',
-          title: 'แผนการทวนสอบเครื่องมือประจำปี (FM-QC-46)',
-          description: 'ตารางแผนการทวนสอบเครื่องมือประจำปี 12 เดือน คำนวณวันครบกำหนดตามกติกา และอนุมัติแผนตาม Approval Matrix',
+          title: 'แผนการทวนสอบเครื่องมือประจำปี',
+          description: 'วางรอบทวนสอบและสอบเทียบเครื่องมือตลอด 12 เดือน และอนุมัติแผนตามลำดับขั้น',
           Icon: Calendar
         };
       case 'ASSETS':
@@ -394,12 +394,12 @@ const AssetRegisterPageInner = () => {
         </button>
       </div>
 
-      {/* Enterprise Unified Page Header */}
-      <div className="bg-white rounded-2xl border border-slate-200/90 p-4 md:p-5 shadow-2xs transition-all">
+      {/* Compact Page Header: breadcrumb + title + one-line description */}
+      <div className="px-1 transition-all">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-          <div className="space-y-1 min-w-0">
+          <div className="space-y-0.5 min-w-0">
             {/* Breadcrumb Navigation Context */}
-            <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
+            <div className="flex items-center gap-1.5 text-[11px] font-medium text-slate-500">
               <span className="hover:text-slate-700 transition-colors">พอร์ทัลหลัก</span>
               <span className="text-slate-300">/</span>
               <span className="text-indigo-600 font-semibold">ศูนย์ทวนสอบและสอบเทียบ (VCC)</span>
@@ -407,16 +407,11 @@ const AssetRegisterPageInner = () => {
               <span className="text-slate-800 font-semibold truncate">{pageMeta.breadcrumb}</span>
             </div>
 
-            {/* Page Title & Icon */}
-            <h1 className="text-xl md:text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-indigo-50 border border-indigo-100/80 text-indigo-600 flex items-center justify-center shrink-0 shadow-2xs">
-                <pageMeta.Icon size={20} />
-              </div>
+            <h1 className="text-lg md:text-xl font-bold text-slate-900 tracking-tight">
               <span className="truncate">{pageMeta.title}</span>
             </h1>
 
-            {/* Subtitle helper */}
-            <p className="text-xs md:text-sm text-slate-600 pl-0.5">
+            <p className="text-xs text-slate-500">
               {pageMeta.description}
             </p>
           </div>

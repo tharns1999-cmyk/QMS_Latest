@@ -102,12 +102,28 @@ export const AnnualPlanMatrixTable = ({
     <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-hidden">
       {/* Table Control Toolbar */}
       <div className="px-4 py-2.5 bg-slate-50/80 border-b border-slate-200/80 flex flex-wrap items-center justify-between gap-3 text-xs">
-        <div className="flex items-center gap-3">
-          <h3 className="font-bold text-slate-800 text-xs flex items-center gap-2">
-            <span>ตารางแผนการทวนสอบและสอบเทียบ (FM-QC-46 Matrix)</span>
-            <span className="text-slate-400 font-normal">•</span>
-            <span className="text-slate-500 font-medium">{planItems.length} รายการ</span>
-          </h3>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* งานหลักของผู้ใช้: เลือกเครื่องมือจากทะเบียนเข้าแผน */}
+          {canEditPlan && onOpenSmartImport && (
+            <button
+              type="button"
+              onClick={onOpenSmartImport}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold transition-colors cursor-pointer"
+            >
+              <Sparkles size={12} />
+              <span>เพิ่มเครื่องมือจากทะเบียน</span>
+            </button>
+          )}
+          {canEditPlan && (
+            <button
+              type="button"
+              onClick={() => onOpenAddItem(null)}
+              className="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 text-xs font-medium transition-colors cursor-pointer"
+            >
+              <Plus size={12} />
+              <span>กำหนดรายการเอง</span>
+            </button>
+          )}
 
           {/* Quick Table Search */}
           {planItems.length > 2 && (
@@ -136,17 +152,6 @@ export const AnnualPlanMatrixTable = ({
 
         {/* View & Density Controls & Smart Import */}
         <div className="flex items-center gap-2">
-          {canEditPlan && onOpenSmartImport && planItems.length > 0 && (
-            <button
-              type="button"
-              onClick={onOpenSmartImport}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold transition-colors cursor-pointer shadow-2xs"
-            >
-              <Sparkles size={12} />
-              <span>เลือกจากทะเบียน (Smart Import)</span>
-            </button>
-          )}
-
           {/* Density Switcher */}
           <div className="inline-flex items-center gap-0.5 bg-slate-200/60 p-0.5 rounded-lg text-[11px]">
             <button
@@ -202,7 +207,7 @@ export const AnnualPlanMatrixTable = ({
       </div>
 
       {/* Main Single-Row Interactive Matrix Table */}
-      <div className="overflow-x-auto max-h-[calc(100vh-270px)]">
+      <div className="overflow-x-auto max-h-[calc(100vh-210px)]">
         <table className="w-full text-left border-collapse text-xs">
           <thead className="sticky top-0 z-20 bg-slate-50/95 backdrop-blur-xs shadow-2xs">
             <tr className="border-b border-slate-200 text-slate-600 text-[11px] font-bold tracking-wider uppercase">
@@ -259,35 +264,14 @@ export const AnnualPlanMatrixTable = ({
                       </h4>
                       <p className="text-xs text-slate-500 mt-1">
                         {planItems.length === 0
-                          ? 'เลือกและนำเข้าเครื่องมือจากทะเบียน (Asset Register) พร้อมกำหนดรอบความถี่และวันครบกำหนดได้ในคลิกเดียว'
+                          ? canEditPlan
+                            ? 'กดปุ่ม “เพิ่มเครื่องมือจากทะเบียน” ด้านบน เพื่อเลือกเครื่องมือและกำหนดรอบการทวนสอบ'
+                            : 'แผนในสถานะนี้ไม่สามารถเพิ่มรายการได้'
                           : `ไม่พบข้อมูลที่ตรงกับ "${tableSearch}" ในตาราง`}
                       </p>
                     </div>
 
-                    {planItems.length === 0 ? (
-                      canEditPlan && (
-                        <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
-                          {onOpenSmartImport && (
-                            <button
-                              type="button"
-                              onClick={onOpenSmartImport}
-                              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-colors shadow-2xs cursor-pointer"
-                            >
-                              <Sparkles size={13} />
-                              <span>เลือกเครื่องมือจากทะเบียน (Smart Import)</span>
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => onOpenAddItem(null)}
-                            className="inline-flex items-center gap-1 px-3 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-colors cursor-pointer"
-                          >
-                            <Plus size={13} />
-                            <span>กำหนดรายการเอง</span>
-                          </button>
-                        </div>
-                      )
-                    ) : (
+                    {planItems.length === 0 ? null : (
                       <div className="pt-1">
                         <button
                           type="button"
@@ -498,7 +482,11 @@ export const AnnualPlanMatrixTable = ({
       {/* Discrete Table Footer with Legend & Summary (Linear style) */}
       <div className="bg-slate-50/90 border-t border-slate-200/80 px-4 py-2 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500">
         <div>
-          รวมเครื่องมือวัดในแผน: <strong className="text-slate-800">{planItems.length}</strong> รายการ
+          {tableSearch.trim() ? (
+            <>
+              พบ <strong className="text-slate-800">{filteredItems.length}</strong> จาก {planItems.length} รายการ
+            </>
+          ) : null}
         </div>
 
         <div className="flex flex-wrap items-center gap-3 text-[11px]">
