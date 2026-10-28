@@ -35,6 +35,7 @@ import {
 } from '../components/AssetRegisterModals';
 import AnnualPlanMatrixSection from '../components/AnnualPlanMatrixSection';
 import WorkOrderSection from '../components/WorkOrderSection';
+import VccDashboardSection from '../components/VccDashboardSection';
 
 const EMPTY_FORM = {
   asset_code: '',
@@ -378,6 +379,19 @@ const AssetRegisterPage = () => {
             <ClipboardList size={15} />
             <span>ใบสั่งงานและบันทึกผล (Work Orders)</span>
           </button>
+
+          <button
+            type="button"
+            onClick={() => setModuleView('DASHBOARD')}
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-colors cursor-pointer ${
+              moduleView === 'DASHBOARD'
+                ? 'bg-indigo-600 text-white shadow-xs'
+                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+            }`}
+          >
+            <History size={15} />
+            <span>ภาพรวมและรายงาน (Dashboard & Export)</span>
+          </button>
         </div>
       </div>
 
@@ -385,6 +399,8 @@ const AssetRegisterPage = () => {
         <AnnualPlanMatrixSection activeDepartments={activeDepartments} />
       ) : moduleView === 'WORK_ORDERS' ? (
         <WorkOrderSection activeDepartments={activeDepartments} />
+      ) : moduleView === 'DASHBOARD' ? (
+        <VccDashboardSection onNavigateToWorkOrders={() => setModuleView('WORK_ORDERS')} />
       ) : (
         <>
           {hasTestData && (

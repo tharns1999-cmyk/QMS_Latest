@@ -59,7 +59,7 @@ const INITIAL_LOCAL_WORK_ORDERS = [
   }
 ];
 
-const getLocalWos = () => readJson(STORAGE_WO_KEY, () => [...INITIAL_LOCAL_WORK_ORDERS]);
+export const getLocalWos = () => readJson(STORAGE_WO_KEY, () => [...INITIAL_LOCAL_WORK_ORDERS]);
 const setLocalWos = (list) => writeJson(STORAGE_WO_KEY, list);
 const getLocalWoSettings = () => readJson(STORAGE_WO_SETTINGS_KEY, () => ({ ...DEFAULT_VCC_WO_SETTINGS }));
 const setLocalWoSettings = (obj) => writeJson(STORAGE_WO_SETTINGS_KEY, obj);
