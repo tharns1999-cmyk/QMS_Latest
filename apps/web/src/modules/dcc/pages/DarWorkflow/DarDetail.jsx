@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import useStore from '../../../../store/useStore';
 import { 
@@ -14,8 +14,11 @@ import {
   Building2,
   Layers,
   CheckCircle2,
-  Workflow
+  Workflow,
+  Upload
 } from 'lucide-react';
+import { isApiMode } from '../../../../api/client';
+import { loadDars, replaceDarFile } from '../../../../api/dars';
 import toast from 'react-hot-toast';
 import DARComments from '../../components/workflow/DARComments';
 import { resolveReviewer, resolveApprover } from '../../utils/workflowResolver';
@@ -23,6 +26,7 @@ import { getDarReason, getDarDetail, getDarDocInfo, isDarDraft, isDarRequester }
 import DarReviewModal from '../../components/workflow/DarReviewModal';
 import FileViewerModal from '../../components/modals/FileViewerModal';
 import { UniversalWatermarkService, resolveWatermarkConfig } from '../../services/UniversalWatermarkService';
+import { formatDarNumber } from '../../utils/darNumberGenerator';
 
 const DarDetail = () => {
   const { id } = useParams();
@@ -30,7 +34,12 @@ const DarDetail = () => {
   const { dars, documents, timeline, currentUser, masterUsers, reviewUsers, approveUsers } = useStore();
   const [isInspectorOpen, setIsInspectorOpen] = useState(false);
   const [isFileViewerOpen, setIsFileViewerOpen] = useState(false);
-  
+
+  // API mode: other people move the DAR along, so read its current state on open.
+  useEffect(() => {
+    if (isApiMode) loadDars().catch(() => {});
+  }, [id]);
+
   const dar = dars.find(d => d.id === id);
   const myTimeline = timeline.filter(t => t.darId === id).sort((a, b) => b.id - a.id);
   
@@ -99,7 +108,8 @@ const DarDetail = () => {
         name: dar.title,
         doc_code: docInfo.docCode,
         rev: docInfo.docRev || '01',
-        status: dar.status || 'EFFECTIVE'
+        status: dar.status || 'EFFECTIVE',
+        apiFilePath: dar.apiFilePath
       };
       const watermarkConfig = resolveWatermarkConfig(targetDoc, {
         currentUser,
@@ -126,7 +136,9 @@ const DarDetail = () => {
   };
 
   const fileName = dar.attachedFile ? dar.attachedFile.name : (dar.file || `${docInfo.docCode || dar.title || 'Document'}.pdf`);
-  const fileSize = dar.attachedFile ? `${(dar.attachedFile.size / 1024 / 1024).toFixed(2)} MB` : (dar.fileSize || '2.4 MB');
+  const fileSize = dar.attachedFile
+    ? (dar.attachedFile.size ? `${(dar.attachedFile.size / 1024 / 1024).toFixed(2)} MB` : 'PDF')
+    : (isApiMode ? 'ยังไม่ได้แนบไฟล์' : (dar.fileSize || '2.4 MB'));
   const nextRev = String(parseInt(docInfo.docRev || '0', 10) + 1).padStart(2, '0');
 
   return (
@@ -144,7 +156,7 @@ const DarDetail = () => {
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <span className="font-mono font-bold text-slate-900 text-lg tracking-tight">
-                {dar.darNumber || (dar.isDraft || dar.status === 'DRAFT' || String(dar.id).startsWith('draft_') ? 'ยังไม่ได้ระบุ (Draft)' : dar.id)}
+                {dar.darNumber ? formatDarNumber(dar.darNumber) : (dar.isDraft || dar.status === 'DRAFT' || String(dar.id).startsWith('draft_') ? 'ยังไม่ได้ระบุ (Draft)' : formatDarNumber(dar.id))}
               </span>
               <span className={`px-2 py-0.5 rounded-md text-[11px] font-semibold uppercase ${
                 dar.type === 'OBSOLETE'
@@ -225,6 +237,19 @@ const DarDetail = () => {
           <div>
             <p className="font-bold text-xs">คำร้องถูกยกเลิก (CANCELLED)</p>
             <p className="text-xs text-rose-700 mt-0.5">ระบบได้ยกเลิกคำร้องนี้โดยอัตโนมัติเนื่องจากเกินกำหนดเวลา SLA (Overdue Day 4) ข้อมูลทั้งหมดอยู่ในสถานะ Read-only</p>
+          </div>
+        </div>
+      )}
+
+      {/* API mode: DCC puts the approved DAR into force */}
+      {isApiMode && dar.apiStatus === 'PENDING_DCC' && (
+        <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-2xl p-4 flex items-center gap-3 shadow-2xs">
+          <CheckCircle2 className="text-emerald-600 shrink-0" size={20} strokeWidth={1.5} />
+          <div>
+            <p className="font-bold text-xs">อนุมัติครบแล้ว รอวันมีผลบังคับใช้ {dar.effectiveDate || '-'}</p>
+            <p className="text-xs text-emerald-700 mt-0.5">
+              {dar.type === 'OBSOLETE' ? `เอกสาร ${dar.doc_code} จะถูกย้ายไปทะเบียนเอกสารยกเลิกเมื่อถึงวันดังกล่าว เวลา 00:00 น.` : `เอกสาร ${dar.doc_code} Rev.${dar.revision} จะมีผลบังคับใช้อัตโนมัติเมื่อถึงวันดังกล่าว เวลา 00:00 น.${dar.type === 'REVISION' ? ' และฉบับเดิมจะถูกย้ายไปทะเบียนฉบับเก่า' : ''}`}
+            </p>
           </div>
         </div>
       )}
@@ -337,7 +362,7 @@ const DarDetail = () => {
                   <div className="min-w-0">
                     <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">2. ผู้ทบทวน</span>
                     <p className="font-semibold text-slate-800 truncate text-xs mt-0.5">
-                      {getActor('Reviewed') || workflow?.reviewer?.name || '-'}
+                      {getActor('Reviewed') !== '-' ? getActor('Reviewed') : (workflow?.reviewer?.name || dar.reviewerName || '-')}
                     </p>
                   </div>
                   <span className="text-[10px] text-slate-600 font-medium shrink-0 inline-flex items-center gap-1">
@@ -351,7 +376,7 @@ const DarDetail = () => {
                   <div className="min-w-0">
                     <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">3. ผู้อนุมัติ</span>
                     <p className="font-semibold text-slate-800 truncate text-xs mt-0.5">
-                      {getActor('Approved') || workflow?.approver?.name || '-'}
+                      {getActor('Approved') !== '-' ? getActor('Approved') : (workflow?.approver?.name || dar.approverName || '-')}
                     </p>
                   </div>
                   <span className="text-[10px] text-slate-600 font-medium shrink-0 inline-flex items-center gap-1">
@@ -369,10 +394,10 @@ const DarDetail = () => {
                     </p>
                   </div>
                   <span className={`text-[10px] font-medium shrink-0 inline-flex items-center gap-1 ${
-                    dar.ackRequirement === 'REQUIRED' ? 'text-amber-700' : 'text-slate-500'
+                    getActor('Acknowledged') !== '-' ? 'text-emerald-700' : dar.ackRequirement === 'REQUIRED' ? 'text-amber-700' : 'text-slate-500'
                   }`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${dar.ackRequirement === 'REQUIRED' ? 'bg-amber-500' : 'bg-slate-400'}`} />
-                    {dar.ackRequirement === 'REQUIRED' ? 'Required' : 'Optional'}
+                    <span className={`w-1.5 h-1.5 rounded-full ${getActor('Acknowledged') !== '-' ? 'bg-emerald-500' : dar.ackRequirement === 'REQUIRED' ? 'bg-amber-500' : 'bg-slate-400'}`} />
+                    {getActor('Acknowledged') !== '-' ? 'รับทราบแล้ว' : dar.ackRequirement === 'REQUIRED' ? 'Required' : 'Optional'}
                   </span>
                 </div>
               </div>
@@ -445,7 +470,7 @@ const DarDetail = () => {
           </div>
 
           {/* Compact Minimalist Attachment Card */}
-          <div className="bg-white border border-slate-200/90 rounded-2xl p-4 shadow-xs flex items-center justify-between gap-3 hover:border-slate-300 transition-all">
+          <div className="bg-white border border-slate-200/90 rounded-2xl p-4 shadow-xs flex flex-wrap items-center justify-between gap-3 hover:border-slate-300 transition-all">
             <div className="flex items-center gap-3 min-w-0">
               <div className="p-2.5 rounded-xl bg-slate-100 text-slate-700 border border-slate-200 shrink-0">
                 <FileText size={18} strokeWidth={1.5} />
@@ -466,6 +491,22 @@ const DarDetail = () => {
             </div>
 
             <div className="flex items-center gap-2 shrink-0">
+              {isApiMode && dar.apiStatus === 'PENDING_REVIEW' && isDarRequester(dar, currentUser) && (
+                <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-xs font-medium cursor-pointer shadow-2xs focus-within:ring-2 focus-within:ring-blue-500/30">
+                  <Upload size={13} strokeWidth={1.5} className="text-slate-500" />
+                  <span>{dar.attachedFile ? 'เปลี่ยนไฟล์' : 'แนบไฟล์ PDF'}</span>
+                  <input
+                    type="file"
+                    accept="application/pdf"
+                    className="sr-only"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      e.target.value = '';
+                      if (file) replaceDarFile(dar, file);
+                    }}
+                  />
+                </label>
+              )}
               <button
                 type="button"
                 onClick={handleDownloadAttachment}

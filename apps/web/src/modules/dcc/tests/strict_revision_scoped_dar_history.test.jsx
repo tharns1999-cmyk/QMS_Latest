@@ -150,7 +150,7 @@ describe('Cumulative DAR History Lineage (Audit Trail <= Current Revision) Tests
       expect(screen.getAllByText('ระเบียบการตรวจประเมินคุณภาพภายในประจำปี').length).toBeGreaterThan(0);
     });
 
-    it('displays ONLY current revision DAR for Rev.01: shows (1) item (Rev.01) and suppresses past Rev.00 and future Rev.02', () => {
+    it('shows the same unified history (all 3 DARs, newest first) when opening Rev.01', () => {
       render(
         <DocumentDetailModal
           isOpen={true}
@@ -159,29 +159,25 @@ describe('Cumulative DAR History Lineage (Audit Trail <= Current Revision) Tests
         />
       );
 
-      // Tab badge must show exact count (1) representing only current Rev.01
+      // One history per document code: every DAR is listed whichever revision is opened
       const historyTabBtn = screen.getByRole('button', { name: /ประวัติ DAR และการแก้ไข/i });
       expect(historyTabBtn).toBeInTheDocument();
-      expect(screen.getByText(/ประวัติ DAR และการแก้ไข \(1\)/i)).toBeInTheDocument();
+      expect(screen.getByText(/ประวัติ DAR และการแก้ไข \(3\)/i)).toBeInTheDocument();
 
       fireEvent.click(historyTabBtn);
 
-      // Header counter states 1 item found
-      expect(screen.getByText(/พบทั้งหมด 1 ฉบับ/i)).toBeInTheDocument();
+      expect(screen.getByText(/พบทั้งหมด 3 ฉบับ/i)).toBeInTheDocument();
+      expect(screen.getByText('DAR-25-001')).toBeInTheDocument();
+      expect(screen.getByText('DAR-26-055')).toBeInTheDocument();
+      expect(screen.getByText('DAR-26-099')).toBeInTheDocument();
 
-      // Only Rev.01 DAR must be displayed
-      expect(screen.getByText('DAR-2026-055')).toBeInTheDocument();
-      expect(screen.queryByText('DAR-2025-001')).not.toBeInTheDocument();
-
-      // Top item (Rev.01) has "ฉบับล่าสุด" badge in active mode
-      expect(screen.getByText('ฉบับล่าสุด')).toBeInTheDocument();
-
-      // Future Rev.02 DAR must be strictly suppressed
-      expect(screen.queryByText('DAR-2026-099')).not.toBeInTheDocument();
-      expect(screen.queryByText(/Future Rev\.02/i)).not.toBeInTheDocument();
+      // Newest first
+      const order = ['DAR-26-099', 'DAR-26-055', 'DAR-25-001'].map((n) => screen.getByText(n));
+      expect(order[0].compareDocumentPosition(order[1]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(order[1].compareDocumentPosition(order[2]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
 
-    it('displays ONLY Rev.00 for Rev.00 document: shows (1) item and suppresses Rev.01/Rev.02 and "ฉบับล่าสุด"', () => {
+    it('shows the same unified history for the Rev.00 document and suppresses "ฉบับล่าสุด"', () => {
       render(
         <DocumentDetailModal
           isOpen={true}
@@ -190,20 +186,16 @@ describe('Cumulative DAR History Lineage (Audit Trail <= Current Revision) Tests
         />
       );
 
-      // Tab badge must show exact count (1)
       const historyTabBtn = screen.getByRole('button', { name: /ประวัติ DAR และการแก้ไข/i });
       expect(historyTabBtn).toBeInTheDocument();
-      expect(screen.getByText(/ประวัติ DAR และการแก้ไข \(1\)/i)).toBeInTheDocument();
+      expect(screen.getByText(/ประวัติ DAR และการแก้ไข \(3\)/i)).toBeInTheDocument();
 
       fireEvent.click(historyTabBtn);
 
-      // Header counter states 1 item found
-      expect(screen.getByText(/พบทั้งหมด 1 ฉบับ/i)).toBeInTheDocument();
-
-      // Only Rev.00 DAR must be displayed
-      expect(screen.getByText('DAR-2025-001')).toBeInTheDocument();
-      expect(screen.queryByText('DAR-2026-055')).not.toBeInTheDocument();
-      expect(screen.queryByText('DAR-2026-099')).not.toBeInTheDocument();
+      expect(screen.getByText(/พบทั้งหมด 3 ฉบับ/i)).toBeInTheDocument();
+      expect(screen.getByText('DAR-25-001')).toBeInTheDocument();
+      expect(screen.getByText('DAR-26-055')).toBeInTheDocument();
+      expect(screen.getByText('DAR-26-099')).toBeInTheDocument();
 
       // Superseded document suppresses "ฉบับล่าสุด"
       expect(screen.queryByText('ฉบับล่าสุด')).not.toBeInTheDocument();
@@ -223,7 +215,7 @@ describe('Cumulative DAR History Lineage (Audit Trail <= Current Revision) Tests
         />
       );
 
-      expect(screen.getByText(/ประวัติ DAR และการแก้ไข \(1\)/i)).toBeInTheDocument();
+      expect(screen.getByText(/ประวัติ DAR และการแก้ไข \(3\)/i)).toBeInTheDocument();
     });
 
     it('constructs single synthetic DAR for current revision when no explicit DAR in store', () => {
@@ -251,10 +243,10 @@ describe('Cumulative DAR History Lineage (Audit Trail <= Current Revision) Tests
       fireEvent.click(historyTabBtn);
 
       expect(screen.getAllByText(/Rev\.01/i).length).toBeGreaterThanOrEqual(1);
-      expect(screen.queryByText(/Rev\.00/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/^Rev\.00$/i)).not.toBeInTheDocument();
     });
 
-    it('Acceptance Criteria: When opening effective document WI-QC-01 Rev.02, tab badge displays "(1)" and renders ONLY Rev.02 DAR-2026-003, suppressing Rev.01 and Rev.00', () => {
+    it('Acceptance Criteria: When opening effective document WI-QC-01 Rev.02, tab badge displays "(3)" and renders every DAR newest first', () => {
       const docWiQc01Rev02 = {
         id: 'doc-wi-qc-01-v2',
         code: 'WI-QC-01',
@@ -317,19 +309,18 @@ describe('Cumulative DAR History Lineage (Audit Trail <= Current Revision) Tests
         />
       );
 
-      // Criteria 1: Tab badge displays "ประวัติ DAR และการแก้ไข (1)"
-      expect(screen.getByText(/ประวัติ DAR และการแก้ไข \(1\)/i)).toBeInTheDocument();
+      // Criteria 1: Tab badge displays "ประวัติ DAR และการแก้ไข (3)"
+      expect(screen.getByText(/ประวัติ DAR และการแก้ไข \(3\)/i)).toBeInTheDocument();
 
       const historyTabBtn = screen.getByRole('button', { name: /ประวัติ DAR และการแก้ไข/i });
       fireEvent.click(historyTabBtn);
 
-      // Header label states 1 item found
-      expect(screen.getByText(/พบทั้งหมด 1 ฉบับ/i)).toBeInTheDocument();
+      expect(screen.getByText(/พบทั้งหมด 3 ฉบับ/i)).toBeInTheDocument();
 
-      // Criteria 2: Only Rev.02 DAR-2026-003 is rendered, Rev.01 and Rev.00 are suppressed
-      expect(screen.getByText('DAR-2026-003')).toBeInTheDocument();
-      expect(screen.queryByText('DAR-2026-002')).not.toBeInTheDocument();
-      expect(screen.queryByText('DAR-2025-001')).not.toBeInTheDocument();
+      // Criteria 2: all three DARs are rendered, newest first
+      const order = ['DAR-26-003', 'DAR-26-002', 'DAR-25-001'].map((n) => screen.getByText(n));
+      expect(order[0].compareDocumentPosition(order[1]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(order[1].compareDocumentPosition(order[2]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
   });
 
@@ -397,7 +388,7 @@ describe('Cumulative DAR History Lineage (Audit Trail <= Current Revision) Tests
       fireEvent.click(historyTabBtn);
 
       // Verify Obsolete DAR-2026-005 is present
-      expect(screen.getByText('DAR-2026-005')).toBeInTheDocument();
+      expect(screen.getByText('DAR-26-005')).toBeInTheDocument();
 
       // Verify Left Badge: Must display "สิ้นสุดที่ Rev.03", NOT "Rev.00 (ยกเลิกถาวร)"
       expect(screen.getByText('สิ้นสุดที่ Rev.03')).toBeInTheDocument();
@@ -407,7 +398,7 @@ describe('Cumulative DAR History Lineage (Audit Trail <= Current Revision) Tests
       expect(screen.getByText('ยกเลิกถาวร (OBSOLETE)')).toBeInTheDocument();
 
       // Verify regular DAR-2026-004 still renders regular Rev.03 and ขอแก้ไข
-      expect(screen.getByText('DAR-2026-004')).toBeInTheDocument();
+      expect(screen.getByText('DAR-26-004')).toBeInTheDocument();
       expect(screen.getByText('ขอแก้ไข')).toBeInTheDocument();
     });
   });

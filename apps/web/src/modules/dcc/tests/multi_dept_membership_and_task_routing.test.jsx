@@ -126,9 +126,9 @@ describe('Multi-Department Membership & Cross-Department Task Routing Tests', ()
       id: 'u-lead-multi',
       name: 'Anan MultiDept Lead',
       primary_department: 'PD',
-      affiliated_departments: ['PD', 'QA'],
+      affiliated_departments: ['PD', 'WH'],
       department: 'PD',
-      depts: ['PD', 'QA'],
+      depts: ['PD', 'WH'],
       role: 'DEPT_MANAGER',
       approval_level: 5,
       level: 5,
@@ -139,6 +139,10 @@ describe('Multi-Department Membership & Cross-Department Task Routing Tests', ()
       setTestUser(multiDeptLead);
 
       useStore.setState({
+        // Demo documents named like these tasks belong to other departments; the tasks' own department decides here.
+        documents: [],
+        dars: [],
+        externalDocuments: [],
         tasks: [
           // 1. Task for PD (Pooled Receipt)
           {
@@ -150,14 +154,14 @@ describe('Multi-Department Membership & Cross-Department Task Routing Tests', ()
             doc_code: 'SOP-PD-001',
             copy_no: '01'
           },
-          // 2. Task for QA (Pooled Receipt)
+          // 2. Task for WH (Pooled Receipt)
           {
             id: 'task-receipt-qa',
             type: 'DEPT_CONFIRM_HARDCOPY_RECEIPT',
-            title: 'ตรวจรับ SOP-QA-001',
-            target_department: 'QA',
+            title: 'ตรวจรับ SOP-WH-001',
+            target_department: 'WH',
             status: 'PENDING',
-            doc_code: 'SOP-QA-001',
+            doc_code: 'SOP-WH-001',
             copy_no: '02'
           },
           // 3. Task for EN (Engineering - should NOT be visible)
@@ -180,29 +184,29 @@ describe('Multi-Department Membership & Cross-Department Task Routing Tests', ()
             status: 'PENDING',
             doc_code: 'WI-PD-002'
           },
-          // 5. Approval Task for QA with Required Level 7 (Requires Level 7, user is 5 -> Hidden)
+          // 5. Approval Task for WH with Required Level 7 (Requires Level 7, user is 5 -> Hidden)
           {
             id: 'task-approve-level7',
             type: 'APPROVE',
-            title: 'อนุมัติ POL-QA-001',
-            target_department: 'QA',
+            title: 'อนุมัติ POL-WH-001',
+            target_department: 'WH',
             required_approval_level: 7,
             status: 'PENDING',
-            doc_code: 'POL-QA-001'
+            doc_code: 'POL-WH-001'
           }
         ]
       });
     });
 
-    it('routes tasks across all affiliated departments (PD and QA) while hiding non-affiliated (EN)', () => {
+    it('routes tasks across all affiliated departments (PD and WH) while hiding non-affiliated (EN)', () => {
       renderWithRouter(<TaskInbox />);
 
       // Default filter is "ทุกแผนกที่สังกัด" (all affiliated departments)
       expect(screen.getByRole('button', { name: /ทุกแผนกที่สังกัด/i })).toBeInTheDocument();
 
-      // Should see PD and QA tasks
+      // Should see PD and WH tasks
       expect(screen.getByText(/ตรวจรับ SOP-PD-001/i)).toBeInTheDocument();
-      expect(screen.getByText(/ตรวจรับ SOP-QA-001/i)).toBeInTheDocument();
+      expect(screen.getByText(/ตรวจรับ SOP-WH-001/i)).toBeInTheDocument();
 
       // Should NOT see EN task
       expect(screen.queryByText(/ตรวจรับ SOP-EN-001/i)).not.toBeInTheDocument();
@@ -215,22 +219,22 @@ describe('Multi-Department Membership & Cross-Department Task Routing Tests', ()
       expect(screen.getByText(/อนุมัติ WI-PD-002/i)).toBeInTheDocument();
 
       // Level 7 approval exceeds user's level (5 < 7)
-      expect(screen.queryByText(/อนุมัติ POL-QA-001/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/อนุมัติ POL-WH-001/i)).not.toBeInTheDocument();
     });
 
     it('filters tasks via the Department Filter Pill Bar', () => {
       renderWithRouter(<TaskInbox />);
 
-      // Initially on all affiliated departments (PD + QA)
+      // Initially on all affiliated departments (PD + WH)
       expect(screen.getByText(/ตรวจรับ SOP-PD-001/i)).toBeInTheDocument();
-      expect(screen.getByText(/ตรวจรับ SOP-QA-001/i)).toBeInTheDocument();
+      expect(screen.getByText(/ตรวจรับ SOP-WH-001/i)).toBeInTheDocument();
 
-      // Click "เฉพาะงาน QA"
-      const qaPill = screen.getByRole('button', { name: /เฉพาะงาน QA/i });
+      // Click "เฉพาะงาน WH"
+      const qaPill = screen.getByRole('button', { name: /เฉพาะงาน WH/i });
       fireEvent.click(qaPill);
 
-      // Only QA tasks should remain
-      expect(screen.getByText(/ตรวจรับ SOP-QA-001/i)).toBeInTheDocument();
+      // Only WH tasks should remain
+      expect(screen.getByText(/ตรวจรับ SOP-WH-001/i)).toBeInTheDocument();
       expect(screen.queryByText(/ตรวจรับ SOP-PD-001/i)).not.toBeInTheDocument();
 
       // Click "เฉพาะงาน PD"
@@ -238,14 +242,14 @@ describe('Multi-Department Membership & Cross-Department Task Routing Tests', ()
       fireEvent.click(pdPill);
 
       expect(screen.getByText(/ตรวจรับ SOP-PD-001/i)).toBeInTheDocument();
-      expect(screen.queryByText(/ตรวจรับ SOP-QA-001/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/ตรวจรับ SOP-WH-001/i)).not.toBeInTheDocument();
 
       // Click to "ทุกแผนกที่สังกัด"
       const allDeptsPill = screen.getByRole('button', { name: /ทุกแผนกที่สังกัด/i });
       fireEvent.click(allDeptsPill);
 
       expect(screen.getByText(/ตรวจรับ SOP-PD-001/i)).toBeInTheDocument();
-      expect(screen.getByText(/ตรวจรับ SOP-QA-001/i)).toBeInTheDocument();
+      expect(screen.getByText(/ตรวจรับ SOP-WH-001/i)).toBeInTheDocument();
     });
 
     it('allows other department members (e.g. Kalyanee in PD) to see and count receipt tasks even if task has another individual assigneeId', () => {

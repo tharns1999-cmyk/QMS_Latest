@@ -30,11 +30,15 @@ import { normalizeDepartmentId, cleanLocationName } from '../../services/MasterD
 import { ErrorBoundary } from '../../../../shared/components/ErrorBoundary';
 import { UniversalWatermarkService, resolveWatermarkConfig, WATERMARK_TYPES, applySupersededWatermark } from '../../services/UniversalWatermarkService';
 import * as fileStorage from '../../utils/fileStorage';
+import { FILE_PURPOSE } from '../../../../api/client';
 import RequestAdditionalCopiesModal from './RequestAdditionalCopiesModal';
 import ReplacementModal from '../../pages/Library/ReplacementModal';
 import RelocateCopyModal from './RelocateCopyModal';
 import ReturnCopyModal from './ReturnCopyModal';
 import { canManageControlledCopy } from '../../utils/accessControl';
+import DarAuditRecord from './DarAuditRecord';
+import { jobTitle } from '../../utils/signatoryResolver';
+import { formatDarNumber } from '../../utils/darNumberGenerator';
 import { 
   getDarReason, 
   getDarDetail, 
@@ -58,6 +62,33 @@ export { resolveFullDocumentHistory };
  * Normalizes '01', '1', 1, 'Rev.01', 'Rev. 1' -> '01'
  * Preserves alphanumeric revisions like 'A' -> 'A'
  */
+// DAR history is always newest -> oldest: by DAR year/sequence (DAR-26-004 before 003), then by date.
+const darSeqKey = (d) => {
+  const m = String(d?.dar_no || d?.darNo || d?.id || '').match(/(?:(\d+)\D+)?(\d+)\s*$/);
+  return m ? Number(m[1] || 0) * 100000 + Number(m[2]) : -1;
+};
+export const compareDarNewestFirst = (a, b) => {
+  const k = darSeqKey(b) - darSeqKey(a);
+  if (k) return k;
+  return new Date(b.completedAt || b.createdAt || b.effectiveDate || 0) - new Date(a.completedAt || a.createdAt || a.effectiveDate || 0);
+};
+
+// "สิ้นสุดที่ Rev.XX": the highest revision this code reached, not what the OBSOLETE DAR happened to store.
+const resolveObsoleteEndRev = (dar, doc, allDars = []) => {
+  const code = String(dar?.doc_code || dar?.docCode || dar?.document_code || doc?.code || doc?.document_code || '').toUpperCase();
+  const num = (r) => parseInt(String(r ?? '').replace(/\D/g, ''), 10);
+  const revs = [dar?.revision, doc?.rev, doc?.revision];
+  allDars.forEach((d) => {
+    const c = String(d?.doc_code || d?.docCode || d?.document_code || '').toUpperCase();
+    const t = d?.type || d?.request_type;
+    if (c && c === code && t !== 'OBSOLETE' && !['CANCELLED', 'REJECTED'].includes(String(d.status || '').toUpperCase())) {
+      revs.push(d.target_revision ?? d.targetRevision ?? d.revision ?? d.rev);
+    }
+  });
+  const best = Math.max(0, ...revs.map(num).filter((n) => !isNaN(n)));
+  return String(best).padStart(2, '0');
+};
+
 const normalizeRev = (r) => {
   if (r === undefined || r === null) return '';
   const str = String(r).trim().replace(/^Rev\.?\s*/i, '').trim();
@@ -118,7 +149,10 @@ export const handleDownloadHistoricalRevision = async (darItem, currentDoc, opti
     const rawObsoleteRev = (darItem.revision && darItem.revision !== '00') 
       ? darItem.revision 
       : (rawTargetRev && rawTargetRev !== '00' ? rawTargetRev : candidateDocRev);
-    const effectiveObsoleteRev = String(rawObsoleteRev).replace(/^Rev\.?/i, '').padStart(2, '0');
+    const storeDars = (() => { try { const st = useStore.getState(); return [...(st.dars || []), ...(st.darRequests || [])]; } catch { return []; } })();
+    const effectiveObsoleteRev = isObsoleteItem
+      ? resolveObsoleteEndRev(darItem, currentDoc, storeDars)
+      : String(rawObsoleteRev).replace(/^Rev\.?/i, '').padStart(2, '0');
 
     const darRevStr = isObsoleteItem 
       ? effectiveObsoleteRev 
@@ -126,7 +160,7 @@ export const handleDownloadHistoricalRevision = async (darItem, currentDoc, opti
     const targetRev = isObsoleteItem ? effectiveObsoleteRev : darRevStr;
 
     const docCode = resolveDocCode(currentDoc) || currentDoc?.code || currentDoc?.document_code || currentDoc?.docNo || currentDoc?.title || 'DOCUMENT';
-    const darNo = darItem.dar_no || darItem.darNo || darItem.id || `DAR-2026-${darRevStr}`;
+    const darNo = formatDarNumber(darItem.dar_no || darItem.darNo || darItem.id || `DAR-2026-${darRevStr}`);
     const effDate = darItem.completedAt || darItem.effectiveDate || darItem.effective_date_requested || darItem.date || darItem.createdAt?.split('T')[0] || '-';
 
     let replacementRev = options.replacedByRev;
@@ -623,7 +657,7 @@ const DocumentDetailModal = ({
 
     try {
       // 1. Resolve raw file blob through Universal File Resolver
-      const rawBlob = await fileStorage.resolveFileBlob(doc, doc.fileId || doc.id || doc.docCode || doc.title || doc.darId);
+      const rawBlob = await fileStorage.resolveFileBlob(doc, doc.fileId || doc.id || doc.docCode || doc.title || doc.darId, { purpose: FILE_PURPOSE.DOWNLOAD });
 
       if (!rawBlob) {
         toast.dismiss(toastId);
@@ -735,7 +769,7 @@ const DocumentDetailModal = ({
     try {
       const copyNum = targetCopy.copy_no || targetCopy.copyNo || targetCopy.ccNumber || '01';
       const toastId = toast.loading(`กำลังจัดเตรียมสำเนาควบคุม Copy ${copyNum}...`);
-      const rawBlob = await resolveFileBlob(doc, doc.fileId || doc.id || doc.docCode || doc.title || doc.darId);
+      const rawBlob = await fileStorage.resolveFileBlob(doc, doc.fileId || doc.id || doc.docCode || doc.title || doc.darId, { purpose: FILE_PURPOSE.DOWNLOAD });
       const docCode = resolveDocCode(doc) || doc.docNo || doc.title || 'DOCUMENT';
       const docRev = normalizeRev(doc.rev || doc.revision || doc.doc_version || '01');
       const docTitle = resolveDocTitle(doc) || doc.name || doc.docName || doc.title || '';
@@ -1076,7 +1110,8 @@ const DocumentDetailModal = ({
         const existingPrio = STATUS_PRIORITY[String(existing.status).toUpperCase()] || 0;
         const newPrio = STATUS_PRIORITY[String(copy.status).toUpperCase()] || 0;
 
-        if (newIssue > existingIssue || (copy.is_replacement && !existing.is_replacement) || newPrio > existingPrio) {
+        // A newer issue always wins: a recalled old copy would otherwise outrank the replacement that stands in for it.
+        if (newIssue > existingIssue || (newIssue === existingIssue && ((copy.is_replacement && !existing.is_replacement) || newPrio > existingPrio))) {
           activeMap.set(copyKey, hydrated);
         }
       }
@@ -1282,85 +1317,14 @@ const DocumentDetailModal = ({
       return matchCode || matchId || matchDirectDarId;
     });
 
-    // 2. ถ้าเปิดดูในโหมด Superseded (ฉบับเดิมตกรุ่น):
-    // รวมประวัติ DAR ทุกฉบับตกรุ่นของรหัสเอกสารนี้มาแสดงในหน้านี้หน้าเดียว (Unified Vertical Timeline)
-    if (isSupersededDoc) {
-      // ค้นหา Revision ของฉบับที่กำลัง Effective อยู่ปัจจุบัน เพื่อกรองไม่เอาฉบับ Effective
-      const effectiveDoc = (documents || []).find((d) => {
-        const c = resolveDocCode(d).toUpperCase();
-        return c === currentDocCodeUpper && (d.status === 'EFFECTIVE' || d.status === 'ACTIVE');
-      });
-      const effectiveRevNorm = effectiveDoc 
-        ? normalizeRev(effectiveDoc.rev || effectiveDoc.revision || effectiveDoc.doc_version)
-        : null;
-
-      const supersededDars = docDars.filter((dar) => {
-        const st = String(dar.status || '').toUpperCase();
-        if (st === 'CANCELLED' || st === 'REJECTED') return false;
-
-        const darRev = String(dar.target_revision ?? dar.targetRevision ?? dar.revision ?? dar.docRev ?? dar.rev ?? dar.doc_version ?? '00');
-        const darRevNorm = normalizeRev(darRev);
-
-        // กรองไม่เอาฉบับ Effective ปัจจุบัน และไม่เอา Draft/Future revision ที่มากกว่าหรือเท่ากับฉบับ Effective
-        if (effectiveRevNorm) {
-          const effectiveRevNum = parseInt(effectiveRevNorm, 10);
-          const darRevNum = parseInt(darRevNorm, 10);
-          if (!isNaN(effectiveRevNum) && !isNaN(darRevNum)) {
-            if (darRevNum >= effectiveRevNum) {
-              return false;
-            }
-          } else if (darRevNorm === effectiveRevNorm) {
-            return false;
-          }
-        }
-        return true;
-      });
-
-      if (supersededDars.length > 0) {
-        // เรียงลำดับจาก Revision ล่าสุดลงไปหาเก่าสุด (Descending: Rev.01 -> Rev.00)
-        return supersededDars.sort((a, b) => {
-          const revA = parseInt(String(a.target_revision ?? a.targetRevision ?? a.revision ?? a.docRev ?? a.rev ?? '0').replace(/\D/g, ''), 10) || 0;
-          const revB = parseInt(String(b.target_revision ?? b.targetRevision ?? b.revision ?? b.docRev ?? b.rev ?? '0').replace(/\D/g, ''), 10) || 0;
-          if (revB !== revA) {
-            return revB - revA;
-          }
-          return new Date(b.completedAt || b.createdAt || b.effectiveDate || 0) - new Date(a.completedAt || a.createdAt || a.effectiveDate || 0);
-        });
-      }
+    // 2. ประวัติเดียวต่อเอกสาร: ทุก DAR ของรหัสนี้ทุก Rev ทุกใบ เหมือนกันไม่ว่าเปิดจากมุมมองไหน (ตัดเฉพาะที่ยกเลิก/ถูกปฏิเสธ)
+    const liveDars = docDars.filter((dar) => !['CANCELLED', 'REJECTED'].includes(String(dar.status || '').toUpperCase()));
+    const unified = resolveFullDocumentHistory(doc, allDars, liveDars);
+    if (unified.length > 0) {
+      return [...unified].sort(compareDarNewestFirst);
     }
 
-    // 3. สำหรับเอกสาร OBSOLETE (ยกเลิกถาวร):
-    // ต้องแสดงประวัติครบทุกรุ่น (Full Document Lifecycle Traceability from Rev.00 to Latest + Obsolete)
-    const isDocObsolete = Boolean(doc.status?.toUpperCase() === 'OBSOLETE' || doc.is_obsolete || isObsoleteDoc);
-    if (isDocObsolete) {
-      const fullHistory = resolveFullDocumentHistory(doc, allDars);
-      if (fullHistory && fullHistory.length > 0) {
-        return fullHistory;
-      }
-    }
-
-    // 4. กรองเฉพาะ DAR ที่มี Revision ตรงกับ Revision ปัจจุบันของเอกสารที่กำลังเปิดดูเท่านั้น (Strict Current Revision)
-    const filtered = docDars.filter((dar) => {
-      const rawDarRev = dar.target_revision ?? dar.targetRevision ?? dar.revision ?? dar.docRev ?? dar.rev ?? dar.doc_version;
-      const darRevision = String(rawDarRev !== undefined && rawDarRev !== null ? rawDarRev : (docDars.length === 1 || dar.type === 'NEW' ? currentRevision : '00'));
-      const darRevisionNorm = normalizeRev(darRevision);
-      return darRevision === currentRevision || (darRevisionNorm && darRevisionNorm === currentRevisionNorm);
-    });
-
-    if (filtered.length > 0) {
-      // จัดเรียงตามลำดับเวลาจากล่าสุดลงไปหาอดีต (Descending)
-      return filtered.sort((a, b) => {
-        const aIsObsolete = a.type === 'OBSOLETE' || a.request_type === 'OBSOLETE' || a.is_obsolete;
-        const bIsObsolete = b.type === 'OBSOLETE' || b.request_type === 'OBSOLETE' || b.is_obsolete;
-        
-        if (aIsObsolete && !bIsObsolete) return -1;
-        if (!aIsObsolete && bIsObsolete) return 1;
-
-        return new Date(b.createdAt || b.effectiveDate || 0) - new Date(a.createdAt || a.effectiveDate || 0);
-      });
-    }
-
-    // 4. Fallback: If no explicit DAR found in store, construct single DAR record for current revision only
+    // 3. Fallback: ไม่พบ DAR ใดเลย สร้างรายการเดียวของ Rev ปัจจุบัน
     const isGenesis = currentRevisionNorm === '00' || currentRevision === '00' || currentRevision === '0';
     const isObs = Boolean(doc.status?.toUpperCase() === 'OBSOLETE' || doc.is_obsolete || isObsoleteDoc);
     const rStr = currentRevisionNorm || '00';
@@ -1370,7 +1334,7 @@ const DocumentDetailModal = ({
 
     return [{
       id: resolvedDarId ? resolvedDarId : `DAR-${currentDocCode}-R${rStr}`,
-      dar_no: resolvedDarNo ? resolvedDarNo : `DAR-${new Date(doc.effectiveDate || '2025-01-01').getFullYear() || 2025}-${String((!isNaN(revNum) ? revNum : 0) + 1).padStart(3, '0')}`,
+      dar_no: resolvedDarNo ? formatDarNumber(resolvedDarNo) : `DAR-${String(new Date(doc.effectiveDate || '2025-01-01').getFullYear() || 2025).slice(-2)}-${String((!isNaN(revNum) ? revNum : 0) + 1).padStart(3, '0')}`,
       doc_code: currentDocCode,
       title: doc.name || doc.title || currentDocCode,
       revision: rStr,
@@ -1394,14 +1358,19 @@ const DocumentDetailModal = ({
   // State ควบคุมการกาง/พับ (Collapsible Timeline - ใบแรกกางออกเป็นค่าเริ่มต้น)
   const [expandedDarItems, setExpandedDarItems] = useState([]);
 
+  // Seed the open card once per document; later re-renders/store refreshes must not undo the user's collapse.
+  const seededDarDocRef = useRef(null);
   useEffect(() => {
+    if (seededDarDocRef.current === doc?.id) return;
+    seededDarDocRef.current = doc?.id;
     if (scopedDarHistory && scopedDarHistory.length > 0) {
       const firstId = scopedDarHistory[0].id || scopedDarHistory[0].dar_no || scopedDarHistory[0].darNo || 'dar-0';
       setExpandedDarItems([firstId]);
     } else {
       setExpandedDarItems([]);
+      seededDarDocRef.current = null; // history not loaded yet; seed when it arrives
     }
-  }, [scopedDarHistory]);
+  }, [doc?.id, scopedDarHistory]);
 
   const toggleDarItem = (id) => {
     setExpandedDarItems(prev => 
@@ -1440,7 +1409,7 @@ const DocumentDetailModal = ({
     const userDepts = currentUser.depts || (userDept ? [userDept] : []);
     const docDept = doc.owner_dept || doc.department;
 
-    const isOwnerDept = docDept && (docDept === userDept || userDepts.includes(docDept) || (userDept === 'QA' && docDept === 'QA/QC') || (userDept === 'QA/QC' && docDept === 'QA'));
+    const isOwnerDept = docDept && (docDept === userDept || userDepts.includes(docDept));
     const isDcc = currentUser.isDcc || currentUser.role === 'DCC_ADMIN' || currentUser.level >= 5;
 
     return isOwnerDept || isDcc;
@@ -2403,6 +2372,7 @@ const DocumentDetailModal = ({
                           const appName = (getApproverName(dar, timeline) !== '-' ? getApproverName(dar, timeline) : null) || dar.approver_name || dar.approver || dar.approverName || '-';
                           const ackName = (getAckNames(dar, timeline) !== '-' ? getAckNames(dar, timeline) : null) || dar.ack_name || dar.ackNames || (dar.require_ack !== false ? 'ต้องรับทราบ' : 'ไม่ต้องรับทราบ');
 
+                          const userOf = (n) => (masterUsers || []).find((u) => u.name === n || u.fullName === n);
                           const darType = dar.type || dar.request_type || dar.requestType || 'NEW';
                           const darStatus = dar.status || 'EFFECTIVE';
                           const isObsoleteItem = dar.type === 'OBSOLETE' || dar.request_type === 'OBSOLETE' || dar.darType === 'OBSOLETE' || dar.is_obsolete;
@@ -2417,16 +2387,22 @@ const DocumentDetailModal = ({
                           const rawObsoleteRev = (dar.revision && dar.revision !== '00') 
                             ? dar.revision 
                             : candidateDocRev;
-                          const effectiveObsoleteRev = String(rawObsoleteRev).replace(/^Rev\.?/i, '').padStart(2, '0');
+                          const effectiveObsoleteRev = isObsoleteItem ? resolveObsoleteEndRev(dar, doc, allDars) : String(rawObsoleteRev).replace(/^Rev\.?/i, '').padStart(2, '0');
 
                           const darRevStr = isObsoleteItem 
                             ? effectiveObsoleteRev 
                             : String(dar.target_revision || dar.targetRevision || dar.docRev || dar.rev || dar.revision || '00').replace(/^Rev\.?/i, '').padStart(2, '0');
-                          const darNo = dar.dar_no || dar.darNo || dar.id || `DAR-2026-${darRevStr}`;
+                          const darNo = formatDarNumber(dar.dar_no || dar.darNo || dar.id || `DAR-2026-${darRevStr}`);
                           const effDate = dar.completedAt || dar.effectiveDate || dar.effective_date_requested || dar.date || dar.createdAt?.split('T')[0] || '-';
 
+                          // The unified list also holds the revision now in force: download that as the live copy, never as SUPERSEDED
+                          const effectiveDocOfCode = (documents || []).find((d) =>
+                            resolveDocCode(d).toUpperCase() === currentDocCode.toUpperCase() && (d.status === 'EFFECTIVE' || d.status === 'ACTIVE'));
+                          const isCurrentEffectiveRow = !isObsoleteItem && !isObsoleteDoc && Boolean(effectiveDocOfCode) &&
+                            normalizeRev(darRevStr) === normalizeRev(effectiveDocOfCode.rev || effectiveDocOfCode.revision || effectiveDocOfCode.doc_version);
+
                           const handleDownloadHistoricalPdf = async () => {
-                            const isHistoricalRev = !isLatest || isObsoleteDoc;
+                            const isHistoricalRev = !(isLatest || isCurrentEffectiveRow) || isObsoleteDoc;
                             if (isHistoricalRev || isObsoleteItem) {
                               const relatedDar = (dars || []).concat(darRequests || []).find(d => 
                                 (dar.dar_no && (d.dar_no === dar.dar_no || d.darNo === dar.dar_no || d.id === dar.dar_no)) ||
@@ -2444,10 +2420,10 @@ const DocumentDetailModal = ({
                               const targetRev = darRevStr;
                               const toastId = toast.loading(`กำลังสร้าง PDF Rev.${targetRev}...`);
                               const targetDoc = {
-                                ...doc,
+                                ...(isCurrentEffectiveRow ? effectiveDocOfCode : doc),
                                 rev: targetRev,
                                 revision: targetRev,
-                                status: doc.status || 'EFFECTIVE'
+                                status: (isCurrentEffectiveRow ? effectiveDocOfCode : doc).status || 'EFFECTIVE'
                               };
                               const watermarkConfig = resolveWatermarkConfig(targetDoc, {
                                 currentUser,
@@ -2550,31 +2526,21 @@ const DocumentDetailModal = ({
                                 {/* Collapsible Body */}
                                 {isExpanded && (
                                   <div className="border-t border-slate-100 p-4 transition-all duration-200 animate-in slide-in-from-top-2 fade-in">
-                                  {/* Reason & Change Details */}
-                                  <div className="bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg p-3 space-y-2 text-xs sm:text-sm min-w-0 max-w-full overflow-hidden">
-                                    <div className="min-w-0 w-full space-y-0.5">
-                                      <span className="font-bold text-[#374151] block text-xs">
-                                        {String(reasonInfo?.title || 'เหตุผลในการร้องขอ').replace(/[:\s]+$/, '')}:
-                                      </span>
-                                      <p className="text-[#1E293B] font-normal leading-relaxed break-words break-all [overflow-wrap:anywhere] whitespace-pre-wrap text-xs sm:text-sm">
-                                        {reasonText}
-                                      </p>
-                                    </div>
-                                    <div className="min-w-0 w-full space-y-0.5 pt-2 border-t border-[#EDF2F7]">
-                                      <span className="font-bold text-[#374151] block text-xs">
-                                        {String(detailInfo?.title || 'รายละเอียดการเปลี่ยนแปลง / แผนรองรับ').replace(/[:\s]+$/, '')}:
-                                      </span>
-                                      <p className="text-[#475569] leading-relaxed break-words break-all [overflow-wrap:anywhere] whitespace-pre-wrap text-xs sm:text-sm">
-                                        {detailText}
-                                      </p>
-                                    </div>
-                                  </div>
+                                  <DarAuditRecord
+                                    dar={dar}
+                                    darType={darType}
+                                    requesterName={reqName}
+                                    requesterDept={dar.department || dar.dept || userOf(reqName)?.department}
+                                    previousRev={String(Math.max(parseInt(darRevStr, 10) - 1, 0)).padStart(2, '0')}
+                                    currentRev={darRevStr}
+                                  />
 
                                   {/* Compact 4-Stage Approval Workflow Grid with Timestamps */}
                                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-3 pt-3 border-t border-[#F1F5F9] bg-[#FAFAFA] p-2.5 rounded-lg text-xs">
                                     <div className="min-w-0">
                                       <p className="text-[#64748B] font-medium text-[11px]">1. ผู้ร้องขอ (Requester)</p>
                                       <p className="font-bold text-[#1E293B] mt-0.5 truncate text-xs">{reqName}</p>
+                                      <p className="text-[10px] text-slate-500 truncate">{jobTitle(userOf(reqName)?.position) || '-'}</p>
                                       <p className="text-[10px] font-mono text-slate-500 mt-0.5 flex items-center gap-1">
                                         <Clock size={10} className="text-[#0D99FF] shrink-0" />
                                         <span>{getWorkflowStepTimestamp(dar, 'REQUEST', timeline)}</span>
@@ -2583,6 +2549,7 @@ const DocumentDetailModal = ({
                                     <div className="min-w-0">
                                       <p className="text-[#64748B] font-medium text-[11px]">2. ผู้ทบทวน (Reviewer)</p>
                                       <p className="font-bold text-[#1E293B] mt-0.5 truncate text-xs">{revName}</p>
+                                      <p className="text-[10px] text-slate-500 truncate">{jobTitle(userOf(revName)?.position) || '-'}</p>
                                       <p className="text-[10px] font-mono text-slate-500 mt-0.5 flex items-center gap-1">
                                         <Clock size={10} className="text-[#0D99FF] shrink-0" />
                                         <span>{getWorkflowStepTimestamp(dar, 'REVIEW', timeline)}</span>
@@ -2591,6 +2558,7 @@ const DocumentDetailModal = ({
                                     <div className="min-w-0">
                                       <p className="text-[#64748B] font-medium text-[11px]">3. ผู้อนุมัติ (Approver)</p>
                                       <p className="font-bold text-[#1E293B] mt-0.5 truncate text-xs">{appName}</p>
+                                      <p className="text-[10px] text-slate-500 truncate">{jobTitle(userOf(appName)?.position) || '-'}</p>
                                       <p className="text-[10px] font-mono text-slate-500 mt-0.5 flex items-center gap-1">
                                         <Clock size={10} className="text-[#0D99FF] shrink-0" />
                                         <span>{getWorkflowStepTimestamp(dar, 'APPROVE', timeline)}</span>
@@ -2756,10 +2724,10 @@ const DocumentDetailModal = ({
       {selectedReplacementCopy && (
         <ReplacementModal
           isOpen={!!selectedReplacementCopy}
-          onClose={(success, type, reason) => {
+          onClose={async (success, type, reason) => {
             if (success && type && reason) {
               try {
-                reportCcDamagedLost(selectedReplacementCopy.id, type, reason);
+                if ((await reportCcDamagedLost(selectedReplacementCopy.id, type, reason)) === false) return;
                 toast.success('ยื่นคำร้องขอสำเนาทดแทนเรียบร้อยแล้ว กรุณารอเจ้าหน้าที่ DCC จัดพิมพ์และส่งมอบ');
                 setSelectedReplacementCopy(null);
               } catch (err) {

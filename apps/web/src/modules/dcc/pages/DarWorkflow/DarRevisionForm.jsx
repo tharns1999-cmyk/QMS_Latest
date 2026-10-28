@@ -18,6 +18,7 @@ import {
 } from '../../utils/darHelper';
 import { cleanLocationName, getMasterStationForDept, normalizeDepartmentId, calculateCopyAllocations } from '../../services/MasterDataService';
 import { resolveDocCode, resolveDocTitle } from '../../utils/documentUtils';
+import { isApiMode } from '../../../../api/client';
 import { saveFile } from '../../utils/fileStorage';
 
 const initialFormState = {
@@ -55,7 +56,7 @@ const DarRevisionForm = () => {
   const prefillDocId = location.state?.prefillDocId;
   const deepLinkDocCode = searchParams.get('docCode') || searchParams.get('code') || location.state?.targetDocCode || location.state?.docCode;
   const deepLinkDocId = searchParams.get('docId') || location.state?.selectedDocId || location.state?.docId || prefillDocId;
-  const { currentUser, addDar, submitDar, saveDarDraft, deleteDar, masterUsers, reviewUsers, approveUsers, documents, dars, darRequests, documentTypes, simulatedDate, controlledCopyInstances, documentControlledCopies, distributionLocations } = useStore();
+  const { currentUser, addDar, submitDar, saveDarDraft, deleteDar, masterUsers, reviewUsers, approveUsers, approvalMatrix, documents, dars, darRequests, documentTypes, simulatedDate, controlledCopyInstances, documentControlledCopies, distributionLocations } = useStore();
   // Document types: prefer runtime store data, fall back to registry
   const activeDocumentTypes = useMemo(() => {
     const storeTypes = documentTypes || [];
@@ -709,10 +710,11 @@ const DarRevisionForm = () => {
     }
     const resolvedRevId = resolveReviewer(
       currentUser?.id, 
-      currentUser?.department, 
+      selectedDoc?.department || currentUser?.department, 
       masterUsers, 
       reviewUsers || masterUsers, 
-      formData.docType
+      formData.docType,
+      approvalMatrix
     )?.id;
     if (resolvedRevId && resolvedRevId !== currentUser?.id) {
       const revUser = (masterUsers || []).find(u => u.id === resolvedRevId);
@@ -730,10 +732,11 @@ const DarRevisionForm = () => {
     const resolvedAppId = resolveApprover(
       currentUser?.id, 
       resolvedRevId, 
-      currentUser?.department, 
+      selectedDoc?.department || currentUser?.department, 
       masterUsers, 
       approveUsers || masterUsers, 
-      formData.docType
+      formData.docType,
+      approvalMatrix
     )?.id;
     if (resolvedAppId && resolvedAppId !== currentUser?.id && resolvedAppId !== resolvedRevId) {
       const appUser = (masterUsers || []).find(u => u.id === resolvedAppId);
@@ -749,7 +752,7 @@ const DarRevisionForm = () => {
       }
     }
     return list;
-  }, [currentUser, formData.docType, masterUsers, reviewUsers, approveUsers]);
+  }, [currentUser, formData.docType, masterUsers, reviewUsers, approveUsers, approvalMatrix, selectedDoc?.department]);
   
   const handleFileChange = (e) => {
     if (e.target.files && e.target.files[0]) {
@@ -985,6 +988,7 @@ const DarRevisionForm = () => {
       } else {
         result = addDar(newDar);
       }
+      if (isApiMode && !result) return; // the server refused and the reason was shown
 
       if (result) {
         const allocatedId = result.id || result.darNumber || result.darNo;
@@ -1737,10 +1741,11 @@ const DarRevisionForm = () => {
         const docTypeCode = selectedDoc?.docType || selectedDoc?.type || (selectedDoc?.title ? selectedDoc.title.split('-')[0] : (formData.docType || 'WI'));
         const resolvedRevId = resolveReviewer(
           currentUser?.id, 
-          currentUser?.department || 'PD', 
+          selectedDoc?.department || currentUser?.department || 'PD', 
           masterUsers || [], 
           reviewUsers || masterUsers || [], 
-          docTypeCode
+          docTypeCode,
+          approvalMatrix
         )?.id;
         const resolvedReviewerObj = (masterUsers || []).find(u => u && u.id === resolvedRevId);
 

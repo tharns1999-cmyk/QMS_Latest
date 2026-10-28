@@ -18,6 +18,7 @@ import {
 import { STANDARD_STATIONS, cleanLocationName } from '../../modules/dcc/services/MasterDataService';
 import { saveFile, resolveRawFileBlob } from '../../modules/dcc/utils/fileStorage';
 import { isSameDepartment } from '../../modules/dcc/utils/taskFilter';
+import { isApiMode } from '../../api/client';
 
 export const createAuthAndOrgSlice = (set, get) => ({
   // State
@@ -93,14 +94,14 @@ export const createAuthAndOrgSlice = (set, get) => ({
     // The primary active department
     let userDeptsList = Array.isArray(baseUser.departments) ? baseUser.departments : (Array.isArray(depts) ? depts : [baseUser.department].filter(Boolean));
     let activeDept = baseUser.primary_department || baseUser.department || userDeptsList[0] || 'DC';
-    if (activeDept === 'QA/QC' || activeDept === 'QA') activeDept = 'QC';
+    if (activeDept === 'QA/QC') activeDept = 'QC';
 
-    userDeptsList = userDeptsList.map(d => (d === 'QA/QC' || d === 'QA') ? 'QC' : d);
-    depts = depts.map(d => (d === 'QA/QC' || d === 'QA') ? 'QC' : d);
+    userDeptsList = userDeptsList.map(d => (d === 'QA/QC') ? 'QC' : d);
+    depts = depts.map(d => (d === 'QA/QC') ? 'QC' : d);
 
     const rawSecondary = baseUser.secondaryDepartments || (Array.isArray(baseUser.affiliated_departments) ? baseUser.affiliated_departments.filter(d => d !== activeDept) : userDeptsList.filter(d => d !== activeDept));
-    const secondaryDepts = rawSecondary.map(d => (d === 'QA/QC' || d === 'QA') ? 'QC' : d).filter(d => d !== activeDept);
-    const affiliated = Array.from(new Set([activeDept, ...secondaryDepts, ...userDeptsList])).map(d => (d === 'QA/QC' || d === 'QA') ? 'QC' : d);
+    const secondaryDepts = rawSecondary.map(d => (d === 'QA/QC') ? 'QC' : d).filter(d => d !== activeDept);
+    const affiliated = Array.from(new Set([activeDept, ...secondaryDepts, ...userDeptsList])).map(d => (d === 'QA/QC') ? 'QC' : d);
 
     const permissions = (baseUser.permissions && baseUser.permissions.length > 0)
       ? baseUser.permissions
@@ -554,6 +555,8 @@ export const createAuthAndOrgSlice = (set, get) => ({
   },
 
   hydrateMasterData: async () => {
+    // The server owns the people list; an old copy in this browser would bring back removed or inactive users.
+    if (isApiMode) return;
     try {
       // 3.1 ดึงรายชื่อ MasterUsers ล่าสุดจาก IndexedDB
       const savedUsersRaw = await resolveRawFileBlob('master_users_persistent_data');

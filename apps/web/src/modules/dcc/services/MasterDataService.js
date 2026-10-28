@@ -245,21 +245,25 @@ export const DEPARTMENT_METADATA = [
 ];
 
 /**
- * Normalize department IDs for backward compatibility (e.g., 'QA' / 'QA/QC' -> 'QC', 'HR' -> 'HR&GA')
+ * Normalize department IDs for backward compatibility (e.g., 'QA/QC' -> 'QC', 'HR&GA' -> 'HR'); QA is its own department
  */
 export const normalizeDepartmentId = (deptId) => {
   if (!deptId) return 'PD';
   const clean = getCleanDept(deptId, String(deptId).trim());
-  if (clean === 'HR' || clean === 'GA') return 'HR&GA';
+  if (clean === 'GA' || clean === 'HR&GA') return 'HR';
   return clean;
 };
 
 /**
  * Get all standard stations belonging to a specific department
  */
+// With a server, the places come from its master data; callers that do not pass a list (copy counting, saved documents) read this one.
+let serverStations = null;
+export const setServerStations = (list) => { serverStations = list; };
+
 export const getDepartmentStations = (deptId, customStationList = null) => {
   const normDept = normalizeDepartmentId(deptId);
-  const stations = customStationList || STANDARD_STATIONS;
+  const stations = customStationList || serverStations || STANDARD_STATIONS;
   return stations.filter(s => s.status !== 'INACTIVE' && normalizeDepartmentId(s.departmentId) === normDept);
 };
 
@@ -283,7 +287,9 @@ export const getMasterStationForDept = (deptId, customStationList = null) => {
   const stations = getDepartmentStations(normDept, customStationList);
   const master = stations.find(s => s.isMasterOffice);
   if (master) return { ...master, name: cleanLocationName(master.name) };
-  
+  // Nothing marked as the main place: use the department's first real place rather than inventing a name.
+  if (stations[0]) return { ...stations[0], name: cleanLocationName(stations[0].name) };
+
   return {
     id: `${normDept}-MASTER`,
     departmentId: normDept,

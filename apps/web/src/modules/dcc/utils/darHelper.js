@@ -116,7 +116,7 @@ export const formatDarDocumentDisplay = (dar, documents = []) => {
   let cleanTitle = String(rawTitle || '').replace(/^\[(OBSOLETE|REVISION|NEW|ยกเลิก)\]\s*/i, '').trim();
 
   // If code is empty but cleanTitle looks like an alphanumeric document code (e.g. SOP-QC-01)
-  if (!cleanCode && /^[A-Z]{2,4}-[A-Z0-9]+(-[A-Z0-9]+)?$/i.test(cleanTitle)) {
+  if (!cleanCode && /^[A-Z]{2,4}-[A-Z0-9]+(-[A-Z0-9&]+)?$/i.test(cleanTitle)) {
     cleanCode = cleanTitle;
   }
 
@@ -307,8 +307,8 @@ export const normalizeDeptCode = (d) => {
   const val = typeof d === 'object' ? (d.id || d.code || d.dept || d.department || d.dept_code) : d;
   if (typeof val !== 'string') return '';
   const clean = val.trim().toUpperCase();
-  if (clean === 'QA' || clean === 'QA/QC' || clean === 'QAQC' || clean === 'QC') {
-    return 'QA/QC';
+  if (clean === 'QA/QC' || clean === 'QAQC') {
+    return 'QC';
   }
   return clean;
 };
@@ -340,8 +340,8 @@ export const isUserAuthorizedForDocDept = (docDeptRaw, currentUser) => {
     currentUser.role === 'QMR' ||
     currentUser.role === 'EXEC' ||
     currentUser.role === 'MGMT' ||
-    ['DC', 'DCC', 'QMR', 'EXEC', 'MGMT'].includes(cleanUserDept) ||
-    ['DC', 'DCC', 'QMR', 'EXEC', 'MGMT'].includes(cleanUserPrimaryDept);
+    ['DC', 'DCC', 'QMR', 'EXEC', 'MGMT', 'MGT'].includes(cleanUserDept) ||
+    ['DC', 'DCC', 'QMR', 'EXEC', 'MGMT', 'MGT'].includes(cleanUserPrimaryDept);
 
   if (isWildcard) return true;
 

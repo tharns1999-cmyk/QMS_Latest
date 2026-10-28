@@ -1,4 +1,5 @@
 import { createJSONStorage } from 'zustand/middleware';
+import { isApiMode } from '../../api/client';
 import toast from 'react-hot-toast';
 import { MASTER_DATA_USER } from '../fixtures/seedData';
 import { MASTER_DEPARTMENTS } from '../../modules/dcc/config/qmsRegistry';
@@ -255,7 +256,8 @@ runSinglePassStorageSelfHealing();
  * Persistence configuration for Zustand persist middleware
  */
 export const persistConfig = {
-  name: 'qms-enterprise-storage',
+  // A separate key keeps API-mode state from mixing with the demo data in the same browser.
+  name: isApiMode ? 'qms-api-mode-storage' : 'qms-enterprise-storage',
   version: 5,
   migrate: (persistedState, version) => {
     if (!version || version < 5) {
@@ -563,7 +565,7 @@ export const persistConfig = {
 
         // Auto-Sanitize QA/QC residue to QC
         const taskDeptStr = String(updated.department || '');
-        if (taskDeptStr === 'QA/QC' || taskDeptStr === 'QA' || taskDeptStr === 'QAQC' || taskDeptStr.includes('QA/QC') || taskDeptStr.includes('ประกันและควบคุมคุณภาพ')) {
+        if (taskDeptStr === 'QA/QC' || taskDeptStr === 'QAQC' || taskDeptStr.includes('QA/QC') || taskDeptStr.includes('ประกันและควบคุมคุณภาพ')) {
           if (updated.department !== 'QC') {
             updated.department = 'QC';
             changed = true;
@@ -576,15 +578,15 @@ export const persistConfig = {
             updated.target_department = 'QC';
             changed = true;
           }
-          if (updated.targetDepartment === 'QA/QC' || updated.targetDepartment === 'QA') {
+          if (updated.targetDepartment === 'QA/QC') {
             updated.targetDepartment = 'QC';
             changed = true;
           }
-          if (updated.destinationDept === 'QA/QC' || updated.destinationDept === 'QA') {
+          if (updated.destinationDept === 'QA/QC') {
             updated.destinationDept = 'QC';
             changed = true;
           }
-          if (updated.assignedToDept === 'QA/QC' || updated.assignedToDept === 'QA') {
+          if (updated.assignedToDept === 'QA/QC') {
             updated.assignedToDept = 'QC';
             changed = true;
           }

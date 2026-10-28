@@ -145,7 +145,7 @@ describe('2-Digit Base Document Running Number Standard (01-99 ➔ 100+) Tests',
       expect(dars100[0].docIdInput).toBe('SOP-QA-100');
     });
 
-    it('renders 2-digit preview in DarNewForm UI (e.g. FM-QC-01)', () => {
+    it('renders 2-digit preview in DarNewForm UI (e.g. FM-QA-01)', () => {
       renderWithRouter(<DarNewForm />);
 
       const selects = screen.getAllByRole('combobox');
@@ -154,7 +154,7 @@ describe('2-Digit Base Document Running Number Standard (01-99 ➔ 100+) Tests',
       // Select FM
       fireEvent.change(docTypeSelect, { target: { value: 'FM' } });
 
-      expect(screen.getByText('FM-QC-01')).toBeDefined();
+      expect(screen.getByText('FM-QA-01')).toBeDefined();
     });
   });
 

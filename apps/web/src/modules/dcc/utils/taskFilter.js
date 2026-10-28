@@ -97,7 +97,7 @@ export const isDccOperationalTask = (task) => {
  * Canonicalizes department identifiers to their standard Master Data code:
  * QA / QA/QC / QAQC / QC -> 'QC'
  * DCC / DC -> 'DC'
- * HR / GA -> 'HR&GA'
+ * GA / HR&GA -> 'HR'
  * Strips descriptive Thai text if attached (e.g. 'QA/QC - ฝ่ายประกัน...' -> 'QC', 'QC (Quality Control)' -> 'QC')
  */
 export const normalizeCanonicalDept = (dept) => {
@@ -119,7 +119,6 @@ export const normalizeCanonicalDept = (dept) => {
   const clean = str.replace(/[^a-zA-Z0-9&]/g, '').toUpperCase();
   if (clean === 'DCC' || clean === 'DC') return 'DC';
   if (
-    clean === 'QA' ||
     clean === 'QAQC' ||
     clean === 'QC' ||
     clean === 'QASUPER' ||
@@ -129,8 +128,9 @@ export const normalizeCanonicalDept = (dept) => {
   ) {
     return 'QC';
   }
-  if (clean === 'HR' || clean === 'GA' || clean === 'HRGA') {
-    return 'HR&GA';
+  // HR&GA is the old name of the plant's HR department, code HR.
+  if (clean === 'GA' || clean === 'HRGA' || clean === 'HR&GA') {
+    return 'HR';
   }
   return str.toUpperCase();
 };
@@ -138,7 +138,7 @@ export const normalizeCanonicalDept = (dept) => {
 export const normalizeDept = normalizeCanonicalDept;
 
 /**
- * Compares two department identifiers with normalization and alias equivalence (QA <-> QA/QC <-> QC)
+ * Compares two department identifiers with normalization and alias equivalence (QA/QC <-> QC; QA is its own department)
  */
 export const isSameDepartment = (deptA, deptB) => {
   if (!deptA || !deptB) return false;
@@ -201,7 +201,8 @@ export const isLevel1To5 = (user) => {
 export const isReceiptTask = (task) => {
   if (!task) return false;
   const normType = (task.type || task.taskType || task.task_type || task.category || '').toUpperCase();
-  const title = String(task.title || '');
+  // A DAR task's title carries the document's name, which may itself contain "ตรวจรับ".
+  const title = task.referenceType === 'INTERNAL_DAR' ? '' : String(task.title || '');
   return (
     normType === 'RECEIPT' || 
     normType === 'DEPT_CONFIRM_HARDCOPY_RECEIPT' || 
@@ -213,6 +214,15 @@ export const isReceiptTask = (task) => {
     title.includes('ตรวจรับสำเนา') ||
     title.includes('ตรวจรับเอกสาร')
   );
+};
+
+// The inbox shows a task that names an assignee only to that person (DCC, QMR, approvals and receipts aside); the menu badge counts the same way.
+export const isAssignedToSomeoneElse = (task, currentUser) => {
+  if (!task || !currentUser || isDccAdmin(currentUser) || currentUser.role === 'QMR' || currentUser.isQmr) return false;
+  const type = String(task.type || task.taskType || '').toUpperCase();
+  if (type === 'PERIODIC_REVIEW_APPROVAL' || isReceiptTask(task)) return false;
+  const assignee = task.assigneeId || task.assignee_id || task.assignedToUserId || task.target_user_id;
+  return Boolean(assignee) && ![currentUser.id, currentUser.empId].includes(assignee) && task.assigneeName !== currentUser.name;
 };
 
 export const isActionableTask = (task, currentUser, documents = [], referenceDate = new Date()) => {

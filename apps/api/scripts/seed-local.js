@@ -1,0 +1,40 @@
+// LOCAL TESTING ONLY. Fills the local D1 (wrangler dev) with sign-in accounts for every department, all with the password 1234.
+// Never run the SQL it writes against Cloudflare: the password is trivial and nobody is asked to change it.
+// Usage (after a fresh `npm run db:migrate:local`): npm run db:seed:local
+//   Starting from scratch: stop wrangler dev, delete apps/api/.wrangler/state/v3/d1 and .../r2, then migrate and seed.
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { hashPassword } from '../src/password.js';
+
+const PASSWORD = '1234';
+// Department code -> short prefix for the email. Codes are the ones migration 0014 creates.
+const DEPARTMENTS = { MGT: 'mg', DC: 'dc', QA: 'qa', QC: 'qc', PD: 'pd', WH: 'wh', EN: 'en', RD: 'rd', PU: 'pu', HR: 'hr', AC: 'ac', SF: 'sf', LB: 'lb' };
+// Level 2 asks, 4 reviews, 6 approves (L6 covers every type but the Quality Manual, which needs 8).
+const ROLES = [[2, 'เจ้าหน้าที่'], [4, 'หัวหน้า'], [6, 'ผู้จัดการ']];
+// Job titles in the seed read like "หัวหน้าฝ่ายผลิต".
+const DEPT_TH = { MGT: 'ฝ่ายบริหาร', DC: 'ฝ่ายควบคุมเอกสาร', QA: 'ฝ่ายประกันคุณภาพ', QC: 'ฝ่ายควบคุมคุณภาพ', PD: 'ฝ่ายผลิต', WH: 'ฝ่ายคลังสินค้า', EN: 'ฝ่ายวิศวกรรม', RD: 'ฝ่ายวิจัยและพัฒนา', PU: 'ฝ่ายจัดซื้อ', HR: 'ฝ่ายบุคคล', AC: 'ฝ่ายบัญชี', SF: 'ฝ่ายความปลอดภัย', LB: 'ฝ่ายห้องปฏิบัติการ' };
+// The DC department's L4 head (dc4) is the DCC supervisor and runs master data and admin alone, so dcc2 is the backup. The MGT L6 manager is the QMR and the DCC's boss; DCC accounts are
+// kept out of the reviewer and approver pickers, so the boss is QMR rather than DCC.
+const EXTRA = [
+  { id: 'dcc2', name: 'DCC สำรอง', position: 'เจ้าหน้าที่ควบคุมเอกสาร (สำรอง)', dept: 'DC', level: 4, dcc: 1, qmr: 0 },
+  { id: 'md', name: 'กรรมการผู้จัดการ', position: 'กรรมการผู้จัดการ', dept: 'MGT', level: 8, dcc: 0, qmr: 0 }
+];
+
+const q = (v) => `'${String(v).replaceAll("'", "''")}'`;
+const hash = await hashPassword(PASSWORD);
+const users = [
+  ...Object.entries(DEPARTMENTS).flatMap(([dept, prefix]) => ROLES.map(([level, title]) => ({ id: `${prefix}${level}`, name: `${dept} ${title}${dept === 'DC' && level === 4 ? ' (DCC)' : ''}`, position: `${title}${DEPT_TH[dept]}`, dept, level, qmr: dept === 'MGT' && level === 6 ? 1 : 0, dcc: dept === 'DC' && level === 4 ? 1 : 0 }))),
+  ...EXTRA
+];
+const sql = [
+  ...users.map((u) => `INSERT INTO users (id, emp_id, name, email, password_hash, role, approval_level, primary_department, departments, is_dcc, is_qmr, must_change_password, position)
+    VALUES (${[u.id, u.id, u.name, `${u.id}@t.co`, hash, u.dcc ? 'DCC_ADMIN' : 'GENERAL_USER', u.level, u.dept, JSON.stringify([u.dept])].map((v, i) => (i === 6 ? v : q(v))).join(', ')}, ${u.dcc}, ${u.qmr}, 0, ${q(u.position)});`),
+  // Two places per department so a DAR can name where controlled copies go.
+  ...Object.keys(DEPARTMENTS).flatMap((dept) => [['สำนักงาน', 'ตู้เอกสารหลัก'], ['หน้างาน', 'จุดใช้งานหน้างาน']]
+    .map(([name, description]) => `INSERT INTO distribution_locations (id, department, name, description, is_master) VALUES (${q(`loc-${dept}-${name}`)}, ${q(dept)}, ${q(`${dept} ${name}`)}, ${q(description)}, ${name === 'สำนักงาน' ? 1 : 0});`))
+];
+// Production asks DCC and L5+ for an authenticator code at sign-in. Locally that would mean a phone for every test account, so it starts off;
+// turn it on in Master Data > Security to try it.
+sql.push("UPDATE settings SET value = '0' WHERE key IN ('two_factor_min_level', 'two_factor_for_dcc');");
+mkdirSync('.wrangler', { recursive: true });
+writeFileSync('.wrangler/seed-local.sql', `${sql.join('\n')}\n`);
+console.log(`Wrote ${users.length} users and ${Object.keys(DEPARTMENTS).length * 2} places to .wrangler/seed-local.sql`);

@@ -12,12 +12,16 @@ import { ACCESS_SCOPE_METADATA } from '../../utils/accessControl';
 import { resolveApprover } from '../../utils/workflowResolver';
 import { 
   stampUnifiedInternalPdf,
-  resolveRawFileBlob, 
+  applyProgressiveSignatoryStamp,
+  resolveRawFileBlob,
   getActiveUserSignatureAsset, 
   resolveSubmissionDate 
 } from '../../utils/pdfStamper';
 import { resolveFileBlob } from '../../utils/fileStorage';
+import { isApiMode, apiBlob } from '../../../../api/client';
 import { generateQmsDownloadName, triggerBrowserDownload, formatDarHeaderTitle } from '../../utils/documentNamingHelper';
+import { jobTitle, resolveProgressiveSignatories } from '../../utils/signatoryResolver';
+import { formatDarNumber } from '../../utils/darNumberGenerator';
 
 const getSystemSampleDocumentBlob = (docCode = 'SOP-QC-002', docTitle = 'Standard Operating Procedure for Quality Control') => {
   const safeTitle = (docTitle || 'Standard Operating Procedure').replace(/[()\\\\]/g, '');
@@ -306,7 +310,7 @@ const TaskReview = () => {
       (users || []).find(u => u && (u.id === dar.requesterId || u.name === reqName));
     const reqDateFormatted = resolveSubmissionDate(dar, task, darTimeline);
     const reqSignature = getActiveUserSignatureAsset(reqUser);
-    const reqPosition = reqUser?.position || reqUser?.role || dar.requesterRole || '';
+    const reqPosition = jobTitle(reqUser?.position, dar.requesterRole);
 
     return {
       requester: {
@@ -406,6 +410,12 @@ const TaskReview = () => {
         }
 
         let rawBlob = null;
+        // API mode: show only the server's copy, never a cached or sample stand-in, so the signer sees what they sign.
+        if (isApiMode) {
+          const source = isObsoleteRequest ? (documents || []).find(d => d.doc_code === dar.doc_code && d.status === 'EFFECTIVE') : dar;
+          if (!source?.apiFilePath) throw new Error('ยังไม่มีไฟล์ PDF ของคำขอนี้บนเซิร์ฟเวอร์');
+          rawBlob = await apiBlob(source.apiFilePath);
+        }
         const allKeys = Array.from(new Set([
           primaryKey,
           activeMasterDoc?.fileId,
@@ -474,7 +484,23 @@ const TaskReview = () => {
             return;
           }
 
-          // Bypass pdfStamper completely for OBSOLETE requests: display Master PDF As-Is without DRAFT watermark
+          // No DRAFT watermark for OBSOLETE, but an effective master always carries its original sign-off table:
+          // stamp it from the DAR that approved this revision (the OBSOLETE DAR itself has no signers for it).
+          try {
+            const masterRev = String(activeMasterDoc?.revision ?? activeMasterDoc?.rev ?? currentDocRev ?? '');
+            const sameCode = (d) => [d.docCode, d.document_code, d.doc_code].includes(currentDocCode);
+            const originDar = (dars || []).find(d => sameCode(d) && d.id !== dar.id && String(d.rev ?? d.revision) === masterRev
+              && d.type !== 'OBSOLETE' && ['COMPLETED', 'APPROVED', 'PENDING_DCC'].includes(d.status));
+            if (originDar) {
+              const signatories = resolveProgressiveSignatories({
+                dar: originDar, masterDoc: activeMasterDoc || {}, stage: 'MASTER', masterUsers, users, currentUser
+              });
+              const stampedBytes = await applyProgressiveSignatoryStamp(rawBlob, signatories);
+              rawBlob = new Blob([stampedBytes], { type: 'application/pdf' });
+            }
+          } catch (stampErr) {
+            console.warn('[TaskReview] Could not stamp effective master for OBSOLETE preview, showing as stored:', stampErr);
+          }
           const rawUrl = URL.createObjectURL(rawBlob);
           createdUrlsRef.current.push(rawUrl);
 
@@ -717,9 +743,9 @@ const TaskReview = () => {
     setShowConfirm(true);
   };
 
-  const executeAction = () => {
+  const executeAction = async () => {
     try {
-      processWorkflow(task?.id, pendingAction, pendingComment);
+      await processWorkflow(task?.id, pendingAction, pendingComment);
       toast.success(`ดำเนินการ ${pendingAction === 'APPROVE' ? 'ผ่านการทบทวน' : 'ส่งกลับแก้ไข'} สำเร็จ`);
       setShowConfirm(false);
       navigate('/tasks');
@@ -777,7 +803,7 @@ const TaskReview = () => {
               </span>
             </div>
             <h2 className="text-xl font-black text-slate-900 mt-1">
-              {dar.darNumber || dar.dar_no || (dar.isDraft || dar.status === 'DRAFT' || String(dar.id).startsWith('draft_') ? 'ยังไม่ได้ระบุ (Draft)' : dar.id)}
+              {formatDarNumber(dar.darNumber || dar.dar_no) !== '-' ? formatDarNumber(dar.darNumber || dar.dar_no) : (dar.isDraft || dar.status === 'DRAFT' || String(dar.id).startsWith('draft_') ? 'ยังไม่ได้ระบุ (Draft)' : formatDarNumber(dar.id))}
             </h2>
             <p className="text-slate-600 font-medium text-xs mt-0.5 truncate" title={dar.title || dar.document_title}>
               {dar.title || dar.document_title}

@@ -202,6 +202,7 @@ const ExternalRequestDetail = () => {
       return {
         ...result,
         ...(attachedFile ? { attachedFile, file: attachedFile, attachment: attachedFile } : {}),
+        ...(request?.apiFilePath ? { apiFilePath: request.apiFilePath } : {}),
         ...(fileId ? { fileId } : {}),
         ...(fileName ? { fileName } : {})
       };

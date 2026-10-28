@@ -12,13 +12,13 @@ export const standardizeDepartmentCode = (dept) => {
     return clean;
   }
   const stripped = raw.replace(/[^a-zA-Z]/g, '').toUpperCase();
-  if (stripped === 'QA' || stripped === 'QC' || stripped === 'QAQC' || stripped === 'QASUPER') {
+  if (stripped === 'QC' || stripped === 'QAQC' || stripped === 'QASUPER') {
     return 'QC';
   }
   return raw.toUpperCase();
 };
 
-const KNOWN_DEPT_CODES = ['PD', 'WH', 'EN', 'PC', 'HSE', 'MKT', 'ST', 'FIN', 'DC', 'HR&GA'];
+const KNOWN_DEPT_CODES = ['PD', 'WH', 'EN', 'PC', 'HSE', 'MKT', 'ST', 'FIN', 'DC', 'HR&GA', 'MGT', 'QA', 'RD', 'PU', 'HR', 'AC', 'SF', 'LB'];
 const DOC_TYPE_PREFIXES = ['QM', 'QP', 'SOP', 'WI', 'SD', 'FM', 'ED', 'EXT', 'DAR', 'DOC', 'JD'];
 
 /**
@@ -39,7 +39,7 @@ export const extractDeptCode = (val) => {
     const p1 = (parts[1] || '').toUpperCase();
 
     // a) {Dept}-{Type}-{##} / QC-XX-XX format
-    if ((p0 === 'QC' || p0 === 'QA' || p0 === 'QAQC' || p0 === 'QA/QC' || p0 === 'QA SUPER' || p0 === 'QASUPER') && !DOC_TYPE_PREFIXES.includes(p0)) {
+    if ((p0 === 'QC' || p0 === 'QAQC' || p0 === 'QA/QC' || p0 === 'QA SUPER' || p0 === 'QASUPER') && !DOC_TYPE_PREFIXES.includes(p0)) {
       return 'QC';
     }
     if (KNOWN_DEPT_CODES.includes(p0) && (DOC_TYPE_PREFIXES.includes(p1) || /^\d+$/.test(p1))) {
@@ -47,7 +47,7 @@ export const extractDeptCode = (val) => {
     }
 
     // b) {Type}-{Dept}-{##} format (e.g., SOP-QC-01, WI-QC-01, ED-QA-01)
-    if (p1 === 'QA' || p1 === 'QC' || p1 === 'QAQC' || p1 === 'QA/QC') {
+    if (p1 === 'QC' || p1 === 'QAQC' || p1 === 'QA/QC') {
       return 'QC';
     }
     if (parts.length >= 2 && p1.length <= 5 && /^[A-Z/]+$/.test(p1)) {
@@ -59,28 +59,28 @@ export const extractDeptCode = (val) => {
   const parenMatch = trimmed.match(/\(([A-Za-z/]+)\)/);
   if (parenMatch) {
     const inside = parenMatch[1].toUpperCase();
-    if (inside === 'QA' || inside === 'QC' || inside === 'QAQC' || inside === 'QA/QC') return 'QC';
+    if (inside === 'QC' || inside === 'QAQC' || inside === 'QA/QC') return 'QC';
     return inside.replace(/[^A-Z]/g, '');
   }
 
   // Extract from formatted "QC - ฝ่ายประกัน..." or "QA/QC - ฝ่ายประกัน..." or "QA SUPER"
   if (/^QA[\s/_-]?(QC|SUPER)/i.test(trimmed)) return 'QC';
   const firstWord = trimmed.split(/[\s-]+/)[0].replace(/[^a-zA-Z]/g, '').toUpperCase();
-  if (firstWord === 'QA' || firstWord === 'QC' || firstWord === 'QAQC' || firstWord === 'QASUPER') return 'QC';
+  if (firstWord === 'QC' || firstWord === 'QAQC' || firstWord === 'QASUPER') return 'QC';
 
   return firstWord || trimmed.toUpperCase();
 };
 
 /**
- * Check if two department codes are equivalent with bidirectional QC / QA / QA/QC alias rule.
+ * Check if two department codes are the same department. QA is its own department; only the old combined QC spellings (QA/QC, QAQC, QA SUPER) count as QC.
  */
 export const isDeptEquivalent = (d1, d2) => {
   if (!d1 || !d2) return false;
   const c1 = d1.toUpperCase();
   const c2 = d2.toUpperCase();
   if (c1 === c2) return true;
-  const isQaQc1 = c1 === 'QC' || c1 === 'QA' || c1 === 'QA/QC' || c1 === 'QAQC' || c1 === 'QA SUPER' || c1 === 'QASUPER';
-  const isQaQc2 = c2 === 'QC' || c2 === 'QA' || c2 === 'QA/QC' || c2 === 'QAQC' || c2 === 'QA SUPER' || c2 === 'QASUPER';
+  const isQaQc1 = c1 === 'QC' || c1 === 'QA/QC' || c1 === 'QAQC' || c1 === 'QA SUPER' || c1 === 'QASUPER';
+  const isQaQc2 = c2 === 'QC' || c2 === 'QA/QC' || c2 === 'QAQC' || c2 === 'QA SUPER' || c2 === 'QASUPER';
   return Boolean(isQaQc1 && isQaQc2);
 };
 

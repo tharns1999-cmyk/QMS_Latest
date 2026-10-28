@@ -70,7 +70,7 @@ describe('DAR File Ingestion, No Synthetic Blank Fallback & 3x3 Stamping Tests',
     const newDar = await submitDar(darPayload, realFile);
 
     expect(newDar).toBeDefined();
-    expect(newDar.id).toMatch(/^DAR-\d{4}-\d{3}$/);
+    expect(newDar.id).toMatch(/^DAR-\d{2}-\d{3}$/);
     expect(newDar.fileId).toBeDefined();
     expect(newDar.attachedFile).toBeDefined();
     expect(newDar.attachedFile.name).toBe('real_procedure_manual.pdf');

@@ -36,7 +36,7 @@ describe('Modal Zero-Flicker & Immediate Render Tests', () => {
 
     // Verify Title & DAR Info
     expect(screen.getByText('ยืนยันการอนุมัติเอกสาร')).toBeDefined();
-    expect(screen.getByText('DAR-2026-001')).toBeDefined();
+    expect(screen.getByText('DAR-26-001')).toBeDefined();
     expect(screen.getByText('ขั้นตอนการควบคุมคุณภาพ (QC Procedure)')).toBeDefined();
     expect(screen.getByText('ตรวจสอบแล้วผ่านเกณฑ์')).toBeDefined();
 

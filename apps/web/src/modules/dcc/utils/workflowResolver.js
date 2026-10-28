@@ -76,7 +76,7 @@ const createRouteResult = (user, level, dept) => {
  */
 const isCrossOrgAuthority = (user) => {
   if (!user) return false;
-  if (user.isQmr || user.department === 'MGMT' || user.role === 'QMR' || user.level >= 6) return true;
+  if (user.isQmr || user.department === 'MGT' || user.department === 'MGMT' || user.role === 'QMR' || user.level >= 6) return true;
   
   const userDepts = [
     user.department, user.dept, user.primaryDepartment, user.primary_department,
@@ -108,15 +108,22 @@ export const isUserInDepartment = (user, department) => {
   if (Array.isArray(user.depts) && user.depts.includes(department)) return true;
 
   // 3. Central admin roles that have access to all
-  if (user.department === 'MGMT' || user.role === 'QMR' || user.level >= 6) {
+  if (user.department === 'MGT' || user.department === 'MGMT' || user.role === 'QMR' || user.level >= 6) {
     return true;
   }
 
   return false;
 };
 
-// Keep old alias for backward compatibility
-const isAffiliatedWithDept = isUserInDepartment;
+// Routing asks a stricter question: does the person belong to the department itself (primary or an extra one)? MGT and L6+
+// are not members of every department; they step in only when the department has nobody eligible (see isCrossOrgAuthority).
+// Otherwise an L4 in MGT outranks the L5 who covers the department.
+const isAffiliatedWithDept = (user, department) => {
+  if (!user || !department) return false;
+  const own = [user.department, user.dept, user.primaryDepartment, user.primary_department,
+    ...(user.secondaryDepartments || []), ...(user.departments || []), ...(user.affiliated_departments || []), ...(user.depts || [])];
+  return own.includes(department) || (Array.isArray(user.managedDepartments) && (user.managedDepartments.includes('*') || user.managedDepartments.includes(department)));
+};
 
 /**
  * Resolves the appropriate Reviewer based on Document Type minimum threshold (L4+)

@@ -3,6 +3,14 @@
  * Extracted from useStore.js (Phase 4 Refactor)
  */
 import { STANDARD_STATIONS } from '../services/MasterDataService';
+import { isApiMode } from '../../../api/client';
+// Loaded on use: api/copies imports the store, which imports this slice.
+const apiCopies = {
+  stepCopy: (...args) => import('../../../api/copies').then((m) => m.stepCopy(...args)),
+  stepCopies: (...args) => import('../../../api/copies').then((m) => m.stepCopies(...args)),
+  disposeCopies: (...args) => import('../../../api/copies').then((m) => m.disposeCopies(...args)),
+  call: (name, ...args) => import('../../../api/copies').then((m) => m[name](...args))
+};
 import { canManageControlledCopy } from '../utils/accessControl';
 import { 
   isSameDepartment, 
@@ -212,8 +220,8 @@ export const resolveReceiptTaskDepartment = (copyOrTask, matchedCopy = null) => 
     if (str === 'DCC' || str === 'DC') {
       return 'DC';
     }
-    if (str === 'HR' || str === 'GA' || str === 'HR&GA') {
-      return 'HR&GA';
+    if (str === 'GA' || str === 'HR&GA') {
+      return 'HR';
     }
     return d;
   };
@@ -473,13 +481,13 @@ export const cleanupDccTasks = (tasks, instances, documents, dars = []) => {
 
     // Auto-Sanitize QA/QC residue on any task
     const rawDeptStr = String(updated.department || '');
-    if (rawDeptStr === 'QA/QC' || rawDeptStr === 'QA' || rawDeptStr === 'QAQC' || rawDeptStr.includes('QA/QC') || rawDeptStr.includes('ประกันและควบคุมคุณภาพ')) {
+    if (rawDeptStr === 'QA/QC' || rawDeptStr === 'QAQC' || rawDeptStr.includes('QA/QC') || rawDeptStr.includes('ประกันและควบคุมคุณภาพ')) {
       updated.department = 'QC';
       updated.departmentName = 'ฝ่ายประกันและควบคุมคุณภาพ';
       if (updated.target_department === 'QA/QC' || updated.target_department === 'QA') updated.target_department = 'QC';
-      if (updated.targetDepartment === 'QA/QC' || updated.targetDepartment === 'QA') updated.targetDepartment = 'QC';
-      if (updated.destinationDept === 'QA/QC' || updated.destinationDept === 'QA') updated.destinationDept = 'QC';
-      if (updated.assignedToDept === 'QA/QC' || updated.assignedToDept === 'QA') updated.assignedToDept = 'QC';
+      if (updated.targetDepartment === 'QA/QC') updated.targetDepartment = 'QC';
+      if (updated.destinationDept === 'QA/QC') updated.destinationDept = 'QC';
+      if (updated.assignedToDept === 'QA/QC') updated.assignedToDept = 'QC';
     }
 
     return updated;
@@ -808,7 +816,9 @@ export const getActivePhysicalCopies = (copies = [], doc = null) => {
     'RECALLED_DESTROYED',
     'REPLACED_VOID',
     'VOID',
-    'SUPERSEDED_ARCHIVED'
+    'SUPERSEDED_ARCHIVED',
+    'RECALLED',
+    'LOST'
   ]);
 
   const physicalCandidates = rawMatches.filter(c => {
@@ -870,7 +880,11 @@ export const createControlledCopySlice = (set, get) => ({
   trackControlledCopyPrint: (copyId) => get().markCopyPrinted(copyId),
 
   // Print Tracking
-  markCopyPrinted: (copyId) => set(state => {
+  // API mode: the server does not record printing; the guard before dispatch uses this browser's flag.
+  markCopyPrinted: (copyId) => isApiMode ? set((state) => {
+    const mark = (list) => (list || []).map((c) => (String(c.id) === String(copyId) ? { ...c, is_printed: true } : c));
+    return { controlledCopyInstances: mark(state.controlledCopyInstances), documentControlledCopies: mark(state.documentControlledCopies) };
+  }) : set(state => {
     const now = new Date().toISOString();
     let targetCopy = null;
 
@@ -1043,7 +1057,7 @@ export const createControlledCopySlice = (set, get) => ({
   distributeCopies: (docIdOrCopyIds, copiesToDispatch) => {
     return get().dispatchControlledCopies(docIdOrCopyIds, copiesToDispatch);
   },
-  dispatchControlledCopy: (copyId) => set((state) => {
+  dispatchControlledCopy: (copyId) => isApiMode ? apiCopies.stepCopy('dispatch', typeof copyId === 'object' ? (copyId?.copyId || copyId?.id) : copyId) : set((state) => {
     const targetId = String(typeof copyId === 'object' ? (copyId?.copyId || copyId?.id || '') : copyId);
     const copies = (state.controlledCopyInstances && state.controlledCopyInstances.length > 0)
       ? state.controlledCopyInstances
@@ -1481,7 +1495,7 @@ export const createControlledCopySlice = (set, get) => ({
   },
 
   // Receipt & Recall Checklist
-  confirmHardcopyReceipt: (copyId, taskId, recipientData = {}) => set((state) => {
+  confirmHardcopyReceipt: (copyId, taskId, recipientData = {}) => isApiMode ? apiCopies.stepCopy('receive', typeof copyId === 'object' ? (copyId?.copyId || copyId?.id) : copyId, recipientData.remarks) : set((state) => {
     // Strict Type Coercion to prevent comparison bugs
     const targetCopyId = String(typeof copyId === 'object' ? (copyId?.copyId || copyId?.id || '') : copyId);
     const targetTaskId = taskId ? String(taskId) : null;
@@ -1690,15 +1704,7 @@ export const createControlledCopySlice = (set, get) => ({
       tasks: cleanupDccTasks(finalTasks, newCopies, [...(state.documents || []), ...(updatedExternalDocs || [])]),
       controlledCopyAuditTrail: [auditLog, ...(state.controlledCopyAuditTrail || [])],
       physicalCopyAuditLogs: [auditLog, ...(state.physicalCopyAuditLogs || [])],
-      notifications: [notif, ...state.notifications],
-      actionLog: [{
-        id: `LOG-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        actionType: 'PHYSICAL_COPY_RECEIVED',
-        actor: confirmedBy,
-        actorUserId: actorUserId,
-        details: `Confirmed physical hardcopy receipt for copy ${resolvedCopyId} (${docId}) by dept ${targetDept}`,
-        timestamp: confirmedAt
-      }, ...(state.actionLog || [])]
+      notifications: [notif, ...state.notifications]
     };
   }),
 
@@ -1710,7 +1716,7 @@ export const createControlledCopySlice = (set, get) => ({
     return get().confirmHardcopyReceipt(instId, taskId, recipientData);
   },
 
-  completeRecallChecklist: (taskId, checkedCopyIds = [], outcome = 'RECALLED_DESTROYED') => set((state) => {
+  completeRecallChecklist: (taskId, checkedCopyIds = [], outcome = 'RECALLED_DESTROYED') => isApiMode ? apiCopies.stepCopies('recall', checkedCopyIds, outcome) : set((state) => {
     const targetTaskId = String(taskId);
     const checkedSet = new Set((checkedCopyIds || []).map(id => String(id)));
     const recalledAt = new Date().toISOString();
@@ -1855,7 +1861,7 @@ export const createControlledCopySlice = (set, get) => ({
     };
   }),
 
-  completeCopyRecallAndArchive: ({ documentCode, collectedCopyIds, dispositionMethod, notes, witnessName, referenceNo, taskId }) => set((state) => {
+  completeCopyRecallAndArchive: ({ documentCode, collectedCopyIds, dispositionMethod, notes, witnessName, referenceNo, taskId }) => isApiMode ? apiCopies.disposeCopies(collectedCopyIds || [], { method: dispositionMethod, witness: witnessName, referenceNo, notes }) : set((state) => {
     const isLostVoided = dispositionMethod === 'LOST_VOIDED';
     const collectedSet = new Set((collectedCopyIds || []).map(id => String(id)));
     const recalledAt = new Date().toISOString();
@@ -1982,7 +1988,7 @@ export const createControlledCopySlice = (set, get) => ({
       user: recalledBy,
       action: auditAction,
       docTitle: documentCode,
-      remarks: `DCC ทำการ ${dispLabel} สำหรับเอกสาร ${documentCode} จำนวน ${collectedSet.size} ชุด ${notes ? `(${notes})` : ''}`
+      remarks: `DCC ทำการ ${dispLabel} สำหรับเอกสาร ${documentCode} จำนวน ${collectedSet.size} ชุด${witnessName ? ` | พยาน: ${witnessName}` : ''}${referenceNo ? ` | อ้างอิง: ${referenceNo}` : ''}${notes ? ` | หมายเหตุ: ${notes}` : ''}`
     };
 
     const actionLogEntry = {
@@ -2132,7 +2138,7 @@ export const createControlledCopySlice = (set, get) => ({
     };
   }),
 
-  requestAdditionalControlledCopies: (docId, newLocationsList = [], reason = '') => set((state) => {
+  requestAdditionalControlledCopies: (docId, newLocationsList = [], reason = '') => isApiMode ? apiCopies.call('requestAdditionalCopies', typeof docId === 'object' && docId ? (docId.documentId || docId.docId || docId.id) : docId, newLocationsList, reason) : set((state) => {
     // Support both positional (docId, newLocationsList, reason) and object payload ({ documentId, docCode, locations, ... })
     let targetId = docId;
     let targetCode = typeof docId === 'string' ? docId : '';
@@ -2478,7 +2484,7 @@ export const createControlledCopySlice = (set, get) => ({
     };
   }),
 
-  reportCcDamagedLost: (instId, type, reason) => set((state) => {
+  reportCcDamagedLost: (instId, type, reason) => isApiMode ? apiCopies.call('reportCopyDamagedOrLost', instId, type, reason) : set((state) => {
     const targetId = String(instId || '').trim();
     if (!targetId) return state;
 
@@ -2820,7 +2826,7 @@ export const createControlledCopySlice = (set, get) => ({
   }),
 
   // Record physical receipt of recalled copy by DCC
-  recordCopyRecalled: (copyId, notes = '') => set((state) => {
+  recordCopyRecalled: (copyId, notes = '') => isApiMode ? apiCopies.stepCopy('recall', copyId, notes) : set((state) => {
     const targetId = String(copyId);
     const copies = (state.controlledCopyInstances && state.controlledCopyInstances.length > 0)
       ? state.controlledCopyInstances
@@ -2882,7 +2888,7 @@ export const createControlledCopySlice = (set, get) => ({
    * Enforces: Origin Invariant (Copy 01 may NOT be relocated).
    * Creates: DCC task type DCC_RELOCATE, sets copy status → RELOCATION_PENDING_APPROVAL.
    */
-  requestCcRelocation: (copyId, { newLocation, newDepartment, reason } = {}) => set((state) => {
+  requestCcRelocation: (copyId, { newLocation, newDepartment, reason } = {}) => isApiMode ? apiCopies.call('requestCopyRelocation', copyId, { newLocation, newDepartment, reason }) : set((state) => {
     if (!copyId || !reason) return state;
     const targetId = String(copyId).trim();
 
@@ -3062,7 +3068,7 @@ export const createControlledCopySlice = (set, get) => ({
    * Enforces: Origin Invariant (Copy 01 may NOT be returned).
    * Creates: DCC task type DCC_RETURN, sets copy status → RETURN_PENDING_APPROVAL.
    */
-  requestCcReturn: (copyId, { reason, returnDate } = {}) => set((state) => {
+  requestCcReturn: (copyId, { reason, returnDate } = {}) => isApiMode ? apiCopies.call('requestCopyReturn', copyId, { reason, returnDate }) : set((state) => {
     if (!copyId || !reason) return state;
     const targetId = String(copyId).trim();
 
@@ -3240,7 +3246,7 @@ export const createControlledCopySlice = (set, get) => ({
    * DCC Admin approves a relocation request. Requires checklistVerified === true (ISO 9001 Clause 7.5.3).
    * Updates copy location, department, and reverts status to ISSUED_ACTIVE.
    */
-  approveCcRelocation: (taskId, { notes = '', checklistVerified = false } = {}) => set((state) => {
+  approveCcRelocation: (taskId, { notes = '', checklistVerified = false } = {}) => isApiMode ? (checklistVerified && apiCopies.call('decideCopyRequest', taskId, 'APPROVE', { notes })) : set((state) => {
     if (!checklistVerified) {
       console.warn('[approveCcRelocation] Cannot approve without checklist verification (ISO 9001 Clause 7.5.3).');
       return state;
@@ -3327,7 +3333,7 @@ export const createControlledCopySlice = (set, get) => ({
    * rejectCcRelocation
    * DCC Admin rejects a relocation request. Reverts copy status to ISSUED_ACTIVE.
    */
-  rejectCcRelocation: (taskId, { rejectReason = '' } = {}) => set((state) => {
+  rejectCcRelocation: (taskId, { rejectReason = '' } = {}) => isApiMode ? apiCopies.call('decideCopyRequest', taskId, 'REJECT', { rejectReason }) : set((state) => {
     const task = (state.tasks || []).find(t => t.id === taskId);
     if (!task) { console.warn(`[rejectCcRelocation] Task ${taskId} not found.`); return state; }
 
@@ -3398,7 +3404,7 @@ export const createControlledCopySlice = (set, get) => ({
    * DCC Admin approves a return/decommission request. Requires checklistVerified === true.
    * Sets copy status to RECALLED (archived, removed from active station inventory).
    */
-  approveCcReturn: (taskId, { dispositionMethod = 'ARCHIVE', witnessName = '', notes = '', checklistVerified = false } = {}) => set((state) => {
+  approveCcReturn: (taskId, { dispositionMethod = 'ARCHIVE', witnessName = '', notes = '', checklistVerified = false } = {}) => isApiMode ? (checklistVerified && apiCopies.call('decideCopyRequest', taskId, 'APPROVE', { notes, dispositionMethod, witnessName })) : set((state) => {
     if (!checklistVerified) {
       console.warn('[approveCcReturn] Cannot approve without checklist verification (ISO 9001 Clause 7.5.3).');
       return state;
@@ -3482,7 +3488,7 @@ export const createControlledCopySlice = (set, get) => ({
    * rejectCcReturn
    * DCC Admin rejects a return request. Reverts copy status to ISSUED_ACTIVE.
    */
-  rejectCcReturn: (taskId, { rejectReason = '' } = {}) => set((state) => {
+  rejectCcReturn: (taskId, { rejectReason = '' } = {}) => isApiMode ? apiCopies.call('decideCopyRequest', taskId, 'REJECT', { rejectReason }) : set((state) => {
     const task = (state.tasks || []).find(t => t.id === taskId);
     if (!task) { console.warn(`[rejectCcReturn] Task ${taskId} not found.`); return state; }
 

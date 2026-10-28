@@ -34,10 +34,10 @@ const ReturnCopyModal = ({ isOpen, onClose, copy }) => {
     if (!canSubmit) return;
     setIsSubmitting(true);
     try {
-      requestCcReturn(copy.id, {
+      if ((await requestCcReturn(copy.id, {
         reason: reason.trim(),
         returnDate: returnDate || defaultDate
-      });
+      })) === false) return;
       toast.success(
         `ส่งคำขอส่งคืน ${docCode} Copy ${rawNo} ถึง DCC แล้ว`,
         { duration: 4000, icon: '↩️' }

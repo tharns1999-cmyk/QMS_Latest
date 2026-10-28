@@ -44,6 +44,8 @@ import { extractDeptCode } from '../../services/darService';
 export const TAB_GENERAL = 'GENERAL';
 export const TAB_MY_DEPT = 'MY_DEPT';
 export const TAB_DISTRIBUTED = 'DISTRIBUTED';
+// DCC only: the whole register, every department and every status (ISO 9001 7.5.3).
+export const TAB_ALL_DEPTS = 'ALL_DEPTS';
 
 export const filterDocumentsByScope = (documents, selectedScope, currentUser) => {
   const userDept = currentUser?.department || 'DC';
@@ -101,7 +103,11 @@ const Library = () => {
     currentUser?.role === 'DCC_STAFF'
   );
 
-  const [activeTab, setActiveTab] = useState(TAB_MY_DEPT);
+  const [chosenTab, setActiveTab] = useState(isDccUser ? TAB_ALL_DEPTS : TAB_MY_DEPT);
+  // Derived, so a non-DCC user can never be left on the DCC tab (e.g. after the signed-in user changes).
+  const activeTab = chosenTab === TAB_ALL_DEPTS && !isDccUser ? TAB_MY_DEPT : chosenTab;
+  // Only these tabs offer the Active / Superseded / Obsolete sub-tabs; the reader tabs show effective documents only.
+  const showsStatusTabs = activeTab === TAB_MY_DEPT || activeTab === 'dept' || activeTab === TAB_ALL_DEPTS;
   const [searchTerm, setSearchTerm] = useState('');
   const [filterDept, setFilterDept] = useState('');
   const [filterType, setFilterType] = useState('');
@@ -169,9 +175,6 @@ const Library = () => {
     const s2 = normalizeDept(d2);
     if (!s1 || !s2) return false;
     if (s1 === s2) return true;
-    const isQa1 = s1 === 'QA' || s1 === 'QA/QC' || s1 === 'QAQC' || s1 === 'QC';
-    const isQa2 = s2 === 'QA' || s2 === 'QA/QC' || s2 === 'QAQC' || s2 === 'QC';
-    if (isQa1 && isQa2) return true;
     return false;
   };
 
@@ -249,15 +252,9 @@ const Library = () => {
   };
 
   const isOwnerDept = useCallback((doc) => {
-    // DCC controls the whole register (ISO 7.5.3): every dept's non-general doc belongs in "My Dept"
-    if (isDccUser) {
-      const docScope = (doc.access_control?.scope || doc.access_scope || doc.scope || 'GENERAL').toUpperCase();
-      const isGeneralScope = docScope === 'GENERAL' || docScope === 'PUBLIC' || doc.access_level === 'PUBLIC' || doc.is_public === true || !doc.department;
-      if (!isGeneralScope) return true;
-    }
     const docDept = doc.owner_dept || doc.department || doc.dept_code || doc.dept || extractDeptCode(doc.code || doc.docNo || doc.doc_code || doc.document_code);
     return isSameDept(userDistinctDepts, docDept);
-  }, [userDistinctDepts, isDccUser]);
+  }, [userDistinctDepts]);
 
   const hasDistributedCopyToUserDept = useCallback((doc) => {
     // 🛡️ Strict Cross-Department Distribution Rule: Exclude own department documents
@@ -456,6 +453,8 @@ const Library = () => {
     };
   }, [statusScopeDocs, countDistinctDocuments]);
 
+  const allDeptsDocsCount = countDistinctDocuments(accessibleDocs.filter(d => matchesStatusTab(d.status, 'EFFECTIVE', d)));
+
   // Compute counts per department for Quick-Pill badges in "เอกสารในแผนกฉัน" (นับเฉพาะ ACTIVE เช่นกัน)
   const _deptCounts = useMemo(() => {
     const counts = {};
@@ -474,7 +473,7 @@ const Library = () => {
       // 1. กรองตามสถานะ:
       // - ในแท็บ "เอกสารในแผนกฉัน" กรองตาม Sub-tabs (EFFECTIVE, SUPERSEDED, OBSOLETE, ALL)
       // - ในแท็บ "เอกสารทั่วไป" และ "เอกสารที่ได้รับการแจกจ่าย" ห้ามแสดง Sub-tabs และล็อกแสดงเฉพาะเอกสารที่มีผลบังคับใช้ (EFFECTIVE / ACTIVE)
-      const effectiveStatusFilter = (activeTab === TAB_MY_DEPT || activeTab === 'dept') ? filterStatus : 'EFFECTIVE';
+      const effectiveStatusFilter = showsStatusTabs ? filterStatus : 'EFFECTIVE';
       if (!matchesStatusTab(doc.status, effectiveStatusFilter, doc)) return false;
 
       // 2. กรองตามประเภทเอกสาร
@@ -516,7 +515,7 @@ const Library = () => {
     });
 
     // การันตี 100%: ในแท็บ "มีผลบังคับใช้ (Active)" 1 รหัสเอกสาร ต้องปรากฏเพียง 1 แถวเท่านั้น (เลือก Revision ล่าสุด)
-    const currentStatusScope = (activeTab === TAB_MY_DEPT || activeTab === 'dept') ? filterStatus : 'EFFECTIVE';
+    const currentStatusScope = showsStatusTabs ? filterStatus : 'EFFECTIVE';
     if (currentStatusScope === 'EFFECTIVE' || currentStatusScope === 'ACTIVE') {
       const activeByCode = new Map();
       rawList.forEach(doc => {
@@ -550,7 +549,7 @@ const Library = () => {
     }
 
     return rawList;
-  }, [baseDocs, filterStatus, filterType, filterDept, activeTab, searchTerm, filterAccessScope, filterStandard, filterDate, resolveDocCodeKey]);
+  }, [baseDocs, filterStatus, filterType, filterDept, activeTab, showsStatusTabs, searchTerm, filterAccessScope, filterStandard, filterDate, resolveDocCodeKey]);
 
   // Grouped Stacking for Superseded and Obsolete tabs (1 Document Code = 1 Row)
   const isGroupedView = filterStatus === 'SUPERSEDED' || filterStatus === 'OBSOLETE';
@@ -1122,7 +1121,7 @@ const Library = () => {
 
   const handleSelectTab = (tab) => {
     setActiveTab(tab);
-    if (tab !== TAB_MY_DEPT && tab !== 'dept') {
+    if (tab !== TAB_MY_DEPT && tab !== 'dept' && tab !== TAB_ALL_DEPTS) {
       setFilterStatus('EFFECTIVE');
     }
   };
@@ -1932,6 +1931,28 @@ const Library = () => {
 
           {/* 3 Scope Tabs: Minimal Segmented Pills */}
           <div className="flex items-center gap-1 p-1 bg-slate-100/90 rounded-lg overflow-x-auto shrink-0 text-xs">
+            {isDccUser && (
+              <button
+                type="button"
+                title="ทะเบียนเอกสารทุกแผนก ทุกสถานะ (เฉพาะ DCC)"
+                aria-label="ทุกแผนก (DCC)"
+                onClick={() => handleSelectTab(TAB_ALL_DEPTS)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-semibold transition-all cursor-pointer whitespace-nowrap ${
+                  activeTab === TAB_ALL_DEPTS
+                    ? 'bg-white text-slate-900 border border-slate-200/80 shadow-2xs font-bold'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/50 border border-transparent'
+                }`}
+              >
+                <Layers size={13} className={activeTab === TAB_ALL_DEPTS ? 'text-blue-600' : 'text-slate-400'} />
+                <span>ทุกแผนก (DCC)</span>
+                <span className={`px-1.5 py-0.2 rounded-full text-[11px] font-mono font-bold ${
+                  activeTab === TAB_ALL_DEPTS ? 'bg-blue-50 text-blue-700 border border-blue-200/80' : 'bg-slate-200/80 text-slate-600'
+                }`}>
+                  {allDeptsDocsCount}
+                </span>
+              </button>
+            )}
+
             {/* Tab 1: เอกสารทั่วไป */}
             <button
               type="button"
@@ -2080,7 +2101,7 @@ const Library = () => {
             </div>
 
             {/* Active Pill Badge (Inline Filter Chip) for General / Distributed tabs */}
-            {activeTab !== TAB_MY_DEPT && activeTab !== 'dept' && (
+            {!showsStatusTabs && (
               <span className="shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all border shadow-xs bg-emerald-50 text-emerald-800 border-emerald-300">
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                 <span>เฉพาะฉบับบังคับใช้</span>
@@ -2103,7 +2124,7 @@ const Library = () => {
 
 
           {/* Universal Status Tabs (เฉพาะในเมนู "เอกสารในแผนกฉัน" เท่านั้น) */}
-          {(activeTab === TAB_MY_DEPT || activeTab === 'dept') && (
+          {showsStatusTabs && (
             <div className="pt-2.5 border-t border-[#F1F5F9] flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 text-xs">
               {/* Responsive Scrollable & Wrap Capsule Pill Container */}
               <div className="w-full sm:w-auto overflow-x-auto scrollbar-hide py-0.5">
@@ -2155,7 +2176,7 @@ const Library = () => {
           )}
 
           {/* Status Count for General & Distributed Tabs */}
-          {activeTab !== TAB_MY_DEPT && activeTab !== 'dept' && (
+          {!showsStatusTabs && (
             <div className="pt-1.5 border-t border-slate-100 flex items-center justify-between gap-2 text-[11px] text-slate-500">
               <div>
                 {(filterType !== 'ALL' && filterType !== '') || (filterDept !== 'ALL' && filterDept !== '') || (filterStandard !== 'ALL' && filterStandard !== '') || searchTerm || (filterAccessScope !== '' && filterAccessScope !== 'ALL') ? (
@@ -2196,10 +2217,10 @@ const Library = () => {
       {replacementInstance && (
         <ReplacementModal
           isOpen={!!replacementInstance}
-          onClose={(success, type, reason) => {
+          onClose={async (success, type, reason) => {
             if (success && type && reason) {
               try {
-                reportCcDamagedLost(replacementInstance.id, type, reason);
+                if ((await reportCcDamagedLost(replacementInstance.id, type, reason)) === false) return;
                 toast.success('ยื่นคำร้องขอสำเนาทดแทนเรียบร้อยแล้ว กรุณารอเจ้าหน้าที่ DCC จัดพิมพ์และส่งมอบ');
                 setReplacementInstance(null);
               } catch (err) {

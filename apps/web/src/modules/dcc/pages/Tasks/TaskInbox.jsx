@@ -31,6 +31,7 @@ import ExternalDocActionModal from './ExternalDocActionModal';
 import PeriodicReviewApprovalModal from './PeriodicReviewApprovalModal';
 import ExternalDocFormModal from '../ExternalDocs/ExternalDocFormModal';
 import TaskConfirmHardcopyReceiptModal from '../../components/workflow/TaskConfirmHardcopyReceiptModal';
+import { isApiMode } from '../../../../api/client';
 import DccCustodyActionModal from '../../components/modals/DccCustodyActionModal';
 import { ErrorBoundary } from '../../../../shared/components/ErrorBoundary';
 import { TablePagination } from '../../../../shared/components/common/TablePagination';
@@ -38,6 +39,7 @@ import { useTablePagination } from '../../../../shared/hooks/useTablePagination'
 import { isActionableTask, isSameDepartment, isDccAdmin, isDccExclusiveTask, isLevel6Plus, isReceiptTask, userMatchesDepartment, normalizeCanonicalDept } from '../../utils/taskFilter';
 import { getDeptNameTh } from '../../config/qmsRegistry';
 import { getDeptBadgeStyle } from '../../../../shared/utils/departmentColors';
+import { formatDarNumber } from '../../utils/darNumberGenerator';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Date Formatter (null-safe)
@@ -153,7 +155,7 @@ export const getDocumentIdentifier = (task, storeContext = {}, matchedDar = null
 
   // 4. Extract standard doc code pattern from title (e.g. SOP-PD-01, WI-WH-002)
   const titleMatch = String(task.title || '').match(
-    /\b([A-Z]{1,5}-[A-Z]{1,5}-\d{2,4}(?:-\d{1,3})?)\b/
+    /\b([A-Z]{1,5}-[A-Z&]{1,6}-\d{2,4}(?:-\d{1,3})?)\b/
   );
   if (titleMatch) return titleMatch[1];
 
@@ -552,12 +554,12 @@ export const resolveReasonSnippet = (task, matchedDar) => {
 // Helper: Resolve Monospace DAR ID
 // ─────────────────────────────────────────────────────────────────────────────
 export const resolveDarIdentifier = (task, matchedDar) => {
-  if (matchedDar?.darNo) return matchedDar.darNo;
-  if (matchedDar?.darNumber) return matchedDar.darNumber;
-  if (task?.darNo) return task.darNo;
-  if (task?.darId && String(task.darId).startsWith('DAR-')) return task.darId;
-  if (task?.referenceType === 'INTERNAL_DAR' && task.referenceId && String(task.referenceId).startsWith('DAR-')) return task.referenceId;
-  if (task?.metadata?.darNo) return task.metadata.darNo;
+  if (matchedDar?.darNo) return formatDarNumber(matchedDar.darNo);
+  if (matchedDar?.darNumber) return formatDarNumber(matchedDar.darNumber);
+  if (task?.darNo) return formatDarNumber(task.darNo);
+  if (task?.darId && String(task.darId).startsWith('DAR-')) return formatDarNumber(task.darId);
+  if (task?.referenceType === 'INTERNAL_DAR' && task.referenceId && String(task.referenceId).startsWith('DAR-')) return formatDarNumber(task.referenceId);
+  if (task?.metadata?.darNo) return formatDarNumber(task.metadata.darNo);
   return null;
 };
 
@@ -877,13 +879,11 @@ const TaskInbox = () => {
     
     const tDept = resolveTaskDept(task);
 
-    if (isDirectAssignee) {
-      if (!targetDept || targetDept === 'ALL') return true;
-      return isSameDepartment(tDept, targetDept) || isSameDepartment(currentUser?.department, targetDept) || isSameDepartment(currentUser?.primary_department, targetDept);
-    }
-
     if (!targetDept || targetDept === 'ALL') return true;
-    return isSameDepartment(tDept, targetDept);
+    if (isSameDepartment(tDept, targetDept)) return true;
+    // A task with no department of its own falls under the assignee's department, so it is not lost.
+    // One that has a department is counted there only: a QMR's QC tasks are not also MGMT tasks.
+    return isDirectAssignee && !tDept && (isSameDepartment(currentUser?.department, targetDept) || isSameDepartment(currentUser?.primary_department, targetDept));
   }, [resolveTaskDept, currentUser]);
 
   const effectiveToday = useMemo(() => {
@@ -1084,7 +1084,7 @@ const TaskInbox = () => {
 
   const handleTaskClick = (task) => {
     const normType = (task.type || task.taskType || '').toUpperCase();
-    const isReceipt =
+    const isReceipt = task.referenceType !== 'INTERNAL_DAR' && (
       normType === 'DEPT_CONFIRM_HARDCOPY_RECEIPT' ||
       task.taskType === 'DEPT_CONFIRM_HARDCOPY_RECEIPT' ||
       normType === 'CONFIRM_RECEIPT' ||
@@ -1094,7 +1094,7 @@ const TaskInbox = () => {
       task.id?.includes('task-receipt-') ||
       task.title?.includes('ตรวจรับเล่ม') ||
       task.title?.includes('ตรวจรับสำเนา') ||
-      task.title?.includes('ตรวจรับเอกสาร');
+      task.title?.includes('ตรวจรับเอกสาร'));
 
     if (isReceipt) {
       setSelectedReceiptTask(task);
@@ -1140,6 +1140,11 @@ const TaskInbox = () => {
 
     if (task.referenceType === 'EXTERNAL_DOC' || task.origin === 'EXTERNAL') {
       // 🛡️ Phase 2: If task is EXTERNAL_REVISE, open ExternalDocFormModal in Resubmit mode
+      // API mode: the requester fixes a returned request on the revise page (the server keeps no draft).
+      if (isApiMode && (normType === 'EXTERNAL_REVISE' || normType === 'REVISE')) {
+        navigate(`/tasks/revise/${task.id}`);
+        return;
+      }
       if (normType === 'EXTERNAL_REVISE' || normType === 'REVISE') {
         const extDoc = (externalDocuments || []).find(d => d.id === task.referenceId || d.id === task.docId || (task.docCode && d.edCode === task.docCode)) ||
                        (externalRequests || []).find(r => r.id === task.referenceId || r.requestId === task.referenceId || r.docId === task.referenceId || r.externalDocId === task.referenceId || (task.docCode && r.edCode === task.docCode));
@@ -1154,6 +1159,11 @@ const TaskInbox = () => {
         }
       }
       setSelectedExtTask(task);
+      return;
+    }
+    // API mode: DCC publishes from the DAR page.
+    if (normType === 'DCC_PUBLISH') {
+      navigate(`/dar/${task.darId}`);
       return;
     }
     if (normType === 'CC_REPLACEMENT_APPROVAL') {
@@ -1303,11 +1313,7 @@ const TaskInbox = () => {
                 <button
                   key={dept}
                   type="button"
-                  aria-label={
-                    dept === 'QC'
-                      ? `QC ${deptCount} เฉพาะงาน QA เฉพาะงาน QC${isPrimary ? ' (แผนกหลัก)' : ''}`
-                      : `${dept} ${deptCount} เฉพาะงาน ${dept}${isPrimary ? ' (แผนกหลัก)' : ''}`
-                  }
+                  aria-label={`${dept} ${deptCount} เฉพาะงาน ${dept}${isPrimary ? ' (แผนกหลัก)' : ''}`}
                   onClick={() => setDeptFilter(dept)}
                   className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium transition-all whitespace-nowrap shrink-0 border cursor-pointer ${
                     isSelected

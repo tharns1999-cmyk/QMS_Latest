@@ -72,7 +72,7 @@ describe('Dashboard & Lean Refactor Verification', () => {
   it('normalizes raw department codes identically via shared normalizeDept', () => {
     expect(normalizeDept({ id: ' pd ' })).toBe('PD');
     expect(normalizeDept({ department: ' qc ' })).toBe('QC');
-    expect(normalizeDept('qa')).toBe('QC');
+    expect(normalizeDept('qa')).toBe('QA');
     expect(normalizeDept(null)).toBe('');
   });
 
@@ -94,12 +94,15 @@ describe('QA/QC Canonical Normalization, RBAC & Document Prefix Extraction', () 
     const docMiddlePrefix = { id: 'doc-1', code: 'WI-QC-01', department: '', access_control: { scope: 'DEPT_ONLY' } };
     const docLeadingPrefix = { id: 'doc-2', code: 'QC-WI-01', department: '', access_control: { scope: 'DEPT_ONLY' } };
 
-    for (const dept of ['QA', 'QC', 'QA/QC']) {
+    for (const dept of ['QC', 'QA/QC']) {
       const user = { id: `U-${dept}`, name: `Staff ${dept}`, department: dept, role: 'GENERAL_USER', level: 2 };
       expect(hasDocumentAccess(docMiddlePrefix, user)).toBe(true);
       expect(hasDocumentAccess(docLeadingPrefix, user)).toBe(true);
     }
 
+    // QA is a separate department from QC: it does not see QC's department-only documents.
+    const qaUser = { id: 'U-QA', name: 'Staff QA', department: 'QA', role: 'GENERAL_USER', level: 2 };
+    expect(hasDocumentAccess(docMiddlePrefix, qaUser)).toBe(false);
     const pdUser = { id: 'U-PD', name: 'Staff PD', department: 'PD', role: 'GENERAL_USER', level: 2 };
     expect(hasDocumentAccess(docMiddlePrefix, pdUser)).toBe(false);
     expect(hasDocumentAccess(docLeadingPrefix, pdUser)).toBe(false);
@@ -107,7 +110,7 @@ describe('QA/QC Canonical Normalization, RBAC & Document Prefix Extraction', () 
 
   it('Criterion 2: matches Level 5 QA / QA/QC Manager for QC document workflow and periodic review without falling back to QMR', () => {
     const requester = { id: 'U-REQ', name: 'QC Staff', department: 'QC', level: 2, status: 'ACTIVE' };
-    const qaManager = { id: 'U-QA-MGR', name: 'QA Manager', department: 'QA', level: 5, role: 'MANAGER', status: 'ACTIVE' };
+    const qaManager = { id: 'U-QA-MGR', name: 'QA Manager', department: 'QC', level: 5, role: 'MANAGER', status: 'ACTIVE' };
     const qmrUser = { id: 'U-QMR', name: 'QMR Exec', department: 'MGMT', level: 6, role: 'QMR', isQmr: true, status: 'ACTIVE' };
     const masterUsers = [requester, qaManager, qmrUser];
 
@@ -173,11 +176,12 @@ describe('QA/QC Canonical Normalization, RBAC & Document Prefix Extraction', () 
     expect(approvalTask?.assignee_id).toBe('U-QA-MGR');
   });
 
-  it('Criterion 3: normalizes QA, QA/QC, and QA Super to canonical QC and treats QA <-> QC as same department', () => {
-    expect(standardizeDepartmentCode('QA')).toBe('QC');
+  it('Criterion 3: normalizes QA/QC and QA Super to canonical QC, and keeps QA a separate department', () => {
+    expect(standardizeDepartmentCode('QA')).toBe('QA');
     expect(standardizeDepartmentCode('QA/QC')).toBe('QC');
     expect(normalizeCanonicalDept('QA Super')).toBe('QC');
-    expect(isSameDepartment('QA', 'QC')).toBe(true);
+    expect(isSameDepartment('QA', 'QC')).toBe(false);
+    expect(isSameDepartment('QA/QC', 'QC')).toBe(true);
   });
 
   it('Criterion 4: isolates SUPERSEDED edition files from Active Edition in resolveFileBlob and External Doc update lifecycle', async () => {

@@ -220,7 +220,7 @@ const RequestAdditionalCopiesModal = ({ isOpen, onClose, document: doc }) => {
     setSelectedLocations(prev => prev.filter((_, idx) => idx !== index));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (selectedLocations.length === 0) {
       toast.error('กรุณาเลือกจุดใช้งานใหม่อย่างน้อย 1 จุด');
@@ -267,7 +267,8 @@ const RequestAdditionalCopiesModal = ({ isOpen, onClose, document: doc }) => {
         reason: reason.trim()
       };
 
-      requestAdditionalControlledCopies(doc.id, enrichedLocations, reason.trim(), payload);
+      // In API mode the server may refuse (and has said why); the demo store always takes it.
+      if ((await requestAdditionalControlledCopies(doc.id, enrichedLocations, reason.trim(), payload)) === false) return;
       toast.success(`ส่งคำขอออกสำเนาเพิ่มเติม ${selectedLocations.length} เล่ม สำเร็จ! ส่งต่อให้ DCC ดำเนินการ`);
       onClose();
     } catch (err) {

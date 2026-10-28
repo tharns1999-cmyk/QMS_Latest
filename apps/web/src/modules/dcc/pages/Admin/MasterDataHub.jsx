@@ -39,12 +39,16 @@ import toast from 'react-hot-toast';
 import { TablePagination } from '../../../../shared/components/common/TablePagination';
 import { useTablePagination } from '../../../../shared/hooks/useTablePagination';
 import { generateCursiveSignatureDataUrl } from '../../utils/pdfStamper';
+import { isApiMode } from '../../../../api/client';
+import * as serverData from '../../../../api/masterData';
+import { PasswordNotice, SecurityTab } from './ApiMasterData';
 
 const MasterDataHub = () => {
   const navigate = useNavigate();
-  const { 
-    currentUser, 
-    masterUsers, 
+  const {
+    currentUser,
+    adminUsers,
+    masterUsers: storeMasterUsers,
     masterDepartments, 
     departments: storeDepts,
     documentTypes, 
@@ -81,6 +85,9 @@ const MasterDataHub = () => {
     seedComprehensiveQaMockData
   } = useStore();
 
+  // With a server, the list also holds closed and locked accounts, and users/departments/places/levels are saved there.
+  const masterUsers = isApiMode ? adminUsers : storeMasterUsers;
+  const [passwordNotice, setPasswordNotice] = useState(null);
   const [activeTab, setActiveTab] = useState('users'); // users, departments, docTypes, locations, security, sla
   const [isCleanSlateModalOpen, setIsCleanSlateModalOpen] = useState(false);
 
@@ -327,7 +334,7 @@ const MasterDataHub = () => {
         departments: affiliated,
         affiliated_departments: affiliated,
         position: user.position || '',
-        role: user.role || (user.isDcc ? 'DCC_ADMIN' : 'GENERAL_USER'),
+        role: user.isDcc ? 'DCC_ADMIN' : user.isQmr ? 'QMR' : (user.role || 'GENERAL_USER'),
         level: user.approval_level || user.level || 1,
         approval_level: user.approval_level || user.level || 1
       });
@@ -356,10 +363,26 @@ const MasterDataHub = () => {
     setIsUserModalOpen(true);
   };
 
-  const handleSaveUser = (e) => {
+  const handleSaveUser = async (e) => {
     e.preventDefault();
     if (!userFormData.name.trim()) {
       toast.error('กรุณาระบุชื่อ-นามสกุล');
+      return;
+    }
+
+    if (isApiMode) {
+      const form = {
+        ...userFormData,
+        department: userFormData.primary_department || userFormData.department,
+        depts: userFormData.depts,
+        approval_level: userFormData.approval_level || userFormData.level,
+        isDcc: userFormData.role === 'DCC_ADMIN',
+        isQmr: userFormData.role === 'QMR'
+      };
+      const result = editingUser ? await serverData.updateUser(editingUser.id, form) : await serverData.createUser(form);
+      if (!result) return;
+      setIsUserModalOpen(false);
+      if (!editingUser) setPasswordNotice({ name: form.name, email: form.email.trim().toLowerCase(), password: result.temporaryPassword });
       return;
     }
 
@@ -407,6 +430,11 @@ const MasterDataHub = () => {
   });
 
   const handleInitiateDeactivateDept = (dept) => {
+    if (isApiMode) {
+      // The server refuses while anyone still belongs to the department.
+      if (window.confirm(`ปิดแผนก ${dept.id}? ปิดได้เมื่อไม่มีผู้ใช้สังกัดอยู่`)) serverData.updateDepartment(dept.id, { status: 'INACTIVE' });
+      return;
+    }
     if (SYSTEM_CORE_DEPTS.includes(dept.id)) {
       toast.error(`แผนก "${dept.id}" เป็นแผนกหลักของระบบควบคุมคุณภาพ (Core Department) ไม่อนุญาตให้ระงับการใช้งาน`);
       return;
@@ -440,6 +468,10 @@ const MasterDataHub = () => {
   };
 
   const handleReactivateDept = (deptId) => {
+    if (isApiMode) {
+      serverData.updateDepartment(deptId, { status: 'ACTIVE' });
+      return;
+    }
     try {
       reactivateDepartment(deptId);
       toast.success(`เปิดใช้งานแผนก "${deptId}" อีกครั้งเรียบร้อยแล้ว`);
@@ -504,8 +536,22 @@ const MasterDataHub = () => {
     });
   };
 
-  const handleSaveDept = (e) => {
+  const handleSaveDept = async (e) => {
     if (e && e.preventDefault) e.preventDefault();
+    if (isApiMode) {
+      const code = (deptFormData.id || '').toString().trim().toUpperCase();
+      const nameTh = (deptFormData.nameTh || '').toString().trim();
+      if (!code || !nameTh) {
+        toast.error('กรุณากรอกรหัสแผนกและชื่อภาษาไทย');
+        return;
+      }
+      const nameEn = (deptFormData.nameEn || '').toString().trim();
+      const saved = editingDept
+        ? await serverData.updateDepartment(editingDept.oldCode || editingDept.id, { name_th: nameTh, name_en: nameEn })
+        : await serverData.createDepartment({ code, nameTh, nameEn });
+      if (saved) handleCloseDeptModal();
+      return;
+    }
     try {
       const currentDeptId = (editingDept?.id || editingDept?.code || editingDept?.deptCode || editingDept?.oldCode || '').toString().trim().toUpperCase();
       const newCode = (deptFormData.id || deptFormData.code || deptFormData.deptCode || '').toString().trim().toUpperCase();
@@ -631,6 +677,7 @@ const MasterDataHub = () => {
         addDocumentType(payload);
         toast.success(`เพิ่มประเภทเอกสาร "${payload.code}" เรียบร้อยแล้ว`);
       }
+      if (isApiMode) serverData.saveDocumentTypes(useStore.getState().documentTypes);
       setIsTypeModalOpen(false);
     } catch (err) {
       toast.error(err.message || 'เกิดข้อผิดพลาด');
@@ -695,10 +742,18 @@ const MasterDataHub = () => {
     setIsLocModalOpen(true);
   };
 
-  const handleSaveLoc = (e) => {
+  const handleSaveLoc = async (e) => {
     e.preventDefault();
     if (!locFormData.name.trim() || !locFormData.departmentId) {
       toast.error('กรุณาระบุชื่อสถานีปฏิบัติงานและเลือกแผนก');
+      return;
+    }
+
+    if (isApiMode) {
+      const saved = editingLoc
+        ? await serverData.updateLocation(editingLoc.id, { name: locFormData.name, description: locFormData.description, is_master: Boolean(locFormData.isMasterOffice) })
+        : await serverData.createLocation({ department: locFormData.departmentId, name: locFormData.name, description: locFormData.description, is_master: Boolean(locFormData.isMasterOffice) });
+      if (saved) setIsLocModalOpen(false);
       return;
     }
 
@@ -717,6 +772,11 @@ const MasterDataHub = () => {
   };
 
   const handleDeleteLoc = (locId) => {
+    if (isApiMode) {
+      // Copies already issued remember their place, so the server keeps it and it is closed instead.
+      serverData.updateLocation(locId, { status: 'INACTIVE' });
+      return;
+    }
     try {
       deleteDistributionLocation(locId);
       toast.success('ลบจุดใช้งานเรียบร้อยแล้ว');
@@ -844,7 +904,12 @@ const MasterDataHub = () => {
         signatureImage: finalSigImage || signatureFormData.signatureImage,
         signatureType: signatureActiveTab
       });
-      toast.success(`บันทึกสินทรัพย์ลายเซ็นของ "${selectedUserForSignature.name}" เรียบร้อยแล้ว`);
+      if (isApiMode) {
+        const saved = await serverData.saveSignature(selectedUserForSignature.id, { ...signatureFormData, signatureType: signatureActiveTab, signatureImage: finalSigImage || signatureFormData.signatureImage });
+        if (!saved) return;
+      } else {
+        toast.success(`บันทึกสินทรัพย์ลายเซ็นของ "${selectedUserForSignature.name}" เรียบร้อยแล้ว`);
+      }
       setIsSignatureModalOpen(false);
     } catch (err) {
       toast.error(err.message || 'เกิดข้อผิดพลาดในการบันทึกลายเซ็น');
@@ -888,6 +953,16 @@ const MasterDataHub = () => {
       toast.error('ระดับผู้อนุมัติขั้นสุดท้าย (Approver Level) ต้องไม่ต่ำกว่าระดับผู้ทบทวน (Reviewer Level)');
       return;
     }
+    if (isApiMode) {
+      const current = (approvalMatrix || []).find((m) => m.doc_type === matrixFormData.docType);
+      serverData.saveMatrixEntry(matrixFormData.docType, {
+        min_requester_level: matrixFormData.minRequesterLevel,
+        required_reviewer_level: matrixFormData.requiredReviewerLevel,
+        required_approver_level: matrixFormData.requiredApproverLevel,
+        obsolete_approver_level: current?.obsolete_approver_level ?? null
+      }).then((saved) => saved && setIsMatrixModalOpen(false));
+      return;
+    }
     updateApprovalMatrixEntry(matrixFormData.docType, matrixFormData);
     toast.success(`อัปเดตสายการอนุมัติสำหรับ ${matrixFormData.docType} เรียบร้อยแล้ว`);
     setIsMatrixModalOpen(false);
@@ -896,6 +971,10 @@ const MasterDataHub = () => {
   const handleSaveAllSlaAndMatrix = (e) => {
     e.preventDefault();
     updateSlaSettings(slaForm);
+    if (isApiMode) {
+      serverData.saveSla(Object.fromEntries(Object.entries(slaForm).map(([k, v]) => [k, Number(v)])));
+      return;
+    }
     toast.success('บันทึกการตั้งค่าสายการอนุมัติและ SLAs เรียบร้อยแล้ว');
   };
 
@@ -945,6 +1024,7 @@ const MasterDataHub = () => {
         </div>
 
         <div className="flex items-center gap-1.5 shrink-0">
+          {!isApiMode && (<>
           <button
             type="button"
             onClick={() => {
@@ -967,6 +1047,7 @@ const MasterDataHub = () => {
             <RotateCcw size={12} className="text-rose-600" />
             <span className="hidden md:inline">Clean Slate</span>
           </button>
+          </>)}
 
           <div className="h-4 w-px bg-slate-200 mx-1 hidden sm:block" />
 
@@ -984,7 +1065,8 @@ const MasterDataHub = () => {
           { id: 'departments', label: 'แผนก (Departments)', legacyLabel: '2. แผนกและโครงสร้าง', icon: Building2, count: departmentsList.length },
           { id: 'docTypes', label: 'ประเภทเอกสาร (Doc Types)', legacyLabel: '3. ประเภทเอกสารและรหัส', icon: FileCode, count: (documentTypes || []).length },
           { id: 'locations', label: 'จุดใช้งาน (Stations)', legacyLabel: '4. จุดใช้งานและไลน์ผลิต', icon: MapPin, count: (distributionLocations || []).length },
-          { id: 'sla', label: 'สายอนุมัติ & SLA', legacyLabel: '5. สายการอนุมัติและ SLAs', icon: Clock }
+          { id: 'sla', label: 'สายอนุมัติ & SLA', legacyLabel: '5. สายการอนุมัติและ SLAs', icon: Clock },
+          ...(isApiMode ? [{ id: 'security', label: 'ความปลอดภัย (2FA)', icon: ShieldCheck }] : [])
         ].map(tab => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -1015,6 +1097,8 @@ const MasterDataHub = () => {
 
       {/* Content Container */}
       <div className="w-full max-w-full overflow-hidden">
+        {isApiMode && activeTab === 'security' && <SecurityTab />}
+        {passwordNotice && <PasswordNotice notice={passwordNotice} onClose={() => setPasswordNotice(null)} />}
         {/* ================= TAB 1: USERS & ROLES ================= */}
         {activeTab === 'users' && (
           <div className="space-y-3">
@@ -1137,7 +1221,9 @@ const MasterDataHub = () => {
                         </td>
                         <td className="py-2 px-3 text-center whitespace-nowrap">
                           <button
-                            onClick={() => toggleUserStatus(user.id)}
+                            onClick={() => (isApiMode
+                              ? (user.id !== currentUser?.id || user.status !== 'ACTIVE') && serverData.setUserStatus(user.id, user.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE')
+                              : toggleUserStatus(user.id))}
                             className={`px-2 py-0.5 rounded-full text-[11px] font-medium cursor-pointer transition-colors ${
                               user.status === 'ACTIVE'
                                 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100'
@@ -1171,7 +1257,13 @@ const MasterDataHub = () => {
                               <Edit size={13} />
                             </button>
                             <button
-                              onClick={() => {
+                              onClick={async () => {
+                                if (isApiMode) {
+                                  if (!window.confirm(`รีเซ็ตรหัสผ่านของ ${user.name}? รหัสเดิมและการเข้าระบบอยู่ตอนนี้จะใช้ไม่ได้`)) return;
+                                  const result = await serverData.resetUserPassword(user.id);
+                                  if (result) setPasswordNotice({ name: user.name, email: user.email, password: result.temporaryPassword });
+                                  return;
+                                }
                                 resetUserPassword(user.id);
                                 toast.success(`รีเซ็ตรหัสผ่านของ ${user.name} เรียบร้อยแล้ว`);
                               }}
@@ -1180,9 +1272,19 @@ const MasterDataHub = () => {
                             >
                               <RotateCcw size={13} />
                             </button>
+                            {isApiMode && user.twoFactorEnabled && (
+                              <button
+                                onClick={() => window.confirm(`รีเซ็ตการยืนยันสองขั้นตอนของ ${user.name}? เขาจะถูกออกจากระบบและต้องตั้งค่าใหม่`) && serverData.resetUserTwoFactor(user.id)}
+                                className="h-7 px-1.5 rounded hover:bg-amber-50 text-[11px] font-semibold text-amber-700 transition-colors"
+                                title="รีเซ็ตการยืนยันสองขั้นตอน (2FA)"
+                              >
+                                2FA
+                              </button>
+                            )}
                             {user.isLocked && (
                               <button
                                 onClick={() => {
+                                  if (isApiMode) { serverData.setUserStatus(user.id, 'ACTIVE'); return; }
                                   unlockUserAccount(user.id);
                                   toast.success(`ปลดล็อกบัญชี ${user.name} เรียบร้อยแล้ว`);
                                 }}
@@ -1474,7 +1576,10 @@ const MasterDataHub = () => {
                         </td>
                         <td className="py-2 px-3 text-center whitespace-nowrap">
                           <button
-                            onClick={() => toggleDocumentTypeStatus(type.code || type.id)}
+                            onClick={() => {
+                              toggleDocumentTypeStatus(type.code || type.id);
+                              if (isApiMode) serverData.saveDocumentTypes(useStore.getState().documentTypes);
+                            }}
                             className={`px-2 py-0.5 rounded-full text-[11px] font-medium cursor-pointer transition-colors ${
                               type.status !== 'INACTIVE'
                                 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
@@ -1756,7 +1861,9 @@ const MasterDataHub = () => {
                           </td>
                           <td className="py-2 px-3 text-center whitespace-nowrap">
                             <button
-                              onClick={() => toggleLocationStatus(loc.id)}
+                              onClick={() => (isApiMode
+                                ? serverData.updateLocation(loc.id, { status: loc.status === 'INACTIVE' ? 'ACTIVE' : 'INACTIVE' })
+                                : toggleLocationStatus(loc.id))}
                               className={`px-2 py-0.5 rounded-full text-[11px] font-medium cursor-pointer transition-colors ${
                                 loc.status !== 'INACTIVE'
                                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
@@ -2249,8 +2356,8 @@ const MasterDataHub = () => {
                 {/* Selected Departments Tag Tray */}
                 <div className="flex flex-wrap items-center gap-1.5 min-h-[40px] p-2 bg-white border border-slate-200 rounded-lg">
                   {(userFormData.affiliated_departments || []).map((deptCode) => {
-                    const normDeptCode = (deptCode === 'QA/QC' || deptCode === 'QA') ? 'QC' : normalizeDepartmentId(deptCode);
-                    const currentPrimary = (userFormData.primary_department === 'QA/QC' || userFormData.primary_department === 'QA') ? 'QC' : (userFormData.primary_department || userFormData.department);
+                    const normDeptCode = (deptCode === 'QA/QC') ? 'QC' : normalizeDepartmentId(deptCode);
+                    const currentPrimary = (userFormData.primary_department === 'QA/QC') ? 'QC' : (userFormData.primary_department || userFormData.department);
                     const isPrimary = normDeptCode === currentPrimary || normalizeDepartmentId(deptCode) === normalizeDepartmentId(currentPrimary);
                     const deptObj = departmentsList.find(d => d.id === normDeptCode || normalizeDepartmentId(d.id) === normalizeDepartmentId(deptCode));
                     const displayCode = normDeptCode === 'QA/QC' ? 'QC' : normDeptCode;
@@ -2273,7 +2380,7 @@ const MasterDataHub = () => {
                           <button
                             type="button"
                             onClick={() => {
-                              const cleanDept = (deptCode === 'QA/QC' || deptCode === 'QA') ? 'QC' : deptCode;
+                              const cleanDept = (deptCode === 'QA/QC') ? 'QC' : deptCode;
                               setUserFormData(prev => ({
                                 ...prev,
                                 primary_department: cleanDept,
@@ -2330,7 +2437,7 @@ const MasterDataHub = () => {
                     onChange={(e) => {
                       const selected = e.target.value;
                       if (!selected) return;
-                      const cleanSelected = (selected === 'QA/QC' || selected === 'QA') ? 'QC' : selected;
+                      const cleanSelected = (selected === 'QA/QC') ? 'QC' : selected;
                       const current = userFormData.affiliated_departments || [];
                       const hasSelected = current.some(c => c === cleanSelected || ((c === 'QC' || c === 'QA/QC') && (cleanSelected === 'QC' || cleanSelected === 'QA/QC')));
                       if (!hasSelected) {
@@ -2350,19 +2457,19 @@ const MasterDataHub = () => {
                     <option value="" disabled>+ เลือกเพิ่มแผนกที่สังกัดร่วม...</option>
                     {departmentsList
                       .filter(d => {
-                        const dCode = (d.id === 'QA/QC' || d.id === 'QA') ? 'QC' : d.id;
-                        const primaryCode = (userFormData.primary_department === 'QA/QC' || userFormData.primary_department === 'QA')
+                        const dCode = (d.id === 'QA/QC') ? 'QC' : d.id;
+                        const primaryCode = (userFormData.primary_department === 'QA/QC')
                           ? 'QC'
                           : (userFormData.primary_department || userFormData.department);
                         // Exclude primary department
                         if (dCode === primaryCode) return false;
                         // Exclude if already in affiliated_departments
-                        const affCodes = (userFormData.affiliated_departments || []).map(a => (a === 'QA/QC' || a === 'QA') ? 'QC' : a);
+                        const affCodes = (userFormData.affiliated_departments || []).map(a => (a === 'QA/QC') ? 'QC' : a);
                         if (affCodes.includes(dCode)) return false;
                         return true;
                       })
                       .map(d => {
-                        const dCode = (d.id === 'QA/QC' || d.id === 'QA') ? 'QC' : d.id;
+                        const dCode = (d.id === 'QA/QC') ? 'QC' : d.id;
                         return (
                           <option key={d.id} value={dCode}>
                             + เพิ่ม: {dCode} ({d.nameTh || d.name})

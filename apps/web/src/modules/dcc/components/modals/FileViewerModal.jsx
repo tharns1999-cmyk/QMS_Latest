@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Download, FileText, Image as ImageIcon } from 'lucide-react';
 import { getFile } from '../../utils/fileStorage';
+import { apiBlob } from '../../../../api/client';
 import toast from 'react-hot-toast';
 
 const FileViewerModal = ({ isOpen, onClose, attachedFile }) => {
@@ -9,9 +10,9 @@ const FileViewerModal = ({ isOpen, onClose, attachedFile }) => {
 
   useEffect(() => {
     let activeUrl = null;
-    if (isOpen && attachedFile?.fileId) {
+    if (isOpen && (attachedFile?.fileId || attachedFile?.apiFilePath)) {
       setLoading(true);
-      getFile(attachedFile.fileId)
+      (attachedFile.apiFilePath ? apiBlob(attachedFile.apiFilePath) : getFile(attachedFile.fileId))
         .then((fileOrBlob) => {
           if (fileOrBlob) {
             activeUrl = URL.createObjectURL(fileOrBlob);

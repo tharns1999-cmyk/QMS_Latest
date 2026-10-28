@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { isApiMode } from '../../../../api/client';
+import { submitExternalToApi, resubmitExternalToApi } from '../../../../api/external';
 import useStore, { generateNextEdrNumber } from '../../../../store/useStore';
 import { X, Upload, Save, AlertCircle, FileText, CheckCircle2, Shield, Building2, Tag, Layers, Printer } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -320,12 +322,32 @@ const ExternalDocFormModal = ({ isOpen, onClose, documentToEdit = null, resubmit
     });
   };
 
-  const handleFileChange = (e) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      setFileName(file.name);
-      setFileBlob(file);
+  const [isDraggingFile, setIsDraggingFile] = useState(false);
+
+  const acceptFile = (file) => {
+    if (!file) return;
+    if (!/\.pdf$/i.test(file.name) && file.type !== 'application/pdf') {
+      toast.error('รองรับไฟล์ .PDF เท่านั้น');
+      return;
     }
+    if (file.size > 25 * 1024 * 1024) {
+      toast.error('ไฟล์ต้องมีขนาดไม่เกิน 25 MB');
+      return;
+    }
+    setFileName(file.name);
+    setFileBlob(file);
+  };
+
+  const handleFileChange = (e) => {
+    acceptFile(e.target.files?.[0]);
+    // Lets the same file be picked again after it was removed.
+    e.target.value = '';
+  };
+
+  const handleFileDrop = (e) => {
+    e.preventDefault();
+    setIsDraggingFile(false);
+    acceptFile(e.dataTransfer?.files?.[0]);
   };
 
   const handleRemoveFile = (e) => {
@@ -476,6 +498,24 @@ const ExternalDocFormModal = ({ isOpen, onClose, documentToEdit = null, resubmit
       }
     }
 
+    // API mode: the server numbers the document, routes it to the named signers and keeps the PDF.
+    if (isApiMode && isResubmit && documentToEdit?.darId) {
+      const ok = await resubmitExternalToApi({ payload: payloadToSubmit, fileBlob, darId: documentToEdit.darId });
+      if (!ok) return;
+      toast.success(`ส่งคำร้องเอกสารภายนอก ${previewEdCode} อีกครั้งเรียบร้อยแล้ว`);
+      setShowConfirmModal(false);
+      onClose();
+      return;
+    }
+    if (isApiMode) {
+      const created = await submitExternalToApi({ payload: payloadToSubmit, fileBlob, documentToEdit });
+      if (!created) return;
+      toast.success(documentToEdit ? `ส่งคำขอปรับปรุงเอกสาร ${created.doc_code} สำเร็จ` : `ลงทะเบียนเอกสารภายนอก ${created.doc_code} เรียบร้อยแล้ว`);
+      setShowConfirmModal(false);
+      onClose();
+      return;
+    }
+
     let attachedFile = null;
     const editionKey = String(payloadToSubmit.sourceVersion || payloadToSubmit.edition || '1.0').trim();
     if (fileBlob) {
@@ -608,7 +648,7 @@ const ExternalDocFormModal = ({ isOpen, onClose, documentToEdit = null, resubmit
                   <div className="flex items-center gap-2.5 flex-wrap">
                     <h2 className="text-slate-900 font-bold text-base sm:text-lg tracking-tight">
                       {isResubmit 
-                        ? 'แก้ไขคำร้องเอกสารภายนอก (Revise External Document)'
+                        ? 'แก้ไขคำร้อง EDR'
                         : documentToEdit 
                           ? 'อัปเดตเอกสารภายนอก (Update External Document)' 
                           : 'ลงทะเบียนเอกสารภายนอก (Register External Document)'}
@@ -1076,40 +1116,50 @@ const ExternalDocFormModal = ({ isOpen, onClose, documentToEdit = null, resubmit
                         </span>
                       )}
                     </div>
-                    <div className="border-2 border-dashed border-slate-300 hover:border-[#da7756] rounded-xl py-4 px-6 flex flex-col items-center justify-center hover:bg-slate-50 transition-all cursor-pointer relative group">
-                      <input 
-                        ref={fileInputRef}
-                        type="file" 
-                        accept=".pdf"
-                        onChange={handleFileChange}
-                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" 
-                      />
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".pdf,application/pdf"
+                      onChange={handleFileChange}
+                      className="hidden"
+                    />
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => fileInputRef.current?.click()}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInputRef.current?.click(); } }}
+                      onDragOver={(e) => { e.preventDefault(); setIsDraggingFile(true); }}
+                      onDragLeave={() => setIsDraggingFile(false)}
+                      onDrop={handleFileDrop}
+                      className={`border-2 border-dashed rounded-xl py-4 px-6 flex flex-col items-center justify-center transition-all cursor-pointer group ${isDraggingFile ? 'border-[#da7756] bg-amber-50' : 'border-slate-300 hover:border-[#da7756] hover:bg-slate-50'}`}
+                    >
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 bg-amber-50 group-hover:bg-amber-100 rounded-lg flex items-center justify-center transition-colors">
                           <Upload className="text-[#da7756]" size={20} />
                         </div>
                         <div className="text-left">
                           <span className="text-xs sm:text-sm font-bold text-slate-700 group-hover:text-[#da7756] transition-colors block">
-                            คลิกหรือลากไฟล์ PDF มาวางที่นี่
+                            {fileName ? 'คลิกหรือลากไฟล์ใหม่มาวางเพื่อเปลี่ยนไฟล์' : 'คลิกหรือลากไฟล์ PDF มาวางที่นี่'}
                           </span>
                           <span className="text-[11px] text-slate-400">รองรับไฟล์ .PDF เท่านั้น (ขนาดไม่เกิน 25MB)</span>
                         </div>
                       </div>
-                      {fileName && (
-                        <div className="mt-2.5 flex items-center gap-2 bg-white border border-slate-200 text-slate-800 px-3 py-1.5 rounded-lg text-xs font-bold shadow-xs z-10">
-                          <FileText size={15} className="text-[#da7756]" />
-                          <span className="truncate max-w-xs">{fileName}</span>
-                          <button
-                            type="button"
-                            onClick={handleRemoveFile}
-                            className="p-0.5 hover:bg-slate-100 rounded text-slate-400 hover:text-red-500 transition-colors cursor-pointer"
-                            title="ลบไฟล์"
-                          >
+                    </div>
+                    {fileName && (
+                      <div className="flex items-center gap-2 bg-white border border-slate-200 text-slate-800 px-3 py-2 rounded-lg text-xs font-bold shadow-xs">
+                        <FileText size={15} className="text-[#da7756] shrink-0" />
+                        <span className="truncate">{fileName}</span>
+                        <span className="text-slate-400 font-medium shrink-0">
+                          {fileBlob ? `${(fileBlob.size / 1024 / 1024).toFixed(2)} MB` : (documentToEdit?.attachedFile?.size ? `${(documentToEdit.attachedFile.size / 1024 / 1024).toFixed(2)} MB` : '(ไฟล์เดิม)')}
+                        </span>
+                        <span className="ml-auto flex items-center gap-1 shrink-0">
+                          <button type="button" onClick={() => fileInputRef.current?.click()} className="px-2 py-0.5 rounded border border-slate-200 text-slate-600 hover:bg-slate-50 cursor-pointer">เปลี่ยนไฟล์</button>
+                          <button type="button" onClick={handleRemoveFile} className="p-1 hover:bg-slate-100 rounded text-slate-400 hover:text-red-500 transition-colors cursor-pointer" title="ลบไฟล์">
                             <X size={14} />
                           </button>
-                        </div>
-                      )}
-                    </div>
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
               </form>

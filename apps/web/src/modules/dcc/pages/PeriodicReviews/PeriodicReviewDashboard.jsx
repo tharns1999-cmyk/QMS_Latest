@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import {
   Clock,
   AlertTriangle,
@@ -22,6 +23,8 @@ import {
   Ban
 } from 'lucide-react';
 import useStore from '../../../../store/useStore';
+import { isApiMode } from '../../../../api/client';
+import { decideReviewOnApi } from '../../../../api/reviews';
 import { getVisiblePeriodicReviews, normalizePeriodicReviewRecord, canExportPeriodicReviews, getPositionLevelForDepartment } from '../../services/PeriodicReviewAccessService';
 import { getDueState, getReviewStatusLabel, getReviewOutcomeLabel } from '../../services/PeriodicReviewService';
 import { TablePagination } from '../../../../shared/components/common/TablePagination';
@@ -601,6 +604,11 @@ const UnifiedWorkspaceView = ({
   const handleApproveClick = (record, targetDoc) => {
     const docId = record.documentId || targetDoc?.id || record.externalDocumentId;
     const docCode = record.documentNumber || targetDoc?.edCode || targetDoc?.doc_code;
+
+    if (isApiMode) {
+      decideReviewOnApi({ docId, decision: 'APPROVE', comment: 'อนุมัติผลการทบทวน' }).then((ok) => ok && toast.success('อนุมัติผลการทบทวนเรียบร้อยแล้ว'));
+      return;
+    }
 
     const storeState = useStore.getState();
     if (typeof storeState.approveExternalPeriodicReview === 'function') {

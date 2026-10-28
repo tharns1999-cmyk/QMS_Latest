@@ -5,6 +5,8 @@ import useStore from '../store/useStore';
 import Layout from './layout/Layout';
 import SLAEngine from '../modules/dcc/components/SLAEngine';
 import ProtectedRoute from './auth/ProtectedRoute';
+import ApiSessionGate from './auth/ApiSessionGate';
+import { isApiMode } from '../api/client';
 
 // [Safe Cache Maintenance: รันตอน Boot เพื่อเคลียร์ Temporary Cache ที่บวมเกิน 1.5MB โดยไม่แตะต้อง Vault หลัก]
 (() => {
@@ -51,6 +53,7 @@ const Viewer = lazy(() => import('../modules/dcc/pages/Library/Viewer'));
 // DCC Admin & Master List
 const Reports = lazy(() => import('../modules/dcc/pages/Admin/Reports'));
 const ActionLog = lazy(() => import('../modules/dcc/pages/Admin/ActionLog'));
+// Connected to the server, the page that saves on the server replaces the browser-only demo hub.
 const MasterDataHub = lazy(() => import('../modules/dcc/pages/Admin/MasterDataHub'));
 const ControlledCopyRegister = lazy(() => import('../modules/dcc/pages/ControlledCopy/ControlledCopyRegister'));
 const ExternalDocsList = lazy(() => import('../modules/dcc/pages/ExternalDocs/ExternalDocsList'));
@@ -115,7 +118,7 @@ function App() {
     useStore.getState().syncPeriodicReviewSchedulesAndTasks?.();
   }, [hydrateMasterData, initializePeriodicReviews, checkScheduledEffectiveDocs]);
 
-  return (
+  const app = (
     <BrowserRouter>
 
       <Toaster position="top-right" />
@@ -256,6 +259,7 @@ function App() {
       </Routes>
     </BrowserRouter>
   );
+  return isApiMode ? <ApiSessionGate>{app}</ApiSessionGate> : app;
 }
 
 export default App;

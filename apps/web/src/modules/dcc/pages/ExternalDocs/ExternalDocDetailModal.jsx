@@ -40,6 +40,7 @@ const ExternalDocDetailModal = ({
 }) => {
   const { 
     externalDocuments, 
+    externalRequests,
     currentUser, 
     controlledCopyInstances, 
     documentControlledCopies,
@@ -77,8 +78,6 @@ const ExternalDocDetailModal = ({
         setCurrentDoc(freshDoc);
       }
     }
-    setPreviewEditionDoc(null);
-    setIsExpanded(false);
   }, [initialDoc, externalDocuments]);
 
   // Reset tab to general on new open
@@ -89,6 +88,32 @@ const ExternalDocDetailModal = ({
       setIsExpanded(false);
     }
   }, [isOpen, initialDoc?.id]);
+
+  // Attach the PDF of one specific edition to a history row. History snapshots often lack file info,
+  // so borrow it from any record of the same document + same edition (other family rows, then requests).
+  const withEditionFile = (item) => {
+    if (!item) return item;
+    const hasFile = (d) => Boolean(d && (d.apiFilePath || d.attachedFile || d.rawFileId || d.fileId || d.fileStorageKey));
+    if (hasFile(item)) return item;
+    const edOf = (d) => String(d?.sourceVersion || d?.edition || d?.ver_ed || '').trim();
+    const codeOf = (d) => String(d?.edCode || d?.doc_code || d?.docNo || '').trim().toUpperCase();
+    const ed = edOf(item);
+    const code = codeOf(item) || String(canonicalDocCode || '').trim().toUpperCase();
+    if (!ed) return item;
+    const donor = [...familyEditions, ...(externalRequests || [])].find(d =>
+      d && d !== item && hasFile(d) && edOf(d) === ed && (!code || !codeOf(d) || codeOf(d) === code)
+    );
+    if (!donor) return item;
+    const f = donor.attachedFile || null;
+    return {
+      ...item,
+      ...(f ? { attachedFile: f, file: f, attachment: f } : {}),
+      ...(donor.apiFilePath ? { apiFilePath: donor.apiFilePath } : {}),
+      ...(donor.rawFileId ? { rawFileId: donor.rawFileId } : {}),
+      ...(donor.fileId ? { fileId: donor.fileId } : {}),
+      ...(donor.fileStorageKey ? { fileStorageKey: donor.fileStorageKey } : {}),
+    };
+  };
 
   // Synchronized controlled copies list
   const allCopies = useMemo(() => {
@@ -125,7 +150,6 @@ const ExternalDocDetailModal = ({
     const s2 = String(typeof d2 === 'object' ? (d2.id || d2.code || d2.dept || d2.department || '') : d2).trim().toUpperCase();
     if (!s1 || !s2) return false;
     if (s1 === s2) return true;
-    if ((s1 === 'QA' || s1 === 'QA/QC' || s1 === 'QAQC' || s1 === 'QC') && (s2 === 'QA' || s2 === 'QA/QC' || s2 === 'QAQC' || s2 === 'QC')) return true;
     return false;
   };
 
@@ -944,7 +968,7 @@ const ExternalDocDetailModal = ({
                             <div className="flex items-center gap-2 shrink-0">
                               <button
                                 type="button"
-                                onClick={() => setPreviewEditionDoc(activeVer)}
+                                onClick={() => setPreviewEditionDoc(withEditionFile(activeVer))}
                                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer"
                                 title="เปิดดูตัวอย่างเอกสารฉบับปัจจุบัน"
                               >
@@ -1036,7 +1060,7 @@ const ExternalDocDetailModal = ({
                                   <div className="flex items-center gap-1.5 shrink-0">
                                     <button
                                       type="button"
-                                      onClick={() => setPreviewEditionDoc(item)}
+                                      onClick={() => setPreviewEditionDoc(withEditionFile(item))}
                                       className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-slate-200/80 rounded-lg transition-colors cursor-pointer"
                                       title="ดูเอกสารฉบับตกรุ่น"
                                     >

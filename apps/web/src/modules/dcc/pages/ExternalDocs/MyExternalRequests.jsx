@@ -270,6 +270,7 @@ const MyExternalRequests = () => {
       ...base,
       requestId: req.requestId || req.id,
       ...(attachedFile ? { attachedFile, file: attachedFile, attachment: attachedFile } : {}),
+      ...(req.apiFilePath ? { apiFilePath: req.apiFilePath } : {}),
       ...(fileId ? { fileId } : {}),
       ...(fileName ? { fileName } : {})
     };

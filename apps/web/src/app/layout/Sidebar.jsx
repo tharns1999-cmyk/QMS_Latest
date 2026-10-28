@@ -22,10 +22,14 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import NotificationPopover from './NotificationPopover';
-import { isActionableTask, isDccAdmin as checkDccAdmin, isSameDepartment } from '../../modules/dcc/utils/taskFilter';
+import { isActionableTask, isAssignedToSomeoneElse, isDccAdmin as checkDccAdmin, isSameDepartment } from '../../modules/dcc/utils/taskFilter';
 import { evaluateDocumentReviewStatus } from '../../modules/dcc/utils/documentUtils';
 import { extractDeptCode } from '../../modules/dcc/services/darService';
 import SystemTimeSimulatorWidget from '../../modules/dcc/components/common/SystemTimeSimulatorWidget';
+import { isApiMode } from '../../api/client';
+import { logout } from '../../api/session';
+import { createPortal } from 'react-dom';
+import ChangePasswordForm from '../auth/ChangePasswordForm';
 
 const Sidebar = () => {
   const navigate = useNavigate();
@@ -39,6 +43,7 @@ const Sidebar = () => {
   } = useStore();
   
   const [isCleanSlateOpen, setIsCleanSlateOpen] = useState(false);
+  const [changingPassword, setChangingPassword] = useState(false);
   
   const path = location.pathname;
   // Context-aware Hub & Spoke: DCC module routes
@@ -81,7 +86,7 @@ const Sidebar = () => {
   const allDocs = useMemo(() => [...(documents || []), ...(externalDocuments || [])], [documents, externalDocuments]);
 
   // Task Counts Calculations
-  const userTasks = (tasks || []).filter(t => isActionableTask(t, currentUser, allDocs, effectiveToday));
+  const userTasks = (tasks || []).filter(t => isActionableTask(t, currentUser, allDocs, effectiveToday) && !isAssignedToSomeoneElse(t, currentUser));
   const myTaskCount = userTasks.filter(t => t.actionRequired !== false && !t.is_completed && t.status !== 'COMPLETED').length;
 
   const ccTaskCount = (controlledCopyInstances || []).filter(inst => {
@@ -313,7 +318,7 @@ const Sidebar = () => {
       </div>
 
       {/* ================= CENTER SECTION: Grouped Navigation Links ================= */}
-      <nav className="flex-1 overflow-y-auto px-3 py-2 space-y-1 scrollbar-none">
+      <nav className="flex-1 overflow-y-auto px-3 py-2 space-y-1">
         {/* WORKSPACE NAVIGATION (Hub vs Spoke) */}
         <SectionHeader title="WORKSPACE" />
         {!isDccModule ? (
@@ -344,6 +349,34 @@ const Sidebar = () => {
                 badgeColor={myTaskCount > 0 ? 'amber' : 'blue'}
                 pulsePing={myTaskCount > 0}
               />
+            )}
+
+            {/* DCC MANAGEMENT (งานกำกับดูแล DCC - แสดงเฉพาะ Role DCC / Admin): first, so the admin never has to scroll for it */}
+            {(isDccUser || isAdmin) && (
+              <>
+                <SectionHeader title="งานกำกับดูแล DCC" />
+                <NavItem 
+                  to="/dcc/controlled-copy" 
+                  icon={Files} 
+                  label="ทะเบียนสำเนาควบคุม" 
+                  badgeCount={ccTaskCount}
+                  badgeColor="blue"
+                />
+                {isAdmin && (
+                  <>
+                    <NavItem 
+                      to="/dcc/admin/master-data" 
+                      icon={SlidersHorizontal} 
+                      label="จัดการข้อมูลหลัก" 
+                    />
+                    <NavItem 
+                      to="/dcc/admin/action-log" 
+                      icon={History} 
+                      label="บันทึกประวัติการทำงาน" 
+                    />
+                  </>
+                )}
+              </>
             )}
 
             {/* GROUP 2: INTERNAL DOCS / DAR (เอกสารภายใน) */}
@@ -389,42 +422,14 @@ const Sidebar = () => {
               badgeCount={periodicReviewCount}
               badgeColor="amber"
             />
-
-            {/* GROUP 4: DCC MANAGEMENT (งานกำกับดูแล DCC - แสดงเฉพาะ Role DCC / Admin) */}
-            {(isDccUser || isAdmin) && (
-              <>
-                <SectionHeader title="งานกำกับดูแล DCC" />
-                <NavItem 
-                  to="/dcc/controlled-copy" 
-                  icon={Files} 
-                  label="ทะเบียนสำเนาควบคุม" 
-                  badgeCount={ccTaskCount}
-                  badgeColor="blue"
-                />
-                {isAdmin && (
-                  <>
-                    <NavItem 
-                      to="/dcc/admin/master-data" 
-                      icon={SlidersHorizontal} 
-                      label="จัดการข้อมูลหลัก" 
-                    />
-                    <NavItem 
-                      to="/dcc/admin/action-log" 
-                      icon={History} 
-                      label="บันทึกประวัติการทำงาน" 
-                    />
-                  </>
-                )}
-              </>
-            )}
           </>
         )}
       </nav>
 
       {/* ================= BOTTOM SECTION: Dev Tools & User Profile ================= */}
       <div className="p-3 border-t border-slate-200/80 bg-white shrink-0 space-y-2.5">
-        {/* Compact Dev Action Bar (QA Seed / Clean Slate) - Admins only */}
-        {isAdmin && (
+        {/* Compact Dev Action Bar (QA Seed / Clean Slate) - Admins only; it loads and wipes demo data in this browser, so not when connected to the server */}
+        {isAdmin && !isApiMode && (
           <div className="flex items-center justify-between gap-1.5 py-1 px-2 bg-slate-50 border border-slate-200/60 rounded-lg text-[11px] text-slate-500">
             <span className="font-mono text-[10px] font-medium text-slate-400 uppercase tracking-wider pl-1">
               DEV TOOLS
@@ -456,8 +461,8 @@ const Sidebar = () => {
           </div>
         )}
 
-        {/* Global System Time Simulator Widget - Available for all roles & pages */}
-        <SystemTimeSimulatorWidget />
+        {/* Global System Time Simulator Widget - demo only: connected to the server, its dates decide, and this widget would just mislead */}
+        {!isApiMode && <SystemTimeSimulatorWidget />}
 
         {/* User Profile & Role Switcher */}
         <div className="p-2.5 bg-slate-50/80 border border-slate-200/80 rounded-xl space-y-2.5 shadow-2xs">
@@ -482,8 +487,26 @@ const Sidebar = () => {
             </div>
           </div>
 
+          {isApiMode ? (
+            <div className="space-y-1.5">
+              <button type="button" onClick={() => setChangingPassword(true)}
+                className="w-full h-8 px-2.5 text-xs font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 cursor-pointer">
+                เปลี่ยนรหัสผ่าน
+              </button>
+              <button type="button" onClick={logout}
+                className="w-full h-8 px-2.5 text-xs font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 cursor-pointer">
+                ออกจากระบบ
+              </button>
+              {changingPassword && createPortal(
+                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 p-4">
+                  <ChangePasswordForm onDone={() => { setChangingPassword(false); toast.success('เปลี่ยนรหัสผ่านเรียบร้อย'); }} onCancel={() => setChangingPassword(false)} />
+                </div>,
+                document.body
+              )}
+            </div>
+          ) : (
           <div className="relative">
-            <select 
+            <select
               className="w-full h-8 px-2.5 text-xs font-medium text-slate-800 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all cursor-pointer leading-normal shadow-none"
               value={currentUser?.id || ''}
               onChange={(e) => {
@@ -499,6 +522,7 @@ const Sidebar = () => {
               ))}
             </select>
           </div>
+          )}
         </div>
       </div>
 
@@ -553,7 +577,7 @@ const Sidebar = () => {
                 <ul className="list-disc list-inside space-y-1 text-slate-700 pl-1 font-medium text-xs">
                   <li>บัญชีผู้ใช้มาตรฐาน พร้อมรหัส PIN 123456</li>
                   <li>แผนกมาตรฐาน (PD, QA/QC, WH, EN ฯลฯ)</li>
-                  <li>ประเภทเอกสาร (QM, SOP, WI, FM, SD, SPEC)</li>
+                  <li>ประเภทเอกสาร (QM, QP, SOP, WI, FM, SD, ED)</li>
                   <li>จุดใช้งานและสถานีมาตรฐานประจำโรงงาน</li>
                   <li>การตั้งค่าความปลอดภัย e-Signature และ SLAs</li>
                 </ul>

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import useStore from '../../../../store/useStore';
 import { FilePlus, Edit, Trash2, ClipboardCheck, Eye, Search, X, FileText, ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react';
@@ -6,6 +6,9 @@ import { TablePagination } from '../../../../shared/components/common/TablePagin
 import { useTablePagination } from '../../../../shared/hooks/useTablePagination';
 import { isDarDraft, isDarRequester, formatDarDocumentDisplay } from '../../utils/darHelper';
 import { DarStatusBadge } from '../../components/ui/StatusBadge';
+import { isApiMode } from '../../../../api/client';
+import { loadDars } from '../../../../api/dars';
+import { formatDarNumber } from '../../utils/darNumberGenerator';
 
 const DarList = () => {
   const navigate = useNavigate();
@@ -13,6 +16,11 @@ const DarList = () => {
   
   const [searchTerm, setSearchTerm] = useState('');
   const [sortConfig, setSortConfig] = useState({ key: 'date', direction: 'desc' });
+
+  // API mode: reviewers and DCC move DARs along, so read the current list on open.
+  useEffect(() => {
+    if (isApiMode) loadDars().catch(() => {});
+  }, []);
 
   const isAdmin = Boolean(currentUser?.isDcc || currentUser?.role === 'DCC_ADMIN' || currentUser?.isDccAdmin);
   
@@ -146,7 +154,8 @@ const DarList = () => {
     
     if (activeTask) {
       const taskRoute = activeTask.type === 'Review' ? `/tasks/review/${activeTask.id}` : 
-                        activeTask.type === 'Approve' ? `/tasks/approve/${activeTask.id}` : `/tasks/ack/${activeTask.id}`;
+                        activeTask.type === 'Approve' ? `/tasks/approve/${activeTask.id}` :
+                        activeTask.type === 'DCC_PUBLISH' ? `/dar/${dar.id}` : `/tasks/ack/${activeTask.id}`;
       return (
         <div className="flex items-center justify-center">
           <button 
@@ -340,7 +349,7 @@ const DarList = () => {
                       </span>
                     ) : (
                       <span className="font-mono font-bold text-[#0D99FF] text-sm sm:text-[15px] hover:underline">
-                        {dar.darNumber || (String(dar.id).startsWith('draft_') ? 'ฉบับร่าง (Draft)' : dar.id)}
+                        {dar.darNumber ? formatDarNumber(dar.darNumber) : (String(dar.id).startsWith('draft_') ? 'ฉบับร่าง (Draft)' : formatDarNumber(dar.id))}
                       </span>
                     )}
                   </td>

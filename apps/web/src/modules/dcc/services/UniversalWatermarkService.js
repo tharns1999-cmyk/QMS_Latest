@@ -15,6 +15,7 @@ import {
   renderSignatoryText
 } from '../utils/pdfStamper';
 import { resolveFileBlob } from '../utils/fileStorage';
+import { FILE_PURPOSE } from '../../../api/client';
 import { generateQmsDownloadName } from '../utils/documentNamingHelper';
 import { cleanLocationName } from './MasterDataService';
 import { isDccUser } from '../utils/taskFilter';
@@ -120,6 +121,9 @@ export const getBangkokFormattedDate = (dateInput = new Date()) => {
  * Step 2 (Watermark Layer): Stamp large diagonal watermark (e.g. UNCONTROLLED COPY ~50pt) using drawIsoDiagonalWatermark.
  * Step 3: Returns the finalized PDF bytes.
  */
+// A revision keeps its sign-off table for life: superseded/obsolete copies are stamped with signatures first, the lifecycle watermark goes on top.
+const SIGNED_OFF_STATUS = /^(ACTIVE|EFFECTIVE|APPROVED|SUPERSEDED|OBSOLETE)/;
+
 export const prepareMasterPdfForDownload = async ({ 
   document: docInput, 
   dar, 
@@ -134,7 +138,8 @@ export const prepareMasterPdfForDownload = async ({
   let pdfBytes = document.fileData || document.originalPdfBytes || document.fileBlob || document.file;
   if (!pdfBytes) {
     const fallbackKey = document.fileId || document.file_id || document.id || document.docCode || document.document_code || dar?.id;
-    const resolvedBlob = await resolveFileBlob(document, fallbackKey);
+    // Preparing a master file for download: the server audits it as a download.
+    const resolvedBlob = await resolveFileBlob(document, fallbackKey, { purpose: FILE_PURPOSE.DOWNLOAD });
     if (resolvedBlob) {
       pdfBytes = await resolvedBlob.arrayBuffer();
     }
@@ -149,7 +154,7 @@ export const prepareMasterPdfForDownload = async ({
 
   // 2. ตรวจสอบและประทับตารางลายเซ็น 3x3 หากเป็นเอกสารที่ผ่านการอนุมัติแล้ว
   const statusUpper = String(document.status || dar?.status || 'ACTIVE').toUpperCase();
-  const isApproved = ['ACTIVE', 'APPROVED', 'EFFECTIVE'].includes(statusUpper) || 
+  const isApproved = SIGNED_OFF_STATUS.test(statusUpper) || 
                      dar?.status === 'APPROVED' || 
                      document.stage === 'MASTER' || 
                      dar?.stage === 'MASTER';
@@ -334,7 +339,7 @@ export class UniversalWatermarkService {
       if (!rawPdfBytes) {
         const merged = { ...meta, ...doc };
         const docCodeFallback = doc?.fileId || doc?.file_id || doc?.attachedFile?.fileId || doc?.attachedFile?.id || doc?.edCode || doc?.doc_code || doc?.document_code || doc?.docNo || doc?.darId || doc?.id || meta?.docCode;
-        const fileBlob = await resolveFileBlob(merged, docCodeFallback);
+        const fileBlob = await resolveFileBlob(merged, docCodeFallback, { purpose: FILE_PURPOSE.DOWNLOAD });
         if (fileBlob) {
           rawPdfBytes = await fileBlob.arrayBuffer();
         }
@@ -403,7 +408,7 @@ export class UniversalWatermarkService {
     let rawPdfBytes = await this.resolveRawPdfBytes(doc, meta);
 
     const statusUpper = String(doc.status || meta.status || 'ACTIVE').toUpperCase();
-    const isMasterDoc = statusUpper === 'ACTIVE' || statusUpper === 'EFFECTIVE' || statusUpper === 'APPROVED' || doc.stage === 'MASTER' || meta.stage === 'MASTER';
+    const isMasterDoc = SIGNED_OFF_STATUS.test(statusUpper) || doc.stage === 'MASTER' || meta.stage === 'MASTER';
     const docCode = doc.document_code || doc.doc_code || doc.edCode || doc.title || meta.docCode || 'DOCUMENT';
     const docTitle = doc.docTitle || doc.docName || doc.name || (doc.title !== docCode ? doc.title : '') || meta.docTitle || '';
     const isInternal = !doc.isExternal && doc.docType !== 'ED' && !String(docCode).startsWith('ED-') && !String(docCode).startsWith('EXT-');
@@ -510,7 +515,7 @@ export class UniversalWatermarkService {
     // Sequential Stamping Pipeline:
     // Step 1 (Signatures Burn-in): If master document is ACTIVE, EFFECTIVE, APPROVED, or stage === 'MASTER'
     const statusUpper = String(doc.status || meta.status || 'ACTIVE').toUpperCase();
-    const isMasterDoc = statusUpper === 'ACTIVE' || statusUpper === 'EFFECTIVE' || statusUpper === 'APPROVED' || doc.stage === 'MASTER' || meta.stage === 'MASTER';
+    const isMasterDoc = SIGNED_OFF_STATUS.test(statusUpper) || doc.stage === 'MASTER' || meta.stage === 'MASTER';
     const isInternal = !doc.isExternal && doc.docType !== 'ED' && !String(docCode).startsWith('ED-') && !String(docCode).startsWith('EXT-');
 
     if (isMasterDoc && isInternal) {

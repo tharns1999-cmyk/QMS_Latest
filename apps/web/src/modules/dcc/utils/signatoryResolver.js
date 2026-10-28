@@ -29,6 +29,13 @@ export const getSignatureAsset = (user) => {
   );
 };
 
+// System roles describe access, not a job; they must never be printed under a signer's name.
+const SYSTEM_ROLES = new Set(['GENERAL_USER', 'DEPT_ADMIN', 'DCC_ADMIN', 'DCC_STAFF', 'APPROVER', 'REVIEWER', 'MGMT', 'QMR', 'ADMIN']);
+
+/** First candidate that is a real job title (the user's current position comes first). */
+export const jobTitle = (...candidates) =>
+  candidates.find((v) => typeof v === 'string' && v.trim() && !SYSTEM_ROLES.has(v.trim().toUpperCase())) || '';
+
 /**
  * Format timestamp to Thai Buddhist Calendar date string (DD/MM/BBBB)
  */
@@ -57,14 +64,19 @@ export const resolveProgressiveSignatories = ({
   const isMasterStage = stage === 'MASTER' || 
     dar?.status === 'COMPLETED' || 
     dar?.status === 'APPROVED' ||
-    ((!dar || !dar.id) && (masterDoc?.status === 'ACTIVE' || masterDoc?.status === 'EFFECTIVE' || masterDoc?.status === 'APPROVED'));
+    ((!dar || !dar.id) && /^(ACTIVE|EFFECTIVE|APPROVED|SUPERSEDED|OBSOLETE)/.test(String(masterDoc?.status || '').toUpperCase()));
 
   // Direct pass-through only if masterDoc has explicit full signatories AND we are in master stage
   if (isMasterStage && masterDoc?.signatories && masterDoc.signatories.requester && masterDoc.signatories.reviewer && masterDoc.signatories.approver) {
+    // The stored snapshot may predate the user's position; show the latest one from the user list.
+    const latest = (s) => {
+      const p = (allUsers || []).find((u) => s.id && (u.id === s.id || u.userId === s.id || u.empId === s.id));
+      return { ...s, position: jobTitle(p?.position, s.position), isCompleted: true, isSigned: true };
+    };
     return {
-      requester: { ...masterDoc.signatories.requester, isCompleted: true, isSigned: true },
-      reviewer:  { ...masterDoc.signatories.reviewer,  isCompleted: true, isSigned: true },
-      approver:  { ...masterDoc.signatories.approver,  isCompleted: true, isSigned: true }
+      requester: latest(masterDoc.signatories.requester),
+      reviewer:  latest(masterDoc.signatories.reviewer),
+      approver:  latest(masterDoc.signatories.approver)
     };
   }
 
@@ -119,13 +131,13 @@ export const resolveProgressiveSignatories = ({
   const reqHistory = history.find(h => h.role === 'REQUESTER' || h.step === 1 || h.action === 'SUBMIT' || h.action === 'REQUEST' || h.action === 'CREATE' || h.action === 'Created');
   const reqStepName = step1Def?.userName || step1Def?.name || step1Def?.assignedTo;
   const reqUserId = masterDoc?.signatories?.requester?.id || reqHistory?.userId || step1Def?.userId || dar?.requesterId || dar?.requester_id || masterDoc?.ownerId || masterDoc?.requesterId || currentUser?.id;
-  const reqNameFallback = masterDoc?.signatories?.requester?.name || reqHistory?.userName || reqStepName || dar?.created_by_name || dar?.requesterName || dar?.requester_name || masterDoc?.ownerName || masterDoc?.requesterName || masterDoc?.author || currentUser?.name || 'บีม';
+  const reqNameFallback = masterDoc?.signatories?.requester?.name || reqHistory?.userName || reqStepName || dar?.created_by_name || dar?.requesterName || dar?.requester_name || masterDoc?.ownerName || masterDoc?.requesterName || masterDoc?.author || currentUser?.name || '-';
   const reqProfile = getUserProfile(reqUserId, reqNameFallback);
 
   const requester = {
     title: 'ผู้จัดทำ',
-    name: reqProfile?.name || reqProfile?.fullName || reqStepName || dar?.created_by_name || dar?.requester_name || dar?.requesterName || reqNameFallback || 'บีม',
-    position: masterDoc?.signatories?.requester?.position || reqProfile?.position || reqProfile?.role || step1Def?.position || dar?.created_by_role || dar?.requester_role || dar?.requesterRole || dar?.requesterPosition || 'QAQC Supervisor',
+    name: reqProfile?.name || reqProfile?.fullName || reqStepName || dar?.created_by_name || dar?.requester_name || dar?.requesterName || reqNameFallback || '-',
+    position: jobTitle(reqProfile?.position, masterDoc?.signatories?.requester?.position, step1Def?.position, dar?.created_by_role, dar?.requester_role, dar?.requesterRole, dar?.requesterPosition),
     date: formatSignatoryDate(masterDoc?.signatories?.requester?.date || reqHistory?.timestamp || step1Def?.timestamp || dar?.submitted_date || dar?.submittedAt || dar?.createdAt || dar?.created_at || dar?.date || masterDoc?.createdAt || new Date()),
     signatureImage: masterDoc?.signatories?.requester?.signatureImage || getSignatureAsset(reqProfile) || null,
     isCompleted: true,
@@ -146,7 +158,7 @@ export const resolveProgressiveSignatories = ({
   const reviewer = {
     title: 'ผู้ทบทวน',
     name: isReviewed ? (revProfile?.name || revProfile?.fullName || revStepName || dar?.reviewed_by_name || dar?.reviewer_name || dar?.reviewerName || revNameFallback || 'กัลยาณี พลไกร') : '',
-    position: isReviewed ? (masterDoc?.signatories?.reviewer?.position || revProfile?.position || revProfile?.role || step2Def?.position || dar?.reviewed_by_role || dar?.reviewer_role || dar?.reviewerRole || 'Production Assistant Manager') : '',
+    position: isReviewed ? jobTitle(revProfile?.position, masterDoc?.signatories?.reviewer?.position, step2Def?.position, dar?.reviewed_by_role, dar?.reviewer_role, dar?.reviewerRole) : '',
     date: isReviewed ? formatSignatoryDate(masterDoc?.signatories?.reviewer?.date || revHistory?.timestamp || dar?.reviewed_at || dar?.reviewedAt || task?.updatedAt || task?.reviewedAt || masterDoc?.reviewedAt || masterDoc?.createdAt || new Date()) : '',
     signatureImage: isReviewed ? (masterDoc?.signatories?.reviewer?.signatureImage || getSignatureAsset(revProfile) || null) : null,
     isCompleted: isReviewed,
@@ -167,7 +179,7 @@ export const resolveProgressiveSignatories = ({
   const approver = {
     title: 'ผู้อนุมัติ',
     name: isApproved ? (appProfile?.name || appProfile?.fullName || appStepName || dar?.approved_by_name || dar?.approver_name || dar?.approverName || appNameFallback || 'คุณเรย์') : '',
-    position: isApproved ? (masterDoc?.signatories?.approver?.position || appProfile?.position || appProfile?.role || step3Def?.position || dar?.approved_by_role || dar?.approver_role || dar?.approverRole || 'General Manager / QMR') : '',
+    position: isApproved ? jobTitle(appProfile?.position, masterDoc?.signatories?.approver?.position, step3Def?.position, dar?.approved_by_role, dar?.approver_role, dar?.approverRole) : '',
     date: isApproved ? formatSignatoryDate(masterDoc?.signatories?.approver?.date || appHistory?.timestamp || dar?.approved_at || dar?.approvedAt || task?.updatedAt || masterDoc?.approvedAt || masterDoc?.effectiveDate || new Date()) : '',
     signatureImage: isApproved ? (masterDoc?.signatories?.approver?.signatureImage || getSignatureAsset(appProfile) || null) : null,
     isCompleted: isApproved,

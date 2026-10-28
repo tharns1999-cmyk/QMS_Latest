@@ -149,9 +149,7 @@ const ControlledCopyRegister = () => {
     const norm = issueDept.trim().toUpperCase();
     return (distributionLocations || []).filter(s => 
       s.status !== 'INACTIVE' && (
-        (s.departmentId || '').toUpperCase() === norm ||
-        (norm === 'QA' && s.departmentId === 'QA/QC') ||
-        (norm === 'QA/QC' && s.departmentId === 'QA')
+        (s.departmentId || '').toUpperCase() === norm
       )
     );
   }, [issueDept, distributionLocations]);
@@ -243,6 +241,7 @@ const ControlledCopyRegister = () => {
         timestamp: l.timestamp || l.createdAt || new Date().toISOString(),
         action: l.action || l.actionType || 'กิจกรรมสำเนา',
         document_code: l.document_code || l.doc_code || l.code || (!isThaiText(l.docTitle) && l.docTitle ? l.docTitle : null) || (!isThaiText(l.title) && l.title ? l.title : null) || '-',
+        revision: l.revision || l.docRev || '',
         copy_number: l.ccNumber || l.copy_no || l.copy_number || '',
         performed_by: l.user || l.actor || l.performed_by || 'DCC Officer',
         details: l.remarks || l.details || l.remark || '-'
@@ -252,6 +251,7 @@ const ControlledCopyRegister = () => {
         timestamp: l.timestamp || new Date().toISOString(),
         action: l.actionType || l.action || 'บันทึกการทำงาน',
         document_code: l.document_code || l.doc_code || l.code || (!isThaiText(l.docTitle) && l.docTitle ? l.docTitle : null) || (!isThaiText(l.title) && l.title ? l.title : null) || l.darNo || '-',
+        revision: l.revision || l.docRev || '',
         copy_number: l.ccNumber || l.copy_no || l.copy_number || '',
         performed_by: l.actor || l.user || 'DCC Officer',
         details: l.details || l.remark || '-'
@@ -577,7 +577,8 @@ const ControlledCopyRegister = () => {
     if (searchTerm && searchTerm.trim()) {
       setExpandedDocKeys(new Set(filteredActiveDocGroups.map(g => g.key)));
     }
-  }, [searchTerm, filteredActiveDocGroups]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-expand when the search text changes, not on data refresh
+  }, [searchTerm]);
 
   // Tab 5: Audit Trail filter
   const filteredAuditLogs = useMemo(() => {
@@ -944,14 +945,14 @@ const ControlledCopyRegister = () => {
   };
 
   // 8. Report Damaged / Lost
-  const handleReportSubmit = (e) => {
+  const handleReportSubmit = async (e) => {
     e.preventDefault();
     const trimmedReason = reportReason.trim();
     if (!trimmedReason) {
       toast.error('กรุณาระบุสาเหตุและความจำเป็น');
       return;
     }
-    reportCcDamagedLost(selectedInstance.id, reportType, trimmedReason);
+    if ((await reportCcDamagedLost(selectedInstance.id, reportType, trimmedReason)) === false) return;
     setReportModalOpen(false);
     setSelectedInstance(null);
     setReportReason('');
@@ -2113,7 +2114,7 @@ const ControlledCopyRegister = () => {
                               </span>
                             </td>
                             <td className="py-2.5 px-3 font-mono font-medium text-[#1E1E1E] whitespace-nowrap">
-                              {docStr}{copyStr}
+                              {docStr}{log?.revision ? ` Rev.${String(log.revision).replace(/^rev\.?\s*/i, '')}` : ''}{copyStr}
                             </td>
                             <td className="py-2.5 px-3 whitespace-nowrap">
                               {actorStr}

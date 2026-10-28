@@ -1,0 +1,44 @@
+{
+  "name": "qms-api",
+  "main": "src/index.js",
+  "compatibility_date": "2026-10-01",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "qms",
+      "database_id": "05a8bae0-70de-4bfc-bc74-4a8971b307e0",
+      "migrations_dir": "migrations"
+    }
+  ],
+  // Controlled PDFs. Create once with `npx wrangler r2 bucket create qms-files`.
+  "r2_buckets": [{ "binding": "FILES", "bucket_name": "qms-files" }],
+  // Comma-separated web origins allowed to call the API; JWT_SECRET is set with `npx wrangler secret put JWT_SECRET`.
+  // Local development: `npx wrangler dev --var ALLOWED_ORIGIN:http://localhost:5173`.
+  // 00:05 Thailand time: approved documents whose effective date has come take effect.
+  "triggers": { "crons": ["5 17 * * *"] },
+  "observability": { "enabled": true },
+  "vars": { "ALLOWED_ORIGIN": "https://qms-web.qms-api.workers.dev" },
+
+  // The block above is the UAT stack on the personal Cloudflare account. Everything below is the company account's
+  // production stack, used only with `--env production` (see docs/ops/account-migration.md). Wrangler does not inherit
+  // bindings, vars or triggers into an env, so they are repeated. Fill in the two REPLACE_ values after `d1 create`
+  // and the company web address; nothing here touches the personal account.
+  "env": {
+    "production": {
+      "name": "qms-api",
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "qms",
+          "database_id": "REPLACE_WITH_COMPANY_D1_ID",
+          "migrations_dir": "migrations"
+        }
+      ],
+      "r2_buckets": [{ "binding": "FILES", "bucket_name": "qms-files" }],
+      "triggers": { "crons": ["5 17 * * *"] },
+      "observability": { "enabled": true },
+      "vars": { "ALLOWED_ORIGIN": "REPLACE_WITH_COMPANY_WEB_ORIGIN" }
+      // Company domain: add "routes": [{ "pattern": "qms-api.company.com", "custom_domain": true }] once the zone is on the company account.
+    }
+  }
+}

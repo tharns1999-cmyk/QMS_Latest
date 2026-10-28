@@ -23,6 +23,7 @@ import { cleanupDccTasks, buildControlledCopyId, sanitizeControlledCopies, resol
 import { generateDynamicWorkflow } from '../utils/workflowEngine';
 import { addYears, getReviewCycleYears } from '../utils/documentUtils';
 import { resolveDccAdminUserId } from './externalDocSlice';
+import { isApiMode } from '../../../api/client';
 
 // Re-export helper
 export { generateInternalDarNumber };
@@ -720,8 +721,12 @@ export const createDarSlice = (set, get) => ({
 },
 
   submitDar: async (dar, rawFile) => {
+    if (isApiMode) {
+      const { submitDarToApi } = await import('../../../api/dars');
+      return submitDarToApi(dar, rawFile || dar.file);
+    }
     const finalDar = { ...dar, isDraft: false };
-    const darId = finalDar.darNumber || finalDar.id || `DAR-${new Date().getFullYear()}-${String(get().dars.length + 1).padStart(3, '0')}`;
+    const darId = finalDar.darNumber || finalDar.id || `DAR-${String(new Date().getFullYear()).slice(-2)}-${String(get().dars.length + 1).padStart(3, '0')}`;
     const fileId = finalDar.fileId || `file-${darId}-${Date.now()}`;
     
     // 1. สกัดหาไฟล์จริงจากทุกช่องทางที่เป็นไปได้
@@ -858,6 +863,8 @@ export const createDarSlice = (set, get) => ({
   }),
 
   finalizeAndPublishMaster: async (darId) => {
+    // API mode: the register changes only when DCC publishes on the server.
+    if (isApiMode) return;
     const state = get();
     const safeDars = state.dars || [];
     const safeDarRequests = state.darRequests || [];
@@ -1060,6 +1067,7 @@ export const createDarSlice = (set, get) => ({
   },
 
   processWorkflow: (taskId, action, comment) => {
+    if (isApiMode) return import('../../../api/dars').then((m) => m.decideTask(taskId, action, comment));
     let newlyCompletedDar = null;
     let targetTask = null;
     let targetDar = null;

@@ -170,7 +170,7 @@ describe('Notification Popover & DAR History Text-Wrap Constraints', () => {
       fireEvent.click(historyTab);
 
       // Verify DAR Card rendered
-      expect(screen.getByText('DAR-2026-001')).toBeInTheDocument();
+      expect(screen.getByText('DAR-26-001')).toBeInTheDocument();
       expect(screen.getByText(/เหตุผลในการร้องขอ/i)).toBeInTheDocument();
 
       // Ensure no duplicate colons "::" exist in the rendered text

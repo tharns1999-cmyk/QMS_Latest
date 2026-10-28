@@ -1,0 +1,88 @@
+name: Monthly audit-log archive
+
+# Same switch as the Nightly backup (repository variable BACKUP_ENABLED = "true") and the same secrets.
+# Once a month: copy audit_log rows older than 365 days to the backup Drive as CSV, prove the Drive copy matches,
+# and only then delete them from D1. Does nothing while no row is that old. Procedure: docs/ops/backup-restore.md section 8.
+on:
+  schedule:
+    - cron: '0 21 1 * *' # 04:00 on the 2nd, Thailand time, two hours after the nightly backup
+  workflow_dispatch:
+    inputs:
+      rehearsal:
+        description: 'Only prove that Drive accepts and returns a file (changes nothing in the database)'
+        type: boolean
+        default: false
+
+concurrency:
+  group: nightly-backup # never overlap a backup export
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read # purge asks whether the last Nightly backup succeeded
+
+jobs:
+  archive:
+    if: vars.BACKUP_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: apps/api
+    env:
+      GH_TOKEN: ${{ github.token }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      BACKUP_PASSWORD: ${{ secrets.BACKUP_PASSWORD }}
+      RCLONE_CONFIG_GDRIVE_TYPE: drive
+      RCLONE_CONFIG_GDRIVE_SCOPE: drive
+      RCLONE_CONFIG_GDRIVE_TOKEN: ${{ secrets.GDRIVE_TOKEN }}
+      RCLONE_CONFIG_GDRIVE_ROOT_FOLDER_ID: ${{ secrets.GDRIVE_FOLDER_ID }}
+      RCLONE_CONFIG_GDRIVE_CLIENT_ID: ${{ secrets.GDRIVE_CLIENT_ID }}
+      RCLONE_CONFIG_GDRIVE_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
+      RCLONE_CONFIG_SAFE_TYPE: crypt
+      RCLONE_CONFIG_SAFE_REMOTE: 'gdrive:'
+      RCLONE_CONFIG_SAFE_FILENAME_ENCRYPTION: 'off'
+      RCLONE_CONFIG_SAFE_DIRECTORY_NAME_ENCRYPTION: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: apps/api/package-lock.json
+      - run: npm ci
+      - run: sudo apt-get update && sudo apt-get install -y rclone
+
+      - name: Check configuration
+        run: |
+          for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID BACKUP_PASSWORD RCLONE_CONFIG_GDRIVE_TOKEN RCLONE_CONFIG_GDRIVE_ROOT_FOLDER_ID; do
+            if [ -z "${!name}" ]; then echo "Missing secret for $name"; exit 1; fi
+          done
+          obscured=$(rclone obscure "$BACKUP_PASSWORD")
+          echo "::add-mask::$obscured"
+          echo "RCLONE_CONFIG_SAFE_PASSWORD=$obscured" >> "$GITHUB_ENV"
+
+      - name: Rehearsal - Drive accepts a file and returns it unchanged
+        if: ${{ inputs.rehearsal }}
+        run: |
+          mkdir rehearsal && echo "audit archive rehearsal $(date -u +%FT%TZ)" > rehearsal/test.txt
+          rclone copy rehearsal safe:audit-archive/_rehearsal
+          [ "$(rclone cat safe:audit-archive/_rehearsal/test.txt | sha256sum)" = "$(sha256sum < rehearsal/test.txt)" ]
+          echo "Drive round trip OK"
+
+      - name: Export rows older than 365 days
+        if: ${{ !inputs.rehearsal }}
+        run: node scripts/audit-archive.js export --remote --out audit-archive
+
+      - name: Copy to Drive, read back, then purge
+        if: ${{ !inputs.rehearsal }}
+        run: |
+          if ! ls audit-archive/*.manifest.json > /dev/null 2>&1; then echo "Nothing old enough to archive."; exit 0; fi
+          rclone copy audit-archive safe:audit-archive
+          # Purge from the copy that came back from Drive, not from the local export (only this run's files, not earlier months').
+          for manifest in audit-archive/*.manifest.json; do
+            name=$(basename "$manifest" .manifest.json)
+            rclone copy safe:audit-archive from-drive --include "$name.*"
+            node scripts/audit-archive.js purge "from-drive/$name.manifest.json" --remote --confirm
+          done

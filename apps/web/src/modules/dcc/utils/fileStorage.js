@@ -1,3 +1,5 @@
+import { apiBlob } from '../../../api/client';
+
 const DB_NAME = 'QMS_Files';
 const STORE_NAME = 'attachments';
 const DB_VERSION = 1;
@@ -112,7 +114,7 @@ export const deleteFile = async (key) => {
  * Universal Resolver: Extract real PDF Blob from any document or attachment object variation
  * Reconciles: attachedFile, fileId, file, fileData, blob, pdfBlob, pdfUrl, id, edCode
  */
-export const resolveFileBlob = async (target, fallbackKey = null) => {
+export const resolveFileBlob = async (target, fallbackKey = null, { purpose } = {}) => {
   if (!target) {
     if (fallbackKey) return await getFile(fallbackKey);
     return null;
@@ -145,6 +147,9 @@ export const resolveFileBlob = async (target, fallbackKey = null) => {
 
   // 4. Object properties examination
   if (typeof target === 'object') {
+    // API mode: the controlled PDF lives in R2 behind the API.
+    if (target.apiFilePath) return await apiBlob(target.apiFilePath, { purpose });
+
     // Check direct binary fields on target
     const directBinaryFields = [
       // Nested file Blob stored inside attachedFile object (same-session in-memory)
