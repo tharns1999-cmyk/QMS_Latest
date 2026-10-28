@@ -190,6 +190,33 @@ export const PlanItemModal = ({
 }) => {
   if (!open || !plan) return null;
 
+  const handleAssetChange = (newAssetId) => {
+    const chosen = activeAssets.find((a) => a.id === newAssetId);
+    setItemForm((prev) => ({
+      ...prev,
+      asset_id: newAssetId,
+      responsible_dept: chosen?.department || prev.responsible_dept || plan.department
+    }));
+  };
+
+  const handleFrequencyChange = (newFreq) => {
+    let defaultMonths = itemForm.planned_months;
+    if (newFreq === 'รายเดือน') {
+      defaultMonths = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+    } else if (newFreq === 'รายไตรมาส') {
+      defaultMonths = [1, 4, 7, 10];
+    } else if (newFreq === 'รายครึ่งปี') {
+      defaultMonths = [1, 7];
+    } else if (newFreq === 'รายปี' && defaultMonths.length > 2) {
+      defaultMonths = [defaultMonths[0] || 1];
+    }
+    setItemForm((prev) => ({
+      ...prev,
+      frequency_label: newFreq,
+      planned_months: defaultMonths
+    }));
+  };
+
   const toggleMonth = (m) => {
     const exists = itemForm.planned_months.includes(m);
     const next = exists
@@ -227,7 +254,7 @@ export const PlanItemModal = ({
             <select
               required
               value={itemForm.asset_id}
-              onChange={(e) => setItemForm({ ...itemForm, asset_id: e.target.value })}
+              onChange={(e) => handleAssetChange(e.target.value)}
               className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm bg-white"
             >
               <option value="" disabled>-- เลือกเครื่องมือจากทะเบียน --</option>
@@ -260,7 +287,7 @@ export const PlanItemModal = ({
               <label className="block text-xs font-bold text-slate-700 mb-1">ความถี่การทวนสอบ</label>
               <select
                 value={itemForm.frequency_label}
-                onChange={(e) => setItemForm({ ...itemForm, frequency_label: e.target.value })}
+                onChange={(e) => handleFrequencyChange(e.target.value)}
                 className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm bg-white"
               >
                 <option value="รายปี">รายปี</option>
