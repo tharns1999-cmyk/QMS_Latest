@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  BarChart3,
   Bell,
   Download,
   Settings,
@@ -161,18 +160,13 @@ export default function VccDashboardSection({ onNavigateToWorkOrders }) {
 
   return (
     <div className="space-y-6" data-testid="vcc-dashboard-section">
-      {/* Top Toolbar */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-4 flex flex-wrap items-center justify-between gap-3 shadow-sm">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center">
-            <BarChart3 size={20} />
-          </div>
-          <div>
-            <h2 className="text-base font-bold text-slate-900">ภาพรวมการทวนสอบ/สอบเทียบ และระบบแจ้งเตือน (Dashboard & Reports)</h2>
-            <p className="text-xs text-slate-500">
-              เกณฑ์งานเสร็จทันเวลา (On-Time): นับเมื่อผู้ตรวจรับอนุมัติปิดงาน (CLOSED) และวันปฏิบัติงานจริงไม่เกินวันครบกำหนด
-            </p>
-          </div>
+      {/* Dashboard Control Bar & Quick Actions */}
+      <div className="bg-white rounded-2xl border border-slate-200/90 p-4 flex flex-wrap items-center justify-between gap-3 shadow-xs">
+        <div className="flex items-center gap-2">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-50 border border-indigo-100 text-indigo-900 font-medium text-xs">
+            <Clock size={14} className="text-indigo-600 shrink-0" />
+            <span>เกณฑ์ On-Time: ปิดงาน (CLOSED) และวันปฏิบัติงานจริงไม่เกินวันครบกำหนด</span>
+          </span>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">

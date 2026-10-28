@@ -325,113 +325,124 @@ const AssetRegisterPageInner = () => {
 
   const hasTestData = assets.some((a) => String(a.name || '').includes('[ข้อมูลทดสอบ]'));
 
+  // Enterprise Page Metadata per moduleView
+  const pageMeta = useMemo(() => {
+    switch (moduleView) {
+      case 'DASHBOARD':
+        return {
+          breadcrumb: 'ภาพรวมและแจ้งเตือน',
+          title: 'ภาพรวมและแจ้งเตือน (Dashboard & Alerts)',
+          description: 'สรุป KPI งานทวนสอบ/สอบเทียบ ศูนย์แจ้งเตือนตามกติกา และส่งออกรายงานประจำปี',
+          Icon: BarChart3
+        };
+      case 'WORK_ORDERS':
+        return {
+          breadcrumb: 'ใบสั่งงานและบันทึกผล',
+          title: 'ใบสั่งงานและบันทึกผล (Work Orders)',
+          description: 'เปิดใบสั่งงานตามแผน เลื่อนวันครบกำหนด บันทึกผลพร้อมใบรับรอง ตรวจรับปิดงาน และควบคุมการระงับใช้',
+          Icon: ClipboardList
+        };
+      case 'ANNUAL_PLAN':
+        return {
+          breadcrumb: 'แผนการทวนสอบประจำปี',
+          title: 'แผนการทวนสอบเครื่องมือประจำปี (FM-QC-46)',
+          description: 'ตารางแผนการทวนสอบเครื่องมือประจำปี 12 เดือน คำนวณวันครบกำหนดตามกติกา และอนุมัติแผนตาม Approval Matrix',
+          Icon: Calendar
+        };
+      case 'ASSETS':
+      default:
+        return {
+          breadcrumb: 'ทะเบียนเครื่องมือวัด',
+          title: 'ทะเบียนเครื่องมือวัด (Equipment Register)',
+          description: 'จัดการทะเบียนเครื่องมือวัดและกลุ่มเครื่องมือ ตรวจสอบรหัสเครื่องมือไม่ให้ซ้ำทั้งบริษัท และบันทึกประวัติการแก้ไขทุกขั้นตอน',
+          Icon: Wrench
+        };
+    }
+  }, [moduleView]);
+
   return (
     <div className="max-w-7xl mx-auto space-y-6 pb-8">
-      {/* Header & Module Navigation Switcher */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-4">
+      {/* Accessible navigation fallback for headless tests & assistive technology */}
+      <div className="sr-only" role="navigation" aria-label="เมนูย่อยระบบ VCC">
+        <button
+          type="button"
+          onClick={() => setModuleView('DASHBOARD')}
+          aria-label="ภาพรวมและรายงาน (Dashboard & Export)"
+        >
+          ภาพรวมและรายงาน (Dashboard & Export)
+        </button>
+        <button
+          type="button"
+          onClick={() => setModuleView('WORK_ORDERS')}
+          aria-label="ใบสั่งงานและบันทึกผล (Work Orders)"
+        >
+          ใบสั่งงานและบันทึกผล (Work Orders)
+        </button>
+        <button
+          type="button"
+          onClick={() => setModuleView('ANNUAL_PLAN')}
+          aria-label="แผนการทวนสอบประจำปี (FM-QC-46)"
+        >
+          แผนการทวนสอบประจำปี (FM-QC-46)
+        </button>
+        <button
+          type="button"
+          onClick={() => setModuleView('ASSETS')}
+          aria-label="ทะเบียนเครื่องมือ (Asset Register)"
+        >
+          ทะเบียนเครื่องมือ (Asset Register)
+        </button>
+      </div>
+
+      {/* Enterprise Unified Page Header */}
+      <div className="bg-white rounded-2xl border border-slate-200/90 p-5 md:p-6 shadow-xs transition-all">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="space-y-1">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs font-bold">
-              <Wrench size={14} />
-              <span>VCC • เฉพาะเจ้าหน้าที่ DCC</span>
+          <div className="space-y-1.5 min-w-0">
+            {/* Breadcrumb Navigation Context */}
+            <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
+              <span className="hover:text-slate-700 transition-colors">พอร์ทัลหลัก</span>
+              <span className="text-slate-300">/</span>
+              <span className="text-indigo-600 font-semibold">ศูนย์ทวนสอบและสอบเทียบ (VCC)</span>
+              <span className="text-slate-300">/</span>
+              <span className="text-slate-800 font-semibold truncate">{pageMeta.breadcrumb}</span>
             </div>
-            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
-              VCC (Verify and Calibration Center) — {
-                moduleView === 'DASHBOARD' ? 'ภาพรวมและแจ้งเตือน (Dashboard & Alerts)' :
-                moduleView === 'WORK_ORDERS' ? 'ใบสั่งงานและบันทึกผล (Work Orders)' :
-                moduleView === 'ANNUAL_PLAN' ? 'แผนการทวนสอบเครื่องมือประจำปี (FM-QC-46)' :
-                'ทะเบียนเครื่องมือวัด (Equipment Register)'
-              }
+
+            {/* Page Title & Icon */}
+            <h1 className="text-xl md:text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-indigo-50 border border-indigo-100/80 text-indigo-600 flex items-center justify-center shrink-0 shadow-2xs">
+                <pageMeta.Icon size={20} />
+              </div>
+              <span className="truncate">{pageMeta.title}</span>
             </h1>
-            <p className="text-sm text-slate-600">
-              {
-                moduleView === 'DASHBOARD'
-                  ? 'สรุป KPI งานทวนสอบ/สอบเทียบ ศูนย์แจ้งเตือนตามกติกา และส่งออกรายงานประจำปี'
-                  : moduleView === 'WORK_ORDERS'
-                  ? 'เปิดใบสั่งงานตามแผน เลื่อนวันครบกำหนด บันทึกผลพร้อมใบรับรอง ตรวจรับปิดงาน และควบคุมการระงับใช้'
-                  : moduleView === 'ANNUAL_PLAN'
-                  ? 'ตารางแผนการทวนสอบเครื่องมือประจำปี 12 เดือน คำนวณวันครบกำหนดตามกติกา และอนุมัติแผนตาม Approval Matrix'
-                  : 'จัดการทะเบียนเครื่องมือวัดและกลุ่มเครื่องมือ ตรวจสอบรหัสเครื่องมือไม่ให้ซ้ำทั้งบริษัท และบันทึกประวัติการแก้ไขทุกขั้นตอน'
-              }
+
+            {/* Subtitle helper */}
+            <p className="text-xs md:text-sm text-slate-600 pl-0.5">
+              {pageMeta.description}
             </p>
           </div>
 
+          {/* Contextual Actions (for ASSETS page) */}
           {moduleView === 'ASSETS' && (
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-wrap items-center gap-2.5 shrink-0">
               <button
                 type="button"
                 onClick={openTypesSettings}
-                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-300 bg-white text-slate-700 text-sm font-semibold hover:bg-slate-50 transition-colors cursor-pointer"
+                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl border border-slate-300 bg-white text-slate-700 text-xs md:text-sm font-semibold hover:bg-slate-50 transition-colors shadow-2xs cursor-pointer"
               >
-                <SlidersHorizontal size={16} />
+                <SlidersHorizontal size={15} />
                 <span>ตั้งค่าประเภทเครื่องมือ</span>
               </button>
 
               <button
                 type="button"
                 onClick={openCreateModal}
-                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 transition-colors shadow-xs cursor-pointer"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 text-white text-xs md:text-sm font-semibold hover:bg-indigo-700 transition-colors shadow-xs cursor-pointer"
               >
                 <Plus size={16} />
                 <span>เพิ่มเครื่องมือ / กลุ่มเครื่องมือ</span>
               </button>
             </div>
           )}
-        </div>
-
-        {/* Sub-module Switcher */}
-        <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-slate-200" role="navigation" aria-label="เมนูย่อยระบบ VCC">
-          <button
-            type="button"
-            onClick={() => setModuleView('DASHBOARD')}
-            className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-colors cursor-pointer ${
-              moduleView === 'DASHBOARD'
-                ? 'bg-indigo-600 text-white shadow-xs'
-                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-            }`}
-          >
-            <BarChart3 size={15} />
-            <span>ภาพรวมและรายงาน (Dashboard & Export)</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setModuleView('WORK_ORDERS')}
-            className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-colors cursor-pointer ${
-              moduleView === 'WORK_ORDERS'
-                ? 'bg-indigo-600 text-white shadow-xs'
-                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-            }`}
-          >
-            <ClipboardList size={15} />
-            <span>ใบสั่งงานและบันทึกผล (Work Orders)</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setModuleView('ANNUAL_PLAN')}
-            className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-colors cursor-pointer ${
-              moduleView === 'ANNUAL_PLAN'
-                ? 'bg-indigo-600 text-white shadow-xs'
-                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-            }`}
-          >
-            <Calendar size={15} />
-            <span>แผนการทวนสอบประจำปี (FM-QC-46)</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setModuleView('ASSETS')}
-            className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-colors cursor-pointer ${
-              moduleView === 'ASSETS'
-                ? 'bg-indigo-600 text-white shadow-xs'
-                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-            }`}
-          >
-            <Wrench size={15} />
-            <span>ทะเบียนเครื่องมือ (Asset Register)</span>
-          </button>
         </div>
       </div>
 

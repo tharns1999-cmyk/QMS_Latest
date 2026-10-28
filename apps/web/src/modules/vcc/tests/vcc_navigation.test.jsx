@@ -127,4 +127,20 @@ describe('VCC Enterprise Navigation & Sidebar Spoke Integration Tests', () => {
       expect(screen.getByTestId('annual-plan-matrix')).toBeTruthy();
     });
   });
+
+  it('4. Renders clean Enterprise Page Header: breadcrumb context, title without redundant module prefix, and eliminates duplicate header tabs in visual UI', async () => {
+    render(
+      <MemoryRouter initialEntries={['/vcc/dashboard']}>
+        <AssetRegisterPage />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      // Must render clean title without redundant "VCC (Verify and Calibration Center) — " prefix
+      expect(screen.getByRole('heading', { level: 1, name: /ภาพรวมและแจ้งเตือน \(Dashboard & Alerts\)/i })).toBeTruthy();
+      // Must render breadcrumb context
+      expect(screen.getByText('ศูนย์ทวนสอบและสอบเทียบ (VCC)')).toBeTruthy();
+      expect(screen.queryByText(/VCC \(Verify and Calibration Center\) —/i)).toBeNull();
+    });
+  });
 });
