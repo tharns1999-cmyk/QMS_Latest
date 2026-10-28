@@ -32,10 +32,10 @@ import {
 
 const WO_TABS = [
   { key: 'OPEN', label: 'เปิดงาน / รอบันทึกผล (OPEN)', color: 'bg-indigo-600 text-white' },
-  { key: 'PENDING_REVIEW', label: 'รอตรวจรับผล (PENDING_REVIEW)', color: 'bg-amber-600 text-white' },
-  { key: 'REJECTED', label: 'ส่งกลับแก้ไขผล (REJECTED)', color: 'bg-rose-600 text-white' },
-  { key: 'CLOSED', label: 'ตรวจรับปิดงานแล้ว (CLOSED)', color: 'bg-emerald-600 text-white' },
-  { key: 'ON_HOLD', label: 'เครื่องมือระงับใช้ / NC (ON_HOLD)', color: 'bg-purple-700 text-white' }
+  { key: 'PENDING_REVIEW', label: 'รอตรวจรับผล (PENDING_REVIEW)', color: 'bg-amber-700 text-white' },
+  { key: 'REJECTED', label: 'ส่งกลับแก้ไขผล (REJECTED)', color: 'bg-rose-700 text-white' },
+  { key: 'CLOSED', label: 'ตรวจรับปิดงานแล้ว (CLOSED)', color: 'bg-emerald-700 text-white' },
+  { key: 'ON_HOLD', label: 'เครื่องมือระงับใช้ / NC (ON_HOLD)', color: 'bg-slate-800 text-white' }
 ];
 
 const WorkOrderSection = ({ activeDepartments }) => {
@@ -382,7 +382,7 @@ const WorkOrderSection = ({ activeDepartments }) => {
                   <tr key={wo.id} className="hover:bg-slate-50/80">
                     <td className="py-3.5 px-4 align-top">
                       <div className="font-mono font-bold text-slate-900">{wo.wo_code}</div>
-                      <div className="text-xs text-slate-500">
+                      <div className="text-xs text-slate-600">
                         {wo.plan_year ? `แผนปี ${wo.plan_year} (เดือน ${wo.planned_month})` : 'ใบงานนอกแผน (Ad-hoc)'}
                       </div>
                     </td>
@@ -390,14 +390,14 @@ const WorkOrderSection = ({ activeDepartments }) => {
                     <td className="py-3.5 px-4 align-top">
                       <div className="font-mono font-bold text-slate-900">{wo.asset_code}</div>
                       <div className="font-semibold text-slate-800">{wo.asset_name}</div>
-                      <div className="text-xs text-slate-500">แผนก: {wo.department} • {wo.provider_name}</div>
+                      <div className="text-xs text-slate-600">แผนก: {wo.department} • {wo.provider_name}</div>
                     </td>
 
                     <td className="py-3.5 px-4 align-top">
                       <div className="font-mono font-bold text-slate-900">{wo.due_date}</div>
                       {wo.due_date !== wo.original_due_date && (
-                        <div className="text-xs text-amber-700 mt-0.5">
-                          วันเดิม: <span className="font-mono line-through">{wo.original_due_date}</span> ({wo.reschedule_reason})
+                        <div className="text-xs text-amber-800 font-medium mt-0.5">
+                          วันเดิม: <span className="font-mono line-through text-slate-500">{wo.original_due_date}</span> ({wo.reschedule_reason})
                         </div>
                       )}
                     </td>

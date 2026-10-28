@@ -567,7 +567,9 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
             <table className="w-full text-left border-collapse text-xs">
               <thead>
                 <tr className="bg-slate-100 border-b border-slate-200 text-slate-700 font-bold">
-                  <th className="py-3 px-3">รายการเครื่องมือวัด</th>
+                  <th className="py-3 px-3 sticky left-0 z-20 bg-slate-100 shadow-[1px_0_0_0_#cbd5e1] min-w-[220px]">
+                    รายการเครื่องมือวัด
+                  </th>
                   <th className="py-3 px-2">หน่วยงานที่ทวนสอบ</th>
                   <th className="py-3 px-2 text-center">Action</th>
                   {MONTHS.map((m) => (
@@ -587,17 +589,17 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
                   return (
                     <React.Fragment key={item.id}>
                       <tr className="hover:bg-slate-50/70">
-                        <td className="py-3 px-3 align-top" rowSpan={2}>
+                        <td className="py-3 px-3 align-top sticky left-0 z-10 bg-white shadow-[1px_0_0_0_#e2e8f0] min-w-[220px]" rowSpan={2}>
                           <div className="font-mono font-bold text-slate-900 text-sm">{item.asset_code}</div>
                           <div className="font-semibold text-slate-800">{item.asset_name}</div>
-                          <div className="text-[11px] text-slate-500">ความถี่: {item.frequency_label}</div>
+                          <div className="text-xs text-slate-600">ความถี่: {item.frequency_label}</div>
                           {isGroup ? (
-                            <span className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded bg-purple-100 text-purple-800 font-bold text-[11px]">
-                              <FolderTree size={11} />
+                            <span className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded bg-indigo-50 border border-indigo-200 text-indigo-900 font-semibold text-xs">
+                              <FolderTree size={12} />
                               กลุ่มแม่ (ต้องแยกรหัสลูกก่อนสร้างใบงาน)
                             </span>
                           ) : item.parent_asset_code ? (
-                            <span className="mt-1 inline-block px-2 py-0.5 rounded bg-slate-100 text-slate-700 text-[11px]">
+                            <span className="mt-1 inline-block px-2 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-700 text-xs">
                               ลูกของกลุ่ม: {item.parent_asset_code}
                             </span>
                           ) : null}
@@ -711,7 +713,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
 
           {/* 3-Stage Sign-off & Approval Matrix Box */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
-            <div className="p-4 rounded-xl border border-slate-200 bg-slate-50 space-y-1 text-xs">
+            <div className="p-4 rounded-xl border border-slate-200/80 bg-slate-50/70 space-y-1 text-xs">
               <div className="font-bold text-slate-700">1. ผู้จัดทำแผน (Requester L{thresholds.min_requester_level}+)</div>
               <div className="text-slate-900 font-semibold">{activePlan.prepared_by_name || activePlan.prepared_by || 'ยังไม่ได้ส่งทบทวน'}</div>
               {canEditPlan && (
@@ -726,7 +728,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
               )}
             </div>
 
-            <div className="p-4 rounded-xl border border-slate-200 bg-slate-50 space-y-1 text-xs">
+            <div className="p-4 rounded-xl border border-slate-200/80 bg-slate-50/70 space-y-1 text-xs">
               <div className="font-bold text-slate-700">2. ผู้ทบทวนแผน (Reviewer L{thresholds.required_reviewer_level}+)</div>
               <div className="text-slate-900 font-semibold">{activePlan.reviewed_by_name || activePlan.reviewed_by || 'รอการทบทวน'}</div>
               {activePlan.status === 'PENDING_REVIEW' && (
@@ -734,7 +736,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
                   <button
                     type="button"
                     onClick={() => openWorkflowModal('REVIEW')}
-                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-cyan-600 text-white font-bold hover:bg-cyan-700 cursor-pointer"
+                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-sky-700 text-white font-bold hover:bg-sky-800 cursor-pointer"
                   >
                     <CheckCircle2 size={13} />
                     <span>ยืนยันการทบทวน</span>
@@ -742,7 +744,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
                   <button
                     type="button"
                     onClick={() => openWorkflowModal('REJECT')}
-                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-rose-600 text-white font-bold hover:bg-rose-700 cursor-pointer"
+                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-rose-700 text-white font-bold hover:bg-rose-800 cursor-pointer"
                   >
                     <XCircle size={13} />
                     <span>ส่งกลับแก้ไข</span>
@@ -751,7 +753,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
               )}
             </div>
 
-            <div className="p-4 rounded-xl border border-slate-200 bg-slate-50 space-y-1 text-xs">
+            <div className="p-4 rounded-xl border border-slate-200/80 bg-slate-50/70 space-y-1 text-xs">
               <div className="font-bold text-slate-700">3. ผู้อนุมัติแผน (Approver L{thresholds.required_approver_level}+)</div>
               <div className="text-slate-900 font-semibold">{activePlan.approved_by_name || activePlan.approved_by || 'รอการอนุมัติ'}</div>
               {activePlan.status === 'PENDING_APPROVAL' && (
@@ -759,7 +761,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
                   <button
                     type="button"
                     onClick={() => openWorkflowModal('APPROVE')}
-                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 cursor-pointer"
+                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-emerald-700 text-white font-bold hover:bg-emerald-800 cursor-pointer"
                   >
                     <ShieldCheck size={13} />
                     <span>อนุมัติแผนประจำปี</span>
@@ -767,7 +769,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
                   <button
                     type="button"
                     onClick={() => openWorkflowModal('REJECT')}
-                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-rose-600 text-white font-bold hover:bg-rose-700 cursor-pointer"
+                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-rose-700 text-white font-bold hover:bg-rose-800 cursor-pointer"
                   >
                     <XCircle size={13} />
                     <span>ส่งกลับแก้ไข</span>
