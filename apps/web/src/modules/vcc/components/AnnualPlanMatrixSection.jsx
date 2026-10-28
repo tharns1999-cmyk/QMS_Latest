@@ -372,7 +372,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
   }, [plans]);
 
   return (
-    <div className="space-y-4" data-testid="annual-plan-matrix">
+    <div className="space-y-3" data-testid="annual-plan-matrix">
       <AnnualPlanWorkspaceHeader
         statusTab={statusTab}
         setStatusTab={setStatusTab}
@@ -396,18 +396,18 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
       />
 
       {workflowBannerError && (
-        <div role="alert" className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-center gap-2 shadow-2xs">
-          <AlertTriangle size={16} className="text-rose-600 shrink-0" />
+        <div role="alert" className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-center gap-2 shadow-2xs">
+          <AlertTriangle size={15} className="text-rose-600 shrink-0" />
           <span>{workflowBannerError}</span>
         </div>
       )}
 
       {loading ? (
-        <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center text-sm text-slate-500 shadow-xs">
+        <div className="bg-white rounded-2xl border border-slate-200/80 p-12 text-center text-sm text-slate-500 shadow-2xs">
           กำลังโหลดตารางแผนการทวนสอบเครื่องมือประจำปี...
         </div>
       ) : !activePlan ? (
-        <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center space-y-2 shadow-xs">
+        <div className="bg-white rounded-2xl border border-slate-200/80 p-12 text-center space-y-2 shadow-2xs">
           <div className="text-base font-bold text-slate-700">
             ไม่พบแผนการทวนสอบประจำปีในสถานะ {statusTab}
           </div>
@@ -416,7 +416,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
           </p>
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-2.5">
           <AnnualPlanApprovalStepper
             activePlan={activePlan}
             thresholds={thresholds}
