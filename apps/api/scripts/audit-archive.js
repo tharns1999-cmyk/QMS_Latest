@@ -30,7 +30,7 @@ const read = (sql) => {
 const write = (sql) => {
   const file = join(tmp, 'write.sql');
   writeFileSync(file, sql);
-  execSync(`npx wrangler d1 execute DB ${target} --file "${file}"`, { env: { ...process.env, CI: 'true' }, stdio: ['ignore', 'ignore', 'inherit'] });
+  execSync(`npx wrangler d1 execute DB ${target} --yes --file "${file}"`, { env: { ...process.env, CI: 'true' }, stdio: ['ignore', 'ignore', 'inherit'] });
 };
 const sqlText = (s) => `'${String(s).replaceAll("'", "''")}'`;
 
