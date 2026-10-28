@@ -282,7 +282,7 @@ const WorkOrderSection = ({ activeDepartments }) => {
   };
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5" data-testid="vcc-work-order-section">
       {/* Rule Notice */}
       <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-xs text-amber-950 space-y-1">
         <div className="font-bold flex items-center gap-2 text-sm text-amber-900">

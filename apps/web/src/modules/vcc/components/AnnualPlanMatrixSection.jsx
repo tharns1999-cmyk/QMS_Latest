@@ -379,7 +379,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
   const canEditPlan = activePlan && (activePlan.status === 'DRAFT' || activePlan.status === 'REJECTED');
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5" data-testid="annual-plan-matrix">
       {/* Rule Notice Banner */}
       <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-xs text-amber-950 space-y-1.5">
         <div className="font-bold flex items-center gap-2 text-sm text-amber-900">
