@@ -7,6 +7,7 @@ import {
   saveVccPlanSettings,
   fetchVccPlans,
   fetchVccPlanDetail,
+  computeDueDateForMonth,
   createVccPlan,
   updateVccPlan,
   saveVccPlanItem,
@@ -17,6 +18,7 @@ import {
   approveVccPlan,
   rejectVccPlan
 } from '../api/vccPlanApi';
+import { fetchVccWorkOrders, createVccWorkOrder } from '../api/vccWorkOrderApi';
 import {
   PlanFormModal,
   PlanItemModal,
@@ -38,6 +40,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
   const [plans, setPlans] = useState([]);
   const [selectedPlanId, setSelectedPlanId] = useState('');
   const [planDetail, setPlanDetail] = useState(null);
+  const [planWorkOrders, setPlanWorkOrders] = useState([]);
   const [activeAssets, setActiveAssets] = useState([]);
   const [providers, setProviders] = useState([]);
   const [planSettings, setPlanSettings] = useState({
@@ -99,6 +102,27 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [smartImportOpen, setSmartImportOpen] = useState(false);
 
+  const loadPlanWorkOrders = useCallback(async (planId) => {
+    if (!planId) {
+      setPlanWorkOrders([]);
+      return;
+    }
+    try {
+      const statuses = ['OPEN', 'PENDING_REVIEW', 'CLOSED'];
+      const results = await Promise.all(
+        statuses.map((st) => fetchVccWorkOrders({ plan_id: planId, status: st }).catch(() => []))
+      );
+      const holdRes = await fetchVccWorkOrders({ plan_id: planId, nc_status: 'OPEN' }).catch(() => []);
+      const map = new Map();
+      [...results.flat(), ...holdRes].forEach((w) => {
+        if (w && w.id) map.set(w.id, w);
+      });
+      setPlanWorkOrders(Array.from(map.values()));
+    } catch {
+      setPlanWorkOrders([]);
+    }
+  }, []);
+
   const loadPlansAndMeta = useCallback(async (preferredPlanId = '') => {
     setLoading(true);
     try {
@@ -120,17 +144,21 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
       setSelectedPlanId(targetId);
 
       if (targetId) {
-        const detail = await fetchVccPlanDetail(targetId);
+        const [detail] = await Promise.all([
+          fetchVccPlanDetail(targetId),
+          loadPlanWorkOrders(targetId)
+        ]);
         setPlanDetail(detail);
       } else {
         setPlanDetail(null);
+        setPlanWorkOrders([]);
       }
     } catch (err) {
       toast.error(err.message || 'ไม่สามารถโหลดแผนการสอบเทียบประจำปีได้');
     } finally {
       setLoading(false);
     }
-  }, [statusTab, filterYear, filterDept]);
+  }, [statusTab, filterYear, filterDept, loadPlanWorkOrders]);
 
   useEffect(() => {
     loadPlansAndMeta();
@@ -140,7 +168,10 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
     setSelectedPlanId(planId);
     setWorkflowBannerError('');
     try {
-      const detail = await fetchVccPlanDetail(planId);
+      const [detail] = await Promise.all([
+        fetchVccPlanDetail(planId),
+        loadPlanWorkOrders(planId)
+      ]);
       setPlanDetail(detail);
     } catch (err) {
       toast.error(err.message || 'ไม่สามารถโหลดรายละเอียดแผนได้');
@@ -257,6 +288,73 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
     } catch (err) {
       toast.error(err.message || 'ไม่สามารถลบรายการได้');
     }
+  };
+
+  const handleQuickAddMonth = async (item, month) => {
+    if (!planDetail?.plan) return;
+    const currentMonths = item.planned_months || [];
+    if (currentMonths.includes(month)) return;
+    const updatedMonths = [...currentMonths, month].sort((a, b) => a - b);
+    await saveVccPlanItem(planDetail.plan.id, {
+      asset_id: item.asset_id,
+      provider_name: item.provider_name,
+      frequency_label: item.frequency_label || 'รายปี',
+      planned_months: updatedMonths,
+      responsible_dept: item.responsible_dept,
+      responsible_label: item.responsible_label || '',
+      remarks: item.remarks || ''
+    });
+    toast.success(`เพิ่มเป้าหมายเดือน ${month} สำหรับ ${item.asset_code} แล้ว`);
+    const refreshed = await fetchVccPlanDetail(planDetail.plan.id);
+    setPlanDetail(refreshed);
+  };
+
+  const handleQuickRemoveMonth = async (item, month) => {
+    if (!planDetail?.plan) return;
+    const currentMonths = item.planned_months || [];
+    if (!currentMonths.includes(month)) return;
+    if (currentMonths.length <= 1) {
+      throw new Error('ต้องมีรอบการทวนสอบอย่างน้อย 1 เดือน หากต้องการนำเครื่องมือออก กรุณากดปุ่มลบรายการ');
+    }
+    const updatedMonths = currentMonths.filter((m) => m !== month);
+    await saveVccPlanItem(planDetail.plan.id, {
+      asset_id: item.asset_id,
+      provider_name: item.provider_name,
+      frequency_label: item.frequency_label || 'รายปี',
+      planned_months: updatedMonths,
+      responsible_dept: item.responsible_dept,
+      responsible_label: item.responsible_label || '',
+      remarks: item.remarks || ''
+    });
+    toast.success(`ยกเลิกรอบเดือน ${month} สำหรับ ${item.asset_code} แล้ว`);
+    const refreshed = await fetchVccPlanDetail(planDetail.plan.id);
+    setPlanDetail(refreshed);
+  };
+
+  const handleCreateWorkOrder = async (item, month) => {
+    if (!planDetail?.plan) return;
+    if (Number(item.is_group) === 1) {
+      openGroupWorkOrderCheck(item);
+      return;
+    }
+    const dueDate = computeDueDateForMonth(
+      planDetail.plan.plan_year,
+      month,
+      planDetail.plan.due_date_rule || 'END_OF_MONTH'
+    );
+    await createVccWorkOrder({
+      mode: 'FROM_PLAN',
+      plan_id: planDetail.plan.id,
+      plan_item_id: item.id,
+      planned_month: month,
+      asset_id: item.asset_id,
+      provider_name: item.provider_name,
+      due_date: dueDate
+    });
+    toast.success(`เปิดใบสั่งงานเดือน ${month} สำหรับ ${item.asset_code} แล้ว`);
+    const refreshed = await fetchVccPlanDetail(planDetail.plan.id);
+    setPlanDetail(refreshed);
+    await loadPlanWorkOrders(planDetail.plan.id);
   };
 
   const handleSubmitPlan = async () => {
@@ -430,11 +528,16 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
 
           <AnnualPlanMatrixTable
             planItems={planItems}
+            activePlan={activePlan}
+            workOrders={planWorkOrders}
             canEditPlan={canEditPlan}
             onOpenAddItem={openAddItem}
             onDeleteItem={handleDeleteItem}
             onOpenGroupWorkOrderCheck={openGroupWorkOrderCheck}
             onOpenSmartImport={() => setSmartImportOpen(true)}
+            onQuickAddMonth={handleQuickAddMonth}
+            onQuickRemoveMonth={handleQuickRemoveMonth}
+            onCreateWorkOrder={handleCreateWorkOrder}
           />
         </div>
       )}
