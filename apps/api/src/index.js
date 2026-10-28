@@ -294,6 +294,11 @@ const isLockConflict = (err) => /UNIQUE/.test(String(err?.message));
 
 // Visible to the people named on the DAR and to DCC.
 const DAR_VISIBLE_TO = `(? IN (requester_id, reviewer_id, approver_id) OR ?)`;
+// DAR-YY-NNN and EDR-YY-NNN (external documents only) are stored when the DAR is submitted. The number restarts each year (UTC year of created_at,
+// the same 'now' the INSERT stamps), is one past the highest already issued, and is never reused. The unique indexes in 0022 back this up.
+// EDR_NO_SQL takes one bound value: the document type.
+const DAR_NO_SQL = `'DAR-' || substr(strftime('%Y', 'now'), 3, 2) || '-' || printf('%03d', 1 + (SELECT COALESCE(MAX(CAST(substr(dar_no, 8) AS INTEGER)), 0) FROM dars WHERE dar_no GLOB 'DAR-' || substr(strftime('%Y', 'now'), 3, 2) || '-[0-9]*'))`;
+const EDR_NO_SQL = `CASE WHEN ? = 'ED' THEN 'EDR-' || substr(strftime('%Y', 'now'), 3, 2) || '-' || printf('%03d', 1 + (SELECT COALESCE(MAX(CAST(substr(edr_no, 8) AS INTEGER)), 0) FROM dars WHERE edr_no GLOB 'EDR-' || substr(strftime('%Y', 'now'), 3, 2) || '-[0-9]*')) END`;
 const darVisibilityArgs = (user) => [user.id, user.isDcc ? 1 : 0];
 
 app.post('/api/dars', requireAuth, async (c) => {
@@ -372,34 +377,29 @@ app.post('/api/dars', requireAuth, async (c) => {
     : ['?', [docCode]];
   try {
     const [inserted] = await db.batch([
-      db.prepare(`INSERT INTO dars (type, doc_code, doc_type, department, revision, name, access_scope, reason, requester_id, reviewer_id, approver_id, effective_date, distributions, ack_user_ids, ext_issuer, ext_edition, review_cycle_months)
-        VALUES (?, ${codeSql}, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`)
-        .bind(type, ...codeArgs, doc.doc_type, doc.department, doc.revision, doc.name, doc.access_scope, str('reason'), user.id, reviewerId, approverId, effectiveDate, JSON.stringify(distributions), ackIds.length ? JSON.stringify(ackIds) : null, ext.issuer, ext.edition, ext.cycle),
+      db.prepare(`INSERT INTO dars (type, doc_code, doc_type, department, revision, name, access_scope, reason, requester_id, reviewer_id, approver_id, effective_date, distributions, ack_user_ids, ext_issuer, ext_edition, review_cycle_months, dar_no, edr_no)
+        VALUES (?, ${codeSql}, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${DAR_NO_SQL}, ${EDR_NO_SQL}) RETURNING *`)
+        .bind(type, ...codeArgs, doc.doc_type, doc.department, doc.revision, doc.name, doc.access_scope, str('reason'), user.id, reviewerId, approverId, effectiveDate, JSON.stringify(distributions), ackIds.length ? JSON.stringify(ackIds) : null, ext.issuer, ext.edition, ext.cycle, doc.doc_type),
       db.prepare(`INSERT INTO audit_log (actor_id, action, details)
         SELECT ?, 'DAR_SUBMITTED', json_object('type', type, 'doc_code', doc_code, 'dar_id', id) FROM dars WHERE id = last_insert_rowid()`).bind(user.id)
     ]);
-    const dar = await db.prepare(`SELECT dars.*, ${DAR_NO_SQL} FROM dars WHERE id = ?`).bind(inserted.results[0].id).first();
-    return c.json({ dar }, 201);
+    return c.json({ dar: inserted.results[0] }, 201);
   } catch (err) {
     if (isLockConflict(err)) return c.json({ error: 'เอกสารนี้มีคำขอ DAR ที่ยังดำเนินการอยู่' }, 409);
     throw err;
   }
 });
 
-// DAR-YY-XXX: the running number restarts each year; ids only grow, so the rank within the year never changes.
-const DAR_NO_SQL = `'DAR-' || substr(dars.created_at, 3, 2) || '-' || printf('%03d', (SELECT COUNT(*) FROM dars d2 WHERE substr(d2.created_at, 1, 4) = substr(dars.created_at, 1, 4) AND d2.id <= dars.id)) AS dar_no,
-  CASE WHEN dars.doc_type = 'ED' THEN 'EDR-' || substr(dars.created_at, 3, 2) || '-' || printf('%03d', (SELECT COUNT(*) FROM dars d2 WHERE d2.doc_type = 'ED' AND substr(d2.created_at, 1, 4) = substr(dars.created_at, 1, 4) AND d2.id <= dars.id)) END AS edr_no`;
-
 app.get('/api/dars', requireAuth, async (c) => {
   await activateDue(c.env.DB);
   const status = c.req.query('status')?.toUpperCase();
-  const { results } = await c.env.DB.prepare(`SELECT dars.*, ${DAR_NO_SQL} FROM dars WHERE (? IS NULL OR status = ?) AND ${DAR_VISIBLE_TO} ORDER BY id DESC`)
+  const { results } = await c.env.DB.prepare(`SELECT * FROM dars WHERE (? IS NULL OR status = ?) AND ${DAR_VISIBLE_TO} ORDER BY id DESC`)
     .bind(status ?? null, status ?? null, ...darVisibilityArgs(c.get('user'))).all();
   return c.json({ dars: results });
 });
 
 app.get('/api/dars/:id', requireAuth, async (c) => {
-  const dar = await c.env.DB.prepare(`SELECT dars.*, ${DAR_NO_SQL} FROM dars WHERE id = ? AND ${DAR_VISIBLE_TO}`).bind(c.req.param('id'), ...darVisibilityArgs(c.get('user'))).first();
+  const dar = await c.env.DB.prepare(`SELECT * FROM dars WHERE id = ? AND ${DAR_VISIBLE_TO}`).bind(c.req.param('id'), ...darVisibilityArgs(c.get('user'))).first();
   return dar ? c.json({ dar }) : c.json({ error: 'ไม่พบคำขอ' }, 404);
 });
 
