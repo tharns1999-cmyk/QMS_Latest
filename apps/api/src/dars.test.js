@@ -147,6 +147,25 @@ describe('DAR workflow API', () => {
     expect(JSON.parse(audit.details)).toMatchObject({ type: 'NEW', doc_code: 'SD-PD-04' });
   });
 
+  it('stores DAR-YY-NNN once at submit: unique, in order, identical in the list and the single read', async () => {
+    const yy = new Date().toISOString().slice(2, 4);
+    const made = (await Promise.all([1, 2, 3].map(() => post('/api/dars', 'R-REQ', newDar({ doc_type: 'WI' }))))).map((r) => r.body.dar);
+    const seqs = made.map((d) => Number(d.dar_no.split('-')[2])).sort((a, b) => a - b);
+    expect(made.every((d) => new RegExp(`^DAR-${yy}-\\d{3}$`).test(d.dar_no))).toBe(true);
+    expect(seqs[1]).toBe(seqs[0] + 1);
+    expect(seqs[2]).toBe(seqs[0] + 2);
+    expect(made.every((d) => d.edr_no === null)).toBe(true); // EDR numbers belong to external documents only
+    const listed = (await get('/api/dars', 'R-DCC')).body.dars;
+    for (const d of made) {
+      expect(listed.find((x) => x.id === d.id).dar_no).toBe(d.dar_no);
+      expect((await get(`/api/dars/${d.id}`, 'R-REQ')).body.dar.dar_no).toBe(d.dar_no);
+    }
+    // A rejected DAR keeps its number, and the next one does not take it.
+    await post(`/api/dars/${made[0].id}/decision`, 'R-REV', { decision: 'REJECT', comment: 'ไม่จำเป็น' });
+    const next = (await post('/api/dars', 'R-REQ', newDar({ doc_type: 'WI' }))).body.dar;
+    expect(Number(next.dar_no.split('-')[2])).toBe(seqs[2] + 1);
+  });
+
   it('rejects with a required comment', async () => {
     const dar = (await post('/api/dars', 'R-REQ', newDar())).body.dar;
     expect((await post(`/api/dars/${dar.id}/decision`, 'R-REV', { decision: 'REJECT' })).status).toBe(400);

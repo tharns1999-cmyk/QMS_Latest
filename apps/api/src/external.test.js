@@ -43,6 +43,7 @@ describe('external documents (doc_type ED) through the request pipeline', () => 
     expect(created.status).toBe('PENDING_DCC'); // approved, waiting for its date
     const code = created.doc_code;
     expect(code).toMatch(/^ED-EXT-\d\d$/);
+    expect((await env.DB.prepare('SELECT edr_no FROM dars WHERE id = ?').bind(created.id).first()).edr_no).toMatch(/^EDR-\d\d-\d{3}$/);
     await env.DB.prepare('UPDATE dars SET effective_date = ? WHERE id = ?').bind(new Date(Date.now() + 7 * 3600e3).toISOString().slice(0, 10), created.id).run();
     await request('GET', '/api/dars', 'E-REQ');
     const first = await doc(code);
