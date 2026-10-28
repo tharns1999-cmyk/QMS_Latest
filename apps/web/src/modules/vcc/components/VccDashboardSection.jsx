@@ -22,10 +22,10 @@ import {
 const MONTH_LABELS = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
 
 const ALERT_TABS = [
-  { key: 'ON_HOLD', label: 'ระงับใช้ (ON_HOLD)', badgeClass: 'bg-rose-100 text-rose-700' },
+  { key: 'ON_HOLD', label: 'ระงับใช้ (ON_HOLD)', badgeClass: 'bg-rose-100 text-rose-800' },
   { key: 'OVERDUE', label: 'เลยกำหนด (OVERDUE)', badgeClass: 'bg-amber-100 text-amber-800' },
-  { key: 'DUE_SOON', label: 'ใกล้ครบกำหนด (DUE_SOON)', badgeClass: 'bg-blue-100 text-blue-700' },
-  { key: 'PENDING_REVIEW', label: 'รอตรวจรับ (PENDING_REVIEW)', badgeClass: 'bg-purple-100 text-purple-700' }
+  { key: 'DUE_SOON', label: 'ใกล้ครบกำหนด (DUE_SOON)', badgeClass: 'bg-blue-100 text-blue-800' },
+  { key: 'PENDING_REVIEW', label: 'รอตรวจรับ (PENDING_REVIEW)', badgeClass: 'bg-indigo-100 text-indigo-800' }
 ];
 
 const parseDaysInput = (text) =>
@@ -239,59 +239,59 @@ export default function VccDashboardSection({ onNavigateToWorkOrders }) {
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
         <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
-          <div className="text-xs text-slate-500">เครื่องมือรายตัว (ใช้งานปกติ)</div>
+          <div className="text-xs font-medium text-slate-600">เครื่องมือรายตัว (ใช้งานปกติ)</div>
           <div className="mt-1 text-2xl font-bold text-slate-900" data-testid="kpi-active-assets">
-            {eq.active_assets ?? 0} <span className="text-xs font-normal text-slate-400">/ {eq.total_assets ?? 0}</span>
+            {eq.active_assets ?? 0} <span className="text-xs font-normal text-slate-500">/ {eq.total_assets ?? 0}</span>
           </div>
-          <div className="mt-1 text-[11px] text-slate-500">กลุ่มแม่: {eq.group_count ?? 0} กลุ่ม | ปลดออก: {eq.retired_assets ?? 0}</div>
+          <div className="mt-1 text-xs text-slate-600">กลุ่มแม่: {eq.group_count ?? 0} กลุ่ม | ปลดออก: {eq.retired_assets ?? 0}</div>
         </div>
 
         <div className="bg-white rounded-2xl border border-rose-200 p-4 shadow-sm">
-          <div className="text-xs font-semibold text-rose-700 flex items-center gap-1">
+          <div className="text-xs font-semibold text-rose-800 flex items-center gap-1">
             <ShieldAlert size={13} /> ระงับใช้งาน (ON_HOLD)
           </div>
-          <div className="mt-1 text-2xl font-bold text-rose-600" data-testid="kpi-on-hold-assets">
+          <div className="mt-1 text-2xl font-bold text-rose-700" data-testid="kpi-on-hold-assets">
             {eq.on_hold_assets ?? 0}
           </div>
-          <div className="mt-1 text-[11px] text-rose-600">ผลไม่ผ่าน (FAIL): {wo.fail_count ?? 0} งาน</div>
+          <div className="mt-1 text-xs text-rose-700">ผลไม่ผ่าน (FAIL): {wo.fail_count ?? 0} งาน</div>
         </div>
 
         <div className="bg-white rounded-2xl border border-amber-200 p-4 shadow-sm">
-          <div className="text-xs font-semibold text-amber-800 flex items-center gap-1">
+          <div className="text-xs font-semibold text-amber-900 flex items-center gap-1">
             <AlertTriangle size={13} /> เลยกำหนด (OVERDUE)
           </div>
-          <div className="mt-1 text-2xl font-bold text-amber-600" data-testid="kpi-overdue-count">
+          <div className="mt-1 text-2xl font-bold text-amber-700" data-testid="kpi-overdue-count">
             {wo.overdue_count ?? 0}
           </div>
-          <div className="mt-1 text-[11px] text-slate-500">ใกล้ครบใน 7 วัน: {wo.due_in_7_days ?? 0} งาน</div>
+          <div className="mt-1 text-xs text-slate-600">ใกล้ครบใน 7 วัน: {wo.due_in_7_days ?? 0} งาน</div>
         </div>
 
         <div className="bg-white rounded-2xl border border-blue-200 p-4 shadow-sm">
-          <div className="text-xs font-semibold text-blue-700 flex items-center gap-1">
+          <div className="text-xs font-semibold text-blue-800 flex items-center gap-1">
             <Clock size={13} /> ใกล้ครบกำหนดใน 30 วัน
           </div>
-          <div className="mt-1 text-2xl font-bold text-blue-600" data-testid="kpi-due-30-count">
+          <div className="mt-1 text-2xl font-bold text-blue-700" data-testid="kpi-due-30-count">
             {wo.due_in_30_days ?? 0}
           </div>
-          <div className="mt-1 text-[11px] text-slate-500">ใบสั่งงานทั้งหมด: {wo.total_work_orders ?? 0}</div>
+          <div className="mt-1 text-xs text-slate-600">ใบสั่งงานทั้งหมด: {wo.total_work_orders ?? 0}</div>
         </div>
 
-        <div className="bg-white rounded-2xl border border-purple-200 p-4 shadow-sm">
-          <div className="text-xs font-semibold text-purple-700">รอผู้ตรวจรับ (PENDING_REVIEW)</div>
-          <div className="mt-1 text-2xl font-bold text-purple-600" data-testid="kpi-pending-review-count">
+        <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
+          <div className="text-xs font-semibold text-slate-700">รอผู้ตรวจรับ (PENDING_REVIEW)</div>
+          <div className="mt-1 text-2xl font-bold text-slate-900" data-testid="kpi-pending-review-count">
             {wo.pending_review_count ?? 0}
           </div>
-          <div className="mt-1 text-[11px] text-slate-500">SLA ตรวจรับ: {dashboard?.notification_settings?.review_sla_days ?? 3} วัน</div>
+          <div className="mt-1 text-xs text-slate-600">SLA ตรวจรับ: {dashboard?.notification_settings?.review_sla_days ?? 3} วัน</div>
         </div>
 
         <div className="bg-white rounded-2xl border border-emerald-200 p-4 shadow-sm">
-          <div className="text-xs font-semibold text-emerald-700 flex items-center gap-1">
+          <div className="text-xs font-semibold text-emerald-800 flex items-center gap-1">
             <CheckCircle2 size={13} /> ปิดงานแล้ว / ทันกำหนด
           </div>
-          <div className="mt-1 text-2xl font-bold text-emerald-600" data-testid="kpi-completed-count">
+          <div className="mt-1 text-2xl font-bold text-emerald-700" data-testid="kpi-completed-count">
             {wo.completed_count ?? 0} <span className="text-xs font-semibold">({wo.on_time_rate ?? 0}%)</span>
           </div>
-          <div className="mt-1 text-[11px] text-emerald-700">ทันกำหนด: {wo.on_time_count ?? 0} งาน | ผ่าน: {wo.pass_count ?? 0}</div>
+          <div className="mt-1 text-xs text-emerald-800">ทันกำหนด: {wo.on_time_count ?? 0} งาน | ผ่าน: {wo.pass_count ?? 0}</div>
         </div>
       </div>
 
@@ -300,13 +300,13 @@ export default function VccDashboardSection({ onNavigateToWorkOrders }) {
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <Bell size={16} className="text-amber-600" />
-            <h3 className="text-sm font-bold text-slate-800">ศูนย์แจ้งเตือนแยกตามสถานะ (งานที่ปิดแล้วจะไม่แจ้งเตือนซ้ำ)</h3>
+            <h2 className="text-sm font-bold text-slate-800">ศูนย์แจ้งเตือนแยกตามสถานะ (งานที่ปิดแล้วจะไม่แจ้งเตือนซ้ำ)</h2>
           </div>
           {onNavigateToWorkOrders && (
             <button
               type="button"
               onClick={onNavigateToWorkOrders}
-              className="text-xs font-semibold text-teal-700 hover:underline"
+              className="text-xs font-semibold text-indigo-700 hover:underline"
             >
               ไปที่หน้าใบสั่งงานทั้งหมด →
             </button>
@@ -333,9 +333,9 @@ export default function VccDashboardSection({ onNavigateToWorkOrders }) {
         </div>
 
         {loading ? (
-          <div className="py-6 text-center text-xs text-slate-400">กำลังประมวลผลรายการแจ้งเตือน...</div>
+          <div className="py-6 text-center text-xs text-slate-500">กำลังประมวลผลรายการแจ้งเตือน...</div>
         ) : filteredAlerts.length === 0 ? (
-          <div className="py-6 text-center text-xs text-slate-400" data-testid="alert-empty-state">
+          <div className="py-6 text-center text-xs text-slate-500" data-testid="alert-empty-state">
             ไม่มีรายการแจ้งเตือนในสถานะนี้
           </div>
         ) : (
@@ -343,12 +343,12 @@ export default function VccDashboardSection({ onNavigateToWorkOrders }) {
             {filteredAlerts.map((alert) => (
               <div key={alert.dedupe_key} className="py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs">
                 <div className="flex items-center gap-2">
-                  <span className="font-mono font-bold text-slate-800">{alert.wo_code}</span>
-                  <span className="font-semibold text-teal-800">{alert.asset_code}</span>
-                  <span className="text-slate-600">{alert.asset_name}</span>
-                  <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-600 text-[11px]">{alert.department}</span>
+                  <span className="font-mono font-bold text-slate-900">{alert.wo_code}</span>
+                  <span className="font-semibold text-indigo-900">{alert.asset_code}</span>
+                  <span className="text-slate-700">{alert.asset_name}</span>
+                  <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 text-xs">{alert.department}</span>
                 </div>
-                <div className="text-slate-700 font-medium">{alert.message}</div>
+                <div className="text-slate-800 font-medium">{alert.message}</div>
               </div>
             ))}
           </div>
@@ -358,9 +358,9 @@ export default function VccDashboardSection({ onNavigateToWorkOrders }) {
       {/* Monthly Plan vs Act. Comparison & Department Breakdown */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
-          <h3 className="text-sm font-bold text-slate-800 mb-3">
+          <h2 className="text-sm font-bold text-slate-800 mb-3">
             เปรียบเทียบแผนที่อนุมัติแล้ว (Plan) กับงานที่ปิดแล้ว (Act.) รายเดือน ปี {year}
-          </h3>
+          </h2>
           <div className="overflow-x-auto">
             <table className="w-full text-xs border-collapse">
               <thead>
@@ -394,7 +394,7 @@ export default function VccDashboardSection({ onNavigateToWorkOrders }) {
         </div>
 
         <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
-          <h3 className="text-sm font-bold text-slate-800 mb-3">สรุปสถานะแยกตามแผนกเจ้าของเครื่องมือ</h3>
+          <h2 className="text-sm font-bold text-slate-800 mb-3">สรุปสถานะแยกตามแผนกเจ้าของเครื่องมือ</h2>
           <div className="overflow-x-auto">
             <table className="w-full text-xs border-collapse">
               <thead>
@@ -429,7 +429,7 @@ export default function VccDashboardSection({ onNavigateToWorkOrders }) {
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <History size={16} className="text-slate-600" />
-            <h3 className="text-sm font-bold text-slate-800">ประวัติการตรวจสอบย้อนหลัง (VCC Audit Trail)</h3>
+            <h2 className="text-sm font-bold text-slate-800">ประวัติการตรวจสอบย้อนหลัง (VCC Audit Trail)</h2>
           </div>
           <select
             aria-label="กรองหมวดหมู่ประวัติ VCC"
