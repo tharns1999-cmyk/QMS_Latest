@@ -1,0 +1,676 @@
+import React from 'react';
+import { AlertTriangle, CheckCircle2, FolderTree, Trash2, X } from 'lucide-react';
+import { computeDueDates } from '../api/vccPlanApi';
+
+const formatThaiDateTime = (iso) => {
+  if (!iso) return '-';
+  try {
+    return new Intl.DateTimeFormat('th-TH', {
+      timeZone: 'Asia/Bangkok',
+      year: 'numeric',
+      month: 'short',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    }).format(new Date(iso));
+  } catch {
+    return iso;
+  }
+};
+
+const PLAN_AUDIT_LABELS = {
+  VCC_PLAN_CREATED: { label: 'สร้างแผนประจำปีใหม่', badge: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  VCC_PLAN_UPDATED: { label: 'แก้ไขข้อมูลหัวแผน', badge: 'bg-blue-50 text-blue-700 border-blue-200' },
+  VCC_PLAN_ITEM_SAVED: { label: 'เพิ่ม/แก้ไขเครื่องมือในแผน', badge: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
+  VCC_PLAN_ITEM_REMOVED: { label: 'ลบเครื่องมือออกจากแผน', badge: 'bg-rose-50 text-rose-700 border-rose-200' },
+  VCC_PLAN_SUBMITTED: { label: 'ส่งทบทวนแผน (Submit)', badge: 'bg-amber-50 text-amber-700 border-amber-200' },
+  VCC_PLAN_REVIEWED: { label: 'ยืนยันการทบทวนแผน (Review)', badge: 'bg-cyan-50 text-cyan-700 border-cyan-200' },
+  VCC_PLAN_APPROVED: { label: 'อนุมัติแผนประจำปี (Approve)', badge: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  VCC_PLAN_REJECTED: { label: 'ส่งกลับแก้ไข (Reject)', badge: 'bg-rose-50 text-rose-700 border-rose-200' },
+  VCC_PLAN_SETTINGS_UPDATED: { label: 'แก้ไขตั้งค่าแผนประจำปี', badge: 'bg-slate-100 text-slate-700 border-slate-200' }
+};
+
+export const PlanFormModal = ({
+  open,
+  onClose,
+  editingPlan,
+  form,
+  setForm,
+  error,
+  saving,
+  onSubmit,
+  activeDepartments
+}) => {
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-lg w-full overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+          <h2 className="text-lg font-bold text-slate-900">
+            {editingPlan ? `แก้ไขหัวแผนประจำปี ${editingPlan.plan_year}` : 'สร้างแผนการทวนสอบเครื่องมือประจำปีใหม่'}
+          </h2>
+          <button type="button" onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 cursor-pointer">
+            <X size={18} />
+          </button>
+        </div>
+
+        <form onSubmit={onSubmit} className="p-6 space-y-4">
+          {error && (
+            <div role="alert" className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-center gap-2">
+              <AlertTriangle size={16} className="text-rose-600 shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                ปี ค.ศ. ของแผน <span className="text-rose-600">*</span>
+              </label>
+              <input
+                type="number"
+                required
+                min={2020}
+                max={2100}
+                disabled={Boolean(editingPlan)}
+                value={form.plan_year}
+                onChange={(e) => setForm({ ...form, plan_year: Number(e.target.value) })}
+                className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm disabled:bg-slate-100"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                แผนกเจ้าของแผน (Master Data) <span className="text-rose-600">*</span>
+              </label>
+              <select
+                required
+                disabled={Boolean(editingPlan) || activeDepartments.length === 0}
+                value={form.department}
+                onChange={(e) => setForm({ ...form, department: e.target.value })}
+                className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm bg-white disabled:bg-slate-100"
+              >
+                <option value="" disabled>
+                  {activeDepartments.length === 0 ? '-- โหลดแผนกไม่ได้ --' : '-- เลือกแผนก --'}
+                </option>
+                {activeDepartments.map((d) => (
+                  <option key={d.code} value={d.code}>
+                    {d.code} — {d.nameTh}
+                  </option>
+                ))}
+              </select>
+              {activeDepartments.length === 0 && (
+                <p className="mt-1 text-xs text-rose-600 font-semibold">
+                  ไม่สามารถโหลดแผนกจาก Master Data ได้ กรุณาตรวจสอบข้อมูลแผนกก่อนบันทึก
+                </p>
+              )}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">รหัสแบบฟอร์มเอกสาร</label>
+              <input
+                type="text"
+                required
+                value={form.document_code}
+                onChange={(e) => setForm({ ...form, document_code: e.target.value })}
+                className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm font-mono"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">Revision (ครั้งที่แก้ไข)</label>
+              <input
+                type="text"
+                required
+                value={form.revision}
+                onChange={(e) => setForm({ ...form, revision: e.target.value })}
+                className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm font-mono"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1">ชื่อแผนประจำปี</label>
+            <input
+              type="text"
+              required
+              value={form.title}
+              onChange={(e) => setForm({ ...form, title: e.target.value })}
+              className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1">
+              กติกาคำนวณวันครบกำหนด (เมื่อแผนระบุเฉพาะเดือน)
+            </label>
+            <select
+              value={form.due_date_rule}
+              onChange={(e) => setForm({ ...form, due_date_rule: e.target.value })}
+              className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm bg-white"
+            >
+              <option value="END_OF_MONTH">วันสิ้นเดือนของเดือนที่วางแผน (END_OF_MONTH เช่น 2026-02-28)</option>
+              <option value="START_OF_MONTH">วันที่ 1 ของเดือนที่วางแผน (START_OF_MONTH เช่น 2026-02-01)</option>
+            </select>
+          </div>
+
+          <div className="pt-2 flex justify-end gap-2">
+            <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl border border-slate-300 text-sm font-semibold">
+              ยกเลิก
+            </button>
+            <button
+              type="submit"
+              disabled={saving || activeDepartments.length === 0}
+              className="px-5 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold disabled:opacity-50 cursor-pointer"
+            >
+              {saving ? 'กำลังบันทึก...' : 'บันทึกแผนประจำปี'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+export const PlanItemModal = ({
+  open,
+  onClose,
+  plan,
+  itemForm,
+  setItemForm,
+  error,
+  saving,
+  onSubmit,
+  activeAssets,
+  providers,
+  activeDepartments
+}) => {
+  if (!open || !plan) return null;
+
+  const toggleMonth = (m) => {
+    const exists = itemForm.planned_months.includes(m);
+    const next = exists
+      ? itemForm.planned_months.filter((x) => x !== m)
+      : [...itemForm.planned_months, m].sort((a, b) => a - b);
+    setItemForm({ ...itemForm, planned_months: next });
+  };
+
+  const previewDueDates = computeDueDates(plan.plan_year, itemForm.planned_months, plan.due_date_rule);
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-xl w-full overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+          <h2 className="text-lg font-bold text-slate-900">
+            กำหนดตารางทวนสอบเครื่องมือในแผนปี {plan.plan_year}
+          </h2>
+          <button type="button" onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 cursor-pointer">
+            <X size={18} />
+          </button>
+        </div>
+
+        <form onSubmit={onSubmit} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
+          {error && (
+            <div role="alert" className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-center gap-2">
+              <AlertTriangle size={16} className="text-rose-600 shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1">
+              เครื่องมือวัด / กลุ่มเครื่องมือ (เฉพาะสถานะ ACTIVE) <span className="text-rose-600">*</span>
+            </label>
+            <select
+              required
+              value={itemForm.asset_id}
+              onChange={(e) => setItemForm({ ...itemForm, asset_id: e.target.value })}
+              className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm bg-white"
+            >
+              <option value="" disabled>-- เลือกเครื่องมือจากทะเบียน --</option>
+              {activeAssets.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.asset_code} — {a.name} {a.is_group ? '(กลุ่มเครื่องมือแม่)' : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                สถาบัน / หน่วยงานที่ทวนสอบ <span className="text-rose-600">*</span>
+              </label>
+              <select
+                required
+                value={itemForm.provider_name}
+                onChange={(e) => setItemForm({ ...itemForm, provider_name: e.target.value })}
+                className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm bg-white"
+              >
+                {providers.map((p) => (
+                  <option key={p} value={p}>{p}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">ความถี่การทวนสอบ</label>
+              <select
+                value={itemForm.frequency_label}
+                onChange={(e) => setItemForm({ ...itemForm, frequency_label: e.target.value })}
+                className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm bg-white"
+              >
+                <option value="รายปี">รายปี</option>
+                <option value="รายครึ่งปี">รายครึ่งปี</option>
+                <option value="รายไตรมาส">รายไตรมาส</option>
+                <option value="รายเดือน">รายเดือน</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1.5">
+              เดือนที่วางแผนทวนสอบ (Plan เดือน 1 - 12) <span className="text-rose-600">*</span>
+            </label>
+            <div className="grid grid-cols-6 gap-2">
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((m) => {
+                const selected = itemForm.planned_months.includes(m);
+                return (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => toggleMonth(m)}
+                    className={`py-2 rounded-xl border text-xs font-bold transition-colors cursor-pointer ${
+                      selected
+                        ? 'bg-indigo-600 border-indigo-600 text-white'
+                        : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                    }`}
+                  >
+                    เดือน {m}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="mt-2 p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-700">
+              <span className="font-bold">วันครบกำหนดตามกติกา ({plan.due_date_rule}):</span>{' '}
+              {previewDueDates.length > 0 ? previewDueDates.join(', ') : 'กรุณาเลือกอย่างน้อย 1 เดือน'}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                แผนกผู้รับผิดชอบ (Master Data) <span className="text-rose-600">*</span>
+              </label>
+              <select
+                required
+                disabled={activeDepartments.length === 0}
+                value={itemForm.responsible_dept}
+                onChange={(e) => setItemForm({ ...itemForm, responsible_dept: e.target.value })}
+                className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm bg-white disabled:bg-slate-100"
+              >
+                {activeDepartments.map((d) => (
+                  <option key={d.code} value={d.code}>
+                    {d.code} — {d.nameTh}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">ตำแหน่ง/ผู้รับผิดชอบ</label>
+              <input
+                type="text"
+                value={itemForm.responsible_label}
+                onChange={(e) => setItemForm({ ...itemForm, responsible_label: e.target.value })}
+                placeholder="เช่น QC Sup., เจ้าหน้าที่ Store"
+                className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1">หมายเหตุ</label>
+            <input
+              type="text"
+              value={itemForm.remarks}
+              onChange={(e) => setItemForm({ ...itemForm, remarks: e.target.value })}
+              placeholder="เช่น ฝ่าย Store เป็นฝ่ายสอบเทียบ FM-ST-31"
+              className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm"
+            />
+          </div>
+
+          <div className="pt-2 flex justify-end gap-2">
+            <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl border border-slate-300 text-sm font-semibold">
+              ยกเลิก
+            </button>
+            <button
+              type="submit"
+              disabled={saving || itemForm.planned_months.length === 0 || activeDepartments.length === 0}
+              className="px-5 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold disabled:opacity-50 cursor-pointer"
+            >
+              {saving ? 'กำลังบันทึก...' : 'บันทึกรายการในแผน'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+export const PlanWorkflowModal = ({
+  modalState,
+  onClose,
+  commentOrReason,
+  setCommentOrReason,
+  error,
+  saving,
+  onConfirm
+}) => {
+  if (!modalState) return null;
+  const isReject = modalState.mode === 'REJECT';
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-md w-full overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+          <h2 className="text-lg font-bold text-slate-900">
+            {isReject
+              ? 'ส่งกลับแก้ไขแผนประจำปี (Reject)'
+              : modalState.mode === 'REVIEW'
+                ? 'ยืนยันการทบทวนแผนประจำปี (Review)'
+                : 'ยืนยันการอนุมัติแผนประจำปี (Approve)'}
+          </h2>
+          <button type="button" onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 cursor-pointer">
+            <X size={18} />
+          </button>
+        </div>
+
+        <form onSubmit={onConfirm} className="p-6 space-y-4">
+          {error && (
+            <div role="alert" className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-center gap-2">
+              <AlertTriangle size={16} className="text-rose-600 shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1">
+              {isReject ? 'เหตุผลในการส่งกลับแก้ไข' : 'ความเห็นเพิ่มเติม (ถ้ามี)'}{' '}
+              {isReject && <span className="text-rose-600">*</span>}
+            </label>
+            <textarea
+              rows={3}
+              required={isReject}
+              value={commentOrReason}
+              onChange={(e) => setCommentOrReason(e.target.value)}
+              placeholder={isReject ? 'ระบุสิ่งที่ต้องแก้ไขในแผนประจำปี...' : 'ความเห็นประกอบการทบทวน/อนุมัติ...'}
+              className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm"
+            />
+          </div>
+
+          <div className="pt-2 flex justify-end gap-2">
+            <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl border border-slate-300 text-sm font-semibold">
+              ยกเลิก
+            </button>
+            <button
+              type="submit"
+              disabled={saving || (isReject && !commentOrReason.trim())}
+              className={`px-5 py-2 rounded-xl text-white text-sm font-semibold disabled:opacity-50 cursor-pointer ${
+                isReject ? 'bg-rose-600 hover:bg-rose-700' : 'bg-emerald-600 hover:bg-emerald-700'
+              }`}
+            >
+              {saving
+                ? 'กำลังบันทึก...'
+                : isReject
+                  ? 'ยืนยันส่งกลับแก้ไข'
+                  : modalState.mode === 'REVIEW'
+                    ? 'บันทึกผลการทบทวน'
+                    : 'บันทึกการอนุมัติแผน'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+export const GroupWorkOrderModal = ({
+  modalData,
+  onClose,
+  selectedChildId,
+  setSelectedChildId,
+  checkResult,
+  checkError,
+  onValidate
+}) => {
+  if (!modalData) return null;
+  const { item, childAssets } = modalData;
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-lg w-full overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+          <h2 className="text-lg font-bold text-slate-900">
+            ตรวจสอบความพร้อมก่อนออกใบสั่งงาน ({item.asset_code})
+          </h2>
+          <button type="button" onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 cursor-pointer">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-4">
+          <div className="p-3.5 rounded-xl bg-purple-50 border border-purple-200 text-xs text-purple-900 space-y-1">
+            <div className="font-bold flex items-center gap-1.5">
+              <FolderTree size={14} />
+              <span>กติกาเครื่องมือแบบกลุ่ม ({item.asset_code} — {item.asset_name})</span>
+            </div>
+            <p>
+              รายการในตารางแผนประจำปีเป็นกลุ่มเครื่องมือแม่ ห้ามออกใบสั่งงานในนามกลุ่มโดยตรง ต้องแยกรหัสเครื่องมือลูก (รายตัว) ที่ใช้งานอยู่ก่อนเสมอ
+            </p>
+          </div>
+
+          {checkError && (
+            <div role="alert" className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-center gap-2">
+              <AlertTriangle size={16} className="text-rose-600 shrink-0" />
+              <span>{checkError}</span>
+            </div>
+          )}
+
+          {checkResult && (
+            <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs space-y-1">
+              <div className="font-bold flex items-center gap-1.5">
+                <CheckCircle2 size={15} className="text-emerald-600" />
+                <span>พร้อมสร้างใบสั่งงานสำหรับเครื่องมือรายตัว: {checkResult.target_asset.asset_code}</span>
+              </div>
+              <div>ชื่อเครื่องมือ: {checkResult.target_asset.name}</div>
+              <div>วันครบกำหนดตามแผน: {(checkResult.due_dates || []).join(', ')}</div>
+            </div>
+          )}
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1">
+              เลือกรหัสเครื่องมือลูก (ACTIVE) ในกลุ่ม {item.asset_code}
+            </label>
+            <select
+              aria-label="เลือกรหัสเครื่องมือลูก"
+              value={selectedChildId}
+              onChange={(e) => setSelectedChildId(e.target.value)}
+              className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm bg-white"
+            >
+              <option value="">-- ยังไม่ได้เลือกรหัสเครื่องมือรายตัว --</option>
+              {childAssets.map((ch) => (
+                <option key={ch.id} value={ch.id}>
+                  {ch.asset_code} — {ch.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="pt-2 flex justify-end gap-2">
+            <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl border border-slate-300 text-sm font-semibold">
+              ปิดหน้าต่าง
+            </button>
+            <button
+              type="button"
+              onClick={onValidate}
+              className="px-5 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 cursor-pointer"
+            >
+              ตรวจสอบการออกใบสั่งงาน
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export const PlanSettingsModal = ({
+  open,
+  onClose,
+  draftProviders,
+  setDraftProviders,
+  newProvider,
+  setNewProvider,
+  draftSettings,
+  setDraftSettings,
+  saving,
+  onSave
+}) => {
+  if (!open) return null;
+
+  const addProvider = () => {
+    const trimmed = newProvider.trim();
+    if (!trimmed || draftProviders.includes(trimmed)) return;
+    setDraftProviders([...draftProviders, trimmed]);
+    setNewProvider('');
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-lg w-full overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+          <h2 className="text-lg font-bold text-slate-900">ตั้งค่าแผนประจำปีและเกณฑ์อนุมัติ (DCC)</h2>
+          <button type="button" onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 cursor-pointer">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">ประเภทเอกสารใน Approval Matrix</label>
+              <select
+                value={draftSettings.approval_doc_type}
+                onChange={(e) => setDraftSettings({ ...draftSettings, approval_doc_type: e.target.value })}
+                className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm bg-white"
+              >
+                <option value="FM">FM (แบบฟอร์ม)</option>
+                <option value="WI">WI (วิธีปฏิบัติงาน)</option>
+                <option value="SOP">SOP (ระเบียบปฏิบัติ)</option>
+                <option value="QM">QM (คู่มือคุณภาพ)</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">กติกาวันครบกำหนดเริ่มต้น</label>
+              <select
+                value={draftSettings.due_date_rule}
+                onChange={(e) => setDraftSettings({ ...draftSettings, due_date_rule: e.target.value })}
+                className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm bg-white"
+              >
+                <option value="END_OF_MONTH">วันสิ้นเดือน (END_OF_MONTH)</option>
+                <option value="START_OF_MONTH">วันที่ 1 ของเดือน (START_OF_MONTH)</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="block text-xs font-bold text-slate-700">รายชื่อสถาบัน / หน่วยงานที่ทวนสอบ</label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={newProvider}
+                onChange={(e) => setNewProvider(e.target.value)}
+                placeholder="เพิ่มชื่อหน่วยงานทวนสอบ..."
+                className="flex-1 px-3 py-2 rounded-xl border border-slate-300 text-sm"
+              />
+              <button type="button" onClick={addProvider} className="px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-semibold">
+                เพิ่ม
+              </button>
+            </div>
+            <div className="border border-slate-200 rounded-xl divide-y divide-slate-200 max-h-40 overflow-y-auto">
+              {draftProviders.map((p) => (
+                <div key={p} className="px-3.5 py-2 flex items-center justify-between text-xs">
+                  <span>{p}</span>
+                  {draftProviders.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => setDraftProviders(draftProviders.filter((x) => x !== p))}
+                      className="text-rose-600 hover:bg-rose-50 p-1 rounded"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="pt-2 flex justify-end gap-2">
+            <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl border border-slate-300 text-sm font-semibold">
+              ยกเลิก
+            </button>
+            <button
+              type="button"
+              disabled={saving}
+              onClick={onSave}
+              className="px-5 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold disabled:opacity-50"
+            >
+              {saving ? 'กำลังบันทึก...' : 'บันทึกการตั้งค่า'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export const PlanHistoryModal = ({ open, onClose, history = [] }) => {
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-xl w-full overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+          <h2 className="text-lg font-bold text-slate-900">ประวัติการอนุมัติและแก้ไขแผน (Audit Log)</h2>
+          <button type="button" onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 cursor-pointer">
+            <X size={18} />
+          </button>
+        </div>
+        <div className="p-6 max-h-[75vh] overflow-y-auto space-y-3">
+          {history.length === 0 ? (
+            <div className="text-xs text-slate-500 text-center py-6">ยังไม่มีประวัติการดำเนินการ</div>
+          ) : (
+            history.map((h) => {
+              const meta = PLAN_AUDIT_LABELS[h.action] || { label: h.action, badge: 'bg-slate-100 text-slate-700 border-slate-200' };
+              return (
+                <div key={h.id} className="p-3.5 rounded-xl border border-slate-200 text-xs space-y-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className={`px-2 py-0.5 rounded border font-bold ${meta.badge}`}>{meta.label}</span>
+                    <span className="text-slate-500">{formatThaiDateTime(h.at)} • {h.actor_name || h.actor_id}</span>
+                  </div>
+                  {h.details?.reason && <div className="text-rose-700 font-semibold">เหตุผล: {h.details.reason}</div>}
+                  {h.details?.comment && <div className="text-slate-700">ความเห็น: {h.details.comment}</div>}
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
