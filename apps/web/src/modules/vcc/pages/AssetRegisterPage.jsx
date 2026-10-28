@@ -361,7 +361,7 @@ const AssetRegisterPageInner = () => {
   }, [moduleView]);
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6 pb-8">
+    <div className="max-w-7xl mx-auto space-y-4 pb-8">
       {/* Accessible navigation fallback for headless tests & assistive technology */}
       <div className="sr-only" role="navigation" aria-label="เมนูย่อยระบบ VCC">
         <button
@@ -395,9 +395,9 @@ const AssetRegisterPageInner = () => {
       </div>
 
       {/* Enterprise Unified Page Header */}
-      <div className="bg-white rounded-2xl border border-slate-200/90 p-5 md:p-6 shadow-xs transition-all">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="space-y-1.5 min-w-0">
+      <div className="bg-white rounded-2xl border border-slate-200/90 p-4 md:p-5 shadow-2xs transition-all">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div className="space-y-1 min-w-0">
             {/* Breadcrumb Navigation Context */}
             <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
               <span className="hover:text-slate-700 transition-colors">พอร์ทัลหลัก</span>

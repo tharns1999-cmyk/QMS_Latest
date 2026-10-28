@@ -70,23 +70,33 @@ export const AnnualPlanMatrixTable = ({
           </h3>
 
           {/* Quick Table Search */}
-          {planItems.length > 3 && (
+          {planItems.length > 2 && (
             <div className="relative">
               <Search size={12} className="absolute left-2.5 top-2 text-slate-400" />
               <input
                 type="text"
                 value={tableSearch}
                 onChange={(e) => setTableSearch(e.target.value)}
-                placeholder="กรองในตาราง..."
-                className="pl-7 pr-2.5 py-1 rounded-lg border border-slate-200 text-xs bg-white focus:outline-none focus:border-indigo-600 w-36 sm:w-48"
+                placeholder="ค้นหารหัส / ชื่อในตาราง..."
+                className="pl-7 pr-6 py-1 rounded-lg border border-slate-200 text-xs bg-white focus:outline-none focus:border-indigo-600 w-40 sm:w-48 text-slate-800 placeholder-slate-400"
               />
+              {tableSearch && (
+                <button
+                  type="button"
+                  onClick={() => setTableSearch('')}
+                  className="absolute right-1.5 top-1.5 text-slate-400 hover:text-slate-600 text-[11px] p-0.5 cursor-pointer"
+                  title="ล้างคำค้นหา"
+                >
+                  ✕
+                </button>
+              )}
             </div>
           )}
         </div>
 
         {/* View Mode Toggle & Smart Import CTA */}
         <div className="flex items-center gap-2">
-          {canEditPlan && onOpenSmartImport && (
+          {canEditPlan && onOpenSmartImport && planItems.length > 0 && (
             <button
               type="button"
               onClick={onOpenSmartImport}
@@ -125,13 +135,13 @@ export const AnnualPlanMatrixTable = ({
         </div>
       </div>
 
-      {/* Main Table Container */}
-      <div className="overflow-x-auto">
+      {/* Main Table Container with Sticky Headings */}
+      <div className="overflow-x-auto max-h-[calc(100vh-280px)]">
         <table className="w-full text-left border-collapse text-xs">
-          <thead>
-            <tr className="bg-slate-50/90 border-b border-slate-200/80 text-slate-600 text-[11px] font-bold tracking-wider uppercase">
+          <thead className="sticky top-0 z-20 bg-slate-50/95 backdrop-blur-xs shadow-2xs">
+            <tr className="border-b border-slate-200 text-slate-600 text-[11px] font-bold tracking-wider uppercase">
               {/* Consolidated Equipment & Context Header */}
-              <th className="py-2.5 px-3.5 sticky left-0 z-20 bg-slate-50 shadow-[1px_0_0_0_#e2e8f0] min-w-[240px]">
+              <th className="py-2.5 px-3.5 sticky left-0 z-30 bg-slate-50 shadow-[1px_0_0_0_#e2e8f0] min-w-[240px]">
                 รายการเครื่องมือวัดและการดำเนินงาน
               </th>
               <th className="py-2.5 px-2 text-center w-12 text-slate-500 font-mono">
@@ -184,29 +194,41 @@ export const AnnualPlanMatrixTable = ({
                       <p className="text-xs text-slate-500 mt-1">
                         {planItems.length === 0
                           ? 'เลือกและนำเข้าเครื่องมือจากทะเบียน (Asset Register) พร้อมกำหนดรอบความถี่และวันครบกำหนดได้ในคลิกเดียว'
-                          : 'ลองเปลี่ยนคำค้นหา หรือล้างตัวกรองในตาราง'}
+                          : `ไม่พบข้อมูลที่ตรงกับ "${tableSearch}" ในตาราง`}
                       </p>
                     </div>
 
-                    {canEditPlan && planItems.length === 0 && (
-                      <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
-                        {onOpenSmartImport && (
+                    {planItems.length === 0 ? (
+                      canEditPlan && (
+                        <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
+                          {onOpenSmartImport && (
+                            <button
+                              type="button"
+                              onClick={onOpenSmartImport}
+                              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-colors shadow-2xs cursor-pointer"
+                            >
+                              <Sparkles size={13} />
+                              <span>เลือกเครื่องมือจากทะเบียน (Smart Import)</span>
+                            </button>
+                          )}
                           <button
                             type="button"
-                            onClick={onOpenSmartImport}
-                            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-colors shadow-2xs cursor-pointer"
+                            onClick={() => onOpenAddItem(null)}
+                            className="inline-flex items-center gap-1 px-3 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-colors cursor-pointer"
                           >
-                            <Sparkles size={13} />
-                            <span>เลือกเครื่องมือจากทะเบียน (Smart Import)</span>
+                            <Plus size={13} />
+                            <span>กำหนดรายการเอง</span>
                           </button>
-                        )}
+                        </div>
+                      )
+                    ) : (
+                      <div className="pt-1">
                         <button
                           type="button"
-                          onClick={() => onOpenAddItem(null)}
-                          className="inline-flex items-center gap-1 px-3 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-colors cursor-pointer"
+                          onClick={() => setTableSearch('')}
+                          className="px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
                         >
-                          <Plus size={13} />
-                          <span>กำหนดรายการเอง</span>
+                          ล้างคำค้นหา
                         </button>
                       </div>
                     )}

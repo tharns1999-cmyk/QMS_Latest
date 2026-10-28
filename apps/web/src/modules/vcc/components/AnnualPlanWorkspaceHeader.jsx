@@ -68,132 +68,138 @@ export const AnnualPlanWorkspaceHeader = ({
       {/* Unified Compact Workspace Header Bar */}
       <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs divide-y divide-slate-100">
         {/* Row 1: Document Context & Fast Actions (Notion / Linear Document Header) */}
-        <div className="p-3.5 sm:px-4 flex flex-col md:flex-row md:items-center justify-between gap-3">
-          {/* Document Title & Metadata */}
-          <div className="flex flex-wrap items-center gap-2.5">
-            {activePlan ? (
-              <>
-                <span className="font-mono text-xs font-bold px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200/80 text-slate-800 shadow-2xs">
-                  {activePlan.document_code} Rev.{activePlan.revision}
-                </span>
+        <div className="p-3.5 sm:px-5 space-y-2">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+            {/* Document Badges & Meta Chips */}
+            <div className="flex flex-wrap items-center gap-2">
+              {activePlan ? (
+                <>
+                  <span className="font-mono text-xs font-bold px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200/90 text-slate-800 shadow-2xs">
+                    {activePlan.document_code} Rev.{activePlan.revision}
+                  </span>
 
-                <span
-                  className={`inline-flex items-center gap-1 text-[11.5px] font-bold px-2.5 py-0.5 rounded-md border shadow-2xs ${getStatusBadgeStyle(
-                    activePlan.status
-                  )}`}
-                >
-                  {activePlan.status === 'APPROVED' ? (
-                    <ShieldCheck size={12} className="text-emerald-700 shrink-0" />
-                  ) : activePlan.status === 'REJECTED' ? (
-                    <AlertCircle size={12} className="text-rose-600 shrink-0" />
-                  ) : (
-                    <Clock size={12} className="shrink-0" />
-                  )}
-                  <span>สถานะ: {activePlan.status}</span>
-                </span>
+                  <span
+                    className={`inline-flex items-center gap-1 text-[11.5px] font-bold px-2.5 py-0.5 rounded-md border shadow-2xs ${getStatusBadgeStyle(
+                      activePlan.status
+                    )}`}
+                  >
+                    {activePlan.status === 'APPROVED' ? (
+                      <ShieldCheck size={12} className="text-emerald-700 shrink-0" />
+                    ) : activePlan.status === 'REJECTED' ? (
+                      <AlertCircle size={12} className="text-rose-600 shrink-0" />
+                    ) : (
+                      <Clock size={12} className="shrink-0" />
+                    )}
+                    <span>สถานะ: {activePlan.status}</span>
+                  </span>
 
-                <h2 className="text-sm sm:text-base font-bold text-slate-900 tracking-tight flex items-center gap-2">
-                  <span>{activePlan.title}</span>
-                  <span className="text-slate-400 font-normal">•</span>
-                  <span className="text-slate-600 font-medium text-xs sm:text-sm">
+                  <span className="text-xs text-slate-600 font-medium">
                     แผนก {activePlan.department}{' '}
                     {activePlan.department_name_th ? `(${activePlan.department_name_th})` : ''}
                   </span>
-                </h2>
 
-                <div className="hidden lg:flex items-center gap-2 text-[11px] text-slate-500 font-medium pl-1 border-l border-slate-200">
-                  <span>{(planItems || []).length} รายการ</span>
-                  <span>•</span>
-                  <span>
+                  <span className="text-slate-300">•</span>
+                  <span className="text-xs text-slate-500 font-medium">
+                    {(planItems || []).length} รายการ
+                  </span>
+
+                  <span className="text-slate-300">•</span>
+                  <span className="text-xs text-slate-500 font-medium">
                     วันครบกำหนด:{' '}
                     {activePlan.due_date_rule === 'START_OF_MONTH'
                       ? 'วันที่ 1 ของเดือน'
                       : 'วันสิ้นเดือน (END_OF_MONTH)'}
                   </span>
+                </>
+              ) : (
+                <div className="text-sm font-semibold text-slate-600 flex items-center gap-2">
+                  <FileText size={16} className="text-slate-400" />
+                  <span className="text-base font-bold text-slate-800">
+                    แผนการทวนสอบและสอบเทียบเครื่องมือประจำปี (FM-QC-46)
+                  </span>
                 </div>
-              </>
-            ) : (
-              <div className="text-sm font-semibold text-slate-600 flex items-center gap-2">
-                <FileText size={15} className="text-slate-400" />
-                <span>แผนการทวนสอบและสอบเทียบเครื่องมือประจำปี (FM-QC-46)</span>
+              )}
+            </div>
+
+            {/* Quick Actions (Organized by Intent: Utility -> Plan Setup -> Content Action) */}
+            <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+              {/* Utilities: QMS Guide, History, Settings */}
+              <div className="inline-flex items-center gap-1 border-r border-slate-200 pr-1.5 mr-0.5">
+                <button
+                  type="button"
+                  onClick={() => setGuideOpen(!guideOpen)}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200/90 bg-white text-slate-600 text-xs font-medium hover:bg-slate-50 hover:text-slate-900 transition-colors cursor-pointer shadow-2xs"
+                  title="คำแนะนำข้อกำหนด QMS"
+                >
+                  <BookOpen size={13} className="text-indigo-600" />
+                  <span className="hidden sm:inline">เกณฑ์ QMS</span>
+                  {guideOpen ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+                </button>
+
+                {activePlan && (
+                  <button
+                    type="button"
+                    onClick={onOpenHistory}
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200/90 bg-white text-slate-600 text-xs font-medium hover:bg-slate-50 hover:text-slate-900 transition-colors cursor-pointer shadow-2xs"
+                    title="ดูประวัติการบันทึกและอนุมัติ"
+                  >
+                    <History size={13} className="text-slate-500" />
+                    <span className="hidden sm:inline">ประวัติการอนุมัติ</span>
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={onOpenSettings}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200/90 bg-white text-slate-600 text-xs font-medium hover:bg-slate-50 hover:text-slate-900 transition-colors cursor-pointer shadow-2xs"
+                  title="ตั้งค่าแผนและเกณฑ์อนุมัติ"
+                >
+                  <SlidersHorizontal size={13} className="text-slate-500" />
+                  <span className="hidden md:inline">ตั้งค่าแผน</span>
+                </button>
               </div>
-            )}
+
+              {/* Plan Setup: Edit Header, New Plan */}
+              {canEditPlan && activePlan && (
+                <button
+                  type="button"
+                  onClick={() => onOpenEditPlan(activePlan)}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200/90 bg-white text-slate-700 text-xs font-medium hover:bg-slate-50 hover:text-slate-900 transition-colors cursor-pointer shadow-2xs"
+                >
+                  <Edit3 size={13} className="text-slate-500" />
+                  <span>แก้ไขหัวแผน</span>
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={onOpenCreatePlan}
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
+              >
+                <Plus size={13} className="text-slate-600" />
+                <span>สร้างแผนประจำปีใหม่</span>
+              </button>
+
+              {/* Primary Content Action */}
+              {canEditPlan && activePlan && (
+                <button
+                  type="button"
+                  onClick={() => onOpenAddItem(null)}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+                >
+                  <Plus size={14} />
+                  <span>เพิ่มเครื่องมือเข้าแผน</span>
+                </button>
+              )}
+            </div>
           </div>
 
-          {/* Quick Actions (Ghost & Primary Buttons) */}
-          <div className="flex flex-wrap items-center gap-1.5 shrink-0">
-            <button
-              type="button"
-              onClick={() => setGuideOpen(!guideOpen)}
-              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 text-xs font-medium hover:bg-slate-50 hover:text-slate-900 transition-colors cursor-pointer"
-            >
-              <BookOpen size={13} className="text-indigo-600" />
-              <span>ข้อกำหนด QMS</span>
-              {guideOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-            </button>
-
-            {activePlan && (
-              <button
-                type="button"
-                onClick={onOpenHistory}
-                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 text-xs font-medium hover:bg-slate-50 hover:text-slate-900 transition-colors cursor-pointer"
-              >
-                <History size={13} className="text-slate-500" />
-                <span>ประวัติการอนุมัติ</span>
-              </button>
-            )}
-
-            {canEditPlan && activePlan && (
-              <button
-                type="button"
-                onClick={() => onOpenEditPlan(activePlan)}
-                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 text-xs font-medium hover:bg-slate-50 hover:text-slate-900 transition-colors cursor-pointer"
-              >
-                <Edit3 size={13} className="text-slate-500" />
-                <span>แก้ไขหัวแผน</span>
-              </button>
-            )}
-
-            <button
-              type="button"
-              onClick={onOpenSettings}
-              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 text-xs font-medium hover:bg-slate-50 hover:text-slate-900 transition-colors cursor-pointer"
-            >
-              <SlidersHorizontal size={13} className="text-slate-500" />
-              <span>ตั้งค่าแผนและเกณฑ์อนุมัติ</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={onOpenCreatePlan}
-              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
-            >
-              <Plus size={13} />
-              <span>สร้างแผนประจำปีใหม่</span>
-            </button>
-
-            {canEditPlan && activePlan && onOpenSmartImport && (
-              <button
-                type="button"
-                onClick={onOpenSmartImport}
-                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
-              >
-                <Sparkles size={13} />
-                <span>เลือกจากทะเบียน (Smart Import)</span>
-              </button>
-            )}
-
-            {canEditPlan && activePlan && (
-              <button
-                type="button"
-                onClick={() => onOpenAddItem(null)}
-                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
-              >
-                <Plus size={13} />
-                <span>เพิ่มเครื่องมือเข้าแผน</span>
-              </button>
-            )}
-          </div>
+          {/* Full-width Plan Title */}
+          {activePlan && (
+            <h2 className="text-base sm:text-lg font-bold text-slate-900 tracking-tight">
+              {activePlan.title}
+            </h2>
+          )}
         </div>
 
         {/* Row 2: Status Tabs (Linear Segmented Control) & Filters */}

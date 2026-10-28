@@ -56,56 +56,56 @@ export const AnnualPlanApprovalStepper = ({
       )}
 
       {/* Sleek Linear-style Workflow Strip */}
-      <div className="bg-white rounded-xl border border-slate-200/80 px-4 py-2.5 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
+      <div className="bg-white rounded-xl border border-slate-200/90 px-3.5 py-2 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-2.5 text-xs">
         {/* Pipeline Nodes */}
-        <div className="flex flex-wrap items-center gap-2 text-xs">
-          <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mr-1">
-            Sign-off:
+        <div className="flex flex-wrap items-center gap-1.5 text-xs">
+          <span className="text-[10.5px] font-bold text-slate-400 uppercase tracking-wider mr-1 select-none">
+            Workflow:
           </span>
 
           {/* Node 1: Requester */}
           <div
-            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border ${
+            className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md border text-[11.5px] ${
               activePlan.prepared_at
-                ? 'bg-emerald-50/70 border-emerald-200 text-emerald-900'
+                ? 'bg-emerald-50/80 border-emerald-200 text-emerald-900'
                 : 'bg-slate-50 border-slate-200 text-slate-700'
             }`}
           >
             {activePlan.prepared_at ? (
-              <CheckCircle2 size={13} className="text-emerald-600 shrink-0" />
+              <CheckCircle2 size={12} className="text-emerald-600 shrink-0" />
             ) : (
               <span className="w-1.5 h-1.5 rounded-full bg-slate-400 shrink-0" />
             )}
             <span className="font-medium">
-              1. ผู้จัดทำแผน (Requester L{thresholds.min_requester_level}+):{' '}
-              <strong className="text-slate-900">
+              1. ผู้จัดทำแผน (L{thresholds.min_requester_level}+):{' '}
+              <strong className="text-slate-900 font-semibold">
                 {activePlan.prepared_by_name || activePlan.prepared_by || 'ยังไม่ส่ง'}
               </strong>
             </span>
           </div>
 
-          <ArrowRight size={12} className="text-slate-300 shrink-0" />
+          <ArrowRight size={11} className="text-slate-300 shrink-0" />
 
           {/* Node 2: Reviewer */}
           <div
-            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border ${
+            className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md border text-[11.5px] ${
               activePlan.reviewed_at
-                ? 'bg-emerald-50/70 border-emerald-200 text-emerald-900'
+                ? 'bg-emerald-50/80 border-emerald-200 text-emerald-900'
                 : activePlan.status === 'PENDING_REVIEW'
                 ? 'bg-amber-50 border-amber-300 text-amber-950 font-bold shadow-2xs'
                 : 'bg-slate-50 border-slate-200 text-slate-600'
             }`}
           >
             {activePlan.reviewed_at ? (
-              <CheckCircle2 size={13} className="text-emerald-600 shrink-0" />
+              <CheckCircle2 size={12} className="text-emerald-600 shrink-0" />
             ) : activePlan.status === 'PENDING_REVIEW' ? (
-              <Clock size={13} className="text-amber-700 shrink-0" />
+              <Clock size={12} className="text-amber-700 shrink-0 animate-pulse" />
             ) : (
               <span className="w-1.5 h-1.5 rounded-full bg-slate-300 shrink-0" />
             )}
             <span>
-              2. ผู้ทบทวนแผน (Reviewer L{thresholds.required_reviewer_level}+):{' '}
-              <strong className="text-slate-900">
+              2. ผู้ทบทวนแผน (L{thresholds.required_reviewer_level}+):{' '}
+              <strong className="text-slate-900 font-semibold">
                 {activePlan.reviewed_by_name ||
                   activePlan.reviewed_by ||
                   (activePlan.status === 'PENDING_REVIEW' ? 'รอการทบทวน' : '-')}
@@ -113,28 +113,28 @@ export const AnnualPlanApprovalStepper = ({
             </span>
           </div>
 
-          <ArrowRight size={12} className="text-slate-300 shrink-0" />
+          <ArrowRight size={11} className="text-slate-300 shrink-0" />
 
           {/* Node 3: Approver */}
           <div
-            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border ${
+            className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md border text-[11.5px] ${
               activePlan.approved_at
-                ? 'bg-emerald-50/70 border-emerald-200 text-emerald-900'
+                ? 'bg-emerald-50/80 border-emerald-200 text-emerald-900'
                 : activePlan.status === 'PENDING_APPROVAL'
                 ? 'bg-indigo-50 border-indigo-300 text-indigo-950 font-bold shadow-2xs'
                 : 'bg-slate-50 border-slate-200 text-slate-600'
             }`}
           >
             {activePlan.approved_at ? (
-              <ShieldCheck size={13} className="text-emerald-600 shrink-0" />
+              <ShieldCheck size={12} className="text-emerald-600 shrink-0" />
             ) : activePlan.status === 'PENDING_APPROVAL' ? (
-              <Clock size={13} className="text-indigo-700 shrink-0" />
+              <Clock size={12} className="text-indigo-700 shrink-0 animate-pulse" />
             ) : (
               <span className="w-1.5 h-1.5 rounded-full bg-slate-300 shrink-0" />
             )}
             <span>
-              3. ผู้อนุมัติแผน (Approver L{thresholds.required_approver_level}+):{' '}
-              <strong className="text-slate-900">
+              3. ผู้อนุมัติแผน (L{thresholds.required_approver_level}+):{' '}
+              <strong className="text-slate-900 font-semibold">
                 {activePlan.approved_by_name ||
                   activePlan.approved_by ||
                   (activePlan.status === 'PENDING_APPROVAL' ? 'รอการอนุมัติ' : '-')}
