@@ -178,9 +178,9 @@ const INITIAL_LOCAL_PLAN_ITEMS = [
   }
 ];
 
-const getLocalPlans = () => readJson(STORAGE_PLANS_KEY, () => [...INITIAL_LOCAL_PLANS]);
+export const getLocalPlans = () => readJson(STORAGE_PLANS_KEY, () => [...INITIAL_LOCAL_PLANS]);
 const setLocalPlans = (list) => writeJson(STORAGE_PLANS_KEY, list);
-const getLocalPlanItems = () => readJson(STORAGE_PLAN_ITEMS_KEY, () => [...INITIAL_LOCAL_PLAN_ITEMS]);
+export const getLocalPlanItems = () => readJson(STORAGE_PLAN_ITEMS_KEY, () => [...INITIAL_LOCAL_PLAN_ITEMS]);
 const setLocalPlanItems = (list) => writeJson(STORAGE_PLAN_ITEMS_KEY, list);
 const getLocalProviders = () => readJson(STORAGE_PROVIDERS_KEY, () => [...DEFAULT_VCC_PROVIDERS]);
 const setLocalProviders = (list) => writeJson(STORAGE_PROVIDERS_KEY, list);
@@ -227,6 +227,11 @@ const enrichLocalPlanItem = (item, allAssets, deptMap) => {
   const parent = asset.parent_id ? allAssets.find((p) => p.id === asset.parent_id) : null;
   const activeChildren = allAssets.filter((c) => c.parent_id === asset.id && c.status === 'ACTIVE');
   const isGroup = Number(asset.is_group) === 1;
+  const closedWos = readJson('qms-vcc-local-work-orders-v1', () => []).filter(
+    (w) => w.plan_item_id === item.id && w.status === 'CLOSED' && w.result_status === 'PASS'
+  );
+  const actualMonths = [...new Set(closedWos.map((w) => Number(w.planned_month)).filter((m) => m >= 1 && m <= 12))].sort((a, b) => a - b);
+  const hasEvidence = closedWos.length > 0 && closedWos.every((w) => Boolean(w.certificate_no));
   return {
     ...item,
     asset_code: asset.asset_code || '-',
@@ -243,9 +248,9 @@ const enrichLocalPlanItem = (item, allAssets, deptMap) => {
     parent_name: parent?.name || null,
     responsible_dept_name_th: deptMap[item.responsible_dept] || item.responsible_dept,
     active_child_count: activeChildren.length,
-    actual_months: [],
-    has_evidence: false,
-    completion_status: 'PLANNED_ONLY',
+    actual_months: actualMonths,
+    has_evidence: hasEvidence,
+    completion_status: actualMonths.length > 0 ? 'COMPLETED' : 'PLANNED_ONLY',
     requires_child_selection: isGroup,
     work_order_ready: !isGroup && asset.status === 'ACTIVE',
     work_order_block_reason: isGroup

@@ -1,6 +1,7 @@
 // VCC (Verify and Calibration Center) — Phase 1: Asset Register API.
 // Every endpoint requires a signed-in DCC user (user.isDcc), checked here on the server.
 import { registerVccPlanRoutes } from './vccPlans.js';
+import { registerVccWorkOrderRoutes } from './vccWorkOrders.js';
 
 const DCC_ONLY = { error: 'เฉพาะ DCC เท่านั้นที่ใช้งานส่วนนี้ได้' };
 const NOW = `strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`;
@@ -415,5 +416,6 @@ export const registerVccRoutes = (app, { requireAuth, audit }) => {
   });
 
   registerVccPlanRoutes(app, { requireAuth, audit });
+  registerVccWorkOrderRoutes(app, { requireAuth, audit });
 };
 
