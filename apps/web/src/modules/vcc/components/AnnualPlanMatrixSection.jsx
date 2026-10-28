@@ -28,6 +28,7 @@ import {
 import AnnualPlanWorkspaceHeader from './AnnualPlanWorkspaceHeader';
 import AnnualPlanApprovalStepper from './AnnualPlanApprovalStepper';
 import AnnualPlanMatrixTable from './AnnualPlanMatrixTable';
+import SmartAssetImportModal from './SmartAssetImportModal';
 
 const AnnualPlanMatrixSection = ({ activeDepartments }) => {
   const [statusTab, setStatusTab] = useState('DRAFT');
@@ -96,6 +97,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
   const [savingSettings, setSavingSettings] = useState(false);
 
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [smartImportOpen, setSmartImportOpen] = useState(false);
 
   const loadPlansAndMeta = useCallback(async (preferredPlanId = '') => {
     setLoading(true);
@@ -392,6 +394,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
         onOpenCreatePlan={openCreatePlan}
         onOpenEditPlan={openEditPlan}
         onOpenAddItem={openAddItem}
+        onOpenSmartImport={() => setSmartImportOpen(true)}
         onOpenHistory={() => setHistoryOpen(true)}
       />
 
@@ -431,6 +434,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
             onOpenAddItem={openAddItem}
             onDeleteItem={handleDeleteItem}
             onOpenGroupWorkOrderCheck={openGroupWorkOrderCheck}
+            onOpenSmartImport={() => setSmartImportOpen(true)}
           />
         </div>
       )}
@@ -492,6 +496,17 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
         setDraftSettings={setDraftSettings}
         saving={savingSettings}
         onSave={handleSaveSettings}
+      />
+
+      <SmartAssetImportModal
+        open={smartImportOpen}
+        onClose={() => setSmartImportOpen(false)}
+        plan={activePlan}
+        activeAssets={activeAssets}
+        existingPlanItems={planItems}
+        providers={providers}
+        activeDepartments={activeDepartments}
+        onImportSuccess={(refreshed) => setPlanDetail(refreshed)}
       />
 
       <PlanHistoryModal

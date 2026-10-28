@@ -11,7 +11,8 @@ import {
   Clock,
   ShieldCheck,
   FileText,
-  AlertCircle
+  AlertCircle,
+  Sparkles
 } from 'lucide-react';
 
 const PLAN_STATUS_TABS = [
@@ -41,6 +42,7 @@ export const AnnualPlanWorkspaceHeader = ({
   onOpenCreatePlan,
   onOpenEditPlan,
   onOpenAddItem,
+  onOpenSmartImport,
   onOpenHistory
 }) => {
   const [guideOpen, setGuideOpen] = useState(false);
@@ -169,6 +171,17 @@ export const AnnualPlanWorkspaceHeader = ({
               <Plus size={13} />
               <span>สร้างแผนประจำปีใหม่</span>
             </button>
+
+            {canEditPlan && activePlan && onOpenSmartImport && (
+              <button
+                type="button"
+                onClick={onOpenSmartImport}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
+              >
+                <Sparkles size={13} />
+                <span>เลือกจากทะเบียน (Smart Import)</span>
+              </button>
+            )}
 
             {canEditPlan && activePlan && (
               <button
