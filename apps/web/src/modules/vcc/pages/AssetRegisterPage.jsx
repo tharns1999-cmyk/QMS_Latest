@@ -3,6 +3,7 @@ import toast from 'react-hot-toast';
 import {
   Wrench,
   Calendar,
+  ClipboardList,
   Plus,
   Search,
   SlidersHorizontal,
@@ -33,6 +34,7 @@ import {
   AssetTypesModal
 } from '../components/AssetRegisterModals';
 import AnnualPlanMatrixSection from '../components/AnnualPlanMatrixSection';
+import WorkOrderSection from '../components/WorkOrderSection';
 
 const EMPTY_FORM = {
   asset_code: '',
@@ -363,11 +365,26 @@ const AssetRegisterPage = () => {
             <Calendar size={15} />
             <span>แผนการทวนสอบประจำปี (FM-QC-46)</span>
           </button>
+
+          <button
+            type="button"
+            onClick={() => setModuleView('WORK_ORDERS')}
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-colors cursor-pointer ${
+              moduleView === 'WORK_ORDERS'
+                ? 'bg-indigo-600 text-white shadow-xs'
+                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+            }`}
+          >
+            <ClipboardList size={15} />
+            <span>ใบสั่งงานและบันทึกผล (Work Orders)</span>
+          </button>
         </div>
       </div>
 
       {moduleView === 'ANNUAL_PLAN' ? (
         <AnnualPlanMatrixSection activeDepartments={activeDepartments} />
+      ) : moduleView === 'WORK_ORDERS' ? (
+        <WorkOrderSection activeDepartments={activeDepartments} />
       ) : (
         <>
           {hasTestData && (

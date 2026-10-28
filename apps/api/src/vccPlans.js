@@ -91,7 +91,7 @@ const PLAN_SELECT = `
 const fetchPlan = (db, id) =>
   db.prepare(`${PLAN_SELECT} WHERE p.id = ?`).bind(id).first();
 
-const enrichPlanItem = (row) => {
+const enrichPlanItem = (row, closedWoRows = []) => {
   const plannedMonths = (() => {
     try {
       return JSON.parse(row.planned_months || '[]');
@@ -107,15 +107,18 @@ const enrichPlanItem = (row) => {
     }
   })();
   const isGroup = Number(row.is_group) === 1;
+  const itemWos = closedWoRows.filter((w) => w.plan_item_id === row.id);
+  const actualMonths = [...new Set(itemWos.map((w) => Number(w.planned_month)).filter((m) => m >= 1 && m <= 12))].sort((a, b) => a - b);
+  const hasEvidence = itemWos.length > 0 && itemWos.every((w) => Boolean(w.certificate_no));
   return {
     ...row,
     is_group: isGroup ? 1 : 0,
     planned_months: plannedMonths,
     due_dates: dueDates,
-    // Highlighted months in the plan are NEVER proof of completion; actual execution requires a work order + certificate in Phase 3.
-    actual_months: [],
-    has_evidence: false,
-    completion_status: 'PLANNED_ONLY',
+    // Highlighted months in the plan are NEVER proof of completion; actual execution requires a CLOSED work order + certificate.
+    actual_months: actualMonths,
+    has_evidence: hasEvidence,
+    completion_status: actualMonths.length > 0 ? 'COMPLETED' : 'PLANNED_ONLY',
     // Group rows in the plan must be broken down into individual child assets before generating work orders.
     requires_child_selection: isGroup,
     work_order_ready: !isGroup && Number(row.active_child_count || 0) >= 0 && row.asset_status === 'ACTIVE',
@@ -151,7 +154,15 @@ const fetchPlanItems = async (db, planId) => {
     WHERE i.plan_id = ?
     ORDER BY i.sort_order ASC, a.asset_code ASC
   `).bind(planId).all();
-  return results.map(enrichPlanItem);
+
+  const closedWoRes = await db
+    .prepare("SELECT plan_item_id, planned_month, certificate_no FROM vcc_work_orders WHERE plan_id = ? AND status = 'CLOSED' AND result_status = 'PASS'")
+    .bind(planId)
+    .all()
+    .catch(() => ({ results: [] }));
+  const closedWoRows = closedWoRes.results || [];
+
+  return results.map((row) => enrichPlanItem(row, closedWoRows));
 };
 
 export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {

@@ -630,10 +630,17 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
                             {(item.due_dates || []).slice(0, 2).join(', ')}
                             {(item.due_dates || []).length > 2 ? ` (+${item.due_dates.length - 2} เดือน)` : ''}
                           </div>
-                          <span className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded bg-amber-50 border border-amber-200 text-amber-800 font-semibold text-[11px]">
-                            <Clock size={11} />
-                            วางแผนเท่านั้น • ยังไม่มีหลักฐานใบงาน
-                          </span>
+                          {item.completion_status === 'COMPLETED' ? (
+                            <span className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-50 border border-emerald-200 text-emerald-800 font-semibold text-[11px]">
+                              <CheckCircle2 size={11} />
+                              ทวนสอบเสร็จแล้ว • มีใบรับรอง
+                            </span>
+                          ) : (
+                            <span className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded bg-amber-50 border border-amber-200 text-amber-800 font-semibold text-[11px]">
+                              <Clock size={11} />
+                              วางแผนเท่านั้น • ยังไม่มีหลักฐานใบงาน
+                            </span>
+                          )}
                         </td>
 
                         <td className="py-3 px-2 align-top" rowSpan={2}>
@@ -678,14 +685,22 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
                         </td>
                       </tr>
 
-                      {/* Act. Row (Never filled from plan color alone) */}
+                      {/* Act. Row (Never filled from plan color alone; only filled when CLOSED work order exists) */}
                       <tr className="bg-slate-50/50">
                         <td className="py-1.5 px-2 text-center font-semibold text-slate-500">Act.</td>
-                        {MONTHS.map((m) => (
-                          <td key={`act-${item.id}-${m}`} className="py-1.5 px-1 text-center border-l border-slate-200 text-slate-300">
-                            -
-                          </td>
-                        ))}
+                        {MONTHS.map((m) => {
+                          const isActual = (item.actual_months || []).includes(m);
+                          return (
+                            <td
+                              key={`act-${item.id}-${m}`}
+                              className={`py-1.5 px-1 text-center border-l border-slate-200 ${
+                                isActual ? 'bg-emerald-600 text-white font-bold' : 'text-slate-300'
+                              }`}
+                            >
+                              {isActual ? `A${m}` : '-'}
+                            </td>
+                          );
+                        })}
                       </tr>
                     </React.Fragment>
                   );
