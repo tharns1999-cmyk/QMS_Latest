@@ -136,6 +136,66 @@ const INITIAL_LOCAL_ASSETS = [
     created_by: 'dc4',
     updated_at: '2026-10-28T02:30:00.000Z',
     updated_by: 'dc4'
+  },
+  {
+    id: 'vcc-seed-grp-vernier',
+    asset_code: 'GRP-VERNIER',
+    name: '[ข้อมูลทดสอบ] กลุ่มเวอร์เนียร์คาลิปเปอร์ (Vernier Caliper)',
+    asset_type: 'เวอร์เนียร์คาลิปเปอร์',
+    serial_no: '',
+    model: '',
+    location: 'ห้องปฏิบัติการ QC',
+    department: 'QC',
+    is_group: 1,
+    parent_id: null,
+    status: 'ACTIVE',
+    retired_reason: null,
+    retired_at: null,
+    retired_by: null,
+    created_at: '2026-10-28T02:00:00.000Z',
+    created_by: 'dc4',
+    updated_at: '2026-10-28T02:00:00.000Z',
+    updated_by: 'dc4'
+  },
+  {
+    id: 'vcc-seed-v001',
+    asset_code: 'V001',
+    name: '[ข้อมูลทดสอบ] เวอร์เนียร์คาลิปเปอร์ V001 (ทวนสอบเดือน 2)',
+    asset_type: 'เวอร์เนียร์คาลิปเปอร์',
+    serial_no: 'VN-001',
+    model: 'Mitutoyo',
+    location: 'ห้องปฏิบัติการ QC',
+    department: 'QC',
+    is_group: 0,
+    parent_id: 'vcc-seed-grp-vernier',
+    status: 'ACTIVE',
+    retired_reason: null,
+    retired_at: null,
+    retired_by: null,
+    created_at: '2026-10-28T02:00:00.000Z',
+    created_by: 'dc4',
+    updated_at: '2026-10-28T02:00:00.000Z',
+    updated_by: 'dc4'
+  },
+  {
+    id: 'vcc-seed-v002',
+    asset_code: 'V002',
+    name: '[ข้อมูลทดสอบ] เวอร์เนียร์คาลิปเปอร์ V002 (ทวนสอบเดือน 9)',
+    asset_type: 'เวอร์เนียร์คาลิปเปอร์',
+    serial_no: 'VN-002',
+    model: 'Mitutoyo',
+    location: 'ห้องปฏิบัติการ QC',
+    department: 'QC',
+    is_group: 0,
+    parent_id: 'vcc-seed-grp-vernier',
+    status: 'ACTIVE',
+    retired_reason: null,
+    retired_at: null,
+    retired_by: null,
+    created_at: '2026-10-28T02:00:00.000Z',
+    created_by: 'dc4',
+    updated_at: '2026-10-28T02:00:00.000Z',
+    updated_by: 'dc4'
   }
 ];
 
@@ -147,12 +207,16 @@ export const resetVccLocalStore = () => {
     localStorage.removeItem(STORAGE_ASSETS_KEY);
     localStorage.removeItem(STORAGE_TYPES_KEY);
     localStorage.removeItem(STORAGE_AUDIT_KEY);
+    localStorage.removeItem('qms-vcc-local-plans-v1');
+    localStorage.removeItem('qms-vcc-local-plan-items-v1');
+    localStorage.removeItem('qms-vcc-local-providers-v1');
+    localStorage.removeItem('qms-vcc-local-plan-settings-v1');
   } catch {
     // ignore storage errors in test environments
   }
 };
 
-const readJson = (key, fallback) => {
+export const readJson = (key, fallback) => {
   try {
     const raw = typeof localStorage !== 'undefined' && typeof localStorage.getItem === 'function' ? localStorage.getItem(key) : null;
     if (raw) return JSON.parse(raw);
@@ -165,7 +229,7 @@ const readJson = (key, fallback) => {
   return initial;
 };
 
-const writeJson = (key, value) => {
+export const writeJson = (key, value) => {
   const serialized = JSON.stringify(value);
   memoryStore.set(key, serialized);
   try {
@@ -217,12 +281,12 @@ const buildSeedAudit = () =>
     ];
   });
 
-const getLocalAssets = () => readJson(STORAGE_ASSETS_KEY, () => [...INITIAL_LOCAL_ASSETS]);
+export const getLocalAssets = () => readJson(STORAGE_ASSETS_KEY, () => [...INITIAL_LOCAL_ASSETS]);
 const setLocalAssets = (list) => writeJson(STORAGE_ASSETS_KEY, list);
 const getLocalTypes = () => readJson(STORAGE_TYPES_KEY, () => [...DEFAULT_VCC_ASSET_TYPES]);
 const setLocalTypes = (list) => writeJson(STORAGE_TYPES_KEY, list);
-const getLocalAudit = () => readJson(STORAGE_AUDIT_KEY, buildSeedAudit);
-const appendLocalAudit = (action, details) => {
+export const getLocalAudit = () => readJson(STORAGE_AUDIT_KEY, buildSeedAudit);
+export const appendLocalAudit = (action, details) => {
   const user = useStore.getState().currentUser;
   const list = getLocalAudit();
   const nextId = list.reduce((max, item) => Math.max(max, item.id || 0), 0) + 1;
@@ -238,14 +302,14 @@ const appendLocalAudit = (action, details) => {
   writeJson(STORAGE_AUDIT_KEY, list);
 };
 
-const assertLocalDcc = () => {
+export const assertLocalDcc = () => {
   const user = useStore.getState().currentUser;
-  const isDcc = Boolean(user?.isDcc || user?.role === 'DCC_ADMIN' || user?.role === 'DCC_STAFF');
+  const isDcc = Boolean(user?.isDcc);
   if (!isDcc) throw new Error('เฉพาะ DCC เท่านั้นที่ใช้งานส่วนนี้ได้');
   return user;
 };
 
-const getDepartmentMap = () => {
+export const getDepartmentMap = () => {
   const state = useStore.getState();
   const depts = state.masterDepartments || state.departments || [];
   const map = {};
