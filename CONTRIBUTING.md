@@ -20,7 +20,7 @@ feature/* ──PR──► develop ──► release/x.y.z ──► uat (ท�
 
 - ห้าม push ตรงเข้า `main`, `uat` และ `develop` ทุกงานต้องผ่าน PR และ CI ต้องผ่าน
 - branch ควรมีอายุสั้น (ไม่เกิน 1–3 วัน) และ rebase หรือ merge จาก `develop` บ่อยๆ
-- ชื่อ branch ให้ขึ้นต้นด้วยชื่อ module (`dcc`, `portal`, `api`, `shared`) เพื่อให้รู้ทันทีว่างานนั้นแตะส่วนไหน
+- ชื่อ branch ให้ขึ้นต้นด้วยชื่อ module (`dcc`, `vcc`, `portal`, `api`, `shared`) เพื่อให้รู้ทันทีว่างานนั้นแตะส่วนไหน
 
 ## Commit message (Conventional Commits)
 
@@ -28,7 +28,7 @@ feature/* ──PR──► develop ──► release/x.y.z ──► uat (ท�
 <type>(<scope>): <สรุปสั้นๆ>
 
 type:  feat | fix | refactor | test | docs | chore | perf
-scope: dcc | portal | shared | web | api | db
+scope: dcc | vcc | portal | shared | web | api | db
 ```
 
 ตัวอย่าง: `feat(dcc): add external doc renewal reminder`, `fix(api): reject self-approval on DAR`
