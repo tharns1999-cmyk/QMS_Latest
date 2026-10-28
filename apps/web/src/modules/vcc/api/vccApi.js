@@ -213,6 +213,7 @@ export const resetVccLocalStore = () => {
     localStorage.removeItem('qms-vcc-local-plan-settings-v1');
     localStorage.removeItem('qms-vcc-local-work-orders-v1');
     localStorage.removeItem('qms-vcc-local-wo-settings-v1');
+    localStorage.removeItem('qms-vcc-local-notification-settings-v1');
   } catch {
     // ignore storage errors in test environments
   }
