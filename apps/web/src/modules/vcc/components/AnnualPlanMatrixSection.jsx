@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import toast from 'react-hot-toast';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, Plus } from 'lucide-react';
+import { getPlanStatusLabel } from '../utils/planLabels';
 import { fetchVccAssets } from '../api/vccApi';
 import {
   fetchVccPlanSettings,
@@ -491,8 +492,6 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
         onOpenSettings={openSettings}
         onOpenCreatePlan={openCreatePlan}
         onOpenEditPlan={openEditPlan}
-        onOpenAddItem={openAddItem}
-        onOpenSmartImport={() => setSmartImportOpen(true)}
         onOpenHistory={() => setHistoryOpen(true)}
       />
 
@@ -508,13 +507,21 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
           กำลังโหลดตารางแผนการทวนสอบเครื่องมือประจำปี...
         </div>
       ) : !activePlan ? (
-        <div className="bg-white rounded-2xl border border-slate-200/80 p-12 text-center space-y-2 shadow-2xs">
+        <div className="bg-white rounded-2xl border border-slate-200/80 p-12 text-center space-y-3 shadow-2xs">
           <div className="text-base font-bold text-slate-700">
-            ไม่พบแผนการทวนสอบประจำปีในสถานะ {statusTab}
+            ไม่พบแผนการทวนสอบประจำปีในสถานะ “{getPlanStatusLabel(statusTab)}”
           </div>
           <p className="text-xs text-slate-500">
-            เลือกแท็บสถานะอื่น หรือกดปุ่ม &ldquo;สร้างแผนประจำปีใหม่&rdquo; ด้านบน
+            เลือกสถานะอื่นจากตัวกรองด้านบน หรือสร้างแผนประจำปีใหม่
           </p>
+          <button
+            type="button"
+            onClick={openCreatePlan}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold cursor-pointer"
+          >
+            <Plus size={13} />
+            <span>สร้างแผนประจำปีใหม่</span>
+          </button>
         </div>
       ) : (
         <div className="space-y-2.5">

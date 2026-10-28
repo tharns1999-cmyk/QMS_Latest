@@ -52,11 +52,10 @@ describe('VCC Phase 2 — Annual Calibration Plan (FM-QC-46) & Approval Workflow
     const plannedOnlyBadges = screen.getAllByText(/วางแผนเท่านั้น • ยังไม่มีหลักฐานใบงาน/i);
     expect(plannedOnlyBadges.length).toBeGreaterThan(0);
 
-    // Switching to APPROVED tab must NOT show DRAFT plans
-    const approvedTab = screen.getByRole('tab', { name: /อนุมัติแล้ว \(APPROVED\)/i });
-    fireEvent.click(approvedTab);
+    // Switching status filter to APPROVED must NOT show DRAFT plans
+    fireEvent.change(screen.getByLabelText('กรองตามสถานะแผน'), { target: { value: 'APPROVED' } });
 
-    expect(await screen.findByText(/ไม่พบแผนการทวนสอบประจำปีในสถานะ APPROVED/i)).toBeInTheDocument();
+    expect(await screen.findByText(/ไม่พบแผนการทวนสอบประจำปีในสถานะ “อนุมัติแล้ว”/i)).toBeInTheDocument();
     expect(screen.queryByText('V001')).not.toBeInTheDocument();
   });
 
@@ -91,7 +90,7 @@ describe('VCC Phase 2 — Annual Calibration Plan (FM-QC-46) & Approval Workflow
     expect(await screen.findByText('ST002')).toBeInTheDocument();
 
     // 1) Submit plan as dc4 -> moves to PENDING_REVIEW
-    const submitBtn = screen.getByRole('button', { name: /ส่งทบทวนแผน \(Submit\)/i });
+    const submitBtn = screen.getByRole('button', { name: 'ส่งทบทวนแผน' });
     fireEvent.click(submitBtn);
 
     // Now in PENDING_REVIEW tab
@@ -152,7 +151,7 @@ describe('VCC Phase 2 — Annual Calibration Plan (FM-QC-46) & Approval Workflow
     fireEvent.click(await screen.findByRole('button', { name: 'บันทึกการอนุมัติแผน' }));
 
     // Verify plan is now in APPROVED status
-    expect(await screen.findByText(/สถานะ: APPROVED/i)).toBeInTheDocument();
+    expect(await screen.findByText(/สถานะ: อนุมัติแล้ว/i, { selector: 'span' })).toBeInTheDocument();
   });
 
   it('4. เมื่อโหลดแผนกจาก Master Data ไม่ได้ จะแสดงข้อความแจ้งเตือนและปิดปุ่มบันทึกแผนประจำปี', async () => {
@@ -161,7 +160,8 @@ describe('VCC Phase 2 — Annual Calibration Plan (FM-QC-46) & Approval Workflow
     render(<AssetRegisterPage />);
     fireEvent.click(await screen.findByRole('button', { name: /แผนการทวนสอบประจำปี \(FM-QC-46\)/i }));
 
-    fireEvent.click(await screen.findByRole('button', { name: /สร้างแผนประจำปีใหม่/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'เมนูเพิ่มเติมของแผน' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: /สร้างแผนประจำปีใหม่/i }));
     expect(
       await screen.findByText(/ไม่สามารถโหลดแผนกจาก Master Data ได้ กรุณาตรวจสอบข้อมูลแผนกก่อนบันทึก/i)
     ).toBeInTheDocument();
