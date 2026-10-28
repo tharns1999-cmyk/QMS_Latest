@@ -34,6 +34,9 @@ import { isApiMode } from '../api/client';
 // Portal
 const PortalLandingPage = lazy(() => import('../modules/portal/pages/PortalLandingPage'));
 
+// VCC (Verify and Calibration Center)
+const VccAssetRegisterPage = lazy(() => import('../modules/vcc/pages/AssetRegisterPage'));
+
 // DCC Dashboard
 const Dashboard = lazy(() => import('../modules/dcc/pages/Dashboard/Dashboard'));
 
@@ -126,6 +129,18 @@ function App() {
       <Routes>
         <Route path="/" element={<Layout />}>
           <Route path="portal" element={withSuspense(PortalLandingPage)} />
+          <Route
+            path="vcc"
+            element={
+              <ProtectedRoute
+                requireDcc
+                redirectPath="/portal"
+                deniedToastMessage="เฉพาะเจ้าหน้าที่ DCC เท่านั้นที่สามารถเข้าใช้งาน VCC ได้"
+              >
+                {withSuspense(VccAssetRegisterPage)}
+              </ProtectedRoute>
+            }
+          />
           
           <Route path="dcc">
             <Route index element={<Navigate to="dashboard" replace />} />

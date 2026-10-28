@@ -1,32 +1,74 @@
-# Ponytail, lazy senior dev mode
+# AGENTS.md
 
-You are a lazy senior developer. The best code is the code never written. You solve the whole problem with the least new code. End your reply with one or two lines: what you skipped or did not check, and any risk the user must know.
+กติกาสำหรับ AI ที่เขียนโค้ดใน repo นี้ (Antigravity, Codex หรืออื่น ๆ) ผู้ใช้ไม่ใช่โปรแกรมเมอร์ ให้อธิบายเป็นภาษาไทยง่าย ๆ และถามเมื่อไม่แน่ใจ อย่าเดา
 
-## Before you write
+## เทคโนโลยี
+Cloudflare Workers + Hono + D1 (SQLite) + R2
 
-Read the task and the code it touches. List every place your change must reach: callers, tests, fixtures, config, exports. Check what your change could break for users: data it would destroy or expose, callers that stop working. That is scope. Extra features are not.
+- web: `apps/web` (modules: `apps/web/src/modules/dcc`, `portal`, `vcc`)
+- API: `apps/api` (`apps/api/src/index.js`, migrations ที่ `apps/api/migrations`)
+- ตรวจทั้งหมด: `npm run check` (lint + test + build)
+- รัน web: `npm run dev` รัน API: `npm run dev:api`
+- ข้อมูลทดสอบ localhost: `npm run db:seed:local --prefix apps/api` (รหัสผ่านทดสอบใช้เฉพาะ local)
 
-## The smallest complete change
+## กติกา git (สำคัญที่สุด)
+ผู้ใช้ไม่รู้ศัพท์ git **ให้ AI จัดการ git เองทั้งหมด** และเดินขั้นตอนเองโดยไม่รอให้ผู้ใช้สั่งทีละคำ
+ห้ามใช้ศัพท์ git กับผู้ใช้ (push, pull, merge, branch, PR, CI) ให้เล่าเป็นภาษาไทยง่าย ๆ เช่น "บันทึกงานแล้ว" "ระบบตรวจอัตโนมัติผ่านแล้ว"
 
-Take the first option that fully works:
+ลำดับที่ AI ทำเอง:
+1. **ก่อนเริ่มงานใหม่:** เช็คว่าไม่มีงานค้างที่ยังไม่บันทึก (ถ้ามี ให้หยุดและบอกว่าเป็นงานอะไร) แล้ว `git switch develop`, `git pull`
+   แตก `feature/<module>-<เรื่อง>` โดย **ตั้งชื่อเอง** จากเรื่องที่ได้รับมอบหมาย (ภาษาอังกฤษ ตัวพิมพ์เล็ก คั่นด้วย `-`) และบอกผู้ใช้หนึ่งบรรทัดว่าตั้งชื่ออะไร
+2. **ระหว่างทำ:** แบ่งเป็นส่วนเล็ก ๆ เมื่อจบแต่ละส่วนและ `npm run check` ผ่าน ให้ commit เฉพาะไฟล์ของงานนี้ (รูปแบบข้อความดู `CONTRIBUTING.md`) ไม่ต้องถามผู้ใช้
+3. **เมื่องานเสร็จ:** `git push`, เปิด PR เข้า `develop` ด้วย `gh pr create`, รอ CI (`gh pr checks --watch`) แล้วรายงานผล ถ้าไม่ผ่านให้แก้เองแล้ว push ใหม่
+4. **รวมงาน:** เมื่อ CI ผ่านครบ (web, e2e, api) ให้ถามผู้ใช้ **หนึ่งคำถามเดียว** ว่า "งานเสร็จและระบบตรวจอัตโนมัติผ่านแล้ว รวมเข้าระบบหลักเลยไหมครับ?"
+   ผู้ใช้ตอบตกลง จึง `gh pr merge` ตาม `CONTRIBUTING.md`, ลบ branch ของงานนั้น, `git switch develop` + `git pull` แล้วบอกว่าเสร็จ
+   ถ้า CI ไม่ผ่าน ห้ามถามเรื่องรวมงาน ให้แก้ก่อน (ระบบก็บล็อกการรวมงานอยู่แล้ว)
+   ไม่ต้องรอ Claude ตรวจทุกรอบ Claude จะตรวจรวมครั้งเดียวตอนจบทั้งโมดูล และ **ห้ามส่งขึ้น `uat` หรือ `main` ก่อนการตรวจนั้น**
+5. **อัปเดตงาน:** ถ้า `develop` เดินหน้าไปและงานของเรา behind ให้ดึงมารวมเอง ถ้าชนกัน (conflict) ให้หยุดและอธิบายว่าชนตรงไหน
 
-1. Does it need to exist? Skip features, options and flexibility nobody asked for, and name them in one line. A vague request ("build me X") gets the smallest version that does the core job.
-2. Already in this codebase (a helper, component, service, pattern)? Use it the way the surrounding code does.
-3. Standard library or a platform feature? Use it, unless the project has its own. A house component beats a native widget.
-4. An installed dependency? Use it. Never add a dependency for a few lines.
-5. Can it be one line a reader gets at a glance? One line.
-6. Otherwise: the minimum code that works.
+กติกาที่ต้องทำเสมอ:
+1. ก่อนเริ่มทุกครั้งรัน `git branch --show-current` แล้วบอกผู้ใช้ ห้ามแก้ไฟล์ตรงบน `develop`, `uat`, `main`
+2. หนึ่งงาน = หนึ่ง branch = หนึ่ง PR งานรอบใหม่แตกจาก `develop` หลังรอบก่อนรวมงานแล้วเท่านั้น
+3. ห้าม `push --force`, `reset --hard`, ลบ branch ที่ยังไม่ merge, หรือแก้ประวัติ commit
+4. ห้าม commit ไฟล์ที่ไม่ใช่ของงานนี้ (เช่น `outputs/`, `.claude/`, `docs/` ที่ผู้ใช้ไม่ได้สั่ง) และห้าม commit รหัสผ่าน/ความลับ
+5. ห้ามแตะ `uat`, `main`, ห้าม deploy, ห้ามแตะ production หรือบัญชี Cloudflare งานขึ้น UAT/production ผู้ใช้จะสั่งแยกเอง
+6. ถ้าเจอสถานการณ์ git ที่ไม่ปกติ (conflict, push ไม่ผ่าน, CI พังซ้ำ) ให้หยุดและอธิบายเป็นภาษาง่าย ๆ พร้อมบอกว่าจะแก้อย่างไร อย่าเดาแก้เอง
 
-- Be lazy about the solution, never about the change itself: finish every part the task needs, including the callers, tests and fixtures your change breaks.
-- No abstraction, wrapper, type conversion, option, config, boilerplate or "for later" code nobody asked for. Keep values in the form the platform already gives you. Deletion beats addition. Keep the structure the codebase already has: its layers, interfaces and conventions.
-- The shortest working diff wins, once you know everything it must touch. A one-liner that needs decoding is not short.
-- Comment only the why the code cannot show, in one line.
-- Bug fix: before you edit, grep every caller of the function you touch, then fix the root cause once in the shared code.
-- Code you move or merge keeps its error handling and validation.
-- Between options of equal size, take the one that is correct on edge cases.
-- Lazy code without its check is unfinished: new non-trivial logic (a branch, a loop, a parser, money or security, or a whole new script or app) leaves one small test or an assert-based self-check. Trivial changes need none.
-- A shortcut with a known limit gets a code comment in this form: `shortcut: <the limit>, <when to upgrade>`.
+## ขอบเขต
+- แก้เฉพาะโค้ดของงานที่ได้รับมอบหมาย ห้ามแก้โค้ด DCC
+- ถ้าจำเป็นต้องแตะส่วนกลาง (login, สิทธิ์, audit log, `index.js`, `App.jsx`, `moduleRegistry.js`, เมนู portal, `seed-local.js`)
+  ให้หยุดและอธิบายก่อนว่าจะแก้อะไร เพราะอะไร แล้วรอผู้ใช้อนุมัติ แก้ได้เฉพาะบรรทัดที่งานนี้ต้องใช้ ห้ามปรับโค้ดเดิมของ DCC ไปด้วย
+- VCC phase 1 เปิดให้เฉพาะ DCC เท่านั้น ทั้ง API และ web ให้เช็ค `isDcc` ตัวเดียวกัน (ห้ามเช็ค role แยก เพราะจะเห็นเมนูแต่เข้าไม่ได้)
+- โค้ด VCC: API อยู่ใน `apps/api/src/vcc*.js` web อยู่ใน `apps/web/src/modules/vcc` ไฟล์หน้าเว็บที่ยาวเกิน ~500 บรรทัดให้แยกเป็น component
 
-Never cut: validation at trust boundaries, error handling that prevents data loss, security, accessibility, the calibration real hardware needs, anything the user asked for.
+## ฐานข้อมูล
+- ตารางหรือคอลัมน์ใหม่ต้องทำเป็นไฟล์ migration ใหม่ใน `apps/api/migrations` เลขต่อจากไฟล์ล่าสุด (ดูด้วย `ls apps/api/migrations`) ห้ามแก้ migration เดิม รวมถึง migration ของงานรอบก่อนที่ merge แล้ว
+- ข้อมูลทดสอบใน `seed-local.js` ต้องติดป้าย `[ข้อมูลทดสอบ]` และรันซ้ำได้โดยไม่เกิดแถวซ้ำ (รวมถึงแถว `audit_log`)
+- `audit_log` เพิ่มได้อย่างเดียว ห้ามแก้หรือลบ (มี trigger กันไว้)
+- SQLite: `ALTER TABLE ADD COLUMN` ใส่ `NOT NULL` ไม่ได้ถ้าไม่มี default
+  ห้ามใช้ `strftime('%y')` ให้ใช้ `substr(strftime('%Y','now'),3,2)`
+- เมื่อมี migration ใหม่ ต้องบอกผู้ใช้ว่าต้องรันคำสั่งอะไรเพื่อให้ localhost ใช้ได้
 
-(Yes, this file also applies to agents working on the ponytail repo itself. Especially to them.)
+## หลักการออกแบบ
+- ห้าม hardcode นโยบาย (ระดับอนุมัติ, ใครต้องอนุมัติ, รายการตัวเลือก) ให้เก็บเป็นค่าตั้งค่าที่ DCC แก้ได้ในหน้าเว็บ
+- การกระทำสำคัญต้องบันทึกใน `audit_log` (ดูตัวช่วย `audit()` ใน `apps/api/src/index.js`)
+- ตรวจสิทธิ์ที่ฝั่ง API ทุกครั้ง ห้ามพึ่งการซ่อนเมนูฝั่ง web อย่างเดียว
+- ใช้แผนกจากตาราง `departments` (Master Data) ห้ามสร้างรายการแผนกซ้ำ
+- รายการที่มีสถานะ ห้ามแสดงสถานะปนกันในลิสต์เดียว
+- ห้ามสร้างระบบสิทธิ์ใหม่ ใช้ระดับอนุมัติ ธง DCC/QMR และ approval matrix ที่มีอยู่
+
+## วิธีทำงาน
+1. ผู้ใช้ส่ง requirement ก่อนเขียนโค้ดให้สรุปความเข้าใจ + แผนงานเป็นข้อ ๆ + คำถามที่ยังไม่ชัด แล้วรอผู้ใช้ตอบ ห้ามลงมือทันที
+2. ทำทีละส่วนเล็ก ๆ หลังแต่ละส่วนรัน `npm run check` และรายงานผลตามจริง ถ้า test ไม่ผ่านให้บอกตรง ๆ ห้ามบอกว่าเสร็จ
+3. เขียน test ให้ทุก endpoint และกติกาสำคัญ (ตัวอย่างที่ `apps/api/src/*.test.js`)
+4. จบแต่ละงานให้บอก: (ก) ไฟล์ที่แก้ (ข) วิธีทดสอบบน localhost ทีละขั้น เริ่มจากเข้า portal แล้วไปที่เมนูของ module (ค) สิ่งที่ยังไม่ได้ทำหรือไม่แน่ใจ
+5. Claude ตรวจงานรวมครั้งเดียวตอนจบทั้งโมดูล อย่าแก้ไฟล์ระหว่างที่ผู้ใช้บอกว่ากำลังถูกตรวจ เพราะ Claude ตรวจไม่ทุกรอบ
+   Antigravity ต้องตรวจตัวเองให้เข้มขึ้น: เทียบกับ "กติกา" และ "ข้อมูลที่ห้ามเดา" ในไฟล์นี้ก่อนบอกว่าเสร็จ และเขียน test ให้ครบ
+6. หน้าเว็บต้องมี test ของกติกาสำคัญด้วย (เช่น ปุ่มที่บังคับกรอกเหตุผล การแยกลิสต์ตามสถานะ การแสดง error จาก API)
+7. รายงานให้สั้น ภาษาไทยง่าย ๆ ไม่ใช้ศัพท์ git หรือศัพท์โปรแกรมเมอร์โดยไม่อธิบาย
+
+## ข้อมูลที่ห้ามเดา
+อย่าตัดสินใจแทนผู้ใช้ในเรื่องเหล่านี้ ให้บันทึกเป็นข้อสงสัยแล้วถาม:
+- วันครบกำหนด, ผู้อนุมัติ, เกณฑ์ยอมรับ, ระยะเวลาเก็บเอกสาร
+- ข้อมูลใน Excel ที่ขัดแย้งกัน (เช่น Vernier Caliper)
+- ห้ามแต่งข้อมูลอนุมัติ วันที่ ใบรับรอง หรืองานที่เสร็จแล้ว

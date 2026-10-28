@@ -5,6 +5,7 @@ import { sign, verify } from 'hono/jwt';
 import { hashPassword, verifyPassword } from './password.js';
 import { checkDecisionRights, getThresholds } from './approval.js';
 import { newSecret, verifyCode, otpauthUri } from './totp.js';
+import { registerVccRoutes } from './vcc.js';
 
 const MAX_FAILED_LOGINS = 5;
 const TOKEN_TTL_SECONDS = 8 * 60 * 60;
@@ -1421,6 +1422,8 @@ app.get('/api/audit-log', requireAuth, async (c) => {
   }
   return c.json({ entries: results, next_before_id: results.length === limit ? results.at(-1).id : null });
 });
+
+registerVccRoutes(app, { requireAuth, audit });
 
 // Workers calls scheduled() from the cron in wrangler.jsonc; tests call request() directly.
 export default {
