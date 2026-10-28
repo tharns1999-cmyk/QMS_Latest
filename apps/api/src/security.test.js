@@ -95,6 +95,15 @@ describe('security hardening', () => {
     await expect(env.DB.prepare('DELETE FROM audit_log').run()).rejects.toThrow(/append-only/);
   });
 
+  it('lets only rows older than 365 days leave the audit log (for scripts/audit-archive.js)', async () => {
+    const at = (days) => new Date(Date.now() - days * 864e5).toISOString();
+    await env.DB.batch([364, 366].map((d) => env.DB.prepare("INSERT INTO audit_log (at, action) VALUES (?, 'RETENTION_TEST')").bind(at(d))));
+    await expect(env.DB.prepare("DELETE FROM audit_log WHERE action = 'RETENTION_TEST'").run()).rejects.toThrow(/365 days/);
+    await env.DB.prepare("DELETE FROM audit_log WHERE action = 'RETENTION_TEST' AND at < ?").bind(at(365)).run();
+    expect((await env.DB.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'RETENTION_TEST'").first()).n).toBe(1);
+    await expect(env.DB.prepare("UPDATE audit_log SET action = 'X' WHERE action = 'RETENTION_TEST'").run()).rejects.toThrow(/append-only/);
+  });
+
   it('exports the audit log to DCC and QMR only, filtered, as JSON or safe CSV', async () => {
     const dcc = await tokenOf('S-DCC@sec.local');
     expect((await call('GET', '/api/audit-log', await tokenOf('S-USER@sec.local'))).status).toBe(403);
