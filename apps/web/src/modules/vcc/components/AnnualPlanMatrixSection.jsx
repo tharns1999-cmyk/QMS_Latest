@@ -29,7 +29,6 @@ import {
   PlanHistoryModal
 } from './AnnualPlanModals';
 import AnnualPlanWorkspaceHeader from './AnnualPlanWorkspaceHeader';
-import AnnualPlanApprovalStepper from './AnnualPlanApprovalStepper';
 import AnnualPlanMatrixTable from './AnnualPlanMatrixTable';
 import SmartAssetImportModal from './SmartAssetImportModal';
 
@@ -495,6 +494,9 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
         activePlan={activePlan}
         planItems={planItems}
         canEditPlan={canEditPlan}
+        thresholds={thresholds}
+        onSubmitPlan={handleSubmitPlan}
+        onOpenWorkflowModal={openWorkflowModal}
         onOpenSettings={openSettings}
         onOpenCreatePlan={openCreatePlan}
         onOpenEditPlan={openEditPlan}
@@ -535,14 +537,6 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
         </div>
       ) : (
         <div className="space-y-2.5">
-          <AnnualPlanApprovalStepper
-            activePlan={activePlan}
-            thresholds={thresholds}
-            canEditPlan={canEditPlan}
-            onSubmitPlan={handleSubmitPlan}
-            onOpenWorkflowModal={openWorkflowModal}
-          />
-
           <AnnualPlanMatrixTable
             planItems={planItems}
             activePlan={activePlan}
