@@ -141,6 +141,54 @@ function App() {
               </ProtectedRoute>
             }
           />
+          <Route
+            path="vcc/dashboard"
+            element={
+              <ProtectedRoute
+                requireDcc
+                redirectPath="/portal"
+                deniedToastMessage="เฉพาะเจ้าหน้าที่ DCC เท่านั้นที่สามารถเข้าใช้งาน VCC ได้"
+              >
+                {withSuspense(VccAssetRegisterPage)}
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="vcc/assets"
+            element={
+              <ProtectedRoute
+                requireDcc
+                redirectPath="/portal"
+                deniedToastMessage="เฉพาะเจ้าหน้าที่ DCC เท่านั้นที่สามารถเข้าใช้งาน VCC ได้"
+              >
+                {withSuspense(VccAssetRegisterPage)}
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="vcc/plans"
+            element={
+              <ProtectedRoute
+                requireDcc
+                redirectPath="/portal"
+                deniedToastMessage="เฉพาะเจ้าหน้าที่ DCC เท่านั้นที่สามารถเข้าใช้งาน VCC ได้"
+              >
+                {withSuspense(VccAssetRegisterPage)}
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="vcc/work-orders"
+            element={
+              <ProtectedRoute
+                requireDcc
+                redirectPath="/portal"
+                deniedToastMessage="เฉพาะเจ้าหน้าที่ DCC เท่านั้นที่สามารถเข้าใช้งาน VCC ได้"
+              >
+                {withSuspense(VccAssetRegisterPage)}
+              </ProtectedRoute>
+            }
+          />
           
           <Route path="dcc">
             <Route index element={<Navigate to="dashboard" replace />} />

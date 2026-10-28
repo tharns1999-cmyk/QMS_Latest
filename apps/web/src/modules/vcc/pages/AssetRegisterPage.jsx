@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useInRouterContext, useLocation, useNavigate, MemoryRouter } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import {
   Wrench,
   Calendar,
   ClipboardList,
+  BarChart3,
   Plus,
   Search,
   SlidersHorizontal,
@@ -49,7 +51,7 @@ const EMPTY_FORM = {
   parent_id: ''
 };
 
-const AssetRegisterPage = () => {
+const AssetRegisterPageInner = () => {
   const { departments: storeDepts, masterDepartments } = useStore();
 
   const activeDepartments = useMemo(() => {
@@ -63,8 +65,35 @@ const AssetRegisterPage = () => {
       .filter((d) => d.code && d.status === 'ACTIVE');
   }, [masterDepartments, storeDepts]);
 
-  // Top-level view switcher: ASSETS vs ANNUAL_PLAN
-  const [moduleView, setModuleView] = useState('ASSETS');
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  // URL-driven navigation synchronized with Sidebar
+  const routeView = useMemo(() => {
+    const p = location?.pathname || '';
+    if (p.includes('/vcc/work-orders')) return 'WORK_ORDERS';
+    if (p.includes('/vcc/plans')) return 'ANNUAL_PLAN';
+    if (p.includes('/vcc/assets')) return 'ASSETS';
+    if (p.includes('/vcc/dashboard')) return 'DASHBOARD';
+    if (p === '/vcc' || p === '/vcc/') return 'DASHBOARD';
+    return null;
+  }, [location?.pathname]);
+
+  const [localModuleView, setLocalModuleView] = useState('ASSETS');
+  const moduleView = routeView || localModuleView;
+
+  const setModuleView = useCallback((nextView) => {
+    setLocalModuleView(nextView);
+    if (navigate && location?.pathname && location.pathname.startsWith('/vcc')) {
+      const targetPath =
+        nextView === 'WORK_ORDERS' ? '/vcc/work-orders' :
+        nextView === 'ANNUAL_PLAN' ? '/vcc/plans' :
+        nextView === 'ASSETS' ? '/vcc/assets' : '/vcc/dashboard';
+      if (location.pathname !== targetPath) {
+        navigate(targetPath);
+      }
+    }
+  }, [navigate, location?.pathname]);
 
   // Separate status tabs: ACTIVE and RETIRED are never mixed in one list.
   const [activeTab, setActiveTab] = useState('ACTIVE');
@@ -307,12 +336,23 @@ const AssetRegisterPage = () => {
               <span>VCC • เฉพาะเจ้าหน้าที่ DCC</span>
             </div>
             <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
-              VCC (Verify and Calibration Center) — {moduleView === 'ASSETS' ? 'ทะเบียนเครื่องมือ' : 'แผนการทวนสอบเครื่องมือประจำปี (FM-QC-46)'}
+              VCC (Verify and Calibration Center) — {
+                moduleView === 'DASHBOARD' ? 'ภาพรวมและแจ้งเตือน (Dashboard & Alerts)' :
+                moduleView === 'WORK_ORDERS' ? 'ใบสั่งงานและบันทึกผล (Work Orders)' :
+                moduleView === 'ANNUAL_PLAN' ? 'แผนการทวนสอบเครื่องมือประจำปี (FM-QC-46)' :
+                'ทะเบียนเครื่องมือวัด (Equipment Register)'
+              }
             </h1>
             <p className="text-sm text-slate-600">
-              {moduleView === 'ASSETS'
-                ? 'จัดการทะเบียนเครื่องมือวัดและกลุ่มเครื่องมือ ตรวจสอบรหัสเครื่องมือไม่ให้ซ้ำทั้งบริษัท และบันทึกประวัติการแก้ไขทุกขั้นตอน'
-                : 'ตารางแผนการทวนสอบเครื่องมือประจำปี 12 เดือน คำนวณวันครบกำหนดตามกติกา และอนุมัติแผนตาม Approval Matrix'}
+              {
+                moduleView === 'DASHBOARD'
+                  ? 'สรุป KPI งานทวนสอบ/สอบเทียบ ศูนย์แจ้งเตือนตามกติกา และส่งออกรายงานประจำปี'
+                  : moduleView === 'WORK_ORDERS'
+                  ? 'เปิดใบสั่งงานตามแผน เลื่อนวันครบกำหนด บันทึกผลพร้อมใบรับรอง ตรวจรับปิดงาน และควบคุมการระงับใช้'
+                  : moduleView === 'ANNUAL_PLAN'
+                  ? 'ตารางแผนการทวนสอบเครื่องมือประจำปี 12 เดือน คำนวณวันครบกำหนดตามกติกา และอนุมัติแผนตาม Approval Matrix'
+                  : 'จัดการทะเบียนเครื่องมือวัดและกลุ่มเครื่องมือ ตรวจสอบรหัสเครื่องมือไม่ให้ซ้ำทั้งบริษัท และบันทึกประวัติการแก้ไขทุกขั้นตอน'
+              }
             </p>
           </div>
 
@@ -343,28 +383,15 @@ const AssetRegisterPage = () => {
         <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-slate-200" role="navigation" aria-label="เมนูย่อยระบบ VCC">
           <button
             type="button"
-            onClick={() => setModuleView('ASSETS')}
+            onClick={() => setModuleView('DASHBOARD')}
             className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-colors cursor-pointer ${
-              moduleView === 'ASSETS'
+              moduleView === 'DASHBOARD'
                 ? 'bg-indigo-600 text-white shadow-xs'
                 : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
             }`}
           >
-            <Wrench size={15} />
-            <span>ทะเบียนเครื่องมือ (Asset Register)</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setModuleView('ANNUAL_PLAN')}
-            className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-colors cursor-pointer ${
-              moduleView === 'ANNUAL_PLAN'
-                ? 'bg-indigo-600 text-white shadow-xs'
-                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-            }`}
-          >
-            <Calendar size={15} />
-            <span>แผนการทวนสอบประจำปี (FM-QC-46)</span>
+            <BarChart3 size={15} />
+            <span>ภาพรวมและรายงาน (Dashboard & Export)</span>
           </button>
 
           <button
@@ -382,15 +409,28 @@ const AssetRegisterPage = () => {
 
           <button
             type="button"
-            onClick={() => setModuleView('DASHBOARD')}
+            onClick={() => setModuleView('ANNUAL_PLAN')}
             className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-colors cursor-pointer ${
-              moduleView === 'DASHBOARD'
+              moduleView === 'ANNUAL_PLAN'
                 ? 'bg-indigo-600 text-white shadow-xs'
                 : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
             }`}
           >
-            <History size={15} />
-            <span>ภาพรวมและรายงาน (Dashboard & Export)</span>
+            <Calendar size={15} />
+            <span>แผนการทวนสอบประจำปี (FM-QC-46)</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setModuleView('ASSETS')}
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-colors cursor-pointer ${
+              moduleView === 'ASSETS'
+                ? 'bg-indigo-600 text-white shadow-xs'
+                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+            }`}
+          >
+            <Wrench size={15} />
+            <span>ทะเบียนเครื่องมือ (Asset Register)</span>
           </button>
         </div>
       </div>
@@ -725,6 +765,18 @@ const AssetRegisterPage = () => {
       />
     </div>
   );
+};
+
+const AssetRegisterPage = (props) => {
+  const inRouter = useInRouterContext();
+  if (!inRouter) {
+    return (
+      <MemoryRouter initialEntries={['/vcc']}>
+        <AssetRegisterPageInner {...props} />
+      </MemoryRouter>
+    );
+  }
+  return <AssetRegisterPageInner {...props} />;
 };
 
 export default AssetRegisterPage;

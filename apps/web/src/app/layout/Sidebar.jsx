@@ -18,7 +18,11 @@ import {
   Trash2, 
   CheckCircle2, 
   X,
-  ArrowLeft
+  ArrowLeft,
+  BarChart3,
+  ClipboardList,
+  Calendar,
+  Wrench
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import NotificationPopover from './NotificationPopover';
@@ -57,6 +61,9 @@ const Sidebar = () => {
                       path.startsWith('/dashboard') || 
                       path.startsWith('/documents') || 
                       path.startsWith('/viewer');
+
+  // Context-aware Hub & Spoke: VCC module routes
+  const isVccModule = path.startsWith('/vcc');
 
   const isRequester = Boolean(
     currentUser?.status !== 'INACTIVE' && (
@@ -304,11 +311,11 @@ const Sidebar = () => {
                 QMS
               </h1>
               <span className="px-1.5 py-0.2 text-[9px] font-black font-mono bg-blue-50 text-blue-700 border border-blue-200 rounded shrink-0 uppercase tracking-wider">
-                Portal
+                {isVccModule ? 'VCC' : isDccModule ? 'DCC' : 'Portal'}
               </span>
             </div>
             <p className="text-[10.5px] text-slate-500 font-medium tracking-tight truncate mt-0.5">
-              Enterprise Quality Suite
+              {isVccModule ? 'Calibration & Verification' : 'Enterprise Quality Suite'}
             </p>
           </div>
         </div>
@@ -321,7 +328,7 @@ const Sidebar = () => {
       <nav className="flex-1 overflow-y-auto px-3 py-2 space-y-1">
         {/* WORKSPACE NAVIGATION (Hub vs Spoke) */}
         <SectionHeader title="WORKSPACE" />
-        {!isDccModule ? (
+        {(!isDccModule && !isVccModule) ? (
           <NavItem 
             to="/portal" 
             end
@@ -421,6 +428,37 @@ const Sidebar = () => {
               label="การทบทวนตามรอบ" 
               badgeCount={periodicReviewCount}
               badgeColor="amber"
+            />
+          </>
+        )}
+
+        {/* VCC MODULE NAVIGATION (Shown only when active in VCC module route) */}
+        {isVccModule && (
+          <>
+            <SectionHeader title="การปฏิบัติงานและภาพรวม" />
+            <NavItem
+              to="/vcc/dashboard"
+              icon={BarChart3}
+              label="ภาพรวมและแจ้งเตือน"
+            />
+            <NavItem
+              to="/vcc/work-orders"
+              icon={ClipboardList}
+              label="ใบสั่งงานและบันทึกผล"
+            />
+
+            <SectionHeader title="แผนและการควบคุม" />
+            <NavItem
+              to="/vcc/plans"
+              icon={Calendar}
+              label="แผนการทวนสอบประจำปี"
+            />
+
+            <SectionHeader title="ทะเบียนและข้อมูลหลัก" />
+            <NavItem
+              to="/vcc/assets"
+              icon={Wrench}
+              label="ทะเบียนเครื่องมือวัด"
             />
           </>
         )}
