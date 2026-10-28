@@ -10,6 +10,12 @@ const PortalLandingPage = () => {
   const { currentUser } = useStore();
   const { t } = usePortalTranslation();
 
+  const isDccUser = Boolean(currentUser?.isDcc);
+
+  const visibleModules = moduleRegistry
+    .filter((module) => !module.dccOnly || isDccUser)
+    .sort((a, b) => a.order - b.order);
+
   const hasModuleAccess = () => {
     return true; 
   };
@@ -42,7 +48,7 @@ const PortalLandingPage = () => {
 
       {/* Modules Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-        {moduleRegistry.sort((a, b) => a.order - b.order).map((module) => {
+        {visibleModules.map((module) => {
           const Icon = module.icon;
           const isActive = module.status === MODULE_STATUS.ACTIVE;
           const hasAccess = hasModuleAccess(module);
