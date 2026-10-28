@@ -77,21 +77,33 @@ export const AnnualPlanWorkspaceHeader = ({
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-2">
-        {/* ตัวเลือกแผน: ระบุปี แผนก และฉบับของแผนที่เลือกในที่เดียว */}
-        <select
-          aria-label="เลือกแผนประจำปี"
-          value={selectedPlanId || ''}
-          onChange={(e) => onSelectPlan(e.target.value)}
-          disabled={plans.length === 0}
-          className={`${selectClass} font-bold text-slate-900 w-full sm:w-auto sm:min-w-[15rem] max-w-full`}
-        >
-          {plans.length === 0 && <option value="">ไม่มีแผนในสถานะนี้</option>}
-          {plans.map((p) => (
-            <option key={p.id} value={p.id}>
-              ปี {p.plan_year} · แผนก {p.department} · {p.document_code} Rev.{p.revision}
-            </option>
-          ))}
-        </select>
+        {/* ตัวเลือกแผนที่มีอยู่ + ปุ่มสร้างแผนใหม่ แยกให้เห็นชัดเจน */}
+        <div className="flex items-center gap-1.5 w-full sm:w-auto">
+          <select
+            aria-label="เลือกแผนประจำปี"
+            value={selectedPlanId || ''}
+            onChange={(e) => onSelectPlan(e.target.value)}
+            disabled={plans.length === 0}
+            className={`${selectClass} font-bold text-slate-900 w-full sm:w-auto sm:min-w-[15rem] max-w-full`}
+          >
+            {plans.length === 0 && <option value="">ไม่มีแผนในสถานะนี้</option>}
+            {plans.map((p) => (
+              <option key={p.id} value={p.id}>
+                ปี {p.plan_year} · แผนก {p.department} · {p.document_code} Rev.{p.revision}
+              </option>
+            ))}
+          </select>
+
+          <button
+            type="button"
+            onClick={onOpenCreatePlan}
+            title="สร้างแผนการทวนสอบเครื่องมือประจำปีใหม่"
+            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-xs font-semibold cursor-pointer shadow-2xs transition-colors shrink-0"
+          >
+            <Plus size={13} />
+            <span>สร้างแผนใหม่</span>
+          </button>
+        </div>
 
         {/* กรองตามสถานะของแผน (แทนแท็บสถานะ 5 ปุ่ม) */}
         <select

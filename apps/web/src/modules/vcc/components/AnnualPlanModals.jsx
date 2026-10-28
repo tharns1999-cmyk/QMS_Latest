@@ -1,6 +1,6 @@
 import React from 'react';
 import { AlertTriangle, CheckCircle2, FolderTree, Trash2, X } from 'lucide-react';
-import { computeDueDates } from '../api/vccPlanApi';
+import { computeDueDates, computeDueDateForMonth } from '../api/vccPlanApi';
 
 const formatThaiDateTime = (iso) => {
   if (!iso) return '-';
@@ -43,6 +43,12 @@ export const PlanFormModal = ({
 }) => {
   if (!open) return null;
 
+  const previewYear = form.plan_year && Number.isInteger(Number(form.plan_year)) && Number(form.plan_year) >= 2000 && Number(form.plan_year) <= 2100
+    ? Number(form.plan_year)
+    : new Date().getFullYear();
+  const endOfMonthPreview = computeDueDateForMonth(previewYear, 2, 'END_OF_MONTH');
+  const startOfMonthPreview = computeDueDateForMonth(previewYear, 2, 'START_OF_MONTH');
+
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-lg w-full overflow-hidden">
@@ -65,19 +71,33 @@ export const PlanFormModal = ({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
+              <label htmlFor="plan_year" className="block text-xs font-bold text-slate-700 mb-1">
                 ปี ค.ศ. ของแผน <span className="text-rose-600">*</span>
               </label>
               <input
+                id="plan_year"
                 type="number"
                 required
-                min={2020}
+                min={2000}
                 max={2100}
                 disabled={Boolean(editingPlan)}
-                value={form.plan_year}
-                onChange={(e) => setForm({ ...form, plan_year: Number(e.target.value) })}
+                value={form.plan_year || ''}
+                onChange={(e) => {
+                  const yr = Number(e.target.value);
+                  const isDefaultTitle = !form.title || form.title.startsWith('แผนการทวนสอบเครื่องมือประจำปี');
+                  setForm({
+                    ...form,
+                    plan_year: yr,
+                    title: isDefaultTitle && yr ? `แผนการทวนสอบเครื่องมือประจำปี ${yr}` : form.title
+                  });
+                }}
                 className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm disabled:bg-slate-100"
               />
+              <p className="mt-1 text-[11px] text-slate-500 font-medium">
+                {form.plan_year && Number.isInteger(Number(form.plan_year)) && Number(form.plan_year) >= 2000 && Number(form.plan_year) <= 2100
+                  ? `ตรงกับ พ.ศ. ${Number(form.plan_year) + 543}`
+                  : 'รองรับ ค.ศ. 2000–2100'}
+              </p>
             </div>
 
             <div>
@@ -152,8 +172,8 @@ export const PlanFormModal = ({
               onChange={(e) => setForm({ ...form, due_date_rule: e.target.value })}
               className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm bg-white"
             >
-              <option value="END_OF_MONTH">วันสิ้นเดือนของเดือนที่วางแผน (END_OF_MONTH เช่น 2026-02-28)</option>
-              <option value="START_OF_MONTH">วันที่ 1 ของเดือนที่วางแผน (START_OF_MONTH เช่น 2026-02-01)</option>
+              <option value="END_OF_MONTH">วันสิ้นเดือนของเดือนที่วางแผน (END_OF_MONTH เช่น {endOfMonthPreview})</option>
+              <option value="START_OF_MONTH">วันที่ 1 ของเดือนที่วางแผน (START_OF_MONTH เช่น {startOfMonthPreview})</option>
             </select>
           </div>
 
