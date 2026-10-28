@@ -10,7 +10,8 @@ import {
   Sparkles,
   Search,
   Maximize2,
-  Info
+  Info,
+  AlertTriangle
 } from 'lucide-react';
 import AnnualPlanMonthCell from './AnnualPlanMonthCell';
 import AnnualPlanSideInspector from './AnnualPlanSideInspector';
@@ -288,6 +289,12 @@ export const AnnualPlanMatrixTable = ({
             ) : (
               filteredItems.map((item) => {
                 const isGroup = Number(item.is_group) === 1;
+                const itemWos = (workOrders || []).filter(
+                  (w) => w.plan_item_id === item.id || (w.plan_id === activePlan?.id && w.asset_id === item.asset_id)
+                );
+                const hasHoldOrNc = itemWos.some((w) => w.nc_status === 'OPEN' || w.result_status === 'FAIL');
+                const closedPassCount = itemWos.filter((w) => w.status === 'CLOSED' && w.result_status === 'PASS').length;
+                const plannedMonthsCount = (item.planned_months || []).length;
 
                 return (
                   <tr
@@ -349,10 +356,25 @@ export const AnnualPlanMatrixTable = ({
                           ? ` (+${item.due_dates.length - 2} เดือน)`
                           : ''}
                       </div>
-                      {item.completion_status === 'COMPLETED' ? (
+                      {hasHoldOrNc ? (
+                        <span className="mt-0.5 inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-50 border border-rose-200 text-rose-800 font-semibold text-[10.5px]">
+                          <AlertTriangle size={11} className="text-rose-700 shrink-0" />
+                          <span>พบข้อบกพร่อง / ระงับใช้ (NC)</span>
+                        </span>
+                      ) : plannedMonthsCount > 0 && closedPassCount >= plannedMonthsCount ? (
                         <span className="mt-0.5 inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-50 border border-emerald-200 text-emerald-800 font-semibold text-[10.5px]">
                           <CheckCircle2 size={11} className="text-emerald-700 shrink-0" />
                           <span>ทวนสอบเสร็จแล้ว • มีใบรับรอง</span>
+                        </span>
+                      ) : closedPassCount > 0 ? (
+                        <span className="mt-0.5 inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-indigo-50 border border-indigo-200 text-indigo-900 font-semibold text-[10.5px]">
+                          <CheckCircle2 size={11} className="text-indigo-700 shrink-0" />
+                          <span>เสร็จบางรอบ ({closedPassCount}/{plannedMonthsCount})</span>
+                        </span>
+                      ) : itemWos.some((w) => w.status === 'OPEN' || w.status === 'PENDING_REVIEW') ? (
+                        <span className="mt-0.5 inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-sky-50 border border-sky-200 text-sky-900 font-semibold text-[10.5px]">
+                          <Clock size={11} className="text-sky-700 shrink-0" />
+                          <span>มีใบงานกำลังดำเนินการ</span>
                         </span>
                       ) : (
                         <span className="mt-0.5 inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-50 border border-amber-200 text-amber-900 font-semibold text-[10.5px]">

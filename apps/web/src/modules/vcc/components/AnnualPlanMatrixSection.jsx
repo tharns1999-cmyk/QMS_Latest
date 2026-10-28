@@ -109,7 +109,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
       return;
     }
     try {
-      const statuses = ['OPEN', 'PENDING_REVIEW', 'CLOSED'];
+      const statuses = ['OPEN', 'PENDING_REVIEW', 'REJECTED', 'CLOSED', 'CANCELLED'];
       const results = await Promise.all(
         statuses.map((st) => fetchVccWorkOrders({ plan_id: planId, status: st }).catch(() => []))
       );

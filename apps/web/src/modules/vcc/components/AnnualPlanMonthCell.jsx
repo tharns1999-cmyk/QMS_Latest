@@ -12,9 +12,14 @@ import {
 } from 'lucide-react';
 import { computeDueDateForMonth } from '../api/vccPlanApi';
 
-const THAI_MONTH_NAMES = [
+export const THAI_MONTH_NAMES = [
   'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
   'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'
+];
+
+export const THAI_MONTH_NAMES_SHORT = [
+  'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.',
+  'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'
 ];
 
 export const AnnualPlanMonthCell = ({
@@ -51,36 +56,44 @@ export const AnnualPlanMonthCell = ({
   }, [isOpen]);
 
   const isPlanned = (item.planned_months || []).includes(month);
-  const isActualFromPlan = (item.actual_months || []).includes(month);
 
-  // Matching work orders for this item in this month
-  const matchingWos = workOrders.filter((w) => {
-    if (w.plan_item_id && w.plan_item_id === item.id) {
-      if (Number(w.planned_month) === month) return true;
-      if (!w.planned_month && w.due_date) {
-        return new Date(w.due_date).getMonth() + 1 === month;
-      }
-    }
-    // Also match if asset matches and plan_id matches
-    if (w.plan_id === plan?.id && w.asset_id === item.asset_id && Number(w.planned_month) === month) {
-      return true;
-    }
-    return false;
+  // 1. Work Order assigned to this planned cycle (source cycle P{month})
+  const cycleWo = workOrders.find((w) => {
+    if (w.status === 'CANCELLED') return false;
+    const matchesItem = w.plan_item_id === item.id || (w.plan_id === plan?.id && w.asset_id === item.asset_id);
+    return matchesItem && Number(w.planned_month) === month;
   });
 
-  const hasHoldOrNc = matchingWos.some((w) => w.nc_status === 'OPEN' || w.result_status === 'FAIL');
-  const hasClosedPass = isActualFromPlan || matchingWos.some((w) => w.status === 'CLOSED' && w.result_status === 'PASS');
-  const hasOpenWo = matchingWos.some((w) => w.status === 'OPEN' || w.status === 'PENDING_REVIEW');
-  const hasEvidence = matchingWos.some((w) => w.status === 'CLOSED' && Boolean(w.certificate_no)) || (isActualFromPlan && item.has_evidence);
+  const cycleActualDate = cycleWo?.performed_at || null;
+  const cycleActualMonth = cycleActualDate ? Number(cycleActualDate.slice(5, 7)) : null;
+  const cycleIsDifferentMonth = Boolean(cycleActualMonth && cycleActualMonth !== month);
 
-  const hasAnyActivity = isPlanned || isActualFromPlan || matchingWos.length > 0;
+  // 2. Work Orders whose ACTUAL execution occurred IN this calendar month, but originated from another plan cycle (or ad-hoc)
+  const externalActualWos = workOrders.filter((w) => {
+    if (w.status === 'CANCELLED') return false;
+    const matchesItem = w.plan_item_id === item.id || (w.plan_id === plan?.id && w.asset_id === item.asset_id);
+    if (!matchesItem || !w.performed_at) return false;
+    const perfMonth = Number(w.performed_at.slice(5, 7));
+    return perfMonth === month && Number(w.planned_month) !== month;
+  });
 
-  // Due date calculation for preview
+  const allCellWos = [
+    ...(cycleWo ? [cycleWo] : []),
+    ...externalActualWos
+  ];
+
+  const hasHoldOrNc = allCellWos.some((w) => w.nc_status === 'OPEN' || w.result_status === 'FAIL');
+  const hasClosedPass = (cycleWo?.status === 'CLOSED' && cycleWo?.result_status === 'PASS') ||
+    externalActualWos.some((w) => w.status === 'CLOSED' && w.result_status === 'PASS');
+  const hasOpenWo = allCellWos.some((w) => w.status === 'OPEN' || w.status === 'PENDING_REVIEW');
+  const hasAnyActivity = isPlanned || allCellWos.length > 0;
+
+  // Due date preview
   const scheduledDueDate = plan?.plan_year
     ? computeDueDateForMonth(plan.plan_year, month, plan.due_date_rule || 'END_OF_MONTH')
     : null;
 
-  // Handle Quick Add
+  // Quick Add
   const handleAddConfirm = async () => {
     if (!onQuickAddMonth || isSaving) return;
     setActionError('');
@@ -92,7 +105,7 @@ export const AnnualPlanMonthCell = ({
     }
   };
 
-  // Handle Quick Remove
+  // Quick Remove
   const handleRemoveConfirm = async () => {
     if (!onQuickRemoveMonth || isSaving) return;
     setActionError('');
@@ -105,7 +118,7 @@ export const AnnualPlanMonthCell = ({
     }
   };
 
-  // Handle Create Work Order
+  // Create Work Order
   const handleCreateWo = async () => {
     if (Number(item.is_group) === 1) {
       setIsOpen(false);
@@ -122,14 +135,9 @@ export const AnnualPlanMonthCell = ({
     }
   };
 
-  // Dynamic popover positioning based on month column index
+  // Popover placement
   const popoverAlignment =
-    month <= 3
-      ? 'left-0'
-      : month >= 10
-      ? 'right-0'
-      : 'left-1/2 -translate-x-1/2';
-
+    month <= 3 ? 'left-0' : month >= 10 ? 'right-0' : 'left-1/2 -translate-x-1/2';
   const isCompact = density === 'compact';
 
   return (
@@ -150,7 +158,6 @@ export const AnnualPlanMonthCell = ({
           : 'bg-white'
       }`}
       onClick={(e) => {
-        // If clicking cell body (not popover), toggle open
         if (!isOpen) {
           e.stopPropagation();
           setIsOpen(true);
@@ -158,64 +165,111 @@ export const AnnualPlanMonthCell = ({
       }}
     >
       {/* Cell Badge Trigger */}
-      <div className="flex items-center justify-center gap-1 min-h-[26px]">
+      <div className="flex items-center justify-center gap-1 min-h-[26px] flex-wrap">
         {hasAnyActivity ? (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              setIsOpen((prev) => !prev);
-            }}
-            aria-label={`เป้าหมายทวนสอบเดือน ${month} (P${month})`}
-            title={`เดือน ${month}: ${
-              hasHoldOrNc
-                ? 'ตรวจไม่ผ่าน / ระงับใช้ (NC)'
-                : hasClosedPass
-                ? 'ตรวจรับปิดงานแล้ว (มีหลักฐาน)'
-                : hasOpenWo
-                ? 'มีใบสั่งงานกำลังดำเนินการ'
-                : 'รอบตามแผนประจำปี'
-            } (คลิกดูรายละเอียด/จัดการ)`}
-            className={`inline-flex items-center justify-center gap-0.5 rounded font-mono font-bold transition-transform cursor-pointer shadow-2xs hover:scale-105 active:scale-95 ${
-              isCompact ? 'px-1 py-0.5 text-[9.5px]' : 'px-1.5 py-0.5 text-[10.5px]'
-            } ${
-              hasHoldOrNc
-                ? 'bg-rose-600 text-white ring-1 ring-rose-400'
-                : hasClosedPass
-                ? 'bg-emerald-600 text-white ring-1 ring-emerald-400'
-                : hasOpenWo
-                ? 'bg-amber-500 text-white ring-1 ring-amber-300'
-                : 'bg-indigo-600 text-white ring-1 ring-indigo-400'
-            }`}
-          >
-            {hasHoldOrNc ? (
-              <span className="flex items-center gap-0.5">
-                <AlertTriangle size={9} />
-                <span>NC</span>
-              </span>
-            ) : hasClosedPass ? (
-              <span className="flex items-center gap-0.5">
-                <CheckCircle2 size={9} />
-                <span>A{month}</span>
-              </span>
-            ) : hasOpenWo ? (
-              <span className="flex items-center gap-0.5">
-                <Clock size={9} />
-                <span>WO</span>
-              </span>
-            ) : (
-              <span>P{month}</span>
+          <div className="inline-flex items-center gap-1 flex-wrap justify-center">
+            {/* Planned Cycle Badge */}
+            {isPlanned && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsOpen((prev) => !prev);
+                }}
+                aria-label={`เป้าหมายทวนสอบเดือน ${month} (P${month})`}
+                title={`รอบแผนเดือน ${month}: ${
+                  cycleWo?.nc_status === 'OPEN' || cycleWo?.result_status === 'FAIL'
+                    ? 'ตรวจไม่ผ่าน / ระงับใช้ (NC)'
+                    : cycleWo?.status === 'CLOSED'
+                    ? cycleIsDifferentMonth
+                      ? `ตรวจจริง ${cycleActualDate} (${THAI_MONTH_NAMES[cycleActualMonth - 1]} - ล่าช้ากว่าแผน)`
+                      : 'ตรวจรับปิดงานแล้วตามกำหนด'
+                    : cycleWo?.status === 'PENDING_REVIEW'
+                    ? 'ส่งผลแล้ว รอผู้ตรวจรับ'
+                    : cycleWo?.status === 'OPEN'
+                    ? 'มีใบสั่งงานกำลังดำเนินการ'
+                    : 'รอบตามแผนประจำปี'
+                }`}
+                className={`inline-flex items-center justify-center gap-0.5 rounded font-mono font-bold transition-transform cursor-pointer shadow-2xs hover:scale-105 active:scale-95 ${
+                  isCompact ? 'px-1 py-0.5 text-[9.5px]' : 'px-1.5 py-0.5 text-[10.5px]'
+                } ${
+                  cycleWo?.nc_status === 'OPEN' || cycleWo?.result_status === 'FAIL'
+                    ? 'bg-rose-600 text-white ring-1 ring-rose-400'
+                    : cycleWo?.status === 'CLOSED' && !cycleIsDifferentMonth
+                    ? 'bg-emerald-600 text-white ring-1 ring-emerald-400'
+                    : cycleWo?.status === 'CLOSED' && cycleIsDifferentMonth
+                    ? 'bg-indigo-700 text-white ring-1 ring-indigo-400'
+                    : cycleWo?.status === 'PENDING_REVIEW'
+                    ? 'bg-amber-500 text-white ring-1 ring-amber-300'
+                    : cycleWo?.status === 'OPEN'
+                    ? 'bg-sky-600 text-white ring-1 ring-sky-400'
+                    : 'bg-indigo-600 text-white ring-1 ring-indigo-400'
+                }`}
+              >
+                {cycleWo?.nc_status === 'OPEN' || cycleWo?.result_status === 'FAIL' ? (
+                  <span className="flex items-center gap-0.5">
+                    <AlertTriangle size={9} />
+                    <span>NC</span>
+                  </span>
+                ) : cycleWo?.status === 'CLOSED' ? (
+                  cycleIsDifferentMonth ? (
+                    <span className="flex items-center gap-0.5" title={`ทำจริง ${cycleActualDate}`}>
+                      <span>P{month}✓</span>
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-0.5">
+                      <CheckCircle2 size={9} />
+                      <span>A{month}</span>
+                    </span>
+                  )
+                ) : cycleWo?.status === 'PENDING_REVIEW' ? (
+                  <span className="flex items-center gap-0.5">
+                    <Clock size={9} />
+                    <span>REV</span>
+                  </span>
+                ) : cycleWo?.status === 'OPEN' ? (
+                  <span className="flex items-center gap-0.5">
+                    <Clock size={9} />
+                    <span>WO</span>
+                  </span>
+                ) : (
+                  <span>P{month}</span>
+                )}
+              </button>
             )}
 
-            {/* If there are multiple active work orders, show count */}
-            {matchingWos.length > 1 && (
-              <span className="ml-0.5 px-0.5 py-0 rounded bg-white/30 text-[8.5px]">
-                {matchingWos.length}
-              </span>
-            )}
-          </button>
+            {/* External Actual Event Badge (Executed in this month from a different cycle) */}
+            {externalActualWos.map((extWo) => {
+              const pMonth = extWo.planned_month;
+              const isClosed = extWo.status === 'CLOSED';
+              const isNc = extWo.nc_status === 'OPEN' || extWo.result_status === 'FAIL';
+
+              return (
+                <button
+                  key={extWo.id}
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsOpen((prev) => !prev);
+                  }}
+                  title={`ทำจริง ${extWo.performed_at} (${pMonth ? `จากรอบแผนเดือน ${pMonth}` : 'นอกแผน'})`}
+                  className={`inline-flex items-center justify-center gap-0.5 rounded font-mono font-bold transition-transform cursor-pointer shadow-2xs hover:scale-105 active:scale-95 ${
+                    isCompact ? 'px-1 py-0.5 text-[9px]' : 'px-1.5 py-0.5 text-[10px]'
+                  } ${
+                    isNc
+                      ? 'bg-rose-700 text-white ring-1 ring-rose-400'
+                      : isClosed
+                      ? 'bg-emerald-600 text-white ring-1 ring-emerald-400'
+                      : 'bg-amber-600 text-white ring-1 ring-amber-400'
+                  }`}
+                >
+                  {isClosed ? <CheckCircle2 size={9} /> : <Clock size={9} />}
+                  <span>A({pMonth ? THAI_MONTH_NAMES_SHORT[pMonth - 1] : 'นอก'})</span>
+                </button>
+              );
+            })}
+          </div>
         ) : canEditPlan ? (
-          /* Empty Cell in Draft/Rejected mode -> quick add affordance */
           <button
             type="button"
             onClick={(e) => {
@@ -237,7 +291,7 @@ export const AnnualPlanMonthCell = ({
         <div
           ref={popoverRef}
           onClick={(e) => e.stopPropagation()}
-          className={`absolute top-full ${popoverAlignment} mt-1.5 z-50 w-72 bg-white rounded-xl shadow-xl border border-slate-200/90 p-3 text-left animate-in fade-in zoom-in-95 duration-100 text-xs`}
+          className={`absolute top-full ${popoverAlignment} mt-1.5 z-50 w-80 bg-white rounded-xl shadow-xl border border-slate-200/90 p-3.5 text-left animate-in fade-in zoom-in-95 duration-100 text-xs`}
         >
           {/* Popover Header */}
           <div className="flex items-center justify-between pb-2 border-b border-slate-100">
@@ -269,70 +323,110 @@ export const AnnualPlanMonthCell = ({
             <div className="text-[11.5px] text-slate-700 font-medium line-clamp-1">
               {item.asset_name}
             </div>
-            {scheduledDueDate && (
-              <div className="text-[11px] text-slate-500 flex items-center gap-1 pt-0.5">
-                <Clock size={11} className="text-slate-400" />
-                <span>วันครบกำหนดตามเกณฑ์: <strong className="text-slate-700 font-mono">{scheduledDueDate}</strong></span>
+          </div>
+
+          {/* Section 1: Planned Cycle of This Month */}
+          <div className="py-2 border-t border-slate-100 space-y-2">
+            <div className="text-[11px] font-semibold text-slate-700 flex items-center justify-between">
+              <span>1. รอบตามแผนประจำปี (Plan)</span>
+              {isPlanned ? (
+                <span className="px-1.5 py-0.2 rounded bg-indigo-50 text-indigo-700 font-mono font-bold text-[10px]">
+                  P{month}
+                </span>
+              ) : (
+                <span className="text-[10.5px] text-slate-400 font-normal">ไม่มีรอบในแผน</span>
+              )}
+            </div>
+
+            {isPlanned && (
+              <div className="p-2 rounded-lg bg-indigo-50/50 border border-indigo-100 space-y-1.5 text-[11px]">
+                {scheduledDueDate && (
+                  <div className="text-slate-600 flex items-center gap-1">
+                    <Clock size={11} className="text-slate-400 shrink-0" />
+                    <span>วันครบกำหนดตามเกณฑ์: <strong className="text-slate-800 font-mono">{scheduledDueDate}</strong></span>
+                  </div>
+                )}
+
+                {cycleWo ? (
+                  <div className={`p-2 rounded border space-y-1 ${
+                    cycleWo.nc_status === 'OPEN' || cycleWo.result_status === 'FAIL'
+                      ? 'bg-rose-50 border-rose-200 text-rose-900'
+                      : cycleWo.status === 'CLOSED'
+                      ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                      : 'bg-amber-50 border-amber-200 text-amber-900'
+                  }`}>
+                    <div className="flex items-center justify-between font-mono font-bold">
+                      <span>{cycleWo.wo_code}</span>
+                      <span className="text-[10px] uppercase px-1 py-0.2 rounded bg-white/80">
+                        {cycleWo.status}
+                      </span>
+                    </div>
+
+                    {cycleActualDate && (
+                      <div className="text-[11px]">
+                        <span>วันที่ตรวจจริง: <strong className="font-mono">{cycleActualDate}</strong></span>
+                        {cycleIsDifferentMonth && (
+                          <span className="block text-[10px] text-indigo-700 font-medium">
+                            ↳ เสร็จสิ้นในเดือน {THAI_MONTH_NAMES[cycleActualMonth - 1]} (ล่าช้ากว่ารอบแผน)
+                          </span>
+                        )}
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-between text-[10.5px]">
+                      <span>ผล: <strong>{cycleWo.result_status || 'รอดำเนินการ'}</strong></span>
+                      {cycleWo.certificate_no && (
+                        <span className="font-mono">Cert: {cycleWo.certificate_no}</span>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-amber-800 bg-amber-50/70 p-1.5 rounded border border-amber-200 flex items-center gap-1 text-[10.5px]">
+                    <Clock size={11} className="shrink-0 text-amber-600" />
+                    <span>ยังไม่ได้เปิดใบสั่งงานจริงสำหรับรอบนี้</span>
+                  </div>
+                )}
               </div>
             )}
           </div>
 
-          {/* Activity Breakdown List */}
-          {hasAnyActivity ? (
+          {/* Section 2: Actual Events In This Month */}
+          {externalActualWos.length > 0 && (
             <div className="py-2 border-t border-slate-100 space-y-1.5">
-              <div className="text-[11px] font-semibold text-slate-600">สถานะและประวัติในเดือนนี้:</div>
+              <div className="text-[11px] font-semibold text-slate-700 flex items-center justify-between">
+                <span>2. การดำเนินงานจริงในเดือนนี้ (Actual)</span>
+                <span className="text-[10px] px-1 rounded bg-emerald-50 text-emerald-700 font-bold">
+                  {externalActualWos.length} รายการ
+                </span>
+              </div>
 
-              {isPlanned && (
-                <div className="p-1.5 rounded-lg bg-indigo-50/70 border border-indigo-100 text-[11px] flex items-center justify-between">
-                  <div className="flex items-center gap-1.5 text-indigo-900 font-medium">
-                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-600" />
-                    <span>รอบตามแผนประจำปี (Plan)</span>
-                  </div>
-                  <span className="text-[10px] text-indigo-600 font-mono">P{month}</span>
-                </div>
-              )}
+              {externalActualWos.map((extWo) => {
+                const pMonth = extWo.planned_month;
+                return (
+                  <div
+                    key={extWo.id}
+                    className="p-2 rounded-lg bg-emerald-50/60 border border-emerald-200 text-emerald-950 space-y-1 text-[11px]"
+                  >
+                    <div className="flex items-center justify-between font-mono font-bold">
+                      <span>{extWo.wo_code}</span>
+                      <span className="text-[10px] text-emerald-800 bg-white/70 px-1 py-0.2 rounded font-sans">
+                        {pMonth ? `จากรอบแผน ${THAI_MONTH_NAMES_SHORT[pMonth - 1]} (P${pMonth})` : 'นอกแผน'}
+                      </span>
+                    </div>
 
-              {matchingWos.map((wo) => (
-                <div
-                  key={wo.id}
-                  className={`p-2 rounded-lg border text-[11px] space-y-0.5 ${
-                    wo.nc_status === 'OPEN' || wo.result_status === 'FAIL'
-                      ? 'bg-rose-50/60 border-rose-200 text-rose-900'
-                      : wo.status === 'CLOSED'
-                      ? 'bg-emerald-50/60 border-emerald-200 text-emerald-900'
-                      : 'bg-amber-50/60 border-amber-200 text-amber-900'
-                  }`}
-                >
-                  <div className="flex items-center justify-between font-mono font-bold">
-                    <span>{wo.wo_code}</span>
-                    <span className="text-[10px] uppercase px-1 py-0.2 rounded bg-white/70">
-                      {wo.status}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between text-[10.5px]">
-                    <span>ผล: <strong>{wo.result_status || 'รอดำเนินการ'}</strong></span>
-                    {wo.certificate_no && (
-                      <span className="font-mono">Cert: {wo.certificate_no}</span>
+                    <div className="text-[10.5px] flex items-center justify-between">
+                      <span>วันที่ตรวจจริง: <strong className="font-mono">{extWo.performed_at}</strong></span>
+                      <span>ผล: <strong>{extWo.result_status}</strong></span>
+                    </div>
+
+                    {extWo.certificate_no && (
+                      <div className="text-[10px] text-slate-600 font-mono">
+                        เลขที่ใบรับรอง: {extWo.certificate_no}
+                      </div>
                     )}
                   </div>
-                  {wo.performed_at && (
-                    <div className="text-[10px] text-slate-500">
-                      วันที่ตรวจจริง: {wo.performed_at}
-                    </div>
-                  )}
-                </div>
-              ))}
-
-              {matchingWos.length === 0 && !hasClosedPass && (
-                <div className="text-[11px] text-amber-700 bg-amber-50/60 p-1.5 rounded-lg border border-amber-100 flex items-center gap-1">
-                  <Clock size={11} className="shrink-0" />
-                  <span>ยังไม่มีการเปิดใบสั่งงานจริง (วางแผนเท่านั้น)</span>
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="py-2 border-t border-slate-100 text-[11.5px] text-slate-500">
-              ยังไม่มีกำหนดการทวนสอบในเดือน {THAI_MONTH_NAMES[month - 1]}
+                );
+              })}
             </div>
           )}
 
@@ -346,7 +440,7 @@ export const AnnualPlanMonthCell = ({
 
           {/* Footer Actions */}
           <div className="pt-2 border-t border-slate-100 space-y-1.5">
-            {/* If cell is NOT planned & plan is editable -> Quick Add */}
+            {/* Quick Add (Draft/Rejected only) */}
             {!isPlanned && canEditPlan && (
               <button
                 type="button"
@@ -359,7 +453,7 @@ export const AnnualPlanMonthCell = ({
               </button>
             )}
 
-            {/* If cell IS planned & plan is editable -> Quick Remove with confirmation */}
+            {/* Quick Remove (Draft/Rejected only) */}
             {isPlanned && canEditPlan && (
               <>
                 {confirmDelete ? (
@@ -410,8 +504,8 @@ export const AnnualPlanMonthCell = ({
               </>
             )}
 
-            {/* If plan is APPROVED -> Create Work Order or Group Check */}
-            {plan?.status === 'APPROVED' && (
+            {/* Approved Plan -> Open Work Order if not created yet */}
+            {plan?.status === 'APPROVED' && isPlanned && !cycleWo && (
               <>
                 {Number(item.is_group) === 1 ? (
                   <button
