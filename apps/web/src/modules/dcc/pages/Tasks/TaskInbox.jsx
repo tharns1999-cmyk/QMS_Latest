@@ -40,6 +40,7 @@ import { isActionableTask, isSameDepartment, isDccAdmin, isDccExclusiveTask, isL
 import { getDeptNameTh } from '../../config/qmsRegistry';
 import { getDeptBadgeStyle } from '../../../../shared/utils/departmentColors';
 import { formatDarNumber } from '../../utils/darNumberGenerator';
+import { syncVccTasks } from '../../../vcc/api/vccPlanApi';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Date Formatter (null-safe)
@@ -567,6 +568,30 @@ export const resolveDarIdentifier = (task, matchedDar) => {
 // Helper: Task Type Badge & Action Configuration
 // ─────────────────────────────────────────────────────────────────────────────
 export const getTaskTypeBadgeConfig = (normType, task) => {
+  if (task?.referenceType === 'VCC_PLAN' || normType.startsWith('VCC_PLAN_') || (task?.type && String(task.type).startsWith('VCC_'))) {
+    if (normType === 'APPROVE' || normType === 'VCC_PLAN_APPROVE' || task?.taskType === 'VCC_PLAN_APPROVE') {
+      return {
+        label: 'อนุมัติแผนสอบเทียบประจำปี (VCC)',
+        actionLabel: 'พิจารณาอนุมัติ',
+        icon: <ShieldCheck size={13} className="text-emerald-600" />,
+        badgeClass: 'bg-emerald-50 text-emerald-800 border-emerald-200'
+      };
+    }
+    if (normType === 'REVISE' || normType === 'VCC_PLAN_REVISE' || task?.taskType === 'VCC_PLAN_REVISE') {
+      return {
+        label: 'ส่งกลับแก้ไขแผนสอบเทียบ (VCC)',
+        actionLabel: 'แก้ไขแผนประจำปี',
+        icon: <FileEdit size={13} className="text-rose-600" />,
+        badgeClass: 'bg-rose-50 text-rose-700 border-rose-200'
+      };
+    }
+    return {
+      label: 'ทบทวนแผนสอบเทียบประจำปี (VCC)',
+      actionLabel: 'พิจารณาตรวจทาน',
+      icon: <Eye size={13} className="text-indigo-600" />,
+      badgeClass: 'bg-indigo-50 text-indigo-700 border-indigo-200'
+    };
+  }
   if (normType === 'PERIODIC_REVIEW_REVISE' || task?.type === 'PERIODIC_REVIEW_REVISE') {
     return {
       label: '⚠️ ส่งกลับแก้ไข (Revision Required)',
@@ -774,10 +799,10 @@ const getSLABadge = (task, mockDateOffset) => {
 export function normalizeTaskCategory(task) {
   if (!task) return '';
   const rawType = (task.type || task.taskType || task.task_type || task.category || '').toUpperCase();
-  if (rawType === 'REVIEW' || rawType === 'EXT_REVIEW' || rawType === 'EXTERNAL_REVIEW' || rawType === 'PERIODIC_REVIEW' || rawType === 'EXTERNAL_VERIFICATION') return 'REVIEW';
-  if (rawType === 'APPROVE' || rawType === 'APPROVAL' || rawType === 'EXT_APPROVAL' || rawType === 'EXTERNAL_APPROVAL' || rawType === 'CC_REPLACEMENT_APPROVAL' || rawType === 'PERIODIC_REVIEW_APPROVAL') return 'APPROVE';
+  if (rawType === 'REVIEW' || rawType === 'EXT_REVIEW' || rawType === 'EXTERNAL_REVIEW' || rawType === 'PERIODIC_REVIEW' || rawType === 'EXTERNAL_VERIFICATION' || rawType === 'VCC_PLAN_REVIEW') return 'REVIEW';
+  if (rawType === 'APPROVE' || rawType === 'APPROVAL' || rawType === 'EXT_APPROVAL' || rawType === 'EXTERNAL_APPROVAL' || rawType === 'CC_REPLACEMENT_APPROVAL' || rawType === 'PERIODIC_REVIEW_APPROVAL' || rawType === 'VCC_PLAN_APPROVE') return 'APPROVE';
   if (rawType === 'ACK' || rawType === 'ACKNOWLEDGE') return 'ACK';
-  if (rawType === 'REVISE' || rawType === 'EXTERNAL_REVISE' || rawType === 'EXT_REVISE' || rawType === 'PERIODIC_REVIEW_REVISE') return 'REVISE';
+  if (rawType === 'REVISE' || rawType === 'EXTERNAL_REVISE' || rawType === 'EXT_REVISE' || rawType === 'PERIODIC_REVIEW_REVISE' || rawType === 'VCC_PLAN_REVISE') return 'REVISE';
   if (
     rawType === 'DEPT_CONFIRM_HARDCOPY_RECEIPT' ||
     task.taskType === 'DEPT_CONFIRM_HARDCOPY_RECEIPT' ||
@@ -838,9 +863,31 @@ const TaskInbox = () => {
     }
   }, [dccAdmin, isLevel6Executive, activeTab]);
 
+  // Synchronize VCC workflow tasks on mount and when currentUser changes
+  useEffect(() => {
+    syncVccTasks(currentUser).catch(() => {});
+  }, [currentUser]);
+
   const userDepts = useMemo(() => {
-    const raw = currentUser?.affiliated_departments || currentUser?.depts || (currentUser?.primary_department ? [currentUser.primary_department] : (currentUser?.department ? [currentUser.department] : []));
-    return Array.from(new Set(raw.map(d => normalizeCanonicalDept(d)).filter(Boolean)));
+    const list = [];
+    if (currentUser?.primary_department) list.push(currentUser.primary_department);
+    if (currentUser?.department) list.push(currentUser.department);
+    if (currentUser?.dept) list.push(currentUser.dept);
+    const sources = [currentUser?.departments, currentUser?.depts, currentUser?.affiliated_departments];
+    for (const src of sources) {
+      if (Array.isArray(src)) {
+        list.push(...src);
+      } else if (typeof src === 'string') {
+        try {
+          const parsed = JSON.parse(src);
+          if (Array.isArray(parsed)) list.push(...parsed);
+          else if (parsed) list.push(parsed);
+        } catch {
+          if (src.trim()) list.push(src.trim());
+        }
+      }
+    }
+    return Array.from(new Set(list.map(d => normalizeCanonicalDept(d)).filter(Boolean)));
   }, [currentUser]);
 
   const primaryDept = useMemo(() => {
@@ -1135,6 +1182,14 @@ const TaskInbox = () => {
     ) {
       const docCode = task.document_code || task.doc_code || task.docCode || task.documentNumber || task.scheduleId || task.id;
       navigate(`/periodic-review/record/${encodeURIComponent(docCode)}?taskId=${encodeURIComponent(task.id)}`);
+      return;
+    }
+
+    // 🛡️ VCC Annual Calibration Plan workflow tasks → navigate to VCC Annual Plan page
+    if (task.referenceType === 'VCC_PLAN' || normType.startsWith('VCC_PLAN_') || task.planId) {
+      const planId = task.planId || task.referenceId;
+      const targetTab = task.statusTab || (normType.includes('APPROVE') ? 'PENDING_APPROVAL' : normType.includes('REVISE') ? 'REJECTED' : 'PENDING_REVIEW');
+      navigate(`/vcc/plans?id=${encodeURIComponent(planId)}&tab=${encodeURIComponent(targetTab)}`);
       return;
     }
 

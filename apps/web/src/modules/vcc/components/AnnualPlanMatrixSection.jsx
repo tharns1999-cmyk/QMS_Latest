@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { AlertTriangle, Plus } from 'lucide-react';
 import { getPlanStatusLabel } from '../utils/planLabels';
@@ -34,9 +35,19 @@ import AnnualPlanMatrixTable from './AnnualPlanMatrixTable';
 import SmartAssetImportModal from './SmartAssetImportModal';
 
 const AnnualPlanMatrixSection = ({ activeDepartments }) => {
-  const [statusTab, setStatusTab] = useState('DRAFT');
+  const [searchParams] = useSearchParams();
+  const queryTab = searchParams.get('tab');
+  const queryId = searchParams.get('id');
+
+  const [statusTab, setStatusTab] = useState(queryTab || 'DRAFT');
   const [filterYear, setFilterYear] = useState('');
   const [filterDept, setFilterDept] = useState('');
+
+  useEffect(() => {
+    if (queryTab && queryTab !== statusTab) {
+      setStatusTab(queryTab);
+    }
+  }, [queryTab]);
 
   const [plans, setPlans] = useState([]);
   const [selectedPlanId, setSelectedPlanId] = useState('');
@@ -163,8 +174,8 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
   }, [statusTab, filterYear, filterDept, loadPlanWorkOrders]);
 
   useEffect(() => {
-    loadPlansAndMeta();
-  }, [loadPlansAndMeta]);
+    loadPlansAndMeta(queryId || '');
+  }, [loadPlansAndMeta, queryId]);
 
   const handleSelectPlan = async (planId) => {
     setSelectedPlanId(planId);

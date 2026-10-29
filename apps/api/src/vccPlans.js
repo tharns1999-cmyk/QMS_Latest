@@ -68,6 +68,27 @@ const loadPlanSettings = async (db) => {
   }
 };
 
+export const getUserDepartments = (user) => {
+  if (!user) return [];
+  const depts = [];
+  if (user.department) depts.push(user.department);
+  if (user.primary_department) depts.push(user.primary_department);
+  if (user.dept) depts.push(user.dept);
+  if (user.dept_code) depts.push(user.dept_code);
+  if (Array.isArray(user.departments)) depts.push(...user.departments);
+  if (Array.isArray(user.secondaryDepartments)) depts.push(...user.secondaryDepartments);
+  if (Array.isArray(user.depts)) depts.push(...user.depts);
+  if (Array.isArray(user.affiliated_departments)) depts.push(...user.affiliated_departments);
+  return [...new Set(depts.filter(Boolean).map((d) => String(d).toUpperCase()))];
+};
+
+export const isUserAuthorizedForPlanDept = (user, planDepartment) => {
+  if (!user) return false;
+  if (user.isDcc || user.isQmr || (user.approval_level && user.approval_level >= 6)) return true;
+  const depts = getUserDepartments(user);
+  return depts.includes(String(planDepartment || '').toUpperCase());
+};
+
 const PLAN_SELECT = `
   SELECT p.*,
     d.name_th AS department_name_th,
@@ -710,6 +731,9 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
 
     const planSettings = await loadPlanSettings(db);
     const thresholds = await getThresholds(db, planSettings.approval_doc_type);
+    if (!isUserAuthorizedForPlanDept(user, plan.department)) {
+      return c.json({ error: 'เฉพาะผู้ใช้งานที่สังกัดแผนกเจ้าของแผน หรือ DCC/QMR เท่านั้นที่สามารถส่งแผนได้' }, 403);
+    }
     if (user.approval_level < thresholds.min_requester_level) {
       return c.json({ error: `ผู้จัดทำแผนต้องมีระดับอนุมัติ L${thresholds.min_requester_level} ขึ้นไป` }, 403);
     }
@@ -829,7 +853,7 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
   });
 
   // Review plan (PENDING_REVIEW -> PENDING_APPROVAL) using existing approval_matrix thresholds
-  app.post('/api/vcc/plans/:id/review', requireAuth, async (c) => {
+  app.post('/api/vcc/plans/:id/review', requireAuth, requireVccAccess, async (c) => {
     const db = c.env.DB;
     const user = c.get('user');
     const id = c.req.param('id');
@@ -845,6 +869,9 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
     const planSettings = await loadPlanSettings(db);
     const thresholds = await getThresholds(db, planSettings.approval_doc_type);
 
+    if (!isUserAuthorizedForPlanDept(user, plan.department)) {
+      return c.json({ error: 'เฉพาะผู้ใช้งานที่สังกัดแผนกของแผน หรือ DCC/QMR เท่านั้นที่สามารถทบทวนแผนได้' }, 403);
+    }
     if (user.id === plan.prepared_by) {
       return c.json({ error: 'ผู้จัดทำไม่สามารถทบทวนแผนของตนเองได้' }, 403);
     }
@@ -877,7 +904,7 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
   });
 
   // Approve plan (PENDING_APPROVAL -> APPROVED) using existing approval_matrix thresholds
-  app.post('/api/vcc/plans/:id/approve', requireAuth, async (c) => {
+  app.post('/api/vcc/plans/:id/approve', requireAuth, requireVccAccess, async (c) => {
     const db = c.env.DB;
     const user = c.get('user');
     const id = c.req.param('id');
@@ -893,6 +920,9 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
     const planSettings = await loadPlanSettings(db);
     const thresholds = await getThresholds(db, planSettings.approval_doc_type);
 
+    if (!isUserAuthorizedForPlanDept(user, plan.department)) {
+      return c.json({ error: 'เฉพาะผู้ใช้งานที่สังกัดแผนกของแผน หรือ DCC/QMR เท่านั้นที่สามารถอนุมัติแผนได้' }, 403);
+    }
     if (user.id === plan.prepared_by) {
       return c.json({ error: 'ผู้จัดทำไม่สามารถอนุมัติแผนของตนเองได้' }, 403);
     }
@@ -928,7 +958,7 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
   });
 
   // Reject / Return plan for revision (PENDING_REVIEW or PENDING_APPROVAL -> REJECTED) with mandatory reason
-  app.post('/api/vcc/plans/:id/reject', requireAuth, async (c) => {
+  app.post('/api/vcc/plans/:id/reject', requireAuth, requireVccAccess, async (c) => {
     const db = c.env.DB;
     const user = c.get('user');
     const id = c.req.param('id');
@@ -950,6 +980,9 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
       ? thresholds.required_reviewer_level
       : thresholds.required_approver_level;
 
+    if (!isUserAuthorizedForPlanDept(user, plan.department)) {
+      return c.json({ error: 'เฉพาะผู้ใช้งานที่สังกัดแผนกของแผน หรือ DCC/QMR เท่านั้นที่สามารถส่งกลับแผนได้' }, 403);
+    }
     if (user.id === plan.prepared_by) {
       return c.json({ error: 'ผู้จัดทำไม่สามารถพิจารณาแผนของตนเองได้' }, 403);
     }
@@ -979,6 +1012,110 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
     ]);
 
     return c.json({ plan: await fetchPlan(db, id) });
+  });
+
+  // Get active VCC workflow tasks for the authenticated user based on DCC Master Data & Approval Matrix
+  app.get('/api/vcc/tasks', requireAuth, requireVccAccess, async (c) => {
+    const db = c.env.DB;
+    const user = c.get('user');
+    const planSettings = await loadPlanSettings(db);
+    const thresholds = await getThresholds(db, planSettings.approval_doc_type);
+
+    const { results: pendingPlans } = await db.prepare(`
+      SELECT * FROM vcc_annual_plans
+      WHERE status IN ('PENDING_REVIEW', 'PENDING_APPROVAL', 'REJECTED')
+      ORDER BY plan_year DESC, department ASC
+    `).all();
+
+    const tasks = [];
+    for (const p of (pendingPlans || [])) {
+      const isDeptAllowed = isUserAuthorizedForPlanDept(user, p.department);
+      if (p.status === 'PENDING_REVIEW') {
+        if (isDeptAllowed && user.id !== p.prepared_by && user.approval_level >= thresholds.required_reviewer_level) {
+          tasks.push({
+            id: `api-vcc-plan-${p.id}-review`,
+            planId: p.id,
+            referenceId: p.id,
+            referenceType: 'VCC_PLAN',
+            docCode: p.document_code,
+            document_code: p.document_code,
+            docTitle: p.title,
+            docName: p.title,
+            title: `[แผนทวนสอบ VCC ทบทวน] ${p.title} (${p.document_code} Rev.${p.revision})`,
+            type: 'Review',
+            taskType: 'VCC_PLAN_REVIEW',
+            task_type: 'VCC_PLAN_REVIEW',
+            category: 'REVIEW',
+            department: p.department,
+            target_department: p.department,
+            owner_dept: p.department,
+            required_approval_level: thresholds.required_reviewer_level,
+            requesterId: p.prepared_by,
+            prepared_by: p.prepared_by,
+            status: 'PENDING',
+            statusTab: 'PENDING_REVIEW',
+            createdAt: p.prepared_at || p.created_at
+          });
+        }
+      } else if (p.status === 'PENDING_APPROVAL') {
+        if (isDeptAllowed && user.id !== p.prepared_by && user.id !== p.reviewed_by && user.approval_level >= thresholds.required_approver_level) {
+          tasks.push({
+            id: `api-vcc-plan-${p.id}-approve`,
+            planId: p.id,
+            referenceId: p.id,
+            referenceType: 'VCC_PLAN',
+            docCode: p.document_code,
+            document_code: p.document_code,
+            docTitle: p.title,
+            docName: p.title,
+            title: `[แผนทวนสอบ VCC อนุมัติ] ${p.title} (${p.document_code} Rev.${p.revision})`,
+            type: 'Approve',
+            taskType: 'VCC_PLAN_APPROVE',
+            task_type: 'VCC_PLAN_APPROVE',
+            category: 'APPROVE',
+            department: p.department,
+            target_department: p.department,
+            owner_dept: p.department,
+            required_approval_level: thresholds.required_approver_level,
+            requesterId: p.prepared_by,
+            reviewerId: p.reviewed_by,
+            status: 'PENDING',
+            statusTab: 'PENDING_APPROVAL',
+            createdAt: p.reviewed_at
+          });
+        }
+      } else if (p.status === 'REJECTED') {
+        if (user.id === p.prepared_by || user.isDcc || user.isQmr) {
+          tasks.push({
+            id: `api-vcc-plan-${p.id}-revise`,
+            planId: p.id,
+            referenceId: p.id,
+            referenceType: 'VCC_PLAN',
+            docCode: p.document_code,
+            document_code: p.document_code,
+            docTitle: p.title,
+            docName: p.title,
+            title: `[แผนทวนสอบ VCC ส่งกลับแก้ไข] ${p.title} (${p.document_code} Rev.${p.revision})`,
+            type: 'Revise',
+            taskType: 'VCC_PLAN_REVISE',
+            task_type: 'VCC_PLAN_REVISE',
+            category: 'REVISE',
+            department: p.department,
+            target_department: p.department,
+            owner_dept: p.department,
+            assigneeId: p.prepared_by,
+            assignee_id: p.prepared_by,
+            requesterId: p.prepared_by,
+            returnReason: p.rejected_reason,
+            status: 'PENDING',
+            statusTab: 'REJECTED',
+            createdAt: p.rejected_at
+          });
+        }
+      }
+    }
+
+    return c.json({ tasks });
   });
 };
 

@@ -158,14 +158,27 @@ export const userMatchesDepartment = (user, dept) => {
     if (user.managedDepartments.includes('*') || user.managedDepartments.some(d => isSameDepartment(d, dept))) return true;
   }
 
-  const userDepts = [
-    user.department,
-    user.dept,
-    user.primary_department,
-    ...(user.depts || []),
-    ...(user.affiliated_departments || [])
-  ].filter(Boolean);
-  return userDepts.some(d => isSameDepartment(d, dept));
+  const list = [];
+  if (user.department) list.push(user.department);
+  if (user.dept) list.push(user.dept);
+  if (user.primary_department) list.push(user.primary_department);
+
+  const sources = [user.departments, user.depts, user.affiliated_departments];
+  for (const src of sources) {
+    if (Array.isArray(src)) {
+      list.push(...src);
+    } else if (typeof src === 'string') {
+      try {
+        const parsed = JSON.parse(src);
+        if (Array.isArray(parsed)) list.push(...parsed);
+        else if (parsed) list.push(parsed);
+      } catch {
+        if (src.trim()) list.push(src.trim());
+      }
+    }
+  }
+
+  return list.filter(Boolean).some(d => isSameDepartment(d, dept));
 };
 
 /**
@@ -369,10 +382,24 @@ export const isActionableTask = (task, currentUser, documents = [], referenceDat
   );
   const isReviewOrApprove = [
     'REVIEW', 'DAR_REVIEW', 'EXT_REVIEW', 'EXTERNAL_REVIEW',
-    'APPROVE', 'DAR_APPROVE', 'APPROVAL', 'EXT_APPROVAL', 'EXTERNAL_APPROVAL'
-  ].includes(normType);
+    'APPROVE', 'DAR_APPROVE', 'APPROVAL', 'EXT_APPROVAL', 'EXTERNAL_APPROVAL',
+    'VCC_PLAN_REVIEW', 'VCC_PLAN_APPROVE'
+  ].includes(normType) || (task.referenceType === 'VCC_PLAN' && ['Review', 'Approve'].includes(task.type));
 
   if (isRequester && isReviewOrApprove) {
+    return false;
+  }
+
+  // 🛡️ Separation of Duties: Reviewer must NEVER approve their own reviewed item
+  const isReviewer = Boolean(
+    (task.reviewerId && (task.reviewerId === currentUser?.id || task.reviewerId === currentUser?.empId)) ||
+    (task.reviewerName && task.reviewerName === currentUser?.name)
+  );
+  const isApproveAction = [
+    'APPROVE', 'DAR_APPROVE', 'APPROVAL', 'EXT_APPROVAL', 'EXTERNAL_APPROVAL', 'VCC_PLAN_APPROVE'
+  ].includes(normType) || (task.referenceType === 'VCC_PLAN' && task.type === 'Approve');
+
+  if (isReviewer && isApproveAction) {
     return false;
   }
 
@@ -393,15 +420,16 @@ export const isActionableTask = (task, currentUser, documents = [], referenceDat
   const isDeptReviewOrApprove = [
     'REVIEW', 'DAR_REVIEW', 'EXT_REVIEW', 'EXTERNAL_REVIEW', 
     'APPROVE', 'DAR_APPROVE', 'APPROVAL', 'EXT_APPROVAL', 'EXTERNAL_APPROVAL',
-    'REVISE', 'EXTERNAL_REVISE', 'ACK', 'ACKNOWLEDGE'
-  ].includes(normType);
+    'REVISE', 'EXTERNAL_REVISE', 'ACK', 'ACKNOWLEDGE',
+    'VCC_PLAN_REVIEW', 'VCC_PLAN_APPROVE', 'VCC_PLAN_REVISE'
+  ].includes(normType) || task.referenceType === 'VCC_PLAN';
 
   if (isDeptReviewOrApprove) {
-    const isQmr = currentUser?.role === 'QMR' || currentUser?.isQmr;
+    const isCrossOrg = currentUser?.role === 'QMR' || currentUser?.isQmr || isLevel6Plus(currentUser);
     const taskDept = task.department || task.target_department || task.targetDepartment || task.destinationDept || task.assignedToDept || task.currentHandlerDepartment || task.holder_dept || '';
-    const isDeptMatch = Boolean(isQmr || (taskDept && userMatchesDepartment(currentUser, taskDept)));
+    const isDeptMatch = Boolean(isCrossOrg || (taskDept && userMatchesDepartment(currentUser, taskDept)));
     const requiredLevel = Number(task.required_approval_level || task.requiredLevel || task.currentHandlerLevel || task.min_level || 1);
-    const isLevelMatch = isQmr || (userApprovalLevel >= requiredLevel);
+    const isLevelMatch = isCrossOrg || (userApprovalLevel >= requiredLevel);
 
     return isDeptMatch && isLevelMatch;
   }
