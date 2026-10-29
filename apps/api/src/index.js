@@ -1399,24 +1399,58 @@ const csvCell = (value) => {
 app.get('/api/audit-log', requireAuth, async (c) => {
   const user = c.get('user');
   if (!user.isDcc && !user.isQmr) return c.json({ error: 'เฉพาะ DCC และ QMR เท่านั้นที่ดู Audit Log ได้' }, 403);
-  const { from, to, action, before_id: beforeId, format } = c.req.query();
+  const { from, to, action, before_id: beforeId, format, module, actor_id: actorId, q } = c.req.query();
   if ((from && !DATE.test(from)) || (to && !DATE.test(to))) return c.json({ error: 'วันที่ต้องอยู่ในรูปแบบ YYYY-MM-DD' }, 400);
   const limit = Math.min(Math.max(Number(c.req.query('limit')) || 1000, 1), MAX_AUDIT_ROWS);
 
   // Days are Thailand days (UTC+7); `at` is stored in UTC, so a day starts at 17:00 UTC the evening before.
-  const filters = [[from, "a.at >= strftime('%Y-%m-%dT%H:%M:%fZ', ?, '-7 hours')"], [to, "a.at < strftime('%Y-%m-%dT%H:%M:%fZ', ?, '+1 day', '-7 hours')"], [action, 'a.action = ?'], [beforeId, 'a.id < ?']].filter(([value]) => value);
+  const whereClauses = [];
+  const bindings = [];
+
+  if (from) {
+    whereClauses.push("a.at >= strftime('%Y-%m-%dT%H:%M:%fZ', ?, '-7 hours')");
+    bindings.push(from);
+  }
+  if (to) {
+    whereClauses.push("a.at < strftime('%Y-%m-%dT%H:%M:%fZ', ?, '+1 day', '-7 hours')");
+    bindings.push(to);
+  }
+  if (action) {
+    whereClauses.push('a.action = ?');
+    bindings.push(action);
+  }
+  if (actorId) {
+    whereClauses.push('a.actor_id = ?');
+    bindings.push(actorId);
+  }
+  if (module === 'VCC') {
+    whereClauses.push("a.action LIKE 'VCC_%'");
+  } else if (module === 'DCC') {
+    whereClauses.push("a.action NOT LIKE 'VCC_%'");
+  }
+  if (q && q.trim()) {
+    whereClauses.push("(a.action LIKE ? OR u.name LIKE ? OR a.details LIKE ?)");
+    const kw = `%${q.trim()}%`;
+    bindings.push(kw, kw, kw);
+  }
+  if (beforeId) {
+    whereClauses.push('a.id < ?');
+    bindings.push(beforeId);
+  }
+
+  const whereSql = whereClauses.length ? `WHERE ${whereClauses.join(' AND ')}` : '';
   const { results } = await c.env.DB.prepare(
     `SELECT a.id, a.at, a.actor_id, u.name AS actor_name, u.email AS actor_email, a.action, a.details
      FROM audit_log a LEFT JOIN users u ON u.id = a.actor_id
-     ${filters.length ? `WHERE ${filters.map(([, sql]) => sql).join(' AND ')}` : ''} ORDER BY a.id DESC LIMIT ?`
-  ).bind(...filters.map(([value]) => value), limit).all();
-  await audit(c.env.DB, user.id, 'AUDIT_LOG_EXPORTED', { from, to, action, format: format || 'json', rows: results.length }).run();
+     ${whereSql} ORDER BY a.id DESC LIMIT ?`
+  ).bind(...bindings, limit).all();
+  await audit(c.env.DB, user.id, 'AUDIT_LOG_EXPORTED', { from, to, action, module, format: format || 'json', rows: results.length }).run();
 
   if (format === 'csv') {
     const columns = ['id', 'at', 'actor_id', 'actor_name', 'actor_email', 'action', 'details'];
     const lines = [columns.join(','), ...results.map((row) => columns.map((k) => csvCell(row[k])).join(','))];
     // The BOM makes Excel read the Thai names as UTF-8.
-    return new Response(`﻿${lines.join('\r\n')}\r\n`, {
+    return new Response(`\uFEFF${lines.join('\r\n')}\r\n`, {
       headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': 'attachment; filename="audit-log.csv"', 'Cache-Control': 'private, no-store' }
     });
   }

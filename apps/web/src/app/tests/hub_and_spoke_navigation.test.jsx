@@ -33,7 +33,7 @@ describe('Hub & Spoke Navigation Isolation (Context-Aware Sidebar)', () => {
     expect(screen.queryByText('การทบทวนตามรอบ')).not.toBeInTheDocument();
     expect(screen.queryByText('ทะเบียนสำเนาควบคุม')).not.toBeInTheDocument();
     expect(screen.queryByText('จัดการข้อมูลหลัก')).not.toBeInTheDocument();
-    expect(screen.queryByText('บันทึกประวัติการทำงาน')).not.toBeInTheDocument();
+    expect(screen.queryByText('ประวัติการดำเนินการ (Audit Trail)')).not.toBeInTheDocument();
     expect(screen.queryByText('กลับสู่พอร์ทัลหลัก')).not.toBeInTheDocument();
   });
 
@@ -56,7 +56,7 @@ describe('Hub & Spoke Navigation Isolation (Context-Aware Sidebar)', () => {
     expect(screen.getByText('การทบทวนตามรอบ')).toBeInTheDocument();
     expect(screen.getByText('ทะเบียนสำเนาควบคุม')).toBeInTheDocument();
     expect(screen.getByText('จัดการข้อมูลหลัก')).toBeInTheDocument();
-    expect(screen.getByText('บันทึกประวัติการทำงาน')).toBeInTheDocument();
+    expect(screen.getByText('ประวัติการดำเนินการ (Audit Trail)')).toBeInTheDocument();
 
     // Bottom tools always available
     expect(screen.getByText('DEV TOOLS')).toBeInTheDocument();

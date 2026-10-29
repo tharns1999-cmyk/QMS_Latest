@@ -216,7 +216,8 @@ function App() {
             <Route path="viewer/:docId/:rev" element={withSuspense(Viewer)} />
 
             <Route path="admin/health" element={withSuspense(AdminHealth)} />
-            <Route path="admin/action-log" element={<ProtectedRoute requireAdmin deniedToastMessage="คุณไม่มีสิทธิ์เข้าถึงประวัติการทำงาน">{withSuspense(ActionLog)}</ProtectedRoute>} />
+            <Route path="admin/action-log" element={<ProtectedRoute requireAdmin deniedToastMessage="เฉพาะเจ้าหน้าที่ DCC Admin เท่านั้นที่สามารถเข้าถึงประวัติการดำเนินการได้">{withSuspense(ActionLog)}</ProtectedRoute>} />
+            <Route path="admin/audit-trail" element={<AliasRedirect to="/dcc/admin/action-log" />} />
             <Route path="admin/master-data" element={<ProtectedRoute requireAdmin deniedToastMessage="คุณไม่มีสิทธิ์เข้าถึงศูนย์จัดการข้อมูลหลัก">{withSuspense(MasterDataHub)}</ProtectedRoute>} />
             <Route path="reports" element={withSuspense(Reports)} />
 

@@ -1,14 +1,11 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import toast from 'react-hot-toast';
 import {
   Plus,
   SlidersHorizontal,
-  AlertTriangle,
-  CheckCircle2,
-  XCircle,
-  CalendarClock,
-  FileCheck2,
-  ShieldAlert
+  Search,
+  X,
+  FilterX
 } from 'lucide-react';
 import { fetchVccAssets } from '../api/vccApi';
 import { fetchVccPlanSettings, fetchVccPlans, fetchVccPlanDetail } from '../api/vccPlanApi';
@@ -29,34 +26,72 @@ import {
   WorkOrderActionModal,
   WorkOrderSettingsModal
 } from './WorkOrderModals';
+import WorkOrderInfoBar from './WorkOrderInfoBar';
+import WorkOrderSideDrawer from './WorkOrderSideDrawer';
+import WorkOrderTable from './WorkOrderTable';
 
 const WO_TABS = [
-  { key: 'OPEN', label: 'เปิดงาน / รอบันทึกผล (OPEN)', color: 'bg-indigo-600 text-white' },
-  { key: 'PENDING_REVIEW', label: 'รอตรวจรับผล (PENDING_REVIEW)', color: 'bg-amber-700 text-white' },
-  { key: 'REJECTED', label: 'ส่งกลับแก้ไขผล (REJECTED)', color: 'bg-rose-700 text-white' },
-  { key: 'CLOSED', label: 'ตรวจรับปิดงานแล้ว (CLOSED)', color: 'bg-emerald-700 text-white' },
-  { key: 'ON_HOLD', label: 'เครื่องมือระงับใช้ / NC (ON_HOLD)', color: 'bg-slate-800 text-white' }
+  {
+    key: 'OPEN',
+    shortLabel: 'เปิดงาน (OPEN)',
+    fullLabel: 'เปิดงาน / รอบันทึกผล (OPEN)'
+  },
+  {
+    key: 'PENDING_REVIEW',
+    shortLabel: 'รอตรวจรับ (PENDING_REVIEW)',
+    fullLabel: 'รอตรวจรับ (PENDING_REVIEW)'
+  },
+  {
+    key: 'REJECTED',
+    shortLabel: 'ส่งกลับแก้ไข (REJECTED)',
+    fullLabel: 'ส่งกลับแก้ไข (REJECTED)'
+  },
+  {
+    key: 'CLOSED',
+    shortLabel: 'ปิดงานแล้ว (CLOSED)',
+    fullLabel: 'ตรวจรับปิดงานแล้ว (CLOSED)'
+  },
+  {
+    key: 'ON_HOLD',
+    shortLabel: 'ระงับใช้ (ON_HOLD)',
+    fullLabel: 'ระงับใช้ (ON_HOLD)'
+  }
 ];
 
-const WorkOrderSection = ({ activeDepartments }) => {
+const WorkOrderSection = ({ activeDepartments = [] }) => {
   const [activeTab, setActiveTab] = useState('OPEN');
   const [filterDept, setFilterDept] = useState('');
-  const [workOrders, setWorkOrders] = useState([]);
+  const [filterResult, setFilterResult] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedDrawerWo, setSelectedDrawerWo] = useState(null);
+
+  // Raw work orders by tab
+  const [rawWosByTab, setRawWosByTab] = useState({
+    OPEN: [],
+    PENDING_REVIEW: [],
+    REJECTED: [],
+    CLOSED: [],
+    ON_HOLD: []
+  });
+
   const [woSettings, setWoSettings] = useState({
     retention_years: 3,
     approval_doc_type: 'FM',
     default_acceptance_criteria: []
   });
+
   const [thresholds, setThresholds] = useState({
     min_requester_level: 1,
     required_reviewer_level: 4,
     required_approver_level: 5
   });
+
   const [individualAssets, setIndividualAssets] = useState([]);
   const [providers, setProviders] = useState([]);
   const [approvedPlans, setApprovedPlans] = useState([]);
   const [selectedPlanItems, setSelectedPlanItems] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState(null);
 
   // Create WO Modal
   const [createOpen, setCreateOpen] = useState(false);
@@ -99,31 +134,50 @@ const WorkOrderSection = ({ activeDepartments }) => {
 
   const loadData = useCallback(async () => {
     setLoading(true);
+    setFetchError(null);
     try {
-      const query =
-        activeTab === 'ON_HOLD'
-          ? { nc_status: 'OPEN', department: filterDept }
-          : { status: activeTab, department: filterDept };
-
-      const [woList, settingsRes, planSettingsRes, indivAssets, appPlans] = await Promise.all([
-        fetchVccWorkOrders(query),
+      const [
+        openWos,
+        pendingWos,
+        rejectedWos,
+        closedWos,
+        holdWos,
+        settingsRes,
+        planSettingsRes,
+        indivAssets,
+        appPlans
+      ] = await Promise.all([
+        fetchVccWorkOrders({ status: 'OPEN', department: filterDept }),
+        fetchVccWorkOrders({ status: 'PENDING_REVIEW', department: filterDept }),
+        fetchVccWorkOrders({ status: 'REJECTED', department: filterDept }),
+        fetchVccWorkOrders({ status: 'CLOSED', department: filterDept }),
+        fetchVccWorkOrders({ nc_status: 'OPEN', department: filterDept }),
         fetchVccWorkOrderSettings(),
         fetchVccPlanSettings(),
         fetchVccAssets({ status: 'ACTIVE', is_group: '0' }),
         fetchVccPlans({ status: 'APPROVED' })
       ]);
-      setWorkOrders(woList);
+
+      setRawWosByTab({
+        OPEN: openWos || [],
+        PENDING_REVIEW: pendingWos || [],
+        REJECTED: rejectedWos || [],
+        CLOSED: closedWos || [],
+        ON_HOLD: holdWos || []
+      });
+
       setWoSettings(settingsRes.settings);
       setThresholds(settingsRes.thresholds);
       setProviders(planSettingsRes.providers || []);
       setIndividualAssets(indivAssets);
       setApprovedPlans(appPlans);
     } catch (err) {
+      setFetchError(err.message || 'ไม่สามารถโหลดข้อมูลใบสั่งงานได้');
       toast.error(err.message || 'ไม่สามารถโหลดข้อมูลใบสั่งงานได้');
     } finally {
       setLoading(false);
     }
-  }, [activeTab, filterDept]);
+  }, [filterDept]);
 
   useEffect(() => {
     loadData();
@@ -138,6 +192,40 @@ const WorkOrderSection = ({ activeDepartments }) => {
       setSelectedPlanItems([]);
     }
   }, [createForm.mode, createForm.plan_id]);
+
+  // Tab counts
+  const tabCounts = useMemo(() => {
+    return {
+      OPEN: rawWosByTab.OPEN.length,
+      PENDING_REVIEW: rawWosByTab.PENDING_REVIEW.length,
+      REJECTED: rawWosByTab.REJECTED.length,
+      CLOSED: rawWosByTab.CLOSED.length,
+      ON_HOLD: rawWosByTab.ON_HOLD.length
+    };
+  }, [rawWosByTab]);
+
+  // Filtered work orders for currently active tab
+  const activeTabWorkOrders = useMemo(() => {
+    let list = rawWosByTab[activeTab] || [];
+
+    // Filter by Result Status (PASS / FAIL / PENDING)
+    if (filterResult) {
+      list = list.filter((wo) => wo.result_status === filterResult);
+    }
+
+    // Filter by Search Query
+    const query = searchTerm.trim().toLowerCase();
+    if (!query) return list;
+
+    return list.filter((wo) => {
+      const matchWoCode = (wo.wo_code || '').toLowerCase().includes(query);
+      const matchAssetCode = (wo.asset_code || '').toLowerCase().includes(query);
+      const matchAssetName = (wo.asset_name || '').toLowerCase().includes(query);
+      const matchCertNo = (wo.certificate_no || '').toLowerCase().includes(query);
+      const matchProvider = (wo.provider_name || '').toLowerCase().includes(query);
+      return matchWoCode || matchAssetCode || matchAssetName || matchCertNo || matchProvider;
+    });
+  }, [rawWosByTab, activeTab, searchTerm, filterResult]);
 
   const openCreateModal = () => {
     setCreateError('');
@@ -176,7 +264,7 @@ const WorkOrderSection = ({ activeDepartments }) => {
       toast.success(`สร้างใบสั่งงาน ${created.wo_code} แล้ว`);
       setCreateOpen(false);
       if (activeTab !== 'OPEN') setActiveTab('OPEN');
-      else await loadData();
+      await loadData();
     } catch (err) {
       setCreateError(err.message || 'ไม่สามารถสร้างใบสั่งงานได้');
     } finally {
@@ -205,7 +293,11 @@ const WorkOrderSection = ({ activeDepartments }) => {
       const updated = await submitVccWorkOrderResult(resultWo.id, resultForm);
       toast.success(`ส่งผลใบสั่งงาน ${updated.wo_code} เข้าสู่คิวตรวจรับแล้ว`);
       setResultWo(null);
+      if (selectedDrawerWo?.id === resultWo.id) {
+        setSelectedDrawerWo(null);
+      }
       setActiveTab('PENDING_REVIEW');
+      await loadData();
     } catch (err) {
       setResultError(err.message || 'ไม่สามารถส่งผลการทวนสอบได้');
     } finally {
@@ -241,16 +333,27 @@ const WorkOrderSection = ({ activeDepartments }) => {
         await approveVccWorkOrder(workOrder.id, actionForm.text);
         toast.success(`ตรวจรับและปิดใบสั่งงาน ${workOrder.wo_code} แล้ว`);
         setActionModal(null);
+        if (selectedDrawerWo?.id === workOrder.id) {
+          setSelectedDrawerWo(null);
+        }
         setActiveTab('CLOSED');
+        await loadData();
       } else if (mode === 'REJECT') {
         await rejectVccWorkOrder(workOrder.id, actionForm.text);
         toast.success(`ส่งใบสั่งงาน ${workOrder.wo_code} กลับไปแก้ไขแล้ว`);
         setActionModal(null);
+        if (selectedDrawerWo?.id === workOrder.id) {
+          setSelectedDrawerWo(null);
+        }
         setActiveTab('REJECTED');
+        await loadData();
       } else if (mode === 'RELEASE_HOLD') {
         await releaseVccWorkOrderHold(workOrder.id, actionForm.text);
         toast.success(`ปลดระงับเครื่องมือ ${workOrder.asset_code} แล้ว`);
         setActionModal(null);
+        if (selectedDrawerWo?.id === workOrder.id) {
+          setSelectedDrawerWo(null);
+        }
         await loadData();
       }
     } catch (err) {
@@ -281,231 +384,209 @@ const WorkOrderSection = ({ activeDepartments }) => {
     }
   };
 
+  const handleResetFilters = () => {
+    setSearchTerm('');
+    setFilterDept('');
+    setFilterResult('');
+  };
+
+  const isFiltered = Boolean(searchTerm || filterDept || filterResult);
+
   return (
-    <div className="space-y-5" data-testid="vcc-work-order-section">
-      {/* Rule Notice */}
-      <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 sm:p-5 text-sm text-amber-950 space-y-2">
-        <div className="font-bold flex items-center gap-2 text-base text-amber-900">
-          <AlertTriangle size={18} className="text-amber-600 shrink-0" />
-          <span>กติกาใบสั่งงานทวนสอบ/สอบเทียบ การตรวจรับผล และการระงับใช้ (ON_HOLD)</span>
+    <div className="space-y-4 max-w-full" data-testid="vcc-work-order-section">
+      
+      {/* 1. Page Header (Single H1 Title, One-line Description, Header Actions) */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-slate-200">
+        <div className="space-y-0.5 min-w-0">
+          <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
+            <span className="hover:text-slate-700 transition-colors">พอร์ทัลหลัก</span>
+            <span className="text-slate-300">/</span>
+            <span className="text-purple-700 font-semibold">ศูนย์ทวนสอบและสอบเทียบ (VCC)</span>
+            <span className="text-slate-300">/</span>
+            <span className="text-slate-800 font-semibold truncate">ใบสั่งงานและบันทึกผล</span>
+          </div>
+
+          <h1 className="text-xl md:text-2xl font-bold text-slate-900 tracking-tight">
+            ใบสั่งงานและบันทึกผล (Work Orders)
+          </h1>
+
+          <p className="text-sm text-slate-500">
+            เปิดใบสั่งงานตามแผน เลื่อนวันครบกำหนด บันทึกผลพร้อมใบรับรอง ตรวจรับปิดงาน และควบคุมการระงับใช้
+          </p>
         </div>
-        <ul className="list-disc list-inside space-y-1 text-sm text-amber-900 leading-relaxed font-medium">
-          <li>ใบสั่งงานต้องผูกกับ <span className="font-bold">เครื่องมือรายตัว</span> เท่านั้น และต้องกรอก <span className="font-bold">เลขที่ใบรับรอง + เกณฑ์ยอมรับ</span> ก่อนส่งตรวจรับ</li>
-          <li>ผู้ตรวจรับผล (<span className="font-mono font-bold">L{thresholds.required_reviewer_level}+</span> คนละคนกับผู้บันทึกผล) ต้องอนุมัติจึงจะปิดงาน (<span className="font-mono font-bold">CLOSED</span>) และอัปเดตแถว <span className="font-mono font-bold">Act.</span> ในตารางแผน</li>
-          <li>เมื่อผลเป็น <span className="font-bold text-rose-700">FAIL</span> เครื่องมือจะถูกระงับใช้ (<span className="font-mono font-bold text-rose-700">ON_HOLD</span>) ทันที และต้องให้ผู้อนุมัติระดับ <span className="font-mono font-bold">L{thresholds.required_approver_level}+</span> บันทึกการประเมินผลกระทบก่อนปลดระงับ • อายุเก็บประวัติใบรับรองปัจจุบัน: <span className="font-bold">{woSettings.retention_years} ปี</span></li>
-        </ul>
+
+        {/* Primary and Secondary Actions */}
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <WorkOrderInfoBar thresholds={thresholds} woSettings={woSettings} />
+
+          <button
+            type="button"
+            onClick={openSettings}
+            className="h-9 inline-flex items-center gap-1.5 px-3 rounded-lg border border-slate-200 bg-white text-slate-700 text-xs sm:text-sm font-medium hover:bg-slate-50 transition-colors cursor-pointer"
+          >
+            <SlidersHorizontal size={14} className="text-slate-500" />
+            <span>ตั้งค่าเกณฑ์ยอมรับ</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={openCreateModal}
+            className="h-9 inline-flex items-center gap-1.5 px-3.5 rounded-lg bg-purple-700 text-white text-xs sm:text-sm font-semibold hover:bg-purple-800 transition-colors shadow-2xs cursor-pointer"
+          >
+            <Plus size={15} />
+            <span>สร้างใบสั่งงานใหม่</span>
+          </button>
+        </div>
       </div>
 
-      {/* Tabs & Action Bar */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-4">
-          <div className="flex flex-wrap items-center gap-2" role="tablist" aria-label="สถานะใบสั่งงาน">
-            {WO_TABS.map((t) => (
+      {/* 2. Status Navigation - Minimal Underline Tabs */}
+      <div className="border-b border-slate-200">
+        <nav
+          className="flex items-center gap-2 sm:gap-3.5 xl:gap-6 overflow-x-auto scrollbar-none"
+          role="tablist"
+          aria-label="สถานะใบสั่งงาน"
+        >
+          {WO_TABS.map((t) => {
+            const isActive = activeTab === t.key;
+            const count = tabCounts[t.key] ?? 0;
+            return (
               <button
                 key={t.key}
                 type="button"
                 role="tab"
-                aria-selected={activeTab === t.key}
+                aria-selected={isActive}
+                aria-label={t.fullLabel}
                 onClick={() => setActiveTab(t.key)}
-                className={`px-4 py-2.5 rounded-xl text-sm font-bold transition-colors cursor-pointer ${
-                  activeTab === t.key ? t.color : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                className={`flex items-center gap-1.5 sm:gap-2 pb-3 pt-1 text-xs sm:text-[13px] 2xl:text-sm font-medium border-b-2 transition-all cursor-pointer whitespace-nowrap select-none ${
+                  isActive
+                    ? 'border-purple-600 text-purple-700 font-semibold'
+                    : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
                 }`}
               >
-                {t.label}
+                <span className="hidden 2xl:inline">{t.fullLabel}</span>
+                <span className="inline 2xl:hidden">{t.shortLabel}</span>
+                <span
+                  className={`px-2 py-0.5 rounded-full text-xs font-mono font-bold transition-colors ${
+                    isActive ? 'bg-purple-100 text-purple-800' : 'bg-slate-100 text-slate-600'
+                  }`}
+                >
+                  {count}
+                </span>
               </button>
-            ))}
-          </div>
+            );
+          })}
+        </nav>
+      </div>
 
-          <div className="flex flex-wrap items-center gap-2.5">
+      {/* 3. Search & Filters Toolbar */}
+      <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+        {/* Search Input (Primary) */}
+        <div className="relative flex-1 min-w-[240px] max-w-sm">
+          <Search
+            size={14}
+            className="text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+          />
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="ค้นหาเลขที่ใบงาน, เครื่องมือ, ใบรับรอง..."
+            className="w-full pl-8.5 pr-8 py-1.5 h-9 bg-white border border-slate-200 rounded-lg text-xs sm:text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-purple-600 focus:ring-1 focus:ring-purple-600 transition-colors shadow-2xs"
+          />
+          {searchTerm && (
             <button
               type="button"
-              onClick={openSettings}
-              className="h-10 inline-flex items-center gap-1.5 px-4 rounded-xl border border-slate-300 bg-white text-slate-700 text-sm font-semibold hover:bg-slate-50 transition-colors cursor-pointer"
+              onClick={() => setSearchTerm('')}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded cursor-pointer"
+              aria-label="ล้างคำค้นหา"
             >
-              <SlidersHorizontal size={15} />
-              <span>ตั้งค่าเกณฑ์ยอมรับและอายุเก็บเอกสาร</span>
+              <X size={13} />
             </button>
-            <button
-              type="button"
-              onClick={openCreateModal}
-              className="h-10 inline-flex items-center gap-1.5 px-4 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 shadow-2xs transition-colors cursor-pointer"
-            >
-              <Plus size={16} />
-              <span>สร้างใบสั่งงานใหม่</span>
-            </button>
-          </div>
+          )}
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-3">
+        {/* Secondary Filters */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Department Filter (Master Data) */}
           <select
             aria-label="กรองใบสั่งงานตามแผนก"
             value={filterDept}
             onChange={(e) => setFilterDept(e.target.value)}
-            className="h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium bg-white"
+            className="h-9 px-3 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-700 focus:outline-none focus:border-purple-600 cursor-pointer shadow-2xs truncate max-w-[180px]"
           >
             <option value="">ทุกแผนก (Master Data)</option>
             {activeDepartments.map((d) => (
-              <option key={d.code} value={d.code}>{d.code} — {d.nameTh}</option>
+              <option key={d.code} value={d.code}>
+                {d.code} — {d.nameTh}
+              </option>
             ))}
           </select>
 
-          <div className="text-sm font-medium text-slate-500">
-            แสดงเฉพาะแท็บ <span className="font-bold text-slate-900">{activeTab}</span> ({workOrders.length} รายการ)
+          {/* Result Status Filter */}
+          <select
+            aria-label="กรองตามผลการตรวจ"
+            value={filterResult}
+            onChange={(e) => setFilterResult(e.target.value)}
+            className="h-9 px-2.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-700 focus:outline-none focus:border-purple-600 cursor-pointer shadow-2xs"
+          >
+            <option value="">ทุกผลตรวจ</option>
+            <option value="PASS">PASS (ผ่านเกณฑ์)</option>
+            <option value="FAIL">FAIL (ไม่ผ่านเกณฑ์)</option>
+            <option value="PENDING">PENDING (รอบันทึกผล)</option>
+          </select>
+
+          {/* Reset Filters button */}
+          {isFiltered && (
+            <button
+              type="button"
+              onClick={handleResetFilters}
+              title="ล้างตัวกรองทั้งหมด"
+              className="inline-flex items-center gap-1 px-2.5 h-9 text-xs font-medium text-rose-600 hover:bg-rose-50 rounded-lg border border-rose-200 transition-colors cursor-pointer shrink-0"
+            >
+              <FilterX size={13} />
+              <span>ล้างตัวกรอง</span>
+            </button>
+          )}
+
+          {/* Right: Total Items Badge */}
+          <div className="text-xs font-medium text-slate-500 pl-1 shrink-0">
+            แสดง <span className="font-bold text-slate-800">{activeTabWorkOrders.length}</span> รายการ
           </div>
         </div>
       </div>
 
-      {/* Work Orders Table */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-        {loading ? (
-          <div className="p-12 text-center text-sm text-slate-500 font-medium">กำลังโหลดข้อมูลใบสั่งงาน...</div>
-        ) : workOrders.length === 0 ? (
-          <div className="p-12 text-center space-y-1.5">
-            <div className="font-bold text-slate-800 text-base">ไม่พบรายการใบสั่งงานในแท็บ {activeTab}</div>
-            <p className="text-sm text-slate-500">เลือกแท็บสถานะอื่น หรือกดปุ่ม &ldquo;สร้างใบสั่งงานใหม่&rdquo; ด้านบน</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-sm">
-              <thead>
-                <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 text-xs font-bold uppercase tracking-wider">
-                  <th className="py-3.5 px-4">เลขที่ใบงาน</th>
-                  <th className="py-3.5 px-4">เครื่องมือวัด (รายตัว)</th>
-                  <th className="py-3.5 px-4">วันครบกำหนด</th>
-                  <th className="py-3.5 px-4">ผลทวนสอบ / ใบรับรอง / เกณฑ์ยอมรับ</th>
-                  <th className="py-3.5 px-4">สถานะ / การระงับใช้</th>
-                  <th className="py-3.5 px-4 text-right">การจัดการ</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200 text-sm">
-                {workOrders.map((wo) => (
-                  <tr key={wo.id} className="hover:bg-slate-50/80 transition-colors">
-                    <td className="py-3.5 px-4 align-top">
-                      <div className="font-mono font-bold text-slate-900 text-sm">{wo.wo_code}</div>
-                      <div className="text-xs text-slate-500 font-medium mt-0.5">
-                        {wo.plan_year ? `แผนปี ${wo.plan_year} (เดือน ${wo.planned_month})` : 'ใบงานนอกแผน (Ad-hoc)'}
-                      </div>
-                    </td>
+      {/* 4. Professional Data Grid (Comfortable Row Density, Single Primary Action) */}
+      <WorkOrderTable
+        workOrders={activeTabWorkOrders}
+        loading={loading}
+        error={fetchError}
+        activeTab={activeTab}
+        searchTerm={searchTerm}
+        filterDept={filterDept}
+        thresholds={thresholds}
+        onRowClick={(wo) => setSelectedDrawerWo(wo)}
+        onRecordResult={openRecordResult}
+        onReschedule={(wo) => openAction('RESCHEDULE', wo)}
+        onApprove={(wo) => openAction('APPROVE', wo)}
+        onReject={(wo) => openAction('REJECT', wo)}
+        onReleaseHold={(wo) => openAction('RELEASE_HOLD', wo)}
+        onResetFilters={handleResetFilters}
+        onOpenCreate={openCreateModal}
+      />
 
-                    <td className="py-3.5 px-4 align-top">
-                      <div className="font-mono font-bold text-indigo-700 text-sm">{wo.asset_code}</div>
-                      <div className="font-semibold text-slate-900">{wo.asset_name}</div>
-                      <div className="text-xs text-slate-500 font-medium mt-0.5">แผนก: {wo.department} • {wo.provider_name}</div>
-                    </td>
+      {/* 5. Side Drawer for Work Order Details */}
+      <WorkOrderSideDrawer
+        workOrder={selectedDrawerWo}
+        onClose={() => setSelectedDrawerWo(null)}
+        thresholds={thresholds}
+        onRecordResult={openRecordResult}
+        onReschedule={(wo) => openAction('RESCHEDULE', wo)}
+        onApprove={(wo) => openAction('APPROVE', wo)}
+        onReject={(wo) => openAction('REJECT', wo)}
+        onReleaseHold={(wo) => openAction('RELEASE_HOLD', wo)}
+      />
 
-                    <td className="py-3.5 px-4 align-top">
-                      <div className="font-mono font-bold text-slate-900 text-sm">{wo.due_date}</div>
-                      {wo.due_date !== wo.original_due_date && (
-                        <div className="text-xs text-amber-800 font-medium mt-0.5">
-                          วันเดิม: <span className="font-mono line-through text-slate-400">{wo.original_due_date}</span> ({wo.reschedule_reason})
-                        </div>
-                      )}
-                    </td>
-
-                    <td className="py-3.5 px-4 align-top space-y-1 text-xs sm:text-sm">
-                      <div>
-                        <span className="font-semibold text-slate-600">ผล:</span>{' '}
-                        <span className={`font-bold ${wo.result_status === 'FAIL' ? 'text-rose-700' : wo.result_status === 'PASS' ? 'text-emerald-700' : 'text-slate-600'}`}>
-                          {wo.result_status}
-                        </span>
-                      </div>
-                      {wo.certificate_no && (
-                        <div>
-                          <span className="font-semibold text-slate-600">ใบรับรอง:</span> <span className="font-mono font-semibold text-slate-900">{wo.certificate_no}</span>
-                        </div>
-                      )}
-                      {wo.acceptance_criteria && (
-                        <div>
-                          <span className="font-semibold text-slate-600">เกณฑ์ยอมรับ:</span> <span className="text-slate-800">{wo.acceptance_criteria}</span>
-                        </div>
-                      )}
-                      {wo.rejected_reason && (
-                        <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 font-medium text-xs sm:text-sm">
-                          <span className="font-bold">เหตุผลที่ส่งกลับ:</span> {wo.rejected_reason}
-                        </div>
-                      )}
-                    </td>
-
-                    <td className="py-3.5 px-4 align-top space-y-1.5">
-                      <div>
-                        <span className="inline-block px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-800 text-xs font-bold">
-                          {wo.status}
-                        </span>
-                      </div>
-                      {wo.nc_status === 'OPEN' && (
-                        <div>
-                          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-100 text-rose-800 border border-rose-300 text-xs font-bold">
-                            <ShieldAlert size={13} />
-                            <span>ON_HOLD (ระงับใช้ชั่วคราว)</span>
-                          </div>
-                        </div>
-                      )}
-                    </td>
-
-                    <td className="py-3.5 px-4 align-top text-right">
-                      <div className="inline-flex flex-wrap justify-end gap-2 text-xs sm:text-sm">
-                        {(wo.status === 'OPEN' || wo.status === 'REJECTED') && (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => openRecordResult(wo)}
-                              className="h-9 inline-flex items-center gap-1.5 px-3 rounded-xl bg-indigo-600 text-white font-semibold hover:bg-indigo-700 transition-colors cursor-pointer shadow-2xs"
-                            >
-                              <FileCheck2 size={14} />
-                              <span>บันทึกผลและใบรับรอง</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => openAction('RESCHEDULE', wo)}
-                              className="h-9 inline-flex items-center gap-1.5 px-3 rounded-xl border border-slate-300 text-slate-700 font-semibold hover:bg-slate-50 transition-colors cursor-pointer"
-                            >
-                              <CalendarClock size={14} />
-                              <span>เลื่อนวันครบกำหนด</span>
-                            </button>
-                          </>
-                        )}
-
-                        {wo.status === 'PENDING_REVIEW' && (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => openAction('APPROVE', wo)}
-                              className="h-9 inline-flex items-center gap-1.5 px-3.5 rounded-xl bg-emerald-600 text-white font-semibold hover:bg-emerald-700 transition-colors cursor-pointer shadow-2xs"
-                            >
-                              <CheckCircle2 size={14} />
-                              <span>ตรวจรับปิดงาน</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => openAction('REJECT', wo)}
-                              className="h-9 inline-flex items-center gap-1.5 px-3.5 rounded-xl bg-rose-600 text-white font-semibold hover:bg-rose-700 transition-colors cursor-pointer shadow-2xs"
-                            >
-                              <XCircle size={14} />
-                              <span>ส่งกลับแก้ไข</span>
-                            </button>
-                          </>
-                        )}
-
-                        {wo.nc_status === 'OPEN' && (
-                          <button
-                            type="button"
-                            onClick={() => openAction('RELEASE_HOLD', wo)}
-                            className="h-9 inline-flex items-center gap-1.5 px-3.5 rounded-xl bg-purple-700 text-white font-semibold hover:bg-purple-800 transition-colors cursor-pointer shadow-2xs"
-                          >
-                            <ShieldAlert size={14} />
-                            <span>ปลดระงับ ON_HOLD (L{thresholds.required_approver_level}+)</span>
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
+      {/* 6. Modals */}
       <CreateWorkOrderModal
         open={createOpen}
         onClose={() => setCreateOpen(false)}
@@ -556,4 +637,3 @@ const WorkOrderSection = ({ activeDepartments }) => {
 };
 
 export default WorkOrderSection;
-

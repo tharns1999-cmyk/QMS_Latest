@@ -142,7 +142,7 @@ describe('System-Wide RBAC, Route Guards & Dynamic User-Switching Tests', () => 
 
       expect(screen.getByText('ทะเบียนสำเนาควบคุม')).toBeInTheDocument();
       expect(screen.getByText('จัดการข้อมูลหลัก')).toBeInTheDocument();
-      expect(screen.getByText('บันทึกประวัติการทำงาน')).toBeInTheDocument();
+      expect(screen.getByText('ประวัติการดำเนินการ (Audit Trail)')).toBeInTheDocument();
       expect(screen.getByTitle(/ล้างข้อมูลจำลอง/)).toBeInTheDocument();
     });
 
@@ -166,7 +166,7 @@ describe('System-Wide RBAC, Route Guards & Dynamic User-Switching Tests', () => 
 
       expect(screen.queryByText('ทะเบียนสำเนาควบคุม')).not.toBeInTheDocument();
       expect(screen.queryByText('จัดการข้อมูลหลัก')).not.toBeInTheDocument();
-      expect(screen.queryByText('บันทึกประวัติการทำงาน')).not.toBeInTheDocument();
+      expect(screen.queryByText('ประวัติการดำเนินการ (Audit Trail)')).not.toBeInTheDocument();
       expect(screen.queryByTitle(/ล้างข้อมูลจำลอง/)).not.toBeInTheDocument();
       // Regular menus are still visible
       expect(screen.getByText('คลังเอกสารแม่บท')).toBeInTheDocument();
