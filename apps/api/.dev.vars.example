@@ -1,2 +1,2 @@
-# Copy to .dev.vars for `npm run dev`. Use a long random value; never commit .dev.vars.
+# Copy to .dev.vars for `pnpm run dev`. Use a long random value; never commit .dev.vars.
 JWT_SECRET=change-me-to-a-long-random-string

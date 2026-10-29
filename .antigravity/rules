@@ -18,8 +18,8 @@
 
 ### 3. [Regression & Integrity Audit (CLI-First)]
 - ห้ามประเมินบั๊กด้วยสายตาเปล่า ให้ตรวจสอบผ่าน Terminal โดยตรง:
-  - รัน Type Check: `npm run type-check` หรือ `npx tsc --noEmit`
-  - รัน Linter/Build: `npm run build` หรือคำสั่ง build ของโปรเจกต์
+  - รัน Type Check: `pnpm run type-check` หรือ `pnpm exec tsc --noEmit`
+  - รัน Linter/Build: `pnpm run build` หรือคำสั่ง build ของโปรเจกต์
 - หาก Terminal ฟ้อง Error หรือ Broken References จากไฟล์อื่น ให้ตามไปแก้ไขจนกว่าจะ Build ผ่าน 100%
 
 ### 4. [Final QC & Delivery]
