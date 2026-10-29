@@ -102,16 +102,16 @@ export const AnnualPlanMatrixTable = ({
   return (
     <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-hidden">
       {/* Table Control Toolbar */}
-      <div className="px-4 py-2.5 bg-slate-50/80 border-b border-slate-200/80 flex flex-wrap items-center justify-between gap-3 text-xs">
-        <div className="flex flex-wrap items-center gap-2">
+      <div className="px-4 py-2.5 bg-slate-50/80 border-b border-slate-200/80 flex flex-wrap items-center justify-between gap-3 text-sm">
+        <div className="flex flex-wrap items-center gap-2.5">
           {/* งานหลักของผู้ใช้: เลือกเครื่องมือจากทะเบียนเข้าแผน */}
           {canEditPlan && onOpenSmartImport && (
             <button
               type="button"
               onClick={onOpenSmartImport}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold transition-colors cursor-pointer"
+              className="inline-flex items-center gap-2 h-9 px-3.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold transition-colors cursor-pointer shadow-2xs"
             >
-              <Sparkles size={12} />
+              <Sparkles size={14} />
               <span>เพิ่มเครื่องมือจากทะเบียน</span>
             </button>
           )}
@@ -119,9 +119,9 @@ export const AnnualPlanMatrixTable = ({
             <button
               type="button"
               onClick={() => onOpenAddItem(null)}
-              className="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 text-xs font-medium transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-xl border border-slate-300 text-slate-700 hover:text-slate-900 hover:bg-slate-100 text-sm font-medium transition-colors cursor-pointer"
             >
-              <Plus size={12} />
+              <Plus size={14} />
               <span>กำหนดรายการเอง</span>
             </button>
           )}
@@ -129,19 +129,19 @@ export const AnnualPlanMatrixTable = ({
           {/* Quick Table Search */}
           {planItems.length > 2 && (
             <div className="relative">
-              <Search size={12} className="absolute left-2.5 top-2 text-slate-400" />
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 type="text"
                 value={tableSearch}
                 onChange={(e) => setTableSearch(e.target.value)}
                 placeholder="ค้นหารหัส / ชื่อในตาราง..."
-                className="pl-7 pr-6 py-1 rounded-lg border border-slate-200 text-xs bg-white focus:outline-none focus:border-indigo-600 w-40 sm:w-48 text-slate-800 placeholder-slate-400"
+                className="h-9 pl-9 pr-7 rounded-xl border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 w-48 sm:w-56 text-slate-800 placeholder-slate-400"
               />
               {tableSearch && (
                 <button
                   type="button"
                   onClick={() => setTableSearch('')}
-                  className="absolute right-1.5 top-1.5 text-slate-400 hover:text-slate-600 text-[11px] p-0.5 cursor-pointer"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs p-0.5 cursor-pointer"
                   title="ล้างคำค้นหา"
                 >
                   ✕
@@ -154,11 +154,11 @@ export const AnnualPlanMatrixTable = ({
         {/* View & Density Controls & Smart Import */}
         <div className="flex items-center gap-2">
           {/* Density Switcher */}
-          <div className="inline-flex items-center gap-0.5 bg-slate-200/60 p-0.5 rounded-lg text-[11px]">
+          <div className="inline-flex items-center gap-1 bg-slate-200/70 p-1 rounded-xl text-xs">
             <button
               type="button"
               onClick={() => setDensity('comfortable')}
-              className={`px-2 py-0.5 rounded-md font-semibold transition-all cursor-pointer ${
+              className={`px-2.5 py-1 rounded-lg font-semibold transition-all cursor-pointer ${
                 density === 'comfortable'
                   ? 'bg-white text-slate-900 shadow-2xs'
                   : 'text-slate-600 hover:text-slate-900'
@@ -169,7 +169,7 @@ export const AnnualPlanMatrixTable = ({
             <button
               type="button"
               onClick={() => setDensity('compact')}
-              className={`px-2 py-0.5 rounded-md font-semibold transition-all cursor-pointer ${
+              className={`px-2.5 py-1 rounded-lg font-semibold transition-all cursor-pointer ${
                 density === 'compact'
                   ? 'bg-white text-slate-900 shadow-2xs'
                   : 'text-slate-600 hover:text-slate-900'
@@ -180,11 +180,11 @@ export const AnnualPlanMatrixTable = ({
           </div>
 
           {/* View Mode: 12 Months vs Quarterly */}
-          <div className="inline-flex items-center gap-0.5 bg-slate-200/60 p-0.5 rounded-lg text-[11px]">
+          <div className="inline-flex items-center gap-1 bg-slate-200/70 p-1 rounded-xl text-xs">
             <button
               type="button"
               onClick={() => setViewMode('12_MONTHS')}
-              className={`px-2 py-0.5 rounded-md font-semibold transition-all cursor-pointer ${
+              className={`px-2.5 py-1 rounded-lg font-semibold transition-all cursor-pointer ${
                 viewMode === '12_MONTHS'
                   ? 'bg-white text-slate-900 shadow-2xs'
                   : 'text-slate-600 hover:text-slate-900'
@@ -195,7 +195,7 @@ export const AnnualPlanMatrixTable = ({
             <button
               type="button"
               onClick={() => setViewMode('QUARTERLY')}
-              className={`px-2 py-0.5 rounded-md font-semibold transition-all cursor-pointer ${
+              className={`px-2.5 py-1 rounded-lg font-semibold transition-all cursor-pointer ${
                 viewMode === 'QUARTERLY'
                   ? 'bg-white text-slate-900 shadow-2xs'
                   : 'text-slate-600 hover:text-slate-900'
@@ -209,16 +209,16 @@ export const AnnualPlanMatrixTable = ({
 
       {/* Main Single-Row Interactive Matrix Table */}
       <div className="overflow-x-auto max-h-[calc(100vh-210px)]">
-        <table className="w-full text-left border-collapse text-xs">
+        <table className="w-full text-left border-collapse text-sm">
           <thead className="sticky top-0 z-20 bg-slate-50/95 backdrop-blur-xs shadow-2xs">
-            <tr className="border-b border-slate-200 text-slate-600 text-[11px] font-bold tracking-wider uppercase">
+            <tr className="border-b border-slate-200 text-slate-700 text-xs font-bold tracking-wider uppercase">
               {/* Sticky Column: Asset Code & Name */}
-              <th className="py-2.5 px-3.5 sticky left-0 z-30 bg-slate-50 shadow-[1px_0_0_0_#e2e8f0] min-w-[220px]">
+              <th className="py-3 px-3.5 sticky left-0 z-30 bg-slate-50 shadow-[1px_0_0_0_#e2e8f0] min-w-[240px]">
                 รายการเครื่องมือวัด
               </th>
 
               {/* Due Date & Evidence Summary (Essential for audit & automated verification) */}
-              <th className="py-2.5 px-3 border-l border-slate-200/70 min-w-[170px]">
+              <th className="py-3 px-3.5 border-l border-slate-200/70 min-w-[180px]">
                 วันครบกำหนด / สถานะหลักฐาน
               </th>
 
@@ -227,23 +227,23 @@ export const AnnualPlanMatrixTable = ({
                 ? MONTHS.map((m) => (
                     <th
                       key={m}
-                      className="py-2.5 px-1 text-center min-w-[50px] border-l border-slate-200/70 text-slate-700 font-mono"
+                      className="py-2.5 px-1.5 text-center min-w-[54px] border-l border-slate-200/70 text-slate-800 font-mono"
                     >
-                      <div className="text-[10px] text-slate-400 font-normal">{MONTH_LABELS[m - 1]}</div>
-                      <div>ด.{m}</div>
+                      <div className="text-[11px] text-slate-500 font-medium">{MONTH_LABELS[m - 1]}</div>
+                      <div className="text-xs font-bold">ด.{m}</div>
                     </th>
                   ))
                 : QUARTERS.map((q) => (
                     <th
                       key={q.key}
-                      className="py-2.5 px-2 text-center min-w-[90px] border-l border-slate-200/70 text-slate-700 font-mono"
+                      className="py-3 px-2 text-center min-w-[100px] border-l border-slate-200/70 text-slate-800 font-mono text-xs font-bold"
                     >
                       {q.label}
                     </th>
                   ))}
 
               {/* Context Actions Header */}
-              <th className="py-2.5 px-3 text-right min-w-[110px]">
+              <th className="py-3 px-3.5 text-right min-w-[120px]">
                 การจัดการ
               </th>
             </tr>
@@ -302,22 +302,22 @@ export const AnnualPlanMatrixTable = ({
                     className="hover:bg-slate-50/60 transition-colors group"
                   >
                     {/* Sticky Left: Asset Code & Operation Context */}
-                    <td className="py-2 px-3.5 align-middle sticky left-0 z-10 bg-white shadow-[1px_0_0_0_#e2e8f0] min-w-[220px]">
-                      <div className="flex items-start justify-between gap-1.5">
-                        <div className="space-y-0.5">
+                    <td className="py-2.5 px-3.5 align-middle sticky left-0 z-10 bg-white shadow-[1px_0_0_0_#e2e8f0] min-w-[240px]">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="space-y-1">
                           <button
                             type="button"
                             onClick={() => setInspectorItem(item)}
                             title="คลิกเพื่อดูรายละเอียดและสเปกเครื่องมือ"
-                            className="text-left font-mono font-bold text-indigo-700 hover:text-indigo-900 hover:underline text-xs tracking-tight cursor-pointer"
+                            className="text-left font-mono font-bold text-indigo-700 hover:text-indigo-900 hover:underline text-sm tracking-tight cursor-pointer"
                           >
                             {item.asset_code}
                           </button>
-                          <div className="text-xs font-medium text-slate-800 leading-snug">
+                          <div className="text-sm font-semibold text-slate-900 leading-snug">
                             {item.asset_name}
                           </div>
-                          <div className="text-[10.5px] text-slate-500 flex flex-wrap items-center gap-1 pt-0.5">
-                            <span className="font-medium text-slate-700">{item.frequency_label}</span>
+                          <div className="text-xs text-slate-500 flex flex-wrap items-center gap-1.5 pt-0.5">
+                            <span className="font-semibold text-slate-700">{item.frequency_label}</span>
                             <span>•</span>
                             <span>{item.provider_name}</span>
                             <span>•</span>
@@ -325,12 +325,12 @@ export const AnnualPlanMatrixTable = ({
                           </div>
 
                           {isGroup ? (
-                            <div className="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-purple-50 border border-purple-200 text-purple-900 font-semibold text-[10px]">
-                              <FolderTree size={10} className="text-purple-700 shrink-0" />
+                            <div className="mt-1 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-purple-50 border border-purple-200 text-purple-900 font-bold text-xs">
+                              <FolderTree size={12} className="text-purple-700 shrink-0" />
                               <span>กลุ่มแม่ (ต้องแยกรหัสลูกก่อนสร้างใบงาน)</span>
                             </div>
                           ) : item.parent_asset_code ? (
-                            <div className="mt-1 inline-block px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-700 text-[10px]">
+                            <div className="mt-1 inline-block px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200 text-slate-700 text-xs">
                               ลูกของกลุ่ม: <span className="font-mono font-semibold">{item.parent_asset_code}</span>
                             </div>
                           ) : null}
@@ -341,44 +341,44 @@ export const AnnualPlanMatrixTable = ({
                           type="button"
                           onClick={() => setInspectorItem(item)}
                           title="ดูรายละเอียดข้อมูลเครื่องมือ"
-                          className="p-1 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer mt-0.5 shrink-0 opacity-60 group-hover:opacity-100"
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer mt-0.5 shrink-0 opacity-70 group-hover:opacity-100"
                         >
-                          <Info size={13} />
+                          <Info size={15} />
                         </button>
                       </div>
                     </td>
 
                     {/* Due Dates & Completion Evidence Summary */}
-                    <td className="py-2 px-3 align-middle border-l border-slate-100 min-w-[170px]">
-                      <div className="font-mono font-bold text-slate-900 text-xs">
+                    <td className="py-2.5 px-3.5 align-middle border-l border-slate-100 min-w-[180px]">
+                      <div className="font-mono font-bold text-slate-900 text-sm">
                         {(item.due_dates || []).slice(0, 2).join(', ')}
                         {(item.due_dates || []).length > 2
                           ? ` (+${item.due_dates.length - 2} เดือน)`
                           : ''}
                       </div>
                       {hasHoldOrNc ? (
-                        <span className="mt-0.5 inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-50 border border-rose-200 text-rose-800 font-semibold text-[10.5px]">
-                          <AlertTriangle size={11} className="text-rose-700 shrink-0" />
+                        <span className="mt-1 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-rose-50 border border-rose-200 text-rose-800 font-bold text-xs">
+                          <AlertTriangle size={12} className="text-rose-700 shrink-0" />
                           <span>พบข้อบกพร่อง / ระงับใช้ (NC)</span>
                         </span>
                       ) : plannedMonthsCount > 0 && closedPassCount >= plannedMonthsCount ? (
-                        <span className="mt-0.5 inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-50 border border-emerald-200 text-emerald-800 font-semibold text-[10.5px]">
-                          <CheckCircle2 size={11} className="text-emerald-700 shrink-0" />
+                        <span className="mt-1 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-800 font-bold text-xs">
+                          <CheckCircle2 size={12} className="text-emerald-700 shrink-0" />
                           <span>ทวนสอบเสร็จแล้ว • มีใบรับรอง</span>
                         </span>
                       ) : closedPassCount > 0 ? (
-                        <span className="mt-0.5 inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-indigo-50 border border-indigo-200 text-indigo-900 font-semibold text-[10.5px]">
-                          <CheckCircle2 size={11} className="text-indigo-700 shrink-0" />
+                        <span className="mt-1 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-indigo-50 border border-indigo-200 text-indigo-900 font-bold text-xs">
+                          <CheckCircle2 size={12} className="text-indigo-700 shrink-0" />
                           <span>เสร็จบางรอบ ({closedPassCount}/{plannedMonthsCount})</span>
                         </span>
                       ) : itemWos.some((w) => w.status === 'OPEN' || w.status === 'PENDING_REVIEW') ? (
-                        <span className="mt-0.5 inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-sky-50 border border-sky-200 text-sky-900 font-semibold text-[10.5px]">
-                          <Clock size={11} className="text-sky-700 shrink-0" />
+                        <span className="mt-1 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-sky-50 border border-sky-200 text-sky-900 font-bold text-xs">
+                          <Clock size={12} className="text-sky-700 shrink-0" />
                           <span>มีใบงานกำลังดำเนินการ</span>
                         </span>
                       ) : (
-                        <span className="mt-0.5 inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-50 border border-amber-200 text-amber-900 font-semibold text-[10.5px]">
-                          <Clock size={11} className="text-amber-700 shrink-0" />
+                        <span className="mt-1 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-amber-50 border border-amber-200 text-amber-900 font-bold text-xs">
+                          <Clock size={12} className="text-amber-700 shrink-0" />
                           <span>วางแผนเท่านั้น • ยังไม่มีหลักฐานใบงาน</span>
                         </span>
                       )}
@@ -426,7 +426,7 @@ export const AnnualPlanMatrixTable = ({
                                 {plannedInQ.map((m) => (
                                   <span
                                     key={`plan-${m}`}
-                                    className="py-0.5 px-1 rounded bg-indigo-600 text-white font-mono font-bold text-[10px] shadow-2xs"
+                                    className="py-0.5 px-1.5 rounded-md bg-indigo-600 text-white font-mono font-bold text-xs shadow-2xs"
                                   >
                                     P{m}
                                   </span>
@@ -434,13 +434,13 @@ export const AnnualPlanMatrixTable = ({
                                 {actualInQ.map((m) => (
                                   <span
                                     key={`act-${m}`}
-                                    className="py-0.5 px-1 rounded bg-emerald-600 text-white font-mono font-bold text-[10px] shadow-2xs"
+                                    className="py-0.5 px-1.5 rounded-md bg-emerald-600 text-white font-mono font-bold text-xs shadow-2xs"
                                   >
                                     A{m}
                                   </span>
                                 ))}
                                 {plannedInQ.length === 0 && actualInQ.length === 0 && (
-                                  <span className="text-slate-300 font-mono text-[10.5px]">-</span>
+                                  <span className="text-slate-300 font-mono text-xs">-</span>
                                 )}
                               </div>
                             </td>
@@ -448,26 +448,26 @@ export const AnnualPlanMatrixTable = ({
                         })}
 
                     {/* Context Actions */}
-                    <td className="py-2 px-3 align-middle text-right">
-                      <div className="flex flex-col items-end gap-1">
+                    <td className="py-2.5 px-3.5 align-middle text-right">
+                      <div className="flex flex-col items-end gap-1.5">
                         {isGroup && (
                           <button
                             type="button"
                             onClick={() => onOpenGroupWorkOrderCheck(item)}
-                            className="inline-flex items-center gap-1 px-2 py-1 rounded bg-purple-50 border border-purple-200 hover:bg-purple-100 text-purple-900 font-bold text-[11px] transition-colors cursor-pointer shadow-2xs"
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-purple-50 border border-purple-200 hover:bg-purple-100 text-purple-900 font-bold text-xs transition-colors cursor-pointer shadow-2xs"
                           >
-                            <ShieldAlert size={11} className="text-purple-700" />
+                            <ShieldAlert size={13} className="text-purple-700" />
                             <span>ตรวจรหัสลูกก่อนออกใบงาน</span>
                           </button>
                         )}
-                        <div className="inline-flex gap-1">
+                        <div className="inline-flex gap-1.5">
                           <button
                             type="button"
                             onClick={() => setInspectorItem(item)}
                             title="เปิด Side Inspector ดูรายละเอียด"
-                            className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 text-[11px] font-medium transition-colors cursor-pointer"
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-colors cursor-pointer"
                           >
-                            <Maximize2 size={11} />
+                            <Maximize2 size={12} />
                             <span>สเปก</span>
                           </button>
                           {canEditPlan && (
@@ -475,17 +475,17 @@ export const AnnualPlanMatrixTable = ({
                               <button
                                 type="button"
                                 onClick={() => onOpenAddItem(item)}
-                                className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-[11px] font-medium transition-colors cursor-pointer"
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-colors cursor-pointer"
                               >
-                                <Edit2 size={11} className="text-slate-500" />
+                                <Edit2 size={12} className="text-slate-500" />
                                 <span>แก้ไข</span>
                               </button>
                               <button
                                 type="button"
                                 onClick={() => onDeleteItem(item)}
-                                className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded border border-rose-200 bg-rose-50/50 hover:bg-rose-50 text-rose-700 text-[11px] font-medium transition-colors cursor-pointer"
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-rose-200 bg-rose-50/70 hover:bg-rose-100 text-rose-700 text-xs font-semibold transition-colors cursor-pointer"
                               >
-                                <Trash2 size={11} className="text-rose-600" />
+                                <Trash2 size={12} className="text-rose-600" />
                                 <span>ลบ</span>
                               </button>
                             </>
@@ -502,19 +502,21 @@ export const AnnualPlanMatrixTable = ({
       </div>
 
       {/* Discrete Table Footer with Legend & Summary (Linear style) */}
-      <div className="bg-slate-50/90 border-t border-slate-200/80 px-4 py-2 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500">
+      <div className="bg-slate-50/90 border-t border-slate-200/80 px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-600">
         <div>
           {tableSearch.trim() ? (
             <>
-              พบ <strong className="text-slate-800">{filteredItems.length}</strong> จาก {planItems.length} รายการ
+              พบ <strong className="text-slate-900">{filteredItems.length}</strong> จาก {planItems.length} รายการ
             </>
-          ) : null}
+          ) : (
+            <span>รวมทั้งหมด <strong className="text-slate-900">{planItems.length}</strong> รายการเครื่องมือวัด</span>
+          )}
         </div>
 
-        <div className="flex flex-wrap items-center gap-3 text-[11px]">
+        <div className="flex flex-wrap items-center gap-3.5 text-xs">
           <span className="inline-flex items-center gap-1.5">
             <span className="w-2.5 h-2.5 rounded-sm bg-indigo-600 inline-block shadow-2xs" />
-            <span className="text-slate-700 font-medium">Plan (P): เป้าหมายตามแผน (คลิกเพื่อแก้ไข/จัดการ)</span>
+            <span className="text-slate-700 font-medium">Plan (P): เป้าหมายตามแผน</span>
           </span>
           <span className="inline-flex items-center gap-1.5">
             <span className="w-2.5 h-2.5 rounded-sm bg-amber-500 inline-block shadow-2xs" />
@@ -525,8 +527,8 @@ export const AnnualPlanMatrixTable = ({
             <span className="text-slate-700 font-medium">✓ (PASS): ปิดงานตรวจรับเสร็จสิ้นแล้ว</span>
           </span>
           <span className="inline-flex items-center gap-1.5">
-            <FolderTree size={12} className="text-purple-700" />
-            <span className="text-purple-900 font-medium">กลุ่มแม่: ต้องแยกรหัสลูกก่อนออกใบงาน</span>
+            <FolderTree size={13} className="text-purple-700 shrink-0" />
+            <span className="text-purple-900 font-semibold">กลุ่มแม่: ต้องแยกรหัสลูกก่อนออกใบงาน</span>
           </span>
         </div>
       </div>

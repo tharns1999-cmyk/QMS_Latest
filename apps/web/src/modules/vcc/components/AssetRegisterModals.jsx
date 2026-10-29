@@ -55,30 +55,30 @@ export const AssetFormModal = ({
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-xl w-full overflow-hidden">
-        <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
-          <h2 className="text-lg font-bold text-slate-900">
+        <div className="px-6 py-4.5 border-b border-slate-200 flex items-center justify-between">
+          <h2 className="text-xl font-bold text-slate-900 tracking-tight">
             {editingAsset ? `แก้ไขข้อมูลเครื่องมือ (${editingAsset.asset_code})` : 'เพิ่มเครื่องมือ / กลุ่มเครื่องมือใหม่'}
           </h2>
           <button
             type="button"
             onClick={() => setFormOpen(false)}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
+            className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
           >
-            <X size={18} />
+            <X size={20} />
           </button>
         </div>
 
         <form onSubmit={handleSaveAsset} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
           {formError && (
-            <div role="alert" className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-center gap-2">
-              <AlertTriangle size={16} className="text-rose-600 shrink-0" />
+            <div role="alert" className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-sm font-semibold flex items-center gap-2">
+              <AlertTriangle size={17} className="text-rose-600 shrink-0" />
               <span>{formError}</span>
             </div>
           )}
 
-          <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
-            <label className="block text-xs font-bold text-slate-700">รูปแบบรายการ</label>
-            <div className="flex flex-wrap gap-3">
+          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2.5">
+            <label className="block text-sm font-bold text-slate-800">รูปแบบรายการ</label>
+            <div className="flex flex-wrap gap-4">
               <label className="inline-flex items-center gap-2 text-sm font-medium text-slate-800 cursor-pointer">
                 <input
                   type="radio"
@@ -100,7 +100,7 @@ export const AssetFormModal = ({
               </label>
             </div>
             {editingAsset && editingAsset.child_count > 0 && (
-              <p className="text-xs text-amber-700 font-medium">
+              <p className="text-xs text-amber-800 font-semibold">
                 * กลุ่มนี้มีเครื่องมือลูกผูกอยู่ ({editingAsset.child_count} รายการ) จึงไม่สามารถเปลี่ยนเป็นเครื่องมือรายตัวได้
               </p>
             )}
@@ -108,7 +108,7 @@ export const AssetFormModal = ({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
+              <label className="block text-sm font-semibold text-slate-700 mb-1.5">
                 รหัสเครื่องมือ (Asset Code) <span className="text-rose-600">*</span>
               </label>
               <input
@@ -117,19 +117,19 @@ export const AssetFormModal = ({
                 value={form.asset_code}
                 onChange={(e) => setForm({ ...form, asset_code: e.target.value.toUpperCase() })}
                 placeholder={form.is_group ? 'เช่น GRP-SCALE' : 'เช่น ST002, SW001, TC001'}
-                className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm font-mono uppercase focus:outline-none focus:border-indigo-600"
+                className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-mono uppercase focus:outline-none focus:border-indigo-600"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
+              <label className="block text-sm font-semibold text-slate-700 mb-1.5">
                 ประเภทเครื่องมือ <span className="text-rose-600">*</span>
               </label>
               <select
                 required
                 value={form.asset_type}
                 onChange={(e) => setForm({ ...form, asset_type: e.target.value })}
-                className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm bg-white focus:outline-none focus:border-indigo-600"
+                className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium bg-white focus:outline-none focus:border-indigo-600"
               >
                 <option value="" disabled>
                   -- เลือกประเภทเครื่องมือ --
@@ -144,7 +144,7 @@ export const AssetFormModal = ({
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">
+            <label className="block text-sm font-semibold text-slate-700 mb-1.5">
               ชื่อเครื่องมือ <span className="text-rose-600">*</span>
             </label>
             <input
@@ -153,13 +153,13 @@ export const AssetFormModal = ({
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
               placeholder="ระบุชื่อเครื่องมือวัด หรือชื่อกลุ่มเครื่องมือ"
-              className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none focus:border-indigo-600"
+              className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium focus:outline-none focus:border-indigo-600"
             />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
+              <label className="block text-sm font-semibold text-slate-700 mb-1.5">
                 แผนกเจ้าของ (Master Data) <span className="text-rose-600">*</span>
               </label>
               <select
@@ -167,7 +167,7 @@ export const AssetFormModal = ({
                 disabled={activeDepartments.length === 0}
                 value={form.department}
                 onChange={(e) => setForm({ ...form, department: e.target.value })}
-                className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm bg-white focus:outline-none focus:border-indigo-600 disabled:bg-slate-100 disabled:text-slate-500"
+                className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium bg-white focus:outline-none focus:border-indigo-600 disabled:bg-slate-100 disabled:text-slate-500"
               >
                 <option value="" disabled>
                   {activeDepartments.length === 0 ? '-- โหลดแผนกไม่ได้ --' : '-- เลือกแผนก --'}
@@ -187,13 +187,13 @@ export const AssetFormModal = ({
 
             {!form.is_group && (
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
+                <label className="block text-sm font-semibold text-slate-700 mb-1.5">
                   กลุ่มเครื่องมือแม่ (ถ้าเป็นเครื่องมือลูก)
                 </label>
                 <select
                   value={form.parent_id}
                   onChange={(e) => setForm({ ...form, parent_id: e.target.value })}
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm bg-white focus:outline-none focus:border-indigo-600"
+                  className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium bg-white focus:outline-none focus:border-indigo-600"
                 >
                   <option value="">-- ไม่อยู่ในกลุ่ม (เครื่องมือเดี่ยว) --</option>
                   {activeGroups
@@ -210,7 +210,7 @@ export const AssetFormModal = ({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
+              <label className="block text-sm font-semibold text-slate-700 mb-1.5">
                 หมายเลขเครื่อง (Serial No.) <span className="text-slate-400 font-normal">(ว่างได้)</span>
               </label>
               <input
@@ -218,12 +218,12 @@ export const AssetFormModal = ({
                 value={form.serial_no}
                 onChange={(e) => setForm({ ...form, serial_no: e.target.value })}
                 placeholder="เช่น 40717388"
-                className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm font-mono focus:outline-none focus:border-indigo-600"
+                className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-mono focus:outline-none focus:border-indigo-600"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
+              <label className="block text-sm font-semibold text-slate-700 mb-1.5">
                 รุ่น (Model) <span className="text-slate-400 font-normal">(ว่างได้)</span>
               </label>
               <input
@@ -231,34 +231,34 @@ export const AssetFormModal = ({
                 value={form.model}
                 onChange={(e) => setForm({ ...form, model: e.target.value })}
                 placeholder="เช่น Testo 176T4, Dixell XR120C"
-                className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none focus:border-indigo-600"
+                className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium focus:outline-none focus:border-indigo-600"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">สถานที่ตั้ง / จุดใช้งาน</label>
+            <label className="block text-sm font-semibold text-slate-700 mb-1.5">สถานที่ตั้ง / จุดใช้งาน</label>
             <input
               type="text"
               value={form.location}
               onChange={(e) => setForm({ ...form, location: e.target.value })}
               placeholder="เช่น ห้องปฏิบัติการ QC, ห้องเย็น F1, จุดรับวัตถุดิบ WH"
-              className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none focus:border-indigo-600"
+              className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium focus:outline-none focus:border-indigo-600"
             />
           </div>
 
-          <div className="pt-3 border-t border-slate-200 flex items-center justify-end gap-2">
+          <div className="pt-3 border-t border-slate-200 flex items-center justify-end gap-2.5">
             <button
               type="button"
               onClick={() => setFormOpen(false)}
-              className="px-4 py-2 rounded-xl border border-slate-300 text-slate-700 text-sm font-semibold hover:bg-slate-50 cursor-pointer"
+              className="h-10 px-4 rounded-xl border border-slate-300 text-slate-700 text-sm font-semibold hover:bg-slate-50 transition-colors cursor-pointer"
             >
               ยกเลิก
             </button>
             <button
               type="submit"
               disabled={savingForm || activeDepartments.length === 0}
-              className="px-5 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 cursor-pointer"
+              className="h-10 px-5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 transition-colors cursor-pointer shadow-2xs"
             >
               {savingForm ? 'กำลังบันทึก...' : 'บันทึกข้อมูล'}
             </button>
@@ -283,8 +283,8 @@ export const AssetStatusModal = ({
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-md w-full overflow-hidden">
-        <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
-          <h2 className="text-lg font-bold text-slate-900">
+        <div className="px-6 py-4.5 border-b border-slate-200 flex items-center justify-between">
+          <h2 className="text-xl font-bold text-slate-900 tracking-tight">
             {statusModal.mode === 'RETIRE'
               ? `ปลดออกเครื่องมือ (${statusModal.asset.asset_code})`
               : `นำเครื่องมือกลับมาใช้งาน (${statusModal.asset.asset_code})`}
@@ -292,38 +292,38 @@ export const AssetStatusModal = ({
           <button
             type="button"
             onClick={() => setStatusModal(null)}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
+            className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
           >
-            <X size={18} />
+            <X size={20} />
           </button>
         </div>
 
         <form onSubmit={handleConfirmStatusChange} className="p-6 space-y-4">
           {statusError && (
-            <div role="alert" className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-center gap-2">
-              <AlertTriangle size={16} className="text-rose-600 shrink-0" />
+            <div role="alert" className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-sm font-semibold flex items-center gap-2">
+              <AlertTriangle size={17} className="text-rose-600 shrink-0" />
               <span>{statusError}</span>
             </div>
           )}
 
-          <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-sm">
-            <div className="font-bold text-slate-900">
+          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-sm">
+            <div className="font-bold text-slate-900 text-base">
               {statusModal.asset.asset_code} — {statusModal.asset.name}
             </div>
-            <div className="text-xs text-slate-500 mt-0.5">
+            <div className="text-xs text-slate-500 font-medium mt-1">
               แผนก: {statusModal.asset.department} • ประเภท: {statusModal.asset.asset_type}
             </div>
           </div>
 
           {statusModal.mode === 'RETIRE' && statusModal.asset.active_child_count > 0 && (
-            <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-medium">
+            <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs sm:text-sm font-medium">
               ไม่สามารถปลดออกกลุ่มแม่นี้ได้ เนื่องจากยังมีเครื่องมือลูกที่ใช้งานอยู่ (ACTIVE) จำนวน{' '}
               <span className="font-bold">{statusModal.asset.active_child_count} รายการ</span> กรุณาย้ายหรือปลดออกเครื่องมือลูกก่อน
             </div>
           )}
 
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">
+            <label className="block text-sm font-semibold text-slate-700 mb-1.5">
               {statusModal.mode === 'RETIRE' ? 'เหตุผลในการปลดออก' : 'เหตุผลในการนำกลับมาใช้งาน'}{' '}
               <span className="text-rose-600">*</span>
             </label>
@@ -337,15 +337,15 @@ export const AssetStatusModal = ({
                   ? 'ระบุสาเหตุ เช่น ชำรุดไม่สามารถซ่อมได้ / ยกเลิกจุดใช้งาน...'
                   : 'ระบุสาเหตุ เช่น ซ่อมบำรุงและทวนสอบผ่านแล้ว...'
               }
-              className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none focus:border-indigo-600"
+              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-medium focus:outline-none focus:border-indigo-600"
             />
           </div>
 
-          <div className="pt-2 flex items-center justify-end gap-2">
+          <div className="pt-2 flex items-center justify-end gap-2.5">
             <button
               type="button"
               onClick={() => setStatusModal(null)}
-              className="px-4 py-2 rounded-xl border border-slate-300 text-slate-700 text-sm font-semibold hover:bg-slate-50 cursor-pointer"
+              className="h-10 px-4 rounded-xl border border-slate-300 text-slate-700 text-sm font-semibold hover:bg-slate-50 transition-colors cursor-pointer"
             >
               ยกเลิก
             </button>
@@ -356,7 +356,7 @@ export const AssetStatusModal = ({
                 !statusReason.trim() ||
                 (statusModal.mode === 'RETIRE' && statusModal.asset.active_child_count > 0)
               }
-              className={`px-5 py-2 rounded-xl text-white text-sm font-semibold disabled:opacity-50 cursor-pointer ${
+              className={`h-10 px-5 rounded-xl text-white text-sm font-semibold disabled:opacity-50 transition-colors cursor-pointer shadow-2xs ${
                 statusModal.mode === 'RETIRE'
                   ? 'bg-rose-600 hover:bg-rose-700'
                   : 'bg-amber-600 hover:bg-amber-700'
@@ -386,33 +386,33 @@ export const AssetDetailHistoryModal = ({
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-2xl w-full overflow-hidden">
-        <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
-          <h2 className="text-lg font-bold text-slate-900">
+        <div className="px-6 py-4.5 border-b border-slate-200 flex items-center justify-between">
+          <h2 className="text-xl font-bold text-slate-900 tracking-tight">
             รายละเอียดและประวัติการแก้ไข (Audit Log)
           </h2>
           <button
             type="button"
             onClick={() => setDetailModalOpen(false)}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
+            className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
           >
-            <X size={18} />
+            <X size={20} />
           </button>
         </div>
 
         <div className="p-6 max-h-[80vh] overflow-y-auto space-y-5">
           {loadingDetail || !detailData ? (
-            <div className="py-10 text-center text-sm text-slate-500">
+            <div className="py-10 text-center text-sm text-slate-500 font-medium">
               กำลังโหลดประวัติการแก้ไข...
             </div>
           ) : (
             <>
-              <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2 text-sm">
+              <div className="p-4 sm:p-5 rounded-xl bg-slate-50 border border-slate-200 space-y-2.5 text-sm">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="font-mono font-bold text-base text-slate-900">
+                  <span className="font-mono font-bold text-lg text-slate-900">
                     {detailData.asset.asset_code} — {detailData.asset.name}
                   </span>
                   <span
-                    className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${
+                    className={`px-3 py-1 rounded-full text-xs font-bold border ${
                       detailData.asset.status === 'ACTIVE'
                         ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                         : 'bg-rose-50 text-rose-700 border-rose-200'
@@ -421,14 +421,14 @@ export const AssetDetailHistoryModal = ({
                     {detailData.asset.status}
                   </span>
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs text-slate-600 pt-1">
-                  <div><span className="font-semibold text-slate-800">ประเภท:</span> {detailData.asset.asset_type}</div>
-                  <div><span className="font-semibold text-slate-800">แผนก:</span> {detailData.asset.department}</div>
-                  <div><span className="font-semibold text-slate-800">Serial No.:</span> {detailData.asset.serial_no || '-'}</div>
-                  <div><span className="font-semibold text-slate-800">รุ่น:</span> {detailData.asset.model || '-'}</div>
-                  <div><span className="font-semibold text-slate-800">ที่ตั้ง:</span> {detailData.asset.location || '-'}</div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-xs sm:text-sm text-slate-600 pt-1.5">
+                  <div><span className="font-semibold text-slate-900">ประเภท:</span> {detailData.asset.asset_type}</div>
+                  <div><span className="font-semibold text-slate-900">แผนก:</span> {detailData.asset.department}</div>
+                  <div><span className="font-semibold text-slate-900">Serial No.:</span> {detailData.asset.serial_no || '-'}</div>
+                  <div><span className="font-semibold text-slate-900">รุ่น:</span> {detailData.asset.model || '-'}</div>
+                  <div><span className="font-semibold text-slate-900">ที่ตั้ง:</span> {detailData.asset.location || '-'}</div>
                   <div>
-                    <span className="font-semibold text-slate-800">กลุ่มแม่:</span>{' '}
+                    <span className="font-semibold text-slate-900">กลุ่มแม่:</span>{' '}
                     {detailData.asset.parent_asset_code || (detailData.asset.is_group ? 'เป็นกลุ่มแม่' : '-')}
                   </div>
                 </div>
@@ -566,19 +566,19 @@ export const AssetTypesModal = ({
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-lg w-full overflow-hidden">
-        <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
-          <h2 className="text-lg font-bold text-slate-900">ตั้งค่ารายการประเภทเครื่องมือ</h2>
+        <div className="px-6 py-4.5 border-b border-slate-200 flex items-center justify-between">
+          <h2 className="text-xl font-bold text-slate-900 tracking-tight">ตั้งค่ารายการประเภทเครื่องมือ</h2>
           <button
             type="button"
             onClick={() => setTypesModalOpen(false)}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
+            className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
           >
-            <X size={18} />
+            <X size={20} />
           </button>
         </div>
 
         <div className="p-6 space-y-4">
-          <p className="text-xs text-slate-600 leading-relaxed">
+          <p className="text-sm text-slate-600 leading-relaxed font-medium">
             เพิ่มหรือลบตัวเลือกประเภทเครื่องมือสำหรับใช้ในหน้าทะเบียนเครื่องมือ การลบประเภทออกจากรายการนี้จะไม่ทำให้เครื่องมือเดิมที่ใช้ประเภทนั้นอยู่เสียหาย
           </p>
 
@@ -594,12 +594,12 @@ export const AssetTypesModal = ({
                 }
               }}
               placeholder="พิมพ์ชื่อประเภทเครื่องมือใหม่..."
-              className="flex-1 px-3.5 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none focus:border-indigo-600"
+              className="flex-1 h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium focus:outline-none focus:border-indigo-600"
             />
             <button
               type="button"
               onClick={handleAddDraftType}
-              className="px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800 cursor-pointer"
+              className="h-10 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold transition-colors cursor-pointer"
             >
               เพิ่มรายการ
             </button>
@@ -608,32 +608,32 @@ export const AssetTypesModal = ({
           <div className="max-h-60 overflow-y-auto border border-slate-200 rounded-xl divide-y divide-slate-200">
             {draftTypes.map((t) => (
               <div key={t} className="px-3.5 py-2.5 flex items-center justify-between text-sm">
-                <span className="font-medium text-slate-800">{t}</span>
+                <span className="font-semibold text-slate-900">{t}</span>
                 <button
                   type="button"
                   onClick={() => handleRemoveDraftType(t)}
-                  className="p-1 text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer"
+                  className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer"
                   title={`ลบ ${t}`}
                 >
-                  <Trash2 size={15} />
+                  <Trash2 size={16} />
                 </button>
               </div>
             ))}
           </div>
 
-          <div className="pt-2 flex items-center justify-end gap-2">
+          <div className="pt-2 flex items-center justify-end gap-2.5">
             <button
               type="button"
               onClick={() => setTypesModalOpen(false)}
-              className="px-4 py-2 rounded-xl border border-slate-300 text-slate-700 text-sm font-semibold hover:bg-slate-50 cursor-pointer"
+              className="h-10 px-4 rounded-xl border border-slate-300 text-slate-700 text-sm font-semibold hover:bg-slate-50 transition-colors cursor-pointer"
             >
               ยกเลิก
             </button>
             <button
-              type="button"
+              type="submit"
               disabled={savingTypes}
               onClick={handleSaveTypes}
-              className="px-5 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 cursor-pointer"
+              className="h-10 px-5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 transition-colors cursor-pointer shadow-2xs"
             >
               {savingTypes ? 'กำลังบันทึก...' : 'บันทึกรายการตั้งค่า'}
             </button>

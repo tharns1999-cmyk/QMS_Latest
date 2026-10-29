@@ -284,12 +284,12 @@ const WorkOrderSection = ({ activeDepartments }) => {
   return (
     <div className="space-y-5" data-testid="vcc-work-order-section">
       {/* Rule Notice */}
-      <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-xs text-amber-950 space-y-1">
-        <div className="font-bold flex items-center gap-2 text-sm text-amber-900">
-          <AlertTriangle size={16} className="text-amber-600 shrink-0" />
+      <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 sm:p-5 text-sm text-amber-950 space-y-2">
+        <div className="font-bold flex items-center gap-2 text-base text-amber-900">
+          <AlertTriangle size={18} className="text-amber-600 shrink-0" />
           <span>กติกาใบสั่งงานทวนสอบ/สอบเทียบ การตรวจรับผล และการระงับใช้ (ON_HOLD)</span>
         </div>
-        <ul className="list-disc list-inside space-y-0.5 text-amber-900">
+        <ul className="list-disc list-inside space-y-1 text-sm text-amber-900 leading-relaxed font-medium">
           <li>ใบสั่งงานต้องผูกกับ <span className="font-bold">เครื่องมือรายตัว</span> เท่านั้น และต้องกรอก <span className="font-bold">เลขที่ใบรับรอง + เกณฑ์ยอมรับ</span> ก่อนส่งตรวจรับ</li>
           <li>ผู้ตรวจรับผล (<span className="font-mono font-bold">L{thresholds.required_reviewer_level}+</span> คนละคนกับผู้บันทึกผล) ต้องอนุมัติจึงจะปิดงาน (<span className="font-mono font-bold">CLOSED</span>) และอัปเดตแถว <span className="font-mono font-bold">Act.</span> ในตารางแผน</li>
           <li>เมื่อผลเป็น <span className="font-bold text-rose-700">FAIL</span> เครื่องมือจะถูกระงับใช้ (<span className="font-mono font-bold text-rose-700">ON_HOLD</span>) ทันที และต้องให้ผู้อนุมัติระดับ <span className="font-mono font-bold">L{thresholds.required_approver_level}+</span> บันทึกการประเมินผลกระทบก่อนปลดระงับ • อายุเก็บประวัติใบรับรองปัจจุบัน: <span className="font-bold">{woSettings.retention_years} ปี</span></li>
@@ -307,7 +307,7 @@ const WorkOrderSection = ({ activeDepartments }) => {
                 role="tab"
                 aria-selected={activeTab === t.key}
                 onClick={() => setActiveTab(t.key)}
-                className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
+                className={`px-4 py-2.5 rounded-xl text-sm font-bold transition-colors cursor-pointer ${
                   activeTab === t.key ? t.color : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                 }`}
               >
@@ -316,32 +316,32 @@ const WorkOrderSection = ({ activeDepartments }) => {
             ))}
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2.5">
             <button
               type="button"
               onClick={openSettings}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-300 bg-white text-slate-700 text-xs font-semibold hover:bg-slate-50 cursor-pointer"
+              className="h-10 inline-flex items-center gap-1.5 px-4 rounded-xl border border-slate-300 bg-white text-slate-700 text-sm font-semibold hover:bg-slate-50 transition-colors cursor-pointer"
             >
-              <SlidersHorizontal size={14} />
+              <SlidersHorizontal size={15} />
               <span>ตั้งค่าเกณฑ์ยอมรับและอายุเก็บเอกสาร</span>
             </button>
             <button
               type="button"
               onClick={openCreateModal}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700 cursor-pointer"
+              className="h-10 inline-flex items-center gap-1.5 px-4 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 shadow-2xs transition-colors cursor-pointer"
             >
-              <Plus size={15} />
+              <Plus size={16} />
               <span>สร้างใบสั่งงานใหม่</span>
             </button>
           </div>
         </div>
 
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <select
             aria-label="กรองใบสั่งงานตามแผนก"
             value={filterDept}
             onChange={(e) => setFilterDept(e.target.value)}
-            className="px-3 py-2 rounded-xl border border-slate-300 text-sm bg-white"
+            className="h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium bg-white"
           >
             <option value="">ทุกแผนก (Master Data)</option>
             {activeDepartments.map((d) => (
@@ -349,8 +349,8 @@ const WorkOrderSection = ({ activeDepartments }) => {
             ))}
           </select>
 
-          <div className="text-xs font-medium text-slate-500">
-            แสดงเฉพาะแท็บ <span className="font-bold text-slate-800">{activeTab}</span> ({workOrders.length} รายการ)
+          <div className="text-sm font-medium text-slate-500">
+            แสดงเฉพาะแท็บ <span className="font-bold text-slate-900">{activeTab}</span> ({workOrders.length} รายการ)
           </div>
         </div>
       </div>
@@ -358,17 +358,17 @@ const WorkOrderSection = ({ activeDepartments }) => {
       {/* Work Orders Table */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
         {loading ? (
-          <div className="p-12 text-center text-sm text-slate-500">กำลังโหลดข้อมูลใบสั่งงาน...</div>
+          <div className="p-12 text-center text-sm text-slate-500 font-medium">กำลังโหลดข้อมูลใบสั่งงาน...</div>
         ) : workOrders.length === 0 ? (
-          <div className="p-12 text-center space-y-1">
-            <div className="font-bold text-slate-700 text-base">ไม่พบรายการใบสั่งงานในแท็บ {activeTab}</div>
-            <p className="text-xs text-slate-500">เลือกแท็บสถานะอื่น หรือกดปุ่ม &ldquo;สร้างใบสั่งงานใหม่&rdquo; ด้านบน</p>
+          <div className="p-12 text-center space-y-1.5">
+            <div className="font-bold text-slate-800 text-base">ไม่พบรายการใบสั่งงานในแท็บ {activeTab}</div>
+            <p className="text-sm text-slate-500">เลือกแท็บสถานะอื่น หรือกดปุ่ม &ldquo;สร้างใบสั่งงานใหม่&rdquo; ด้านบน</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs">
+            <table className="w-full text-left border-collapse text-sm">
               <thead>
-                <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase">
+                <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 text-xs font-bold uppercase tracking-wider">
                   <th className="py-3.5 px-4">เลขที่ใบงาน</th>
                   <th className="py-3.5 px-4">เครื่องมือวัด (รายตัว)</th>
                   <th className="py-3.5 px-4">วันครบกำหนด</th>
@@ -379,75 +379,87 @@ const WorkOrderSection = ({ activeDepartments }) => {
               </thead>
               <tbody className="divide-y divide-slate-200 text-sm">
                 {workOrders.map((wo) => (
-                  <tr key={wo.id} className="hover:bg-slate-50/80">
+                  <tr key={wo.id} className="hover:bg-slate-50/80 transition-colors">
                     <td className="py-3.5 px-4 align-top">
-                      <div className="font-mono font-bold text-slate-900">{wo.wo_code}</div>
-                      <div className="text-xs text-slate-600">
+                      <div className="font-mono font-bold text-slate-900 text-sm">{wo.wo_code}</div>
+                      <div className="text-xs text-slate-500 font-medium mt-0.5">
                         {wo.plan_year ? `แผนปี ${wo.plan_year} (เดือน ${wo.planned_month})` : 'ใบงานนอกแผน (Ad-hoc)'}
                       </div>
                     </td>
 
                     <td className="py-3.5 px-4 align-top">
-                      <div className="font-mono font-bold text-slate-900">{wo.asset_code}</div>
-                      <div className="font-semibold text-slate-800">{wo.asset_name}</div>
-                      <div className="text-xs text-slate-600">แผนก: {wo.department} • {wo.provider_name}</div>
+                      <div className="font-mono font-bold text-indigo-700 text-sm">{wo.asset_code}</div>
+                      <div className="font-semibold text-slate-900">{wo.asset_name}</div>
+                      <div className="text-xs text-slate-500 font-medium mt-0.5">แผนก: {wo.department} • {wo.provider_name}</div>
                     </td>
 
                     <td className="py-3.5 px-4 align-top">
-                      <div className="font-mono font-bold text-slate-900">{wo.due_date}</div>
+                      <div className="font-mono font-bold text-slate-900 text-sm">{wo.due_date}</div>
                       {wo.due_date !== wo.original_due_date && (
                         <div className="text-xs text-amber-800 font-medium mt-0.5">
-                          วันเดิม: <span className="font-mono line-through text-slate-500">{wo.original_due_date}</span> ({wo.reschedule_reason})
+                          วันเดิม: <span className="font-mono line-through text-slate-400">{wo.original_due_date}</span> ({wo.reschedule_reason})
                         </div>
                       )}
                     </td>
 
-                    <td className="py-3.5 px-4 align-top text-xs space-y-1">
+                    <td className="py-3.5 px-4 align-top space-y-1 text-xs sm:text-sm">
                       <div>
-                        <span className="font-bold">ผล:</span>{' '}
+                        <span className="font-semibold text-slate-600">ผล:</span>{' '}
                         <span className={`font-bold ${wo.result_status === 'FAIL' ? 'text-rose-700' : wo.result_status === 'PASS' ? 'text-emerald-700' : 'text-slate-600'}`}>
                           {wo.result_status}
                         </span>
                       </div>
-                      {wo.certificate_no && <div><span className="font-bold">ใบรับรอง:</span> <span className="font-mono">{wo.certificate_no}</span></div>}
-                      {wo.acceptance_criteria && <div><span className="font-bold">เกณฑ์ยอมรับ:</span> {wo.acceptance_criteria}</div>}
+                      {wo.certificate_no && (
+                        <div>
+                          <span className="font-semibold text-slate-600">ใบรับรอง:</span> <span className="font-mono font-semibold text-slate-900">{wo.certificate_no}</span>
+                        </div>
+                      )}
+                      {wo.acceptance_criteria && (
+                        <div>
+                          <span className="font-semibold text-slate-600">เกณฑ์ยอมรับ:</span> <span className="text-slate-800">{wo.acceptance_criteria}</span>
+                        </div>
+                      )}
                       {wo.rejected_reason && (
-                        <div className="p-2 rounded bg-rose-50 border border-rose-200 text-rose-800 font-semibold">
-                          เหตุผลที่ส่งกลับ: {wo.rejected_reason}
+                        <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 font-medium text-xs sm:text-sm">
+                          <span className="font-bold">เหตุผลที่ส่งกลับ:</span> {wo.rejected_reason}
                         </div>
                       )}
                     </td>
 
-                    <td className="py-3.5 px-4 align-top space-y-1">
-                      <span className="inline-block px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-800 text-xs font-bold">
-                        {wo.status}
-                      </span>
+                    <td className="py-3.5 px-4 align-top space-y-1.5">
+                      <div>
+                        <span className="inline-block px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-800 text-xs font-bold">
+                          {wo.status}
+                        </span>
+                      </div>
                       {wo.nc_status === 'OPEN' && (
-                        <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-rose-100 text-rose-800 border border-rose-300 text-xs font-bold">
-                          <ShieldAlert size={12} />
-                          <span>ON_HOLD (ระงับใช้ชั่วคราว)</span>
+                        <div>
+                          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-100 text-rose-800 border border-rose-300 text-xs font-bold">
+                            <ShieldAlert size={13} />
+                            <span>ON_HOLD (ระงับใช้ชั่วคราว)</span>
+                          </div>
                         </div>
                       )}
                     </td>
 
                     <td className="py-3.5 px-4 align-top text-right">
-                      <div className="inline-flex flex-wrap justify-end gap-1.5 text-xs">
+                      <div className="inline-flex flex-wrap justify-end gap-2 text-xs sm:text-sm">
                         {(wo.status === 'OPEN' || wo.status === 'REJECTED') && (
                           <>
                             <button
                               type="button"
                               onClick={() => openRecordResult(wo)}
-                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-indigo-600 text-white font-semibold hover:bg-indigo-700 cursor-pointer"
+                              className="h-9 inline-flex items-center gap-1.5 px-3 rounded-xl bg-indigo-600 text-white font-semibold hover:bg-indigo-700 transition-colors cursor-pointer shadow-2xs"
                             >
-                              <FileCheck2 size={13} />
+                              <FileCheck2 size={14} />
                               <span>บันทึกผลและใบรับรอง</span>
                             </button>
                             <button
                               type="button"
                               onClick={() => openAction('RESCHEDULE', wo)}
-                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-300 text-slate-700 font-semibold hover:bg-slate-50 cursor-pointer"
+                              className="h-9 inline-flex items-center gap-1.5 px-3 rounded-xl border border-slate-300 text-slate-700 font-semibold hover:bg-slate-50 transition-colors cursor-pointer"
                             >
-                              <CalendarClock size={13} />
+                              <CalendarClock size={14} />
                               <span>เลื่อนวันครบกำหนด</span>
                             </button>
                           </>
@@ -458,17 +470,17 @@ const WorkOrderSection = ({ activeDepartments }) => {
                             <button
                               type="button"
                               onClick={() => openAction('APPROVE', wo)}
-                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white font-semibold hover:bg-emerald-700 cursor-pointer"
+                              className="h-9 inline-flex items-center gap-1.5 px-3.5 rounded-xl bg-emerald-600 text-white font-semibold hover:bg-emerald-700 transition-colors cursor-pointer shadow-2xs"
                             >
-                              <CheckCircle2 size={13} />
+                              <CheckCircle2 size={14} />
                               <span>ตรวจรับปิดงาน</span>
                             </button>
                             <button
                               type="button"
                               onClick={() => openAction('REJECT', wo)}
-                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-rose-600 text-white font-semibold hover:bg-rose-700 cursor-pointer"
+                              className="h-9 inline-flex items-center gap-1.5 px-3.5 rounded-xl bg-rose-600 text-white font-semibold hover:bg-rose-700 transition-colors cursor-pointer shadow-2xs"
                             >
-                              <XCircle size={13} />
+                              <XCircle size={14} />
                               <span>ส่งกลับแก้ไข</span>
                             </button>
                           </>
@@ -478,9 +490,9 @@ const WorkOrderSection = ({ activeDepartments }) => {
                           <button
                             type="button"
                             onClick={() => openAction('RELEASE_HOLD', wo)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-purple-700 text-white font-semibold hover:bg-purple-800 cursor-pointer"
+                            className="h-9 inline-flex items-center gap-1.5 px-3.5 rounded-xl bg-purple-700 text-white font-semibold hover:bg-purple-800 transition-colors cursor-pointer shadow-2xs"
                           >
-                            <ShieldAlert size={13} />
+                            <ShieldAlert size={14} />
                             <span>ปลดระงับ ON_HOLD (L{thresholds.required_approver_level}+)</span>
                           </button>
                         )}

@@ -168,10 +168,10 @@ export const SmartAssetImportModal = ({
               <Sparkles size={18} />
             </div>
             <div>
-              <h2 className="text-base font-bold text-slate-900">
+              <h2 className="text-xl font-bold text-slate-900 tracking-tight">
                 เลือกเครื่องมือจากทะเบียนเข้าสู่แผนปี {plan.plan_year} (FM-QC-46)
               </h2>
-              <p className="text-xs text-slate-500">
+              <p className="text-sm text-slate-500 font-medium mt-0.5">
                 เชื่อมโยงข้อมูลเครื่องมือจริงจาก Asset Register เพื่อกำหนดรอบการทวนสอบและวันครบกำหนดอัตโนมัติ
               </p>
             </div>
@@ -179,9 +179,9 @@ export const SmartAssetImportModal = ({
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+            className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
           >
-            <X size={18} />
+            <X size={20} />
           </button>
         </div>
 
@@ -190,9 +190,9 @@ export const SmartAssetImportModal = ({
           {importError && (
             <div
               role="alert"
-              className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-center gap-2"
+              className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-sm font-semibold flex items-center gap-2"
             >
-              <AlertTriangle size={15} className="text-rose-600 shrink-0" />
+              <AlertTriangle size={16} className="text-rose-600 shrink-0" />
               <span>{importError}</span>
             </div>
           )}
@@ -201,13 +201,13 @@ export const SmartAssetImportModal = ({
           <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 bg-slate-50 p-3 rounded-xl border border-slate-200/80">
             {/* Search Input */}
             <div className="relative">
-              <Search size={14} className="absolute left-3 top-2.5 text-slate-400" />
+              <Search size={16} className="absolute left-3.5 top-3 text-slate-400" />
               <input
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="ค้นหารหัส, ชื่อ, รุ่น, จุดติดตั้ง..."
-                className="w-full pl-8 pr-3 py-1.5 rounded-lg border border-slate-300 text-xs bg-white focus:outline-none focus:border-indigo-600"
+                className="w-full h-10 pl-9 pr-3.5 rounded-xl border border-slate-300 text-sm font-medium bg-white focus:outline-none focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600"
               />
             </div>
 
@@ -215,7 +215,7 @@ export const SmartAssetImportModal = ({
             <select
               value={deptFilter}
               onChange={(e) => setDeptFilter(e.target.value)}
-              className="px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs bg-white focus:outline-none focus:border-indigo-600 font-medium"
+              className="h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium bg-white focus:outline-none focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600"
             >
               <option value="">ทุกแผนก (Master Data)</option>
               {activeDepartments.map((d) => (
@@ -229,7 +229,7 @@ export const SmartAssetImportModal = ({
             <select
               value={typeFilter}
               onChange={(e) => setTypeFilter(e.target.value)}
-              className="px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs bg-white focus:outline-none focus:border-indigo-600 font-medium"
+              className="h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium bg-white focus:outline-none focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600"
             >
               <option value="">ทุกประเภทเครื่องมือ</option>
               {assetTypes.map((t) => (
@@ -242,7 +242,7 @@ export const SmartAssetImportModal = ({
 
           {/* Section 1: Asset Selection Table */}
           <div className="space-y-2">
-            <div className="flex items-center justify-between text-xs">
+            <div className="flex items-center justify-between text-sm">
               <div className="font-bold text-slate-800 flex items-center gap-2">
                 <span>เลือกเครื่องมือวัดในทะเบียน ({filteredAssets.length} รายการที่ค้นพบ)</span>
                 <span className="text-slate-400 font-normal">•</span>
@@ -253,29 +253,29 @@ export const SmartAssetImportModal = ({
               <button
                 type="button"
                 onClick={handleSelectAllFiltered}
-                className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold cursor-pointer underline"
+                className="text-sm text-indigo-600 hover:text-indigo-800 font-semibold cursor-pointer underline"
               >
                 เลือก/ยกเลิกทั้งหมดที่แสดง
               </button>
             </div>
 
             <div className="border border-slate-200 rounded-xl overflow-hidden max-h-52 overflow-y-auto">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead className="bg-slate-100/80 sticky top-0 z-10 border-b border-slate-200 text-slate-700 font-semibold">
+              <table className="w-full text-left text-sm border-collapse">
+                <thead className="bg-slate-100/80 sticky top-0 z-10 border-b border-slate-200 text-slate-600 font-bold text-xs uppercase tracking-wider">
                   <tr>
-                    <th className="py-2 px-3 w-8 text-center">#</th>
-                    <th className="py-2 px-3">รหัสเครื่องมือ</th>
-                    <th className="py-2 px-3">ชื่อเครื่องมือ</th>
-                    <th className="py-2 px-2">ประเภท</th>
-                    <th className="py-2 px-2">แผนก</th>
-                    <th className="py-2 px-3">สถานที่ติดตั้ง</th>
-                    <th className="py-2 px-3 text-right">สถานะในแผน</th>
+                    <th className="py-2.5 px-3 w-8 text-center">#</th>
+                    <th className="py-2.5 px-3.5">รหัสเครื่องมือ</th>
+                    <th className="py-2.5 px-3.5">ชื่อเครื่องมือ</th>
+                    <th className="py-2.5 px-3">ประเภท</th>
+                    <th className="py-2.5 px-3">แผนก</th>
+                    <th className="py-2.5 px-3.5">สถานที่ติดตั้ง</th>
+                    <th className="py-2.5 px-3.5 text-right">สถานะในแผน</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {filteredAssets.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="py-6 text-center text-slate-500">
+                      <td colSpan={7} className="py-6 text-center text-slate-500 font-medium">
                         ไม่พบเครื่องมือวัดตรงตามเงื่อนไขการค้นหา
                       </td>
                     </tr>
@@ -297,36 +297,36 @@ export const SmartAssetImportModal = ({
                               : 'hover:bg-slate-50'
                           }`}
                         >
-                          <td className="py-2 px-3 text-center">
+                          <td className="py-2.5 px-3 text-center">
                             <input
                               type="checkbox"
                               checked={isSelected}
                               disabled={isAlreadyInPlan}
                               onChange={() => toggleSelectAsset(asset.id)}
-                              className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                              className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
                             />
                           </td>
-                          <td className="py-2 px-3 font-mono font-bold text-slate-900">
+                          <td className="py-2.5 px-3.5 font-mono font-bold text-slate-900">
                             {asset.asset_code}
                           </td>
-                          <td className="py-2 px-3 font-medium text-slate-800">
+                          <td className="py-2.5 px-3.5 font-semibold text-slate-800">
                             <div>{asset.name}</div>
                             {isGroup && (
-                              <span className="inline-flex items-center gap-1 text-[10px] text-purple-700 font-semibold">
-                                <FolderTree size={10} /> กลุ่มแม่
+                              <span className="inline-flex items-center gap-1 text-xs text-purple-700 font-semibold mt-0.5">
+                                <FolderTree size={12} /> กลุ่มแม่
                               </span>
                             )}
                           </td>
-                          <td className="py-2 px-2 text-slate-600">{asset.asset_type}</td>
-                          <td className="py-2 px-2 font-bold text-slate-700">{asset.department}</td>
-                          <td className="py-2 px-3 text-slate-500">{asset.location || '-'}</td>
-                          <td className="py-2 px-3 text-right">
+                          <td className="py-2.5 px-3 text-slate-600 font-medium">{asset.asset_type}</td>
+                          <td className="py-2.5 px-3 font-bold text-slate-700">{asset.department}</td>
+                          <td className="py-2.5 px-3.5 text-slate-500 font-medium">{asset.location || '-'}</td>
+                          <td className="py-2.5 px-3.5 text-right">
                             {isAlreadyInPlan ? (
-                              <span className="inline-flex items-center gap-1 text-[10.5px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded">
-                                <CheckCircle2 size={11} className="text-slate-400" /> อยู่ในแผนแล้ว
+                              <span className="inline-flex items-center gap-1 text-xs font-bold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-lg">
+                                <CheckCircle2 size={13} className="text-slate-400" /> อยู่ในแผนแล้ว
                               </span>
                             ) : (
-                              <span className="text-[10.5px] text-indigo-700 font-semibold bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
+                              <span className="text-xs text-indigo-700 font-semibold bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-200">
                                 พร้อมนำเข้า
                               </span>
                             )}
@@ -343,13 +343,13 @@ export const SmartAssetImportModal = ({
           {/* Section 2: Shared Schedule Rule Configuration for Selected Items */}
           <div className="p-4 rounded-xl border border-indigo-100 bg-indigo-50/30 space-y-3.5">
             <div className="flex items-center justify-between">
-              <h3 className="text-xs font-bold text-slate-900 flex items-center gap-2">
-                <Calendar size={14} className="text-indigo-600" />
+              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <Calendar size={16} className="text-indigo-600" />
                 <span>กำหนดรอบการทวนสอบและวันครบกำหนด (สำหรับรายการที่เลือก)</span>
               </h3>
-              <div className="text-[11px] text-slate-500">
+              <div className="text-xs text-slate-500 font-medium">
                 กติกาวันครบกำหนด:{' '}
-                <strong>
+                <strong className="text-slate-800">
                   {plan.due_date_rule === 'START_OF_MONTH' ? 'วันที่ 1 ของเดือน' : 'วันสิ้นเดือน (END_OF_MONTH)'}
                 </strong>
               </div>
@@ -357,7 +357,7 @@ export const SmartAssetImportModal = ({
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
+                <label className="block text-sm font-semibold text-slate-700 mb-1.5">
                   สถาบัน / หน่วยงานที่ทวนสอบ <span className="text-rose-600">*</span>
                 </label>
                 <select
@@ -365,7 +365,7 @@ export const SmartAssetImportModal = ({
                   onChange={(e) =>
                     setScheduleConfig((prev) => ({ ...prev, provider_name: e.target.value }))
                   }
-                  className="w-full px-3 py-1.5 rounded-lg border border-slate-300 text-xs bg-white"
+                  className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium bg-white focus:outline-none focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600"
                 >
                   {providers.map((p) => (
                     <option key={p} value={p}>
@@ -376,16 +376,16 @@ export const SmartAssetImportModal = ({
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
+                <label className="block text-sm font-semibold text-slate-700 mb-1.5">
                   ความถี่ในการทวนสอบ
                 </label>
-                <div className="grid grid-cols-4 gap-1">
+                <div className="grid grid-cols-4 gap-1.5">
                   {FREQUENCY_PRESETS.map((preset) => (
                     <button
                       key={preset.label}
                       type="button"
                       onClick={() => applyFrequencyPreset(preset)}
-                      className={`py-1.5 rounded-lg border text-xs font-semibold transition-colors cursor-pointer ${
+                      className={`h-10 rounded-xl border text-sm font-semibold transition-colors cursor-pointer ${
                         scheduleConfig.frequency_label === preset.label
                           ? 'bg-indigo-600 border-indigo-600 text-white'
                           : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100'
@@ -400,7 +400,7 @@ export const SmartAssetImportModal = ({
 
             {/* Months Selector */}
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1.5">
+              <label className="block text-sm font-semibold text-slate-700 mb-1.5">
                 เลือกเดือนที่วางแผน (Plan เดือน 1 - 12) <span className="text-rose-600">*</span>
               </label>
               <div className="grid grid-cols-6 sm:grid-cols-12 gap-1.5">
@@ -411,7 +411,7 @@ export const SmartAssetImportModal = ({
                       key={m}
                       type="button"
                       onClick={() => toggleMonth(m)}
-                      className={`py-1.5 rounded-lg border text-xs font-bold transition-colors cursor-pointer ${
+                      className={`py-2 rounded-xl border text-sm font-bold transition-colors cursor-pointer ${
                         selected
                           ? 'bg-indigo-600 border-indigo-600 text-white shadow-2xs'
                           : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100'
@@ -423,10 +423,10 @@ export const SmartAssetImportModal = ({
                 })}
               </div>
 
-              <div className="mt-2 text-[11px] text-slate-600 flex items-center gap-1.5">
-                <Clock size={12} className="text-indigo-600 shrink-0" />
+              <div className="mt-2.5 text-xs text-slate-600 font-medium flex items-center gap-1.5">
+                <Clock size={14} className="text-indigo-600 shrink-0" />
                 <span>วันครบกำหนดคำนวณอัตโนมัติ:</span>
-                <span className="font-mono font-bold text-slate-800">
+                <span className="font-mono font-bold text-xs sm:text-sm text-slate-800">
                   {previewDueDates.length > 0 ? previewDueDates.join(', ') : 'ยังไม่ได้เลือกเดือน'}
                 </span>
               </div>
@@ -434,7 +434,7 @@ export const SmartAssetImportModal = ({
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
+                <label className="block text-sm font-semibold text-slate-700 mb-1.5">
                   แผนกผู้รับผิดชอบ <span className="text-rose-600">*</span>
                 </label>
                 <select
@@ -442,7 +442,7 @@ export const SmartAssetImportModal = ({
                   onChange={(e) =>
                     setScheduleConfig((prev) => ({ ...prev, responsible_dept: e.target.value }))
                   }
-                  className="w-full px-3 py-1.5 rounded-lg border border-slate-300 text-xs bg-white"
+                  className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium bg-white focus:outline-none focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600"
                 >
                   {activeDepartments.map((d) => (
                     <option key={d.code} value={d.code}>
@@ -453,7 +453,7 @@ export const SmartAssetImportModal = ({
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
+                <label className="block text-sm font-semibold text-slate-700 mb-1.5">
                   ตำแหน่งผู้รับผิดชอบ
                 </label>
                 <input
@@ -463,32 +463,32 @@ export const SmartAssetImportModal = ({
                     setScheduleConfig((prev) => ({ ...prev, responsible_label: e.target.value }))
                   }
                   placeholder="เช่น QC Sup., เจ้าหน้าที่ Store"
-                  className="w-full px-3 py-1.5 rounded-lg border border-slate-300 text-xs"
+                  className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium bg-white focus:outline-none focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600"
                 />
               </div>
             </div>
           </div>
 
           {/* Footer Actions */}
-          <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-3">
-            <div className="text-xs text-slate-500">
-              พร้อมนำเข้าเครื่องมือเข้าแผนประจำปี: <strong>{selectedAssetIds.length}</strong> รายการ
+          <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-3">
+            <div className="text-sm font-medium text-slate-600">
+              พร้อมนำเข้าเครื่องมือเข้าแผนประจำปี: <strong className="text-slate-900">{selectedAssetIds.length}</strong> รายการ
             </div>
 
             <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={onClose}
-                className="px-3.5 py-2 rounded-xl border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
+                className="h-10 px-4 rounded-xl border border-slate-300 text-sm font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
               >
                 ยกเลิก
               </button>
               <button
                 type="submit"
                 disabled={saving || selectedAssetIds.length === 0}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                className="inline-flex items-center gap-1.5 h-10 px-5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold shadow-xs transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <ArrowRight size={14} />
+                <ArrowRight size={16} />
                 <span>
                   {saving
                     ? 'กำลังนำเข้าสู่แผน...'

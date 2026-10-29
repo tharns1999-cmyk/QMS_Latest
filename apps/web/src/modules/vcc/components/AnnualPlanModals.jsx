@@ -52,26 +52,26 @@ export const PlanFormModal = ({
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-lg w-full overflow-hidden">
-        <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
-          <h2 className="text-lg font-bold text-slate-900">
+        <div className="px-6 py-4.5 border-b border-slate-200 flex items-center justify-between">
+          <h2 className="text-xl font-bold text-slate-900 tracking-tight">
             {editingPlan ? `แก้ไขหัวแผนประจำปี ${editingPlan.plan_year}` : 'สร้างแผนการทวนสอบเครื่องมือประจำปีใหม่'}
           </h2>
-          <button type="button" onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 cursor-pointer">
-            <X size={18} />
+          <button type="button" onClick={onClose} className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer">
+            <X size={20} />
           </button>
         </div>
 
         <form onSubmit={onSubmit} className="p-6 space-y-4">
           {error && (
-            <div role="alert" className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-center gap-2">
-              <AlertTriangle size={16} className="text-rose-600 shrink-0" />
+            <div role="alert" className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-sm font-semibold flex items-center gap-2">
+              <AlertTriangle size={17} className="text-rose-600 shrink-0" />
               <span>{error}</span>
             </div>
           )}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label htmlFor="plan_year" className="block text-xs font-bold text-slate-700 mb-1">
+              <label htmlFor="plan_year" className="block text-sm font-semibold text-slate-700 mb-1.5">
                 ปี ค.ศ. ของแผน <span className="text-rose-600">*</span>
               </label>
               <input
@@ -91,9 +91,9 @@ export const PlanFormModal = ({
                     title: isDefaultTitle && yr ? `แผนการทวนสอบเครื่องมือประจำปี ${yr}` : form.title
                   });
                 }}
-                className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm disabled:bg-slate-100"
+                className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium disabled:bg-slate-100"
               />
-              <p className="mt-1 text-[11px] text-slate-500 font-medium">
+              <p className="mt-1 text-xs text-slate-500 font-medium">
                 {form.plan_year && Number.isInteger(Number(form.plan_year)) && Number(form.plan_year) >= 2000 && Number(form.plan_year) <= 2100
                   ? `ตรงกับ พ.ศ. ${Number(form.plan_year) + 543}`
                   : 'รองรับ ค.ศ. 2000–2100'}
@@ -101,7 +101,7 @@ export const PlanFormModal = ({
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
+              <label className="block text-sm font-semibold text-slate-700 mb-1.5">
                 แผนกเจ้าของแผน (Master Data) <span className="text-rose-600">*</span>
               </label>
               <select
@@ -109,7 +109,7 @@ export const PlanFormModal = ({
                 disabled={Boolean(editingPlan) || activeDepartments.length === 0}
                 value={form.department}
                 onChange={(e) => setForm({ ...form, department: e.target.value })}
-                className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm bg-white disabled:bg-slate-100"
+                className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium bg-white disabled:bg-slate-100"
               >
                 <option value="" disabled>
                   {activeDepartments.length === 0 ? '-- โหลดแผนกไม่ได้ --' : '-- เลือกแผนก --'}
@@ -121,7 +121,7 @@ export const PlanFormModal = ({
                 ))}
               </select>
               {activeDepartments.length === 0 && (
-                <p className="mt-1 text-xs text-rose-600 font-semibold">
+                <p className="mt-1.5 text-xs text-rose-600 font-semibold">
                   ไม่สามารถโหลดแผนกจาก Master Data ได้ กรุณาตรวจสอบข้อมูลแผนกก่อนบันทึก
                 </p>
               )}
@@ -130,61 +130,61 @@ export const PlanFormModal = ({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">รหัสแบบฟอร์มเอกสาร</label>
+              <label className="block text-sm font-semibold text-slate-700 mb-1.5">รหัสแบบฟอร์มเอกสาร</label>
               <input
                 type="text"
                 required
                 value={form.document_code}
                 onChange={(e) => setForm({ ...form, document_code: e.target.value })}
-                className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm font-mono"
+                className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-mono font-medium"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Revision (ครั้งที่แก้ไข)</label>
+              <label className="block text-sm font-semibold text-slate-700 mb-1.5">Revision (ครั้งที่แก้ไข)</label>
               <input
                 type="text"
                 required
                 value={form.revision}
                 onChange={(e) => setForm({ ...form, revision: e.target.value })}
-                className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm font-mono"
+                className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-mono font-medium"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">ชื่อแผนประจำปี</label>
+            <label className="block text-sm font-semibold text-slate-700 mb-1.5">ชื่อแผนประจำปี</label>
             <input
               type="text"
               required
               value={form.title}
               onChange={(e) => setForm({ ...form, title: e.target.value })}
-              className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm"
+              className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">
+            <label className="block text-sm font-semibold text-slate-700 mb-1.5">
               กติกาคำนวณวันครบกำหนด (เมื่อแผนระบุเฉพาะเดือน)
             </label>
             <select
               value={form.due_date_rule}
               onChange={(e) => setForm({ ...form, due_date_rule: e.target.value })}
-              className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm bg-white"
+              className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium bg-white"
             >
               <option value="END_OF_MONTH">วันสิ้นเดือนของเดือนที่วางแผน (END_OF_MONTH เช่น {endOfMonthPreview})</option>
               <option value="START_OF_MONTH">วันที่ 1 ของเดือนที่วางแผน (START_OF_MONTH เช่น {startOfMonthPreview})</option>
             </select>
           </div>
 
-          <div className="pt-2 flex justify-end gap-2">
-            <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl border border-slate-300 text-sm font-semibold">
+          <div className="pt-2 flex justify-end gap-2.5">
+            <button type="button" onClick={onClose} className="h-10 px-4 rounded-xl border border-slate-300 text-sm font-semibold hover:bg-slate-50 transition-colors cursor-pointer">
               ยกเลิก
             </button>
             <button
               type="submit"
               disabled={saving || activeDepartments.length === 0}
-              className="px-5 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold disabled:opacity-50 cursor-pointer"
+              className="h-10 px-5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 transition-colors cursor-pointer"
             >
               {saving ? 'กำลังบันทึก...' : 'บันทึกแผนประจำปี'}
             </button>
@@ -250,32 +250,32 @@ export const PlanItemModal = ({
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-xl w-full overflow-hidden">
-        <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
-          <h2 className="text-lg font-bold text-slate-900">
+        <div className="px-6 py-4.5 border-b border-slate-200 flex items-center justify-between">
+          <h2 className="text-xl font-bold text-slate-900 tracking-tight">
             กำหนดตารางทวนสอบเครื่องมือในแผนปี {plan.plan_year}
           </h2>
-          <button type="button" onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 cursor-pointer">
-            <X size={18} />
+          <button type="button" onClick={onClose} className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer">
+            <X size={20} />
           </button>
         </div>
 
         <form onSubmit={onSubmit} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
           {error && (
-            <div role="alert" className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-center gap-2">
-              <AlertTriangle size={16} className="text-rose-600 shrink-0" />
+            <div role="alert" className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-sm font-semibold flex items-center gap-2">
+              <AlertTriangle size={17} className="text-rose-600 shrink-0" />
               <span>{error}</span>
             </div>
           )}
 
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">
+            <label className="block text-sm font-semibold text-slate-700 mb-1.5">
               เครื่องมือวัด / กลุ่มเครื่องมือ (เฉพาะสถานะ ACTIVE) <span className="text-rose-600">*</span>
             </label>
             <select
               required
               value={itemForm.asset_id}
               onChange={(e) => handleAssetChange(e.target.value)}
-              className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm bg-white"
+              className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium bg-white"
             >
               <option value="" disabled>-- เลือกเครื่องมือจากทะเบียน --</option>
               {activeAssets.map((a) => (
@@ -288,14 +288,14 @@ export const PlanItemModal = ({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
+              <label className="block text-sm font-semibold text-slate-700 mb-1.5">
                 สถาบัน / หน่วยงานที่ทวนสอบ <span className="text-rose-600">*</span>
               </label>
               <select
                 required
                 value={itemForm.provider_name}
                 onChange={(e) => setItemForm({ ...itemForm, provider_name: e.target.value })}
-                className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm bg-white"
+                className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium bg-white"
               >
                 {providers.map((p) => (
                   <option key={p} value={p}>{p}</option>
@@ -304,11 +304,11 @@ export const PlanItemModal = ({
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">ความถี่การทวนสอบ</label>
+              <label className="block text-sm font-semibold text-slate-700 mb-1.5">ความถี่การทวนสอบ</label>
               <select
                 value={itemForm.frequency_label}
                 onChange={(e) => handleFrequencyChange(e.target.value)}
-                className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm bg-white"
+                className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium bg-white"
               >
                 <option value="รายปี">รายปี</option>
                 <option value="รายครึ่งปี">รายครึ่งปี</option>
@@ -319,7 +319,7 @@ export const PlanItemModal = ({
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1.5">
+            <label className="block text-sm font-semibold text-slate-700 mb-2">
               เดือนที่วางแผนทวนสอบ (Plan เดือน 1 - 12) <span className="text-rose-600">*</span>
             </label>
             <div className="grid grid-cols-6 gap-2">
@@ -330,9 +330,9 @@ export const PlanItemModal = ({
                     key={m}
                     type="button"
                     onClick={() => toggleMonth(m)}
-                    className={`py-2 rounded-xl border text-xs font-bold transition-colors cursor-pointer ${
+                    className={`py-2 rounded-xl border text-sm font-bold transition-colors cursor-pointer ${
                       selected
-                        ? 'bg-indigo-600 border-indigo-600 text-white'
+                        ? 'bg-indigo-600 border-indigo-600 text-white shadow-2xs'
                         : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
                     }`}
                   >
@@ -341,15 +341,15 @@ export const PlanItemModal = ({
                 );
               })}
             </div>
-            <div className="mt-2 p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-700">
-              <span className="font-bold">วันครบกำหนดตามกติกา ({plan.due_date_rule}):</span>{' '}
-              {previewDueDates.length > 0 ? previewDueDates.join(', ') : 'กรุณาเลือกอย่างน้อย 1 เดือน'}
+            <div className="mt-2.5 p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs sm:text-sm text-slate-700 font-medium">
+              <span className="font-bold text-slate-900">วันครบกำหนดตามกติกา ({plan.due_date_rule}):</span>{' '}
+              <span className="font-mono text-slate-900 font-bold">{previewDueDates.length > 0 ? previewDueDates.join(', ') : 'กรุณาเลือกอย่างน้อย 1 เดือน'}</span>
             </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
+              <label className="block text-sm font-semibold text-slate-700 mb-1.5">
                 แผนกผู้รับผิดชอบ (Master Data) <span className="text-rose-600">*</span>
               </label>
               <select
@@ -357,7 +357,7 @@ export const PlanItemModal = ({
                 disabled={activeDepartments.length === 0}
                 value={itemForm.responsible_dept}
                 onChange={(e) => setItemForm({ ...itemForm, responsible_dept: e.target.value })}
-                className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm bg-white disabled:bg-slate-100"
+                className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium bg-white disabled:bg-slate-100"
               >
                 {activeDepartments.map((d) => (
                   <option key={d.code} value={d.code}>
@@ -368,36 +368,36 @@ export const PlanItemModal = ({
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">ตำแหน่ง/ผู้รับผิดชอบ</label>
+              <label className="block text-sm font-semibold text-slate-700 mb-1.5">ตำแหน่ง/ผู้รับผิดชอบ</label>
               <input
                 type="text"
                 value={itemForm.responsible_label}
                 onChange={(e) => setItemForm({ ...itemForm, responsible_label: e.target.value })}
                 placeholder="เช่น QC Sup., เจ้าหน้าที่ Store"
-                className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm"
+                className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">หมายเหตุ</label>
+            <label className="block text-sm font-semibold text-slate-700 mb-1.5">หมายเหตุ</label>
             <input
               type="text"
               value={itemForm.remarks}
               onChange={(e) => setItemForm({ ...itemForm, remarks: e.target.value })}
               placeholder="เช่น ฝ่าย Store เป็นฝ่ายสอบเทียบ FM-ST-31"
-              className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm"
+              className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium"
             />
           </div>
 
-          <div className="pt-2 flex justify-end gap-2">
-            <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl border border-slate-300 text-sm font-semibold">
+          <div className="pt-2 flex justify-end gap-2.5">
+            <button type="button" onClick={onClose} className="h-10 px-4 rounded-xl border border-slate-300 text-sm font-semibold hover:bg-slate-50 transition-colors cursor-pointer">
               ยกเลิก
             </button>
             <button
               type="submit"
               disabled={saving || itemForm.planned_months.length === 0 || activeDepartments.length === 0}
-              className="px-5 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold disabled:opacity-50 cursor-pointer"
+              className="h-10 px-5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 transition-colors cursor-pointer shadow-2xs"
             >
               {saving ? 'กำลังบันทึก...' : 'บันทึกรายการในแผน'}
             </button>
@@ -423,29 +423,29 @@ export const PlanWorkflowModal = ({
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-md w-full overflow-hidden">
-        <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
-          <h2 className="text-lg font-bold text-slate-900">
+        <div className="px-6 py-4.5 border-b border-slate-200 flex items-center justify-between">
+          <h2 className="text-xl font-bold text-slate-900 tracking-tight">
             {isReject
               ? 'ส่งกลับแก้ไขแผนประจำปี (Reject)'
               : modalState.mode === 'REVIEW'
                 ? 'ยืนยันการทบทวนแผนประจำปี (Review)'
                 : 'ยืนยันการอนุมัติแผนประจำปี (Approve)'}
           </h2>
-          <button type="button" onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 cursor-pointer">
-            <X size={18} />
+          <button type="button" onClick={onClose} className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer">
+            <X size={20} />
           </button>
         </div>
 
         <form onSubmit={onConfirm} className="p-6 space-y-4">
           {error && (
-            <div role="alert" className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-center gap-2">
-              <AlertTriangle size={16} className="text-rose-600 shrink-0" />
+            <div role="alert" className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-sm font-semibold flex items-center gap-2">
+              <AlertTriangle size={17} className="text-rose-600 shrink-0" />
               <span>{error}</span>
             </div>
           )}
 
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">
+            <label className="block text-sm font-semibold text-slate-700 mb-1.5">
               {isReject ? 'เหตุผลในการส่งกลับแก้ไข' : 'ความเห็นเพิ่มเติม (ถ้ามี)'}{' '}
               {isReject && <span className="text-rose-600">*</span>}
             </label>
@@ -455,18 +455,18 @@ export const PlanWorkflowModal = ({
               value={commentOrReason}
               onChange={(e) => setCommentOrReason(e.target.value)}
               placeholder={isReject ? 'ระบุสิ่งที่ต้องแก้ไขในแผนประจำปี...' : 'ความเห็นประกอบการทบทวน/อนุมัติ...'}
-              className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm"
+              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-medium"
             />
           </div>
 
-          <div className="pt-2 flex justify-end gap-2">
-            <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl border border-slate-300 text-sm font-semibold">
+          <div className="pt-2 flex justify-end gap-2.5">
+            <button type="button" onClick={onClose} className="h-10 px-4 rounded-xl border border-slate-300 text-sm font-semibold hover:bg-slate-50 transition-colors cursor-pointer">
               ยกเลิก
             </button>
             <button
               type="submit"
               disabled={saving || (isReject && !commentOrReason.trim())}
-              className={`px-5 py-2 rounded-xl text-white text-sm font-semibold disabled:opacity-50 cursor-pointer ${
+              className={`h-10 px-5 rounded-xl text-white text-sm font-semibold disabled:opacity-50 transition-colors cursor-pointer shadow-2xs ${
                 isReject ? 'bg-rose-600 hover:bg-rose-700' : 'bg-emerald-600 hover:bg-emerald-700'
               }`}
             >
@@ -500,53 +500,53 @@ export const GroupWorkOrderModal = ({
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-lg w-full overflow-hidden">
-        <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
-          <h2 className="text-lg font-bold text-slate-900">
+        <div className="px-6 py-4.5 border-b border-slate-200 flex items-center justify-between">
+          <h2 className="text-xl font-bold text-slate-900 tracking-tight">
             ตรวจสอบความพร้อมก่อนออกใบสั่งงาน ({item.asset_code})
           </h2>
-          <button type="button" onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 cursor-pointer">
-            <X size={18} />
+          <button type="button" onClick={onClose} className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer">
+            <X size={20} />
           </button>
         </div>
 
         <div className="p-6 space-y-4">
-          <div className="p-3.5 rounded-xl bg-purple-50 border border-purple-200 text-xs text-purple-900 space-y-1">
-            <div className="font-bold flex items-center gap-1.5">
-              <FolderTree size={14} />
+          <div className="p-4 rounded-xl bg-purple-50 border border-purple-200 text-sm text-purple-900 space-y-1.5">
+            <div className="font-bold flex items-center gap-2">
+              <FolderTree size={16} />
               <span>กติกาเครื่องมือแบบกลุ่ม ({item.asset_code} — {item.asset_name})</span>
             </div>
-            <p>
+            <p className="leading-relaxed">
               รายการในตารางแผนประจำปีเป็นกลุ่มเครื่องมือแม่ ห้ามออกใบสั่งงานในนามกลุ่มโดยตรง ต้องแยกรหัสเครื่องมือลูก (รายตัว) ที่ใช้งานอยู่ก่อนเสมอ
             </p>
           </div>
 
           {checkError && (
-            <div role="alert" className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-center gap-2">
-              <AlertTriangle size={16} className="text-rose-600 shrink-0" />
+            <div role="alert" className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-sm font-semibold flex items-center gap-2">
+              <AlertTriangle size={17} className="text-rose-600 shrink-0" />
               <span>{checkError}</span>
             </div>
           )}
 
           {checkResult && (
-            <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs space-y-1">
-              <div className="font-bold flex items-center gap-1.5">
-                <CheckCircle2 size={15} className="text-emerald-600" />
+            <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-sm space-y-1.5 font-medium">
+              <div className="font-bold flex items-center gap-2">
+                <CheckCircle2 size={17} className="text-emerald-600" />
                 <span>พร้อมสร้างใบสั่งงานสำหรับเครื่องมือรายตัว: {checkResult.target_asset.asset_code}</span>
               </div>
               <div>ชื่อเครื่องมือ: {checkResult.target_asset.name}</div>
-              <div>วันครบกำหนดตามแผน: {(checkResult.due_dates || []).join(', ')}</div>
+              <div>วันครบกำหนดตามแผน: <span className="font-mono font-bold">{(checkResult.due_dates || []).join(', ')}</span></div>
             </div>
           )}
 
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">
+            <label className="block text-sm font-semibold text-slate-700 mb-1.5">
               เลือกรหัสเครื่องมือลูก (ACTIVE) ในกลุ่ม {item.asset_code}
             </label>
             <select
               aria-label="เลือกรหัสเครื่องมือลูก"
               value={selectedChildId}
               onChange={(e) => setSelectedChildId(e.target.value)}
-              className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm bg-white"
+              className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium bg-white"
             >
               <option value="">-- ยังไม่ได้เลือกรหัสเครื่องมือรายตัว --</option>
               {childAssets.map((ch) => (
@@ -557,14 +557,14 @@ export const GroupWorkOrderModal = ({
             </select>
           </div>
 
-          <div className="pt-2 flex justify-end gap-2">
-            <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl border border-slate-300 text-sm font-semibold">
+          <div className="pt-2 flex justify-end gap-2.5">
+            <button type="button" onClick={onClose} className="h-10 px-4 rounded-xl border border-slate-300 text-sm font-semibold hover:bg-slate-50 transition-colors cursor-pointer">
               ปิดหน้าต่าง
             </button>
             <button
               type="button"
               onClick={onValidate}
-              className="px-5 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 cursor-pointer"
+              className="h-10 px-5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 transition-colors cursor-pointer shadow-2xs"
             >
               ตรวจสอบการออกใบสั่งงาน
             </button>
@@ -599,21 +599,21 @@ export const PlanSettingsModal = ({
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-lg w-full overflow-hidden">
-        <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
-          <h2 className="text-lg font-bold text-slate-900">ตั้งค่าแผนประจำปีและเกณฑ์อนุมัติ (DCC)</h2>
-          <button type="button" onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 cursor-pointer">
-            <X size={18} />
+        <div className="px-6 py-4.5 border-b border-slate-200 flex items-center justify-between">
+          <h2 className="text-xl font-bold text-slate-900 tracking-tight">ตั้งค่าแผนประจำปีและเกณฑ์อนุมัติ (DCC)</h2>
+          <button type="button" onClick={onClose} className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer">
+            <X size={20} />
           </button>
         </div>
 
         <div className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">ประเภทเอกสารใน Approval Matrix</label>
+              <label className="block text-sm font-semibold text-slate-700 mb-1.5">ประเภทเอกสารใน Approval Matrix</label>
               <select
                 value={draftSettings.approval_doc_type}
                 onChange={(e) => setDraftSettings({ ...draftSettings, approval_doc_type: e.target.value })}
-                className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm bg-white"
+                className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium bg-white"
               >
                 <option value="FM">FM (แบบฟอร์ม)</option>
                 <option value="WI">WI (วิธีปฏิบัติงาน)</option>
@@ -623,11 +623,11 @@ export const PlanSettingsModal = ({
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">กติกาวันครบกำหนดเริ่มต้น</label>
+              <label className="block text-sm font-semibold text-slate-700 mb-1.5">กติกาวันครบกำหนดเริ่มต้น</label>
               <select
                 value={draftSettings.due_date_rule}
                 onChange={(e) => setDraftSettings({ ...draftSettings, due_date_rule: e.target.value })}
-                className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm bg-white"
+                className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium bg-white"
               >
                 <option value="END_OF_MONTH">วันสิ้นเดือน (END_OF_MONTH)</option>
                 <option value="START_OF_MONTH">วันที่ 1 ของเดือน (START_OF_MONTH)</option>
@@ -636,30 +636,30 @@ export const PlanSettingsModal = ({
           </div>
 
           <div className="space-y-2">
-            <label className="block text-xs font-bold text-slate-700">รายชื่อสถาบัน / หน่วยงานที่ทวนสอบ</label>
+            <label className="block text-sm font-semibold text-slate-700">รายชื่อสถาบัน / หน่วยงานที่ทวนสอบ</label>
             <div className="flex gap-2">
               <input
                 type="text"
                 value={newProvider}
                 onChange={(e) => setNewProvider(e.target.value)}
                 placeholder="เพิ่มชื่อหน่วยงานทวนสอบ..."
-                className="flex-1 px-3 py-2 rounded-xl border border-slate-300 text-sm"
+                className="flex-1 h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium"
               />
-              <button type="button" onClick={addProvider} className="px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-semibold">
+              <button type="button" onClick={addProvider} className="h-10 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold transition-colors cursor-pointer">
                 เพิ่ม
               </button>
             </div>
             <div className="border border-slate-200 rounded-xl divide-y divide-slate-200 max-h-40 overflow-y-auto">
               {draftProviders.map((p) => (
-                <div key={p} className="px-3.5 py-2 flex items-center justify-between text-xs">
-                  <span>{p}</span>
+                <div key={p} className="px-3.5 py-2.5 flex items-center justify-between text-sm">
+                  <span className="font-medium text-slate-800">{p}</span>
                   {draftProviders.length > 1 && (
                     <button
                       type="button"
                       onClick={() => setDraftProviders(draftProviders.filter((x) => x !== p))}
-                      className="text-rose-600 hover:bg-rose-50 p-1 rounded"
+                      className="text-rose-600 hover:bg-rose-50 p-1.5 rounded-lg cursor-pointer"
                     >
-                      <Trash2 size={14} />
+                      <Trash2 size={16} />
                     </button>
                   )}
                 </div>
@@ -667,15 +667,15 @@ export const PlanSettingsModal = ({
             </div>
           </div>
 
-          <div className="pt-2 flex justify-end gap-2">
-            <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl border border-slate-300 text-sm font-semibold">
+          <div className="pt-2 flex justify-end gap-2.5">
+            <button type="button" onClick={onClose} className="h-10 px-4 rounded-xl border border-slate-300 text-sm font-semibold hover:bg-slate-50 transition-colors cursor-pointer">
               ยกเลิก
             </button>
             <button
               type="button"
               disabled={saving}
               onClick={onSave}
-              className="px-5 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold disabled:opacity-50"
+              className="h-10 px-5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 transition-colors cursor-pointer shadow-2xs"
             >
               {saving ? 'กำลังบันทึก...' : 'บันทึกการตั้งค่า'}
             </button>
@@ -692,26 +692,26 @@ export const PlanHistoryModal = ({ open, onClose, history = [] }) => {
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-xl w-full overflow-hidden">
-        <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
-          <h2 className="text-lg font-bold text-slate-900">ประวัติการอนุมัติและแก้ไขแผน (Audit Log)</h2>
-          <button type="button" onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 cursor-pointer">
-            <X size={18} />
+        <div className="px-6 py-4.5 border-b border-slate-200 flex items-center justify-between">
+          <h2 className="text-xl font-bold text-slate-900 tracking-tight">ประวัติการอนุมัติและแก้ไขแผน (Audit Log)</h2>
+          <button type="button" onClick={onClose} className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer">
+            <X size={20} />
           </button>
         </div>
-        <div className="p-6 max-h-[75vh] overflow-y-auto space-y-3">
+        <div className="p-6 max-h-[75vh] overflow-y-auto space-y-3.5">
           {history.length === 0 ? (
-            <div className="text-xs text-slate-500 text-center py-6">ยังไม่มีประวัติการดำเนินการ</div>
+            <div className="text-sm text-slate-500 text-center py-8 font-medium">ยังไม่มีประวัติการดำเนินการ</div>
           ) : (
             history.map((h) => {
               const meta = PLAN_AUDIT_LABELS[h.action] || { label: h.action, badge: 'bg-slate-100 text-slate-700 border-slate-200' };
               return (
-                <div key={h.id} className="p-3.5 rounded-xl border border-slate-200 text-xs space-y-1.5">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className={`px-2 py-0.5 rounded border font-bold ${meta.badge}`}>{meta.label}</span>
-                    <span className="text-slate-500">{formatThaiDateTime(h.at)} • {h.actor_name || h.actor_id}</span>
+                <div key={h.id} className="p-4 rounded-xl border border-slate-200 text-sm space-y-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className={`px-2.5 py-0.5 rounded-md border text-xs font-bold ${meta.badge}`}>{meta.label}</span>
+                    <span className="text-xs text-slate-500 font-mono">{formatThaiDateTime(h.at)} • {h.actor_name || h.actor_id}</span>
                   </div>
-                  {h.details?.reason && <div className="text-rose-700 font-semibold">เหตุผล: {h.details.reason}</div>}
-                  {h.details?.comment && <div className="text-slate-700">ความเห็น: {h.details.comment}</div>}
+                  {h.details?.reason && <div className="text-rose-700 font-semibold text-sm">เหตุผล: {h.details.reason}</div>}
+                  {h.details?.comment && <div className="text-slate-700 font-medium text-sm">ความเห็น: {h.details.comment}</div>}
                 </div>
               );
             })

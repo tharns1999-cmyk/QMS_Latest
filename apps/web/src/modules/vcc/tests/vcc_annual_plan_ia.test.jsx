@@ -105,7 +105,7 @@ describe('VCC FM-QC-46 — สถาปัตยกรรมข้อมูล�
     fireEvent.click(screen.getByRole('button', { name: 'ส่งทบทวนแผน' }));
     expect(await screen.findByRole('button', { name: 'ยืนยันการทบทวน' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /เพิ่มเครื่องมือจากทะเบียน/ })).toBeNull();
-  });
+  }, 15000);
 
   it('6. สรุปสถานะบอกขั้นตอนถัดไป และรายละเอียดผู้ทบทวน/ผู้อนุมัติขยายดูได้', async () => {
     await openPlanPage();

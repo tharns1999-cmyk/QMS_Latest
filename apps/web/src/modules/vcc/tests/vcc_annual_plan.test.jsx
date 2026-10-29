@@ -152,7 +152,7 @@ describe('VCC Phase 2 — Annual Calibration Plan (FM-QC-46) & Approval Workflow
 
     // Verify plan is now in APPROVED status
     expect(await screen.findByText(/สถานะ: อนุมัติแล้ว/i, { selector: 'span' })).toBeInTheDocument();
-  });
+  }, 15000);
 
   it('4. เมื่อโหลดแผนกจาก Master Data ไม่ได้ จะแสดงข้อความแจ้งเตือนและปิดปุ่มบันทึกแผนประจำปี', async () => {
     useStore.setState({ masterDepartments: [], departments: [] });

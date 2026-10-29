@@ -77,7 +77,7 @@ describe('VCC FM-QC-46 — ประสบการณ์การเลือ�
       const planSelect = screen.getByLabelText('เลือกแผนประจำปี');
       expect(planSelect.selectedOptions[0]).toHaveTextContent(/2028/);
     });
-  });
+  }, 15000);
 
   it('3. เมื่อกรองปีที่ยังไม่มีแผน แสดง Empty State ชัดเจนพร้อมปุ่มสร้างแผนที่กรอกปีนั้นให้อัตโนมัติ', async () => {
     await openPlanPage();

@@ -399,7 +399,7 @@ const AssetRegisterPageInner = () => {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
           <div className="space-y-0.5 min-w-0">
             {/* Breadcrumb Navigation Context */}
-            <div className="flex items-center gap-1.5 text-[11px] font-medium text-slate-500">
+            <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
               <span className="hover:text-slate-700 transition-colors">พอร์ทัลหลัก</span>
               <span className="text-slate-300">/</span>
               <span className="text-indigo-600 font-semibold">ศูนย์ทวนสอบและสอบเทียบ (VCC)</span>
@@ -407,11 +407,11 @@ const AssetRegisterPageInner = () => {
               <span className="text-slate-800 font-semibold truncate">{pageMeta.breadcrumb}</span>
             </div>
 
-            <h1 className="text-lg md:text-xl font-bold text-slate-900 tracking-tight">
+            <h1 className="text-xl md:text-2xl font-bold text-slate-900 tracking-tight">
               <span className="truncate">{pageMeta.title}</span>
             </h1>
 
-            <p className="text-xs text-slate-500">
+            <p className="text-sm text-slate-500">
               {pageMeta.description}
             </p>
           </div>
@@ -422,7 +422,7 @@ const AssetRegisterPageInner = () => {
               <button
                 type="button"
                 onClick={openTypesSettings}
-                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl border border-slate-300 bg-white text-slate-700 text-xs md:text-sm font-semibold hover:bg-slate-50 transition-colors shadow-2xs cursor-pointer"
+                className="inline-flex items-center gap-2 px-4 py-2.5 h-10 rounded-xl border border-slate-300 bg-white text-slate-700 text-sm font-semibold hover:bg-slate-50 transition-colors shadow-2xs cursor-pointer"
               >
                 <SlidersHorizontal size={15} />
                 <span>ตั้งค่าประเภทเครื่องมือ</span>
@@ -431,7 +431,7 @@ const AssetRegisterPageInner = () => {
               <button
                 type="button"
                 onClick={openCreateModal}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 text-white text-xs md:text-sm font-semibold hover:bg-indigo-700 transition-colors shadow-xs cursor-pointer"
+                className="inline-flex items-center gap-2 px-4 py-2.5 h-10 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 transition-colors shadow-xs cursor-pointer"
               >
                 <Plus size={16} />
                 <span>เพิ่มเครื่องมือ / กลุ่มเครื่องมือ</span>
@@ -494,7 +494,7 @@ const AssetRegisterPageInner = () => {
                 </button>
               </div>
 
-              <div className="text-xs font-medium text-slate-600">
+              <div className="text-sm font-medium text-slate-600">
                 แสดงเฉพาะสถานะ <span className="font-bold text-slate-800">{activeTab}</span> ({assets.length} รายการ)
               </div>
             </div>
@@ -507,7 +507,7 @@ const AssetRegisterPageInner = () => {
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="ค้นหารหัสเครื่องมือ, ชื่อ, Serial, รุ่น, ที่ตั้ง..."
-                  className="w-full pl-10 pr-4 py-2 rounded-xl border border-slate-300 text-sm placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600"
+                  className="w-full h-10 pl-10 pr-4 rounded-xl border border-slate-300 text-sm placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600"
                 />
               </div>
 
@@ -515,7 +515,7 @@ const AssetRegisterPageInner = () => {
                 value={filterDept}
                 onChange={(e) => setFilterDept(e.target.value)}
                 aria-label="กรองตามแผนก"
-                className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm bg-white focus:outline-none focus:border-indigo-600"
+                className="w-full h-10 px-3 rounded-xl border border-slate-300 text-sm bg-white focus:outline-none focus:border-indigo-600"
               >
                 <option value="">ทุกแผนก (Master Data)</option>
                 {activeDepartments.map((d) => (
@@ -529,7 +529,7 @@ const AssetRegisterPageInner = () => {
                 value={filterType}
                 onChange={(e) => setFilterType(e.target.value)}
                 aria-label="กรองตามประเภทเครื่องมือ"
-                className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm bg-white focus:outline-none focus:border-indigo-600"
+                className="w-full h-10 px-3 rounded-xl border border-slate-300 text-sm bg-white focus:outline-none focus:border-indigo-600"
               >
                 <option value="">ทุกประเภทเครื่องมือ</option>
                 {assetTypes.map((t) => (
@@ -541,7 +541,7 @@ const AssetRegisterPageInner = () => {
                 value={filterKind}
                 onChange={(e) => setFilterKind(e.target.value)}
                 aria-label="กรองตามรูปแบบกลุ่มหรือรายตัว"
-                className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm bg-white focus:outline-none focus:border-indigo-600"
+                className="w-full h-10 px-3 rounded-xl border border-slate-300 text-sm bg-white focus:outline-none focus:border-indigo-600"
               >
                 <option value="">ทุกรูปแบบ (กลุ่ม + รายตัว)</option>
                 <option value="0">เฉพาะเครื่องมือรายตัว</option>
@@ -550,12 +550,12 @@ const AssetRegisterPageInner = () => {
             </div>
 
             {activeGroups.length > 0 && (
-              <div className="flex flex-wrap items-center gap-2 pt-1 text-xs">
-                <span className="font-semibold text-slate-500">กรองตามกลุ่มแม่:</span>
+              <div className="flex flex-wrap items-center gap-2 pt-1 text-sm">
+                <span className="font-semibold text-slate-500 text-xs">กรองตามกลุ่มแม่:</span>
                 <button
                   type="button"
                   onClick={() => setFilterParent('')}
-                  className={`px-2.5 py-1 rounded-lg border font-medium cursor-pointer ${
+                  className={`px-3 py-1 rounded-lg border text-xs sm:text-sm font-medium cursor-pointer ${
                     filterParent === ''
                       ? 'bg-indigo-50 border-indigo-300 text-indigo-700 font-bold'
                       : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
@@ -568,7 +568,7 @@ const AssetRegisterPageInner = () => {
                     key={g.id}
                     type="button"
                     onClick={() => setFilterParent(g.id === filterParent ? '' : g.id)}
-                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border font-medium cursor-pointer ${
+                    className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg border text-xs sm:text-sm font-medium cursor-pointer ${
                       filterParent === g.id
                         ? 'bg-indigo-50 border-indigo-300 text-indigo-700 font-bold'
                         : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
@@ -593,7 +593,7 @@ const AssetRegisterPageInner = () => {
                 <div className="text-slate-700 font-bold text-base">
                   ไม่พบรายการเครื่องมือในสถานะ {activeTab === 'ACTIVE' ? 'ใช้งานปกติ (ACTIVE)' : 'ปลดออกแล้ว (RETIRED)'}
                 </div>
-                <p className="text-slate-500 text-xs">
+                <p className="text-slate-500 text-sm">
                   ลองปรับเงื่อนไขการค้นหา หรือกดปุ่ม &ldquo;เพิ่มเครื่องมือ / กลุ่มเครื่องมือ&rdquo; ด้านบน
                 </p>
               </div>
@@ -601,7 +601,7 @@ const AssetRegisterPageInner = () => {
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                   <thead>
-                    <tr className="bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-600 uppercase">
+                    <tr className="bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-600 uppercase tracking-wider">
                       <th className="py-3.5 px-4">รหัสเครื่องมือ</th>
                       <th className="py-3.5 px-4">ชื่อเครื่องมือ / รุ่น</th>
                       <th className="py-3.5 px-4">ประเภท</th>
@@ -617,10 +617,10 @@ const AssetRegisterPageInner = () => {
                       return (
                         <tr key={asset.id} className="hover:bg-slate-50/80 transition-colors">
                           <td className="py-3.5 px-4 align-top">
-                            <div className="font-mono font-bold text-slate-900">{asset.asset_code}</div>
+                            <div className="font-mono font-bold text-sm text-slate-900">{asset.asset_code}</div>
                             {isGroup ? (
-                              <span className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-200 text-[11px] font-bold">
-                                <FolderTree size={11} />
+                              <span className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-200 text-xs font-bold">
+                                <FolderTree size={12} />
                                 กลุ่มแม่ (ลูก {asset.active_child_count || 0}/{asset.child_count || 0})
                               </span>
                             ) : asset.parent_asset_code ? (
@@ -633,7 +633,7 @@ const AssetRegisterPageInner = () => {
                           </td>
 
                           <td className="py-3.5 px-4 align-top">
-                            <div className="font-semibold text-slate-900">{asset.name}</div>
+                            <div className="font-semibold text-slate-900 text-sm">{asset.name}</div>
                             {asset.model && <div className="text-xs text-slate-600 mt-0.5">รุ่น: {asset.model}</div>}
                             {asset.status === 'RETIRED' && asset.retired_reason && (
                               <div className="mt-1.5 text-xs text-rose-800 bg-rose-50 border border-rose-200 rounded-lg px-2.5 py-1">
@@ -653,7 +653,7 @@ const AssetRegisterPageInner = () => {
                           </td>
 
                           <td className="py-3.5 px-4 align-top">
-                            <div className="font-semibold text-slate-800">
+                            <div className="font-semibold text-slate-800 text-sm">
                               {asset.department} {asset.department_name_th ? `(${asset.department_name_th})` : ''}
                             </div>
                             <div className="text-xs text-slate-600 mt-0.5">{asset.location || 'ไม่ระบุที่ตั้ง'}</div>
@@ -661,12 +661,12 @@ const AssetRegisterPageInner = () => {
 
                           <td className="py-3.5 px-4 align-top">
                             {asset.status === 'ACTIVE' ? (
-                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-bold">
+                              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-bold">
                                 <CheckCircle2 size={13} />
                                 ใช้งานปกติ (ACTIVE)
                               </span>
                             ) : (
-                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-50 text-rose-800 border border-rose-200 text-xs font-bold">
+                              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-50 text-rose-800 border border-rose-200 text-xs font-bold">
                                 <XCircle size={13} />
                                 ปลดออกแล้ว (RETIRED)
                               </span>
@@ -678,7 +678,7 @@ const AssetRegisterPageInner = () => {
                               <button
                                 type="button"
                                 onClick={() => openHistoryModal(asset.id)}
-                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 text-xs font-semibold hover:bg-slate-50 cursor-pointer"
+                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 text-xs sm:text-sm font-semibold hover:bg-slate-50 cursor-pointer"
                               >
                                 <History size={13} />
                                 <span>ประวัติ</span>
@@ -689,7 +689,7 @@ const AssetRegisterPageInner = () => {
                                   <button
                                     type="button"
                                     onClick={() => openEditModal(asset)}
-                                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 text-xs font-semibold hover:bg-indigo-100 cursor-pointer"
+                                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 text-xs sm:text-sm font-semibold hover:bg-indigo-100 cursor-pointer"
                                   >
                                     <Edit3 size={13} />
                                     <span>แก้ไข</span>
@@ -697,7 +697,7 @@ const AssetRegisterPageInner = () => {
                                   <button
                                     type="button"
                                     onClick={() => openRetireModal(asset)}
-                                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-rose-200 bg-rose-50 text-rose-700 text-xs font-semibold hover:bg-rose-100 cursor-pointer"
+                                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-rose-200 bg-rose-50 text-rose-700 text-xs sm:text-sm font-semibold hover:bg-rose-100 cursor-pointer"
                                   >
                                     <Archive size={13} />
                                     <span>ปลดออก</span>
@@ -707,7 +707,7 @@ const AssetRegisterPageInner = () => {
                                 <button
                                   type="button"
                                   onClick={() => openReactivateModal(asset)}
-                                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-amber-300 bg-amber-50 text-amber-800 text-xs font-semibold hover:bg-amber-100 cursor-pointer"
+                                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-amber-300 bg-amber-50 text-amber-800 text-xs sm:text-sm font-semibold hover:bg-amber-100 cursor-pointer"
                                 >
                                   <RotateCcw size={13} />
                                   <span>นำกลับมาใช้ (Reactivate)</span>
