@@ -19,7 +19,7 @@
 - สไตล์การเขียนโค้ด การเว้นวรรค และ Pattern การจัดการ State/Error ต้องกลมกลืนกับไฟล์เดิมที่อยู่ในโฟลเดอร์เดียวกัน
 
 ### 1.3 ห้ามอัปเดตเวอร์ชันไลบรารีตามใจชอบถ้าไม่ได้รับอนุญาต
-- ห้ามรันคำสั่ง `npm update`, `npm install <package>@latest` หรือเปลี่ยนเวอร์ชันใน `package.json` / `backend/package.json` โดยพลการ
+- ห้ามรันคำสั่ง `pnpm update`, `pnpm add <package>@latest` หรือเปลี่ยนเวอร์ชันใน `package.json` / `backend/package.json` โดยพลการ
 - การเพิ่ม Library ใหม่ต้องได้รับการอนุมัติอย่างชัดเจน และต้องตรวจสอบความเข้ากันได้กับ Node.js / React 19 / Vite ก่อนเสมอ
 
 ### 1.4 ตรวจสอบไฟล์เดิมก่อนเริ่มเขียนโค้ดใหม่เสมอ
@@ -36,9 +36,9 @@
 
 1. **CLI-First Verification**:
    - เมื่อแก้ไขโค้ดเสร็จแล้ว ต้องตรวจสอบด้วยคำสั่งใน Terminal เสมอ:
-     * Linter: `npm run lint` (ต้องไม่มี Error)
-     * Unit Tests: `npm run test`
-     * Production Build: `npm run build`
+     * Linter: `pnpm run lint` (ต้องไม่มี Error)
+     * Unit Tests: `pnpm run test`
+     * Production Build: `pnpm run build`
 2. **รักษาความเข้ากันได้ของข้อมูล (Backward Compatibility)**:
    - ห้ามทำลายโครงสร้างข้อมูลใน `localStorage` (`qms-enterprise-storage`, `qms-storage-vault`) และ IndexedDB
    - การเปลี่ยนแปลง Database ต้องเขียน Migration ทั้งไฟล์ `_up.sql` และ `_down.sql` ใน `database/migrations/`

@@ -8,6 +8,7 @@ Cloudflare Workers + Hono + D1 (SQLite) + R2
 - web: `apps/web` (modules: `apps/web/src/modules/dcc`, `portal`, `vcc`)
 - API: `apps/api` (`apps/api/src/index.js`, migrations ที่ `apps/api/migrations`)
 - ตรวจทั้งหมด: `pnpm run check` (lint + test + build)
+- ใช้ pnpm เท่านั้น (`pnpm install`, เพิ่มแพ็กเกจด้วย `pnpm add <ชื่อ>` ในโฟลเดอร์ `apps/web` หรือ `apps/api`) ห้ามใช้ `npm install` และห้ามสร้าง `package-lock.json`
 - รัน web: `pnpm run dev` รัน API: `pnpm run dev:api`
 - ข้อมูลทดสอบ localhost: `pnpm --dir apps/api run db:seed:local` (รหัสผ่านทดสอบใช้เฉพาะ local)
 

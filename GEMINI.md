@@ -13,7 +13,7 @@
 - **Architect**: [.agents/architect.md](file:///d:/Tharn/QMS-Portal_NewVersion/.agents/architect.md) — สถาปัตยกรรมระบบ, Zustand store, Database schema, Backward compatibility
 - **Frontend Coder**: [.agents/frontend-coder.md](file:///d:/Tharn/QMS-Portal_NewVersion/.agents/frontend-coder.md) — React 19, Tailwind CSS v4, Zustand, จัดการ Edge cases ครบถ้วน
 - **Backend Coder**: [.agents/backend-coder.md](file:///d:/Tharn/QMS-Portal_NewVersion/.agents/backend-coder.md) — Express 5, PostgreSQL, node-cron, Migrations, PDF services
-- **QA Tester**: [.agents/qa-tester.md](file:///d:/Tharn/QMS-Portal_NewVersion/.agents/qa-tester.md) — รัน `npm run lint`, `npm run test`, `npm run build` ป้องกัน Regression
+- **QA Tester**: [.agents/qa-tester.md](file:///d:/Tharn/QMS-Portal_NewVersion/.agents/qa-tester.md) — รัน `pnpm run lint`, `pnpm run test`, `pnpm run build` ป้องกัน Regression
 - **Security Auditor**: [.agents/security-auditor.md](file:///d:/Tharn/QMS-Portal_NewVersion/.agents/security-auditor.md) — ตรวจสอบ RBAC, ตราประทับ, ลายน้ำ, และ Audit trail
 
 ---
@@ -25,6 +25,7 @@
 2. **ต้องตั้งชื่อฟังก์ชัน ตัวแปร และสไตล์โค้ดให้กลมกลืนกับโค้ดเดิม** — ฟังก์ชัน/ตัวแปร `camelCase`, คอมโพเนนต์ `PascalCase`, Schema/DB `snake_case`
 3. **ห้ามอัปเดตเวอร์ชันไลบรารีตามใจชอบ** — ห้ามเปลี่ยน Dependencies ใน `package.json` เด็ดขาดหากไม่ได้รับอนุญาต
 4. **ตรวจสอบไฟล์เดิมก่อนเริ่มเขียนโค้ดใหม่เสมอ** — สืบค้น Utility, Service, Store ที่มีอยู่เดิมเพื่อเรียกใช้ซ้ำ
+5. **ใช้ pnpm เท่านั้น** — `pnpm install`, เพิ่มแพ็กเกจด้วย `pnpm add <ชื่อ>` ในโฟลเดอร์ `apps/web` หรือ `apps/api` ห้าม `npm install` และห้ามสร้าง `package-lock.json`
 
 ---
 
@@ -34,5 +35,5 @@
 1. **[Impact Scan]**: สแกนไฟล์ที่เกี่ยวข้อง ประเมินผลกระทบย้อนหลัง
 2. **[Architecture & Security Review]**: ตรวจสอบโครงสร้างข้อมูลและสิทธิ์ผู้ใช้
 3. **[Implementation]**: เขียนโค้ดตามมาตรฐานของโปรเจกต์และ `DESIGN.md`
-4. **[Verification]**: ตรวจสอบผ่าน Terminal (`npm run lint` ต้องไม่มี error)
+4. **[Verification]**: ตรวจสอบผ่าน Terminal (`pnpm run lint` ต้องไม่มี error)
 5. **[Delivery Report]**: Orchestrator สรุปผลแบบกระชับ (ไฟล์ที่แก้, การป้องกันผลกระทบ, ผลการ verify)
