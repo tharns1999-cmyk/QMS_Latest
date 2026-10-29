@@ -211,7 +211,7 @@ const DarList = () => {
   };
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-4 w-full max-w-full overflow-hidden">
+    <div className="space-y-6 w-full min-w-0 pb-4 overflow-hidden">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h2 className="text-xl font-bold text-[#1E1E1E] tracking-tight">คำร้อง DAR ของฉัน (My DAR Requests)</h2>

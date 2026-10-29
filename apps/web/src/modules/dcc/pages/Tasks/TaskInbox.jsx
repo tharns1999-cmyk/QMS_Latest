@@ -1183,7 +1183,7 @@ const TaskInbox = () => {
   };
 
   return (
-    <div className="space-y-4 max-w-7xl mx-auto pb-10 w-full max-w-full overflow-hidden">
+    <div className="space-y-4 w-full min-w-0 pb-10 overflow-hidden">
       {/* ── Standardized Page Header ── */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 px-6 py-4 bg-white border border-slate-200/80 rounded-xl shadow-2xs">
         <div className="flex items-center gap-3">

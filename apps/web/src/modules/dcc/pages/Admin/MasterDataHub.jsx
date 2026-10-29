@@ -1002,7 +1002,7 @@ const MasterDataHub = () => {
   }
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-12 w-full max-w-full overflow-hidden">
+    <div className="space-y-6 w-full min-w-0 pb-12 overflow-hidden">
       {/* 1. Minimalist Page Header (Clean Single-Row <= 48px) */}
       <div className="flex items-center justify-between gap-3 h-11">
         <div className="flex items-center gap-2.5 min-w-0">

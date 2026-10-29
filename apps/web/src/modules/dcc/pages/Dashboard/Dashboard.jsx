@@ -344,7 +344,7 @@ const Dashboard = () => {
   };
 
   return (
-    <div className="space-y-4 max-w-7xl mx-auto pb-12 w-full max-w-full overflow-hidden">
+    <div className="space-y-4 w-full min-w-0 pb-12 overflow-hidden">
       
       {/* ========================================================================= */}
       {/* SECTION 1: COMPACT SINGLE-ROW HERO BAR (<= 48px)                          */}
