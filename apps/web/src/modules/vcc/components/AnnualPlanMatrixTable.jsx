@@ -112,9 +112,8 @@ export const AnnualPlanMatrixTable = ({
             <button
               type="button"
               onClick={onOpenSmartImport}
-              className="inline-flex items-center gap-2 h-9 px-3.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold transition-colors cursor-pointer shadow-2xs"
+              className="inline-flex items-center justify-center h-9 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold transition-colors cursor-pointer shadow-2xs focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
             >
-              <Sparkles size={14} />
               <span>เพิ่มเครื่องมือจากทะเบียน</span>
             </button>
           )}
