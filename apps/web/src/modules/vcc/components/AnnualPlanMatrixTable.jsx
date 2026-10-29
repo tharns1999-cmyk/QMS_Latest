@@ -11,7 +11,9 @@ import {
   Search,
   Maximize2,
   Info,
-  AlertTriangle
+  AlertTriangle,
+  Check,
+  X
 } from 'lucide-react';
 import AnnualPlanMonthCell from './AnnualPlanMonthCell';
 import AnnualPlanSideInspector from './AnnualPlanSideInspector';
@@ -48,6 +50,7 @@ export const AnnualPlanMatrixTable = ({
   const [tableSearch, setTableSearch] = useState('');
   const [inspectorItem, setInspectorItem] = useState(null);
   const [savingCellKey, setSavingCellKey] = useState('');
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
 
   const filteredItems = useMemo(() => {
     if (!tableSearch.trim()) return planItems;
@@ -212,13 +215,13 @@ export const AnnualPlanMatrixTable = ({
         <table className="w-full text-left border-collapse text-sm">
           <thead className="sticky top-0 z-20 bg-slate-50/95 backdrop-blur-xs shadow-2xs">
             <tr className="border-b border-slate-200 text-slate-700 text-xs font-bold tracking-wider uppercase">
-              {/* Sticky Column: Asset Code & Name */}
-              <th className="py-3 px-3.5 sticky left-0 z-30 bg-slate-50 shadow-[1px_0_0_0_#e2e8f0] min-w-[240px]">
+              {/* Sticky Column: Asset Code & Name (absorbs excess space to keep instrument identification readable) */}
+              <th className="py-3 px-3.5 sticky left-0 z-30 bg-slate-50 shadow-[1px_0_0_0_#e2e8f0] min-w-[260px] w-full">
                 รายการเครื่องมือวัด
               </th>
 
               {/* Due Date & Evidence Summary (Essential for audit & automated verification) */}
-              <th className="py-3 px-3.5 border-l border-slate-200/70 min-w-[180px]">
+              <th className="py-3 px-3.5 border-l border-slate-200/70 min-w-[180px] w-[180px] whitespace-nowrap">
                 วันครบกำหนด / สถานะหลักฐาน
               </th>
 
@@ -227,7 +230,7 @@ export const AnnualPlanMatrixTable = ({
                 ? MONTHS.map((m) => (
                     <th
                       key={m}
-                      className="py-2.5 px-1.5 text-center min-w-[54px] border-l border-slate-200/70 text-slate-800 font-mono"
+                      className="py-2.5 px-1.5 text-center min-w-[56px] w-[56px] border-l border-slate-200/70 text-slate-800 font-mono whitespace-nowrap"
                     >
                       <div className="text-[11px] text-slate-500 font-medium">{MONTH_LABELS[m - 1]}</div>
                       <div className="text-xs font-bold">ด.{m}</div>
@@ -236,14 +239,14 @@ export const AnnualPlanMatrixTable = ({
                 : QUARTERS.map((q) => (
                     <th
                       key={q.key}
-                      className="py-3 px-2 text-center min-w-[100px] border-l border-slate-200/70 text-slate-800 font-mono text-xs font-bold"
+                      className="py-3 px-2 text-center min-w-[100px] w-[100px] border-l border-slate-200/70 text-slate-800 font-mono text-xs font-bold whitespace-nowrap"
                     >
                       {q.label}
                     </th>
                   ))}
 
-              {/* Context Actions Header */}
-              <th className="py-3 px-3.5 text-right min-w-[120px]">
+              {/* Context Actions Header (Compact 104px) */}
+              <th className="py-3 px-2.5 text-right w-[104px] min-w-[104px] max-w-[104px] text-xs font-bold tracking-wider uppercase text-slate-700 whitespace-nowrap">
                 การจัดการ
               </th>
             </tr>
@@ -325,10 +328,16 @@ export const AnnualPlanMatrixTable = ({
                           </div>
 
                           {isGroup ? (
-                            <div className="mt-1 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-purple-50 border border-purple-200 text-purple-900 font-bold text-xs">
-                              <FolderTree size={12} className="text-purple-700 shrink-0" />
-                              <span>กลุ่มแม่ (ต้องแยกรหัสลูกก่อนสร้างใบงาน)</span>
-                            </div>
+                            <button
+                              type="button"
+                              onClick={() => onOpenGroupWorkOrderCheck && onOpenGroupWorkOrderCheck(item)}
+                              title="ตรวจรหัสลูกก่อนออกใบงาน"
+                              aria-label="ตรวจรหัสลูกก่อนออกใบงาน"
+                              className="mt-1 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-900 font-bold text-xs transition-colors cursor-pointer text-left"
+                            >
+                              <ShieldAlert size={12} className="text-purple-700 shrink-0" />
+                              <span>ตรวจรหัสลูกก่อนออกใบงาน</span>
+                            </button>
                           ) : item.parent_asset_code ? (
                             <div className="mt-1 inline-block px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200 text-slate-700 text-xs">
                               ลูกของกลุ่ม: <span className="font-mono font-semibold">{item.parent_asset_code}</span>
@@ -447,50 +456,68 @@ export const AnnualPlanMatrixTable = ({
                           );
                         })}
 
-                    {/* Context Actions */}
-                    <td className="py-2.5 px-3.5 align-middle text-right">
-                      <div className="flex flex-col items-end gap-1.5">
-                        {isGroup && (
-                          <button
-                            type="button"
-                            onClick={() => onOpenGroupWorkOrderCheck(item)}
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-purple-50 border border-purple-200 hover:bg-purple-100 text-purple-900 font-bold text-xs transition-colors cursor-pointer shadow-2xs"
-                          >
-                            <ShieldAlert size={13} className="text-purple-700" />
-                            <span>ตรวจรหัสลูกก่อนออกใบงาน</span>
-                          </button>
+                    {/* Context Actions (Compact 104px) */}
+                    <td className="py-2 px-2.5 align-middle text-right w-[104px] min-w-[104px] max-w-[104px] whitespace-nowrap">
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setInspectorItem(item)}
+                          title="ดูสเปกและรายละเอียดเครื่องมือ"
+                          aria-label="ดูสเปกและรายละเอียดเครื่องมือ"
+                          className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-slate-300 shrink-0"
+                        >
+                          <Maximize2 size={15} />
+                        </button>
+
+                        {canEditPlan && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => onOpenAddItem(item)}
+                              title="แก้ไขข้อมูลในแผน"
+                              aria-label="แก้ไขข้อมูลในแผน"
+                              className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-500/20 shrink-0"
+                            >
+                              <Edit2 size={15} />
+                            </button>
+
+                            {confirmDeleteId === item.id ? (
+                              <div className="inline-flex items-center gap-0.5 bg-rose-50 border border-rose-200 rounded-lg p-0.5 animate-in fade-in duration-150 shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    onDeleteItem(item);
+                                    setConfirmDeleteId(null);
+                                  }}
+                                  title="ยืนยันลบรายการ"
+                                  aria-label="ยืนยันลบ"
+                                  className="w-7 h-7 rounded-md flex items-center justify-center text-white bg-rose-600 hover:bg-rose-700 transition-colors cursor-pointer shadow-2xs"
+                                >
+                                  <Check size={14} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setConfirmDeleteId(null)}
+                                  title="ยกเลิก"
+                                  aria-label="ยกเลิก"
+                                  className="w-7 h-7 rounded-md flex items-center justify-center text-slate-500 hover:text-slate-800 hover:bg-slate-200 transition-colors cursor-pointer"
+                                >
+                                  <X size={14} />
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => setConfirmDeleteId(item.id)}
+                                title="ลบรายการออกจากแผน"
+                                aria-label="ลบรายการออกจากแผน"
+                                className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-rose-500/20 shrink-0"
+                              >
+                                <Trash2 size={15} />
+                              </button>
+                            )}
+                          </>
                         )}
-                        <div className="inline-flex gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => setInspectorItem(item)}
-                            title="เปิด Side Inspector ดูรายละเอียด"
-                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-colors cursor-pointer"
-                          >
-                            <Maximize2 size={12} />
-                            <span>สเปก</span>
-                          </button>
-                          {canEditPlan && (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => onOpenAddItem(item)}
-                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-colors cursor-pointer"
-                              >
-                                <Edit2 size={12} className="text-slate-500" />
-                                <span>แก้ไข</span>
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => onDeleteItem(item)}
-                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-rose-200 bg-rose-50/70 hover:bg-rose-100 text-rose-700 text-xs font-semibold transition-colors cursor-pointer"
-                              >
-                                <Trash2 size={12} className="text-rose-600" />
-                                <span>ลบ</span>
-                              </button>
-                            </>
-                          )}
-                        </div>
                       </div>
                     </td>
                   </tr>
