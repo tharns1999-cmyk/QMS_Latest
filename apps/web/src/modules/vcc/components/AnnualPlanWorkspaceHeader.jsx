@@ -107,22 +107,22 @@ const StatusIcon = ({ status }) => {
 };
 
 const StepRow = ({ label, name, at, done, current }) => (
-  <div className="flex items-start gap-2 text-xs">
+  <div className="flex items-start gap-2 text-sm">
     {done ? (
-      <CheckCircle2 size={13} className="text-emerald-600 shrink-0 mt-0.5" />
+      <CheckCircle2 size={15} className="text-emerald-600 shrink-0 mt-0.5" />
     ) : (
-      <span className={`w-2 h-2 rounded-full shrink-0 mt-1 ${current ? 'bg-amber-500 ring-2 ring-amber-200' : 'bg-slate-300'}`} />
+      <span className={`w-2 h-2 rounded-full shrink-0 mt-1.5 ${current ? 'bg-amber-500 ring-2 ring-amber-200' : 'bg-slate-300'}`} />
     )}
     <div className="min-w-0">
-      <span className="text-slate-500">{label}: </span>
+      <span className="text-slate-500 text-xs block sm:inline sm:mr-1">{label}: </span>
       <span className={`font-semibold ${done || current ? 'text-slate-900' : 'text-slate-500'}`}>{name}</span>
-      {at && <span className="text-slate-400"> · {at}</span>}
+      {at && <span className="text-slate-400 text-xs font-mono"> · {at}</span>}
     </div>
   </div>
 );
 
 const selectClass =
-  'px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs font-medium bg-white text-slate-700 focus:outline-none focus:border-indigo-600';
+  'h-9 px-3 rounded-xl border border-slate-300 text-sm font-medium bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600';
 
 /**
  * Modern Executive QMS Workspace Header (FM-QC-46)
@@ -173,7 +173,7 @@ export const AnnualPlanWorkspaceHeader = ({
   };
 
   const menuItemClass =
-    'w-full flex items-center gap-2 px-3 py-2 text-left text-xs font-medium text-slate-700 hover:bg-slate-50 cursor-pointer';
+    'w-full flex items-center gap-2.5 px-3.5 py-2 text-left text-sm font-medium text-slate-700 hover:bg-slate-50 cursor-pointer';
 
   return (
     <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs p-4 space-y-3">
@@ -184,11 +184,11 @@ export const AnnualPlanWorkspaceHeader = ({
           {activePlan ? (
             <div>
               <div className="flex items-center gap-2 flex-wrap">
-                <h2 className="text-sm sm:text-base font-bold text-slate-900 tracking-tight" title={activePlan.title}>
+                <h2 className="text-base sm:text-lg lg:text-xl font-bold text-slate-900 tracking-tight" title={activePlan.title}>
                   {activePlan.title}
                 </h2>
                 <span
-                  className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-bold border shadow-2xs shrink-0 ${getStatusBadgeStyle(
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold border shadow-2xs shrink-0 ${getStatusBadgeStyle(
                     activePlan.status
                   )}`}
                 >
@@ -196,17 +196,17 @@ export const AnnualPlanWorkspaceHeader = ({
                   <span>สถานะ: {getPlanStatusLabel(activePlan.status)}</span>
                 </span>
               </div>
-              <div className="flex items-center gap-2 flex-wrap text-xs text-slate-500 mt-1">
-                <span className="font-mono font-bold text-[11px] text-slate-800 bg-slate-100 px-2 py-0.5 rounded border border-slate-200/80 shadow-2xs">
+              <div className="flex items-center gap-2 flex-wrap text-sm text-slate-600 mt-1">
+                <span className="font-mono font-bold text-xs text-slate-800 bg-slate-100 px-2 py-0.5 rounded border border-slate-200/80 shadow-2xs">
                   {activePlan.document_code} Rev.{activePlan.revision}
                 </span>
-                <span className="text-slate-600 font-medium">
+                <span className="text-slate-700 font-medium">
                   {activePlan.department_name_th
                     ? `${activePlan.department_name_th} (${activePlan.department})`
                     : `แผนก ${activePlan.department}`}
                 </span>
                 <span className="text-slate-300">•</span>
-                <span className="font-medium text-slate-700">{planItems.length} รายการ</span>
+                <span className="font-semibold text-slate-800">{planItems.length} รายการ</span>
                 {getDueDateRuleLabel(activePlan.due_date_rule) && (
                   <>
                     <span className="text-slate-300">•</span>
@@ -217,7 +217,7 @@ export const AnnualPlanWorkspaceHeader = ({
             </div>
           ) : (
             <div>
-              <h2 className="text-sm sm:text-base font-bold text-slate-700">แผนการทวนสอบเครื่องมือประจำปี</h2>
+              <h2 className="text-base sm:text-lg font-bold text-slate-700">แผนการทวนสอบเครื่องมือประจำปี</h2>
               <p className="text-xs text-slate-400 mt-0.5">ยังไม่ได้เลือกแผน หรือไม่มีแผนในตัวกรองนี้</p>
             </div>
           )}
@@ -230,9 +230,9 @@ export const AnnualPlanWorkspaceHeader = ({
             <button
               type="button"
               onClick={onSubmitPlan}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-semibold text-xs shadow-2xs transition-colors cursor-pointer"
+              className="inline-flex items-center gap-2 h-9 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-semibold text-sm shadow-2xs transition-colors cursor-pointer"
             >
-              <Send size={12} />
+              <Send size={14} />
               <span>ส่งทบทวนแผน</span>
             </button>
           )}
@@ -242,17 +242,17 @@ export const AnnualPlanWorkspaceHeader = ({
               <button
                 type="button"
                 onClick={() => onOpenWorkflowModal('REVIEW')}
-                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-semibold text-xs shadow-2xs transition-colors cursor-pointer"
+                className="inline-flex items-center gap-2 h-9 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-semibold text-sm shadow-2xs transition-colors cursor-pointer"
               >
-                <CheckCircle2 size={13} />
+                <CheckCircle2 size={15} />
                 <span>ยืนยันการทบทวน</span>
               </button>
               <button
                 type="button"
                 onClick={() => onOpenWorkflowModal('REJECT')}
-                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-rose-300 bg-white hover:bg-rose-50 text-rose-700 font-semibold text-xs transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-xl border border-rose-300 bg-white hover:bg-rose-50 text-rose-700 font-semibold text-sm transition-colors cursor-pointer"
               >
-                <XCircle size={13} />
+                <XCircle size={15} />
                 <span>ส่งกลับแก้ไข</span>
               </button>
             </>
@@ -263,17 +263,17 @@ export const AnnualPlanWorkspaceHeader = ({
               <button
                 type="button"
                 onClick={() => onOpenWorkflowModal('APPROVE')}
-                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-semibold text-xs shadow-2xs transition-colors cursor-pointer"
+                className="inline-flex items-center gap-2 h-9 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-semibold text-sm shadow-2xs transition-colors cursor-pointer"
               >
-                <ShieldCheck size={13} />
+                <ShieldCheck size={15} />
                 <span>อนุมัติแผนประจำปี</span>
               </button>
               <button
                 type="button"
                 onClick={() => onOpenWorkflowModal('REJECT')}
-                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-rose-300 bg-white hover:bg-rose-50 text-rose-700 font-semibold text-xs transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-xl border border-rose-300 bg-white hover:bg-rose-50 text-rose-700 font-semibold text-sm transition-colors cursor-pointer"
               >
-                <XCircle size={13} />
+                <XCircle size={15} />
                 <span>ส่งกลับแก้ไข</span>
               </button>
             </>
@@ -284,9 +284,9 @@ export const AnnualPlanWorkspaceHeader = ({
             type="button"
             onClick={onOpenCreatePlan}
             title="สร้างแผนการทวนสอบเครื่องมือประจำปีใหม่"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
+            className="inline-flex items-center gap-2 h-9 px-3.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-sm font-semibold shadow-2xs transition-colors cursor-pointer"
           >
-            <Plus size={13} className="text-slate-500" />
+            <Plus size={15} className="text-slate-500" />
             <span>สร้างแผนใหม่</span>
           </button>
 
@@ -296,11 +296,11 @@ export const AnnualPlanWorkspaceHeader = ({
               type="button"
               aria-expanded={detailOpen}
               onClick={() => setDetailOpen((v) => !v)}
-              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 text-xs font-medium shadow-2xs transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-sm font-medium shadow-2xs transition-colors cursor-pointer"
             >
-              <Users size={13} className="text-slate-500" />
+              <Users size={15} className="text-slate-500" />
               <span>ผู้เกี่ยวข้อง</span>
-              {detailOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+              {detailOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
             </button>
           )}
 
@@ -312,38 +312,38 @@ export const AnnualPlanWorkspaceHeader = ({
               aria-haspopup="menu"
               aria-expanded={menuOpen}
               onClick={() => setMenuOpen((v) => !v)}
-              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-600 hover:bg-slate-50 shadow-2xs cursor-pointer"
+              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-xl border border-slate-300 bg-white text-sm font-medium text-slate-700 hover:bg-slate-50 shadow-2xs cursor-pointer"
             >
-              <MoreHorizontal size={14} />
+              <MoreHorizontal size={15} />
               <span className="hidden sm:inline">เพิ่มเติม</span>
             </button>
             {menuOpen && (
               <div
                 role="menu"
-                className="absolute right-0 top-full mt-1.5 z-40 w-56 bg-white rounded-xl border border-slate-200 shadow-lg py-1"
+                className="absolute right-0 top-full mt-1.5 z-40 w-60 bg-white rounded-xl border border-slate-200 shadow-lg py-1.5"
               >
                 {canEditPlan && activePlan && (
                   <button type="button" role="menuitem" className={menuItemClass} onClick={runMenu(() => onOpenEditPlan(activePlan))}>
-                    <Edit3 size={13} className="text-slate-500" />
+                    <Edit3 size={15} className="text-slate-500" />
                     <span>แก้ไขหัวแผน</span>
                   </button>
                 )}
                 <button type="button" role="menuitem" className={menuItemClass} onClick={runMenu(onOpenCreatePlan)}>
-                  <Plus size={13} className="text-slate-500" />
+                  <Plus size={15} className="text-slate-500" />
                   <span>สร้างแผนประจำปีใหม่</span>
                 </button>
                 {activePlan && (
                   <button type="button" role="menuitem" className={menuItemClass} onClick={runMenu(onOpenHistory)}>
-                    <History size={13} className="text-slate-500" />
+                    <History size={15} className="text-slate-500" />
                     <span>ประวัติการอนุมัติ</span>
                   </button>
                 )}
                 <button type="button" role="menuitem" className={menuItemClass} onClick={runMenu(onOpenSettings)}>
-                  <SlidersHorizontal size={13} className="text-slate-500" />
+                  <SlidersHorizontal size={15} className="text-slate-500" />
                   <span>ตั้งค่าแผนและเกณฑ์อนุมัติ</span>
                 </button>
                 <button type="button" role="menuitem" className={menuItemClass} onClick={runMenu(() => setGuideOpen((v) => !v))}>
-                  <BookOpen size={13} className="text-indigo-600" />
+                  <BookOpen size={15} className="text-indigo-600" />
                   <span>{guideOpen ? 'ซ่อนข้อกำหนดการใช้แผน' : 'ข้อกำหนดการใช้แผน'}</span>
                 </button>
               </div>
@@ -353,16 +353,16 @@ export const AnnualPlanWorkspaceHeader = ({
       </div>
 
       {/* แถวที่ 2 (Control & Guidance Deck): สลับแผน + ตัวกรอง (ซ้าย) | คำแนะนำขั้นตอน (ขวา) */}
-      <div className="pt-2.5 border-t border-slate-100 flex flex-col xl:flex-row xl:items-center justify-between gap-3 text-xs">
+      <div className="pt-3 border-t border-slate-100 flex flex-col xl:flex-row xl:items-center justify-between gap-3 text-sm">
         {/* ฝั่งซ้าย: กลุ่มควบคุมการเลือกและกรองแผน (Plan Selector & Scope Filters) */}
-        <div className="flex items-center gap-2 flex-wrap shrink-0">
-          <span className="text-[11px] font-medium text-slate-400">เลือกแผน:</span>
+        <div className="flex items-center gap-2.5 flex-wrap shrink-0">
+          <span className="text-xs font-semibold text-slate-500">เลือกแผน:</span>
           <select
             aria-label="เลือกแผนประจำปี"
             value={selectedPlanId || ''}
             onChange={(e) => onSelectPlan(e.target.value)}
             disabled={plans.length === 0}
-            className="px-2.5 py-1 rounded-lg border border-slate-200 text-xs font-bold bg-white text-slate-800 shadow-2xs hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 cursor-pointer min-w-[14rem] max-w-full"
+            className="h-9 px-3 rounded-xl border border-slate-300 text-sm font-semibold bg-white text-slate-800 shadow-2xs hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 cursor-pointer min-w-[14rem] max-w-full"
           >
             {plans.length === 0 && <option value="">ไม่มีแผนในสถานะนี้</option>}
             {plans.map((p) => (
@@ -372,14 +372,14 @@ export const AnnualPlanWorkspaceHeader = ({
             ))}
           </select>
 
-          <span className="text-slate-200 hidden sm:inline">|</span>
+          <span className="text-slate-300 hidden sm:inline">|</span>
 
           {/* กรองตามสถานะของแผน */}
           <select
             aria-label="กรองตามสถานะแผน"
             value={statusTab}
             onChange={(e) => setStatusTab(e.target.value)}
-            className="px-2.5 py-1 rounded-lg border border-slate-200 text-xs font-medium bg-slate-50 hover:bg-white text-slate-700 focus:outline-none focus:border-indigo-600 cursor-pointer"
+            className="h-9 px-3 rounded-xl border border-slate-300 text-sm font-medium bg-slate-50 hover:bg-white text-slate-700 focus:outline-none focus:border-indigo-600 cursor-pointer"
           >
             {PLAN_STATUS_OPTIONS.map((s) => (
               <option key={s.key} value={s.key}>
@@ -395,14 +395,14 @@ export const AnnualPlanWorkspaceHeader = ({
               aria-haspopup="true"
               aria-expanded={filterOpen}
               onClick={() => setFilterOpen((v) => !v)}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-slate-200 bg-slate-50 hover:bg-white text-xs font-medium text-slate-600 cursor-pointer"
+              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-xl border border-slate-300 bg-slate-50 hover:bg-white text-sm font-medium text-slate-700 cursor-pointer"
             >
-              <ListFilter size={12} className="text-slate-500" />
+              <ListFilter size={14} className="text-slate-500" />
               <span>กรองปี/แผนก{extraFilterCount > 0 ? ` (${extraFilterCount})` : ''}</span>
             </button>
             {filterOpen && (
-              <div className="absolute left-0 sm:left-auto sm:right-0 top-full mt-1.5 z-40 w-64 bg-white rounded-xl border border-slate-200 shadow-lg p-3 space-y-2">
-                <label className="block text-[11px] font-semibold text-slate-500">
+              <div className="absolute left-0 sm:left-auto sm:right-0 top-full mt-1.5 z-40 w-64 bg-white rounded-xl border border-slate-200 shadow-lg p-3.5 space-y-2.5">
+                <label className="block text-xs font-semibold text-slate-700">
                   ปีของแผน
                   <select
                     aria-label="กรองตามปีของแผน"
@@ -418,7 +418,7 @@ export const AnnualPlanWorkspaceHeader = ({
                     ))}
                   </select>
                 </label>
-                <label className="block text-[11px] font-semibold text-slate-500">
+                <label className="block text-xs font-semibold text-slate-700">
                   แผนก
                   <select
                     aria-label="กรองแผนตามแผนก"
@@ -442,21 +442,21 @@ export const AnnualPlanWorkspaceHeader = ({
         {/* ฝั่งขวา: คำแนะนำขั้นตอนถัดไป หรือ แถบแจ้งเตือนส่งกลับแก้ไข */}
         <div className="min-w-0 flex items-center justify-start xl:justify-end">
           {activePlan?.status === 'REJECTED' && activePlan?.rejected_reason ? (
-            <div className="inline-flex items-center gap-1.5 text-rose-700 bg-rose-50 px-2.5 py-1 rounded-lg border border-rose-200 text-xs font-medium">
-              <AlertTriangle size={12} className="text-rose-600 shrink-0" />
-              <span className="font-bold">ส่งกลับแก้ไข:</span>
+            <div className="inline-flex items-center gap-2 text-rose-800 bg-rose-50 px-3 py-1.5 rounded-xl border border-rose-200 text-sm font-medium">
+              <AlertTriangle size={15} className="text-rose-600 shrink-0" />
+              <span className="font-bold text-rose-900">ส่งกลับแก้ไข:</span>
               <span className="truncate max-w-xs">{activePlan.rejected_reason}</span>
               {activePlan.rejected_by && (
-                <span className="text-rose-500 text-[11px] shrink-0">
+                <span className="text-rose-600 text-xs shrink-0 font-medium">
                   (โดย {activePlan.rejected_by_name || activePlan.rejected_by})
                 </span>
               )}
             </div>
           ) : activePlan ? (
-            <div className="inline-flex items-center gap-1.5 text-slate-500 text-xs">
-              <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0" />
-              <span className="font-semibold text-slate-700">ขั้นตอนถัดไป:</span>
-              <span className="text-slate-500">{getNextStepText(activePlan, thresholds)}</span>
+            <div className="inline-flex items-center gap-2 text-slate-600 text-sm">
+              <span className="w-2 h-2 rounded-full bg-indigo-600 shrink-0" />
+              <span className="font-bold text-slate-800">ขั้นตอนถัดไป:</span>
+              <span className="text-slate-600">{getNextStepText(activePlan, thresholds)}</span>
             </div>
           ) : (
             <span className="text-slate-400 text-xs">เลือกสถานะหรือตัวกรองเพื่อค้นหาแผน</span>
@@ -500,19 +500,19 @@ export const AnnualPlanWorkspaceHeader = ({
 
       {/* กล่องขยาย: ข้อกำหนดการใช้แผน */}
       {guideOpen && (
-        <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-700 space-y-1.5">
-          <div className="font-bold text-slate-800">ข้อกำหนดการใช้แผน (FM-QC-46)</div>
-          <ul className="space-y-1 text-[11.5px]">
-            <li className="flex items-start gap-1.5">
-              <CheckCircle2 size={13} className="text-indigo-600 shrink-0 mt-0.5" />
+        <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 text-sm text-slate-700 space-y-2">
+          <div className="font-bold text-slate-800 text-sm">ข้อกำหนดการใช้แผน (FM-QC-46)</div>
+          <ul className="space-y-1.5 text-sm">
+            <li className="flex items-start gap-2">
+              <CheckCircle2 size={15} className="text-indigo-600 shrink-0 mt-0.5" />
               <span>เดือนที่วางแผนไว้ไม่ใช่หลักฐานว่าทำเสร็จ ผลจริงจะขึ้นเมื่อตรวจรับใบสั่งงานเรียบร้อยแล้ว</span>
             </li>
-            <li className="flex items-start gap-1.5">
-              <CheckCircle2 size={13} className="text-indigo-600 shrink-0 mt-0.5" />
+            <li className="flex items-start gap-2">
+              <CheckCircle2 size={15} className="text-indigo-600 shrink-0 mt-0.5" />
               <span>เครื่องมือแบบกลุ่มต้องเลือกรหัสเครื่องมือรายตัวก่อนออกใบสั่งงาน</span>
             </li>
-            <li className="flex items-start gap-1.5">
-              <CheckCircle2 size={13} className="text-indigo-600 shrink-0 mt-0.5" />
+            <li className="flex items-start gap-2">
+              <CheckCircle2 size={15} className="text-indigo-600 shrink-0 mt-0.5" />
               <span>วันครบกำหนดคำนวณอัตโนมัติจากเดือนที่วางแผน ตามกติกาที่ตั้งค่าไว้ในแผน</span>
             </li>
           </ul>

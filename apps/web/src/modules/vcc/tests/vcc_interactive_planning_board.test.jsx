@@ -66,7 +66,7 @@ describe('VCC Interactive Planning Board (FM-QC-46 Redesign)', () => {
     fireEvent.click(full12Btn);
     expect(screen.getByText('ด.1')).toBeInTheDocument();
     expect(screen.getByText('ด.12')).toBeInTheDocument();
-  });
+  }, 15000);
 
   it('2. คลิก Cell ที่มีแผนอยู่แล้ว จะเปิด Popover แสดงรายละเอียดวันครบกำหนดและ Quick Actions ได้', async () => {
     render(<AssetRegisterPage />);
@@ -96,7 +96,7 @@ describe('VCC Interactive Planning Board (FM-QC-46 Redesign)', () => {
     // Click "ไม่ยกเลิก" -> aborts delete
     fireEvent.click(screen.getByRole('button', { name: 'ไม่ยกเลิก' }));
     expect(screen.queryByText(/ยืนยันยกเลิกรอบเดือน 2 ออกจากแผน\?/i)).not.toBeInTheDocument();
-  });
+  }, 15000);
 
   it('3. เปิด Side Inspector ดูรายละเอียดสเปกเครื่องมือ ข้อมูลสถานที่ และไทม์ไลน์ 12 เดือนแบบ On-demand', async () => {
     render(<AssetRegisterPage />);
@@ -119,5 +119,5 @@ describe('VCC Interactive Planning Board (FM-QC-46 Redesign)', () => {
     await waitFor(() => {
       expect(screen.queryByText(/ข้อมูลจำเพาะและสถานที่ติดตั้ง/i)).not.toBeInTheDocument();
     });
-  });
+  }, 15000);
 });

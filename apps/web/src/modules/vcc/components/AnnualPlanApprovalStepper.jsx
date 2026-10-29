@@ -47,18 +47,18 @@ const getNextStepText = (plan, thresholds) => {
 };
 
 const StepRow = ({ label, name, at, done, current }) => (
-  <div className="flex items-start gap-2 text-xs">
+  <div className="flex items-start gap-2 text-sm">
     {done ? (
-      <CheckCircle2 size={13} className="text-emerald-600 shrink-0 mt-0.5" />
+      <CheckCircle2 size={15} className="text-emerald-600 shrink-0 mt-0.5" />
     ) : (
       <span
-        className={`w-2 h-2 rounded-full shrink-0 mt-1 ${current ? 'bg-amber-500' : 'bg-slate-300'}`}
+        className={`w-2.5 h-2.5 rounded-full shrink-0 mt-1.5 ${current ? 'bg-amber-500 ring-2 ring-amber-200' : 'bg-slate-300'}`}
       />
     )}
     <div className="min-w-0">
-      <span className="text-slate-500">{label}: </span>
+      <span className="text-slate-500 text-xs sm:text-sm">{label}: </span>
       <span className={`font-semibold ${done || current ? 'text-slate-900' : 'text-slate-500'}`}>{name}</span>
-      {at && <span className="text-slate-400"> · {at}</span>}
+      {at && <span className="text-slate-400 text-xs font-mono block sm:inline sm:ml-1">· {at}</span>}
     </div>
   </div>
 );
@@ -78,20 +78,20 @@ export const AnnualPlanApprovalStepper = ({
   if (!activePlan) return null;
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-2.5">
       {activePlan.status === 'REJECTED' && activePlan.rejected_reason && (
         <div
           role="status"
-          className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-900 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2"
+          className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-900 text-sm flex flex-col sm:flex-row sm:items-center justify-between gap-2.5"
         >
           <div className="flex items-center gap-2">
-            <AlertTriangle size={15} className="text-rose-600 shrink-0" />
+            <AlertTriangle size={17} className="text-rose-600 shrink-0" />
             <div>
-              <span className="font-bold text-rose-800">ส่งกลับแก้ไข:</span> <span>{activePlan.rejected_reason}</span>
+              <span className="font-bold text-rose-800">ส่งกลับแก้ไข:</span> <span className="font-medium">{activePlan.rejected_reason}</span>
             </div>
           </div>
           {activePlan.rejected_by && (
-            <div className="text-[11px] text-rose-600 shrink-0 pl-6 sm:pl-0">
+            <div className="text-xs text-rose-600 shrink-0 pl-6 sm:pl-0 font-medium">
               โดย {activePlan.rejected_by_name || activePlan.rejected_by}
               {activePlan.rejected_at && ` · ${formatThaiDateTime(activePlan.rejected_at)}`}
             </div>
@@ -99,22 +99,22 @@ export const AnnualPlanApprovalStepper = ({
         </div>
       )}
 
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs border-y border-slate-200/80 py-2">
+      <div className="flex flex-wrap items-center gap-x-3.5 gap-y-2.5 text-sm border-y border-slate-200/80 py-2.5">
         <span
-          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-bold ${getPlanStatusTone(activePlan.status)}`}
+          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold ${getPlanStatusTone(activePlan.status)}`}
         >
           สถานะ: {getPlanStatusLabel(activePlan.status)}
         </span>
-        <span className="text-slate-600 min-w-0">{getNextStepText(activePlan, thresholds)}</span>
+        <span className="text-slate-700 font-medium min-w-0">{getNextStepText(activePlan, thresholds)}</span>
 
         <div className="flex flex-wrap items-center gap-2 ml-auto">
           {canEditPlan && (
             <button
               type="button"
               onClick={onSubmitPlan}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm transition-colors cursor-pointer shadow-2xs"
             >
-              <Send size={12} />
+              <Send size={14} />
               <span>ส่งทบทวนแผน</span>
             </button>
           )}
@@ -124,17 +124,17 @@ export const AnnualPlanApprovalStepper = ({
               <button
                 type="button"
                 onClick={() => onOpenWorkflowModal('REVIEW')}
-                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm transition-colors cursor-pointer shadow-2xs"
               >
-                <CheckCircle2 size={13} />
+                <CheckCircle2 size={15} />
                 <span>ยืนยันการทบทวน</span>
               </button>
               <button
                 type="button"
                 onClick={() => onOpenWorkflowModal('REJECT')}
-                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-rose-300 bg-white hover:bg-rose-50 text-rose-700 font-semibold text-xs transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-rose-300 bg-white hover:bg-rose-50 text-rose-700 font-semibold text-sm transition-colors cursor-pointer shadow-2xs"
               >
-                <XCircle size={13} />
+                <XCircle size={15} />
                 <span>ส่งกลับแก้ไข</span>
               </button>
             </>
@@ -145,17 +145,17 @@ export const AnnualPlanApprovalStepper = ({
               <button
                 type="button"
                 onClick={() => onOpenWorkflowModal('APPROVE')}
-                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm transition-colors cursor-pointer shadow-2xs"
               >
-                <ShieldCheck size={13} />
+                <ShieldCheck size={15} />
                 <span>อนุมัติแผนประจำปี</span>
               </button>
               <button
                 type="button"
                 onClick={() => onOpenWorkflowModal('REJECT')}
-                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-rose-300 bg-white hover:bg-rose-50 text-rose-700 font-semibold text-xs transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-rose-300 bg-white hover:bg-rose-50 text-rose-700 font-semibold text-sm transition-colors cursor-pointer shadow-2xs"
               >
-                <XCircle size={13} />
+                <XCircle size={15} />
                 <span>ส่งกลับแก้ไข</span>
               </button>
             </>
@@ -165,10 +165,10 @@ export const AnnualPlanApprovalStepper = ({
             type="button"
             aria-expanded={detailOpen}
             onClick={() => setDetailOpen((v) => !v)}
-            className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-slate-500 hover:text-slate-800 hover:bg-slate-100 text-[11.5px] font-medium cursor-pointer"
+            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 text-xs font-semibold cursor-pointer border border-slate-200"
           >
             <span>ผู้เกี่ยวข้อง</span>
-            {detailOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+            {detailOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
           </button>
         </div>
       </div>
