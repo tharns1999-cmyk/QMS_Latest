@@ -4,7 +4,7 @@ This directory contains the complete User Acceptance Testing (UAT) package for t
 
 ## A. Start the Application
 1. **Project Directory:** `c:/Users/User/Desktop/qms-portal`
-2. **Dependency Installation Command:** `npm install`
+2. **Dependency Installation Command:** `pnpm install`
 3. **Application Start Command:** `npm run dev:uat` (Must use UAT mode)
 4. **Exact Local URL:** `http://localhost:5173/dcc/uat-tools` (to access the UAT Panel)
 5. **Supported Browser:** Google Chrome (latest)

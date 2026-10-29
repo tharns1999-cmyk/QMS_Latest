@@ -42,7 +42,7 @@
 
 ## 4. การกู้คืน
 
-เตรียมเครื่อง: ติดตั้ง Node.js, โคลน repo, `cd apps/api && npm ci`, ล็อกอิน `npx wrangler login`
+เตรียมเครื่อง: ติดตั้ง Node.js, โคลน repo, `cd apps/api && pnpm install --frozen-lockfile`, ล็อกอิน `npx wrangler login`
 สำหรับ backup ใน Drive ติดตั้ง rclone แล้วรัน `rclone config` สร้าง 2 remote: `gdrive` (ประเภท drive, root_folder_id = GDRIVE_FOLDER_ID) และ `safe` (ประเภท crypt ชี้ไป `gdrive:`, filename_encryption = off, directory_name_encryption = false, ใส่ BACKUP_PASSWORD)
 
 ### A. ข้อมูลผิดพลาดและรู้เวลาโดยประมาณ → ย้อนเวลา (เร็วที่สุด)
@@ -90,8 +90,8 @@ Deploy คอมมิตเวอร์ชันก่อนหน้าอี�
 3. สั่ง Nightly backup ด้วยมือ (Run workflow) และรอให้เขียว
 4. ตรวจว่า migration ใหม่เป็นแบบเพิ่มอย่างเดียว (หัวข้อ 4 ข้อ D)
 5. ปล่อยเวอร์ชัน:
-   - API: `cd apps/api` แล้ว `npm run db:migrate:remote` ตามด้วย `npm run deploy`
-   - เว็บ: `cd apps/web` ตั้ง `VITE_API_URL=https://qms-api.qms-api.workers.dev` แล้ว `npm run build` ตามด้วย `npx wrangler@4.151.3 deploy`
+   - API: `cd apps/api` แล้ว `pnpm run db:migrate:remote` ตามด้วย `pnpm run deploy`
+   - เว็บ: `cd apps/web` ตั้ง `VITE_API_URL=https://qms-api.qms-api.workers.dev` แล้ว `pnpm run build` ตามด้วย `npx wrangler@4.151.3 deploy`
    - ที่อยู่ระบบ: เว็บ https://qms-web.qms-api.workers.dev, API https://qms-api.qms-api.workers.dev
 6. ติด tag ใน git (เช่น `v1.0.0`) และบันทึกวันที่ ผู้ปล่อย และ bookmark
 

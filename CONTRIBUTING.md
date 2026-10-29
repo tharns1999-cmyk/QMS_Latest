@@ -35,7 +35,7 @@ scope: dcc | vcc | portal | shared | web | api | db
 
 ## Pull request
 
-1. ก่อนเปิด PR ให้รัน `npm run check` ที่ root ให้ผ่าน (lint + test + build)
+1. ก่อนเปิด PR ให้รัน `pnpm run check` ที่ root ให้ผ่าน (lint + test + build)
 2. กรอก PR template และระบุ module ที่งานนั้นแตะ
 3. ต้องมี reviewer approve อย่างน้อย 1 คนก่อน merge ใช้ **Squash merge** เข้า `develop` และใช้ **Merge commit** เมื่อ merge `release/*` เข้า `main`
 4. ถ้ามีการเปลี่ยน database ต้องเพิ่ม migration ใหม่ใน `database/migrations/` พร้อมไฟล์ `_down.sql` ห้ามแก้ migration ที่เคยรันไปแล้ว

@@ -1,14 +1,15 @@
 {
   "name": "qms-portal",
   "private": true,
+  "packageManager": "pnpm@12.16.1",
   "scripts": {
-    "install:all": "npm ci --prefix apps/web && npm ci --prefix apps/api",
-    "dev": "npm run dev --prefix apps/web",
-    "dev:api": "npm run dev --prefix apps/api",
-    "build": "npm run build --prefix apps/web",
-    "lint": "npm run lint --prefix apps/web",
-    "test": "npm test --prefix apps/web && npm test --prefix apps/api",
-    "test:e2e": "npm run test:e2e --prefix apps/web",
-    "check": "npm run lint && npm test && npm run build"
+    "install:all": "pnpm --dir apps/web install --frozen-lockfile && pnpm --dir apps/api install --frozen-lockfile",
+    "dev": "pnpm --dir apps/web run dev",
+    "dev:api": "pnpm --dir apps/api run dev",
+    "build": "pnpm --dir apps/web run build",
+    "lint": "pnpm --dir apps/web run lint",
+    "test": "pnpm --dir apps/web test && pnpm --dir apps/api test",
+    "test:e2e": "pnpm --dir apps/web run test:e2e",
+    "check": "pnpm run lint && pnpm test && pnpm run build"
   }
 }
