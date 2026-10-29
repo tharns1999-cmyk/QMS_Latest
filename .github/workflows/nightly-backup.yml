@@ -68,7 +68,7 @@ jobs:
       - name: Export the database and prove the export restores
         run: |
           node scripts/backup-tools.js counts --remote > counts-before.json
-          npx wrangler d1 export DB --remote --skip-confirmation --output qms.sql
+          pnpm exec wrangler d1 export DB --remote --skip-confirmation --output qms.sql
           node scripts/backup-tools.js counts --remote > counts-after.json
           node scripts/backup-tools.js verify qms.sql --min counts-before.json --max counts-after.json
           sha256sum qms.sql | tee qms.sql.sha256
