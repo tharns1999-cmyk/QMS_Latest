@@ -73,6 +73,11 @@ describe('VCC Multi-Department Access & Approval Workflow (RBAC & SoD)', () => {
   });
 
   afterAll(async () => {
+    try {
+      await env?.DB?.prepare(
+        "UPDATE settings SET value = '[\"เทอร์โมมิเตอร์\",\"เครื่องชั่ง\",\"ตุ้มน้ำหนักมาตรฐาน\",\"Temperature Controller\",\"เครื่องตรวจจับโลหะ\",\"นาฬิกาจับเวลา\",\"เวอร์เนียร์คาลิปเปอร์\",\"เครื่องวัดคุณภาพน้ำ/น้ำมัน\"]' WHERE key = 'vcc_asset_types'"
+      )?.run();
+    } catch {}
     await proxy?.dispose();
   });
 
@@ -114,9 +119,12 @@ describe('VCC Multi-Department Access & Approval Workflow (RBAC & SoD)', () => {
     // QC and QA cannot modify notification settings
     expect((await call('PUT', '/api/vcc/notification-settings', 'QA-MGR', { review_sla_days: 5 })).status).toBe(403);
 
-    // DCC can modify asset types
-    const dccRes = await call('PUT', '/api/vcc/asset-types', 'DCC-USER', { assetTypes: ['เทอร์โมมิเตอร์', 'เวอร์เนียร์'] });
+    // DCC can modify asset types (preserving default types plus new one)
+    const existingTypes = (await call('GET', '/api/vcc/asset-types', 'DCC-USER')).body.assetTypes || [];
+    const updatedTypes = Array.from(new Set([...existingTypes, 'ไมโครมิเตอร์']));
+    const dccRes = await call('PUT', '/api/vcc/asset-types', 'DCC-USER', { assetTypes: updatedTypes });
     expect(dccRes.status).toBe(200);
+    expect(dccRes.body.assetTypes).toContain('ไมโครมิเตอร์');
   });
 
   it('4. Multi-Department Annual Plan Workflow (QC Draft -> QC Review -> QA Approve) with strict SoD', async () => {
@@ -124,7 +132,7 @@ describe('VCC Multi-Department Access & Approval Workflow (RBAC & SoD)', () => {
     const assetRes = await call('POST', '/api/vcc/assets', 'DCC-USER', {
       asset_code: 'QC-CAL-001',
       name: '[ข้อมูลทดสอบ] ไมโครมิเตอร์ QC',
-      asset_type: 'เวอร์เนียร์',
+      asset_type: 'ไมโครมิเตอร์',
       department: 'QC',
       is_group: 0
     });
