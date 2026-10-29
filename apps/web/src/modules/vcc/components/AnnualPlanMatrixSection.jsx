@@ -29,7 +29,6 @@ import {
   PlanHistoryModal
 } from './AnnualPlanModals';
 import AnnualPlanWorkspaceHeader from './AnnualPlanWorkspaceHeader';
-import AnnualPlanApprovalStepper from './AnnualPlanApprovalStepper';
 import AnnualPlanMatrixTable from './AnnualPlanMatrixTable';
 import SmartAssetImportModal from './SmartAssetImportModal';
 
@@ -179,16 +178,18 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
     }
   };
 
-  const openCreatePlan = () => {
+  const openCreatePlan = (overrideYear = null) => {
     const currentYear = new Date().getFullYear();
+    const targetYear = overrideYear ? Number(overrideYear) : (filterYear ? Number(filterYear) : currentYear);
+    const targetDept = filterDept || activeDepartments[0]?.code || '';
     setEditingPlan(null);
     setPlanFormError('');
     setPlanForm({
-      plan_year: currentYear,
-      department: activeDepartments[0]?.code || '',
+      plan_year: targetYear,
+      department: targetDept,
       document_code: planSettings.default_doc_code || 'FM-QC-46',
       revision: '01',
-      title: `แผนการทวนสอบเครื่องมือประจำปี ${currentYear}`,
+      title: `แผนการทวนสอบเครื่องมือประจำปี ${targetYear}`,
       due_date_rule: planSettings.due_date_rule || 'END_OF_MONTH'
     });
     setPlanFormOpen(true);
@@ -463,14 +464,18 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
 
   const availableYears = useMemo(() => {
     const currentYear = new Date().getFullYear();
-    const yearSet = new Set([
+    const dynamicBaseYears = [
       currentYear - 1,
       currentYear,
       currentYear + 1,
-      ...plans.map((p) => Number(p.plan_year)).filter(Boolean)
-    ]);
+      currentYear + 2,
+      currentYear + 3
+    ];
+    const planYears = plans.map((p) => Number(p.plan_year)).filter(Boolean);
+    const filterYr = filterYear ? [Number(filterYear)] : [];
+    const yearSet = new Set([...dynamicBaseYears, ...planYears, ...filterYr]);
     return Array.from(yearSet).sort((a, b) => b - a);
-  }, [plans]);
+  }, [plans, filterYear]);
 
   return (
     <div className="space-y-3" data-testid="annual-plan-matrix">
@@ -489,6 +494,9 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
         activePlan={activePlan}
         planItems={planItems}
         canEditPlan={canEditPlan}
+        thresholds={thresholds}
+        onSubmitPlan={handleSubmitPlan}
+        onOpenWorkflowModal={openWorkflowModal}
         onOpenSettings={openSettings}
         onOpenCreatePlan={openCreatePlan}
         onOpenEditPlan={openEditPlan}
@@ -509,14 +517,18 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
       ) : !activePlan ? (
         <div className="bg-white rounded-2xl border border-slate-200/80 p-12 text-center space-y-3 shadow-2xs">
           <div className="text-base font-bold text-slate-700">
-            ไม่พบแผนการทวนสอบประจำปีในสถานะ “{getPlanStatusLabel(statusTab)}”
+            {filterYear
+              ? `ไม่พบแผนการทวนสอบประจำปี ${filterYear} ในสถานะ “${getPlanStatusLabel(statusTab)}”`
+              : `ไม่พบแผนการทวนสอบประจำปีในสถานะ “${getPlanStatusLabel(statusTab)}”`}
           </div>
           <p className="text-xs text-slate-500">
-            เลือกสถานะอื่นจากตัวกรองด้านบน หรือสร้างแผนประจำปีใหม่
+            {filterYear
+              ? `ยังไม่มีแผนสำหรับปี ${filterYear} (พ.ศ. ${Number(filterYear) + 543}) คุณสามารถสร้างแผนใหม่ได้ทันที`
+              : 'เลือกสถานะอื่นจากตัวกรองด้านบน หรือสร้างแผนประจำปีใหม่'}
           </p>
           <button
             type="button"
-            onClick={openCreatePlan}
+            onClick={() => openCreatePlan(filterYear)}
             className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold cursor-pointer"
           >
             <Plus size={13} />
@@ -525,14 +537,6 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
         </div>
       ) : (
         <div className="space-y-2.5">
-          <AnnualPlanApprovalStepper
-            activePlan={activePlan}
-            thresholds={thresholds}
-            canEditPlan={canEditPlan}
-            onSubmitPlan={handleSubmitPlan}
-            onOpenWorkflowModal={openWorkflowModal}
-          />
-
           <AnnualPlanMatrixTable
             planItems={planItems}
             activePlan={activePlan}
