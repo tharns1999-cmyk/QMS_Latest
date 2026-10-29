@@ -12,9 +12,16 @@
 - **Orchestrator**: [.agents/orchestrator.md](file:///d:/Tharn/QMS-Portal_NewVersion/.agents/orchestrator.md) — วิเคราะห์ Requirement, ควบคุมขอบเขตงาน, และกำกับไปป์ไลน์
 - **Architect**: [.agents/architect.md](file:///d:/Tharn/QMS-Portal_NewVersion/.agents/architect.md) — สถาปัตยกรรมระบบ, Zustand store, Database schema, Backward compatibility
 - **Frontend Coder**: [.agents/frontend-coder.md](file:///d:/Tharn/QMS-Portal_NewVersion/.agents/frontend-coder.md) — React 19, Tailwind CSS v4, Zustand, จัดการ Edge cases ครบถ้วน
-- **Backend Coder**: [.agents/backend-coder.md](file:///d:/Tharn/QMS-Portal_NewVersion/.agents/backend-coder.md) — Express 5, PostgreSQL, node-cron, Migrations, PDF services
+- **Backend Coder**: [.agents/backend-coder.md](file:///d:/Tharn/QMS-Portal_NewVersion/.agents/backend-coder.md) — Cloudflare Workers + Hono (ESM) + Cloudflare D1 (SQLite) + R2, cron ผ่าน `scheduled()`, migrations ที่ `apps/api/migrations`
 - **QA Tester**: [.agents/qa-tester.md](file:///d:/Tharn/QMS-Portal_NewVersion/.agents/qa-tester.md) — รัน `pnpm run lint`, `pnpm run test`, `pnpm run build` ป้องกัน Regression
 - **Security Auditor**: [.agents/security-auditor.md](file:///d:/Tharn/QMS-Portal_NewVersion/.agents/security-auditor.md) — ตรวจสอบ RBAC, ตราประทับ, ลายน้ำ, และ Audit trail
+
+### สถาปัตยกรรม Backend (`apps/api`)
+- **Runtime:** Cloudflare Workers ตั้งค่าใน `apps/api/wrangler.jsonc` (entry `src/index.js`, binding `DB` = D1, `FILES` = R2 bucket `qms-files`)
+- **Routing:** Hono app เดียวใน `src/index.js` โมดูล VCC แยก route ไว้ใน `src/vcc*.js` (สิทธิ์ VCC อยู่ที่ `src/vccAuth.js`)
+- **Database:** D1 (SQLite) ใช้ `db.prepare(...).bind(...)` ไม่มี ORM ตารางหรือคอลัมน์ใหม่ต้องเป็นไฟล์ migration ใหม่ใน `apps/api/migrations` ห้ามแก้ไฟล์เดิม
+- **งานตามเวลา:** ใช้ `scheduled()` ใน `src/index.js` คู่กับ `triggers.crons` ใน `wrangler.jsonc` (ไม่มี node-cron หรือ background job แยก)
+- **Test:** Vitest (`apps/api/src/*.test.js`) รันด้วย `pnpm --dir apps/api test` บน D1 จำลองในเครื่อง
 
 ---
 
