@@ -79,7 +79,7 @@ describe('ActionLog Page & Multi-Key Timestamp Synchronization Tests', () => {
 
   it('renders action log table with entries for DCC Admin without crashing', () => {
     renderWithRouter(<ActionLog />);
-    expect(screen.getByText(/บันทึกประวัติการทำงาน/i)).toBeInTheDocument();
+    expect(screen.getByText(/บันทึกประวัติการดำเนินการ/i)).toBeInTheDocument();
     expect(screen.getByText('DAR_SUBMIT')).toBeInTheDocument();
     expect(screen.getByText('John Doe')).toBeInTheDocument();
   });
@@ -128,5 +128,75 @@ describe('ActionLog Page & Multi-Key Timestamp Synchronization Tests', () => {
     expect(objectLog.actionType).toBe('DOWNLOAD_WATERMARK_PDF');
     expect(objectLog.timestamp).toBeDefined();
     expect(objectLog.date).toBeDefined();
+  });
+
+  it('renders VCC logs with Thai event labels and supports module filtering', () => {
+    useStore.setState({
+      currentUser: mockDccAdmin,
+      actionLog: [
+        {
+          id: 'VCC-LOG-001',
+          actionType: 'VCC_WO_CREATED',
+          actor: 'Calibration Officer',
+          actorRole: 'VCC Engineer',
+          details: 'Created Work Order WO-2026-001',
+          date: '2026-08-25T08:00:00.000Z'
+        },
+        {
+          id: 'DCC-LOG-001',
+          actionType: 'DAR_SUBMIT',
+          actor: 'John Doe',
+          actorRole: 'Requester',
+          details: 'Submitted DAR-2026-001',
+          date: '2026-08-25T01:00:00.000Z'
+        }
+      ]
+    });
+
+    renderWithRouter(<ActionLog />);
+
+    // Check VCC translation and module badge
+    expect(screen.getByText('สร้างใบสั่งงานสอบเทียบ/ทวนสอบ')).toBeInTheDocument();
+    expect(screen.getByText('VCC_WO_CREATED')).toBeInTheDocument();
+    expect(screen.getByText('VCC')).toBeInTheDocument();
+    expect(screen.getByText('DCC')).toBeInTheDocument();
+
+    // Switch to VCC only
+    const vccFilterBtn = screen.getByRole('button', { name: /VCC \(สอบเทียบ\/ทวนสอบ\)/i });
+    fireEvent.click(vccFilterBtn);
+    expect(screen.getByText('VCC_WO_CREATED')).toBeInTheDocument();
+    expect(screen.queryByText('DAR_SUBMIT')).not.toBeInTheDocument();
+
+    // Switch to DCC only
+    const dccFilterBtn = screen.getByRole('button', { name: /DCC \(ควบคุมเอกสาร\)/i });
+    fireEvent.click(dccFilterBtn);
+    expect(screen.getByText('DAR_SUBMIT')).toBeInTheDocument();
+    expect(screen.queryByText('VCC_WO_CREATED')).not.toBeInTheDocument();
+  });
+
+  it('opens event detail modal when clicking view details', () => {
+    useStore.setState({
+      currentUser: mockDccAdmin,
+      actionLog: [
+        {
+          id: 'LOG-DETAILS-001',
+          actionType: 'VCC_WO_APPROVED',
+          actor: 'Quality Manager',
+          actorRole: 'Approver',
+          details: JSON.stringify({ wo_number: 'WO-2026-005', approver_notes: 'Passed acceptance' }),
+          date: '2026-08-25T09:30:00.000Z'
+        }
+      ]
+    });
+
+    renderWithRouter(<ActionLog />);
+
+    const detailBtn = screen.getByRole('button', { name: /ดูรายละเอียด/i });
+    fireEvent.click(detailBtn);
+
+    // Modal should be visible
+    expect(screen.getByText(/รายละเอียดเหตุการณ์ Audit Log/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/WO-2026-005/i).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/Passed acceptance/i).length).toBeGreaterThanOrEqual(1);
   });
 });

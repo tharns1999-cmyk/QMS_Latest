@@ -379,7 +379,7 @@ const Sidebar = () => {
                     <NavItem 
                       to="/dcc/admin/action-log" 
                       icon={History} 
-                      label="บันทึกประวัติการทำงาน" 
+                      label="ประวัติการดำเนินการ (Audit Trail)" 
                     />
                   </>
                 )}

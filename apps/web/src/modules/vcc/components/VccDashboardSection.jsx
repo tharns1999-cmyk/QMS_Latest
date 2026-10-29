@@ -7,7 +7,6 @@ import {
   Clock,
   CheckCircle2,
   AlertTriangle,
-  History,
   RefreshCw,
   FileSpreadsheet,
   X,
@@ -16,7 +15,6 @@ import {
 } from 'lucide-react';
 import {
   fetchVccDashboard,
-  fetchVccAuditLog,
   saveVccNotificationSettings,
   exportVccAnnualPlanCsv,
   exportVccWorkOrdersCsv
@@ -58,8 +56,6 @@ const triggerCsvDownload = (csvText, filename) => {
 export default function VccDashboardSection({ onNavigateToWorkOrders }) {
   const [year, setYear] = useState(2026);
   const [dashboard, setDashboard] = useState(null);
-  const [auditHistory, setAuditHistory] = useState([]);
-  const [auditCategory, setAuditCategory] = useState('VCC_');
   const [alertTab, setAlertTab] = useState('OVERDUE');
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
@@ -77,12 +73,8 @@ export default function VccDashboardSection({ onNavigateToWorkOrders }) {
     setLoading(true);
     setErrorMsg('');
     try {
-      const [dashData, logs] = await Promise.all([
-        fetchVccDashboard({ year }),
-        fetchVccAuditLog(auditCategory)
-      ]);
+      const dashData = await fetchVccDashboard({ year });
       setDashboard(dashData);
-      setAuditHistory(logs || []);
       if (dashData?.notification_settings) {
         const s = dashData.notification_settings;
         setMonthlyDueSoonText((s.monthly_due_soon_days || [7, 3]).join(', '));
@@ -96,7 +88,7 @@ export default function VccDashboardSection({ onNavigateToWorkOrders }) {
     } finally {
       setLoading(false);
     }
-  }, [year, auditCategory]);
+  }, [year]);
 
   useEffect(() => {
     loadData();
@@ -569,48 +561,7 @@ export default function VccDashboardSection({ onNavigateToWorkOrders }) {
         </div>
       </div>
 
-      {/* 5. VCC Audit Trail (Subtle Bottom Analytical Card) */}
-      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs p-5 sm:p-6 space-y-3">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-2 border-b border-slate-100">
-          <div className="flex items-center gap-2">
-            <History size={16} className="text-slate-500 shrink-0" />
-            <h3 className="text-sm font-bold text-slate-900 tracking-tight">ประวัติการตรวจสอบย้อนหลัง (VCC Audit Trail)</h3>
-          </div>
-          <select
-            aria-label="กรองหมวดหมู่ประวัติ VCC"
-            value={auditCategory}
-            onChange={(e) => setAuditCategory(e.target.value)}
-            className="h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 focus:outline-hidden focus:border-slate-400 cursor-pointer shadow-2xs"
-          >
-            <option value="VCC_">ทั้งหมดใน VCC</option>
-            <option value="VCC_ASSET">ทะเบียนเครื่องมือ (VCC_ASSET)</option>
-            <option value="VCC_PLAN">แผนประจำปี (VCC_PLAN)</option>
-            <option value="VCC_WO">ใบสั่งงานและระงับใช้ (VCC_WO)</option>
-            <option value="VCC_NOTIFICATION">กติกาแจ้งเตือน (VCC_NOTIFICATION)</option>
-            <option value="VCC_EXPORT">การส่งออกรายงาน (VCC_EXPORT)</option>
-          </select>
-        </div>
-
-        <div className="max-h-56 overflow-y-auto divide-y divide-slate-100 pr-1 text-xs" data-testid="vcc-audit-trail-list">
-          {auditHistory.length === 0 ? (
-            <div className="py-6 text-center text-slate-400 font-medium">ยังไม่มีบันทึกประวัติในหมวดหมู่นี้</div>
-          ) : (
-            auditHistory.slice(0, 30).map((item) => (
-              <div key={item.id} className="py-2.5 px-1 hover:bg-slate-50/70 rounded transition-colors flex flex-wrap items-center justify-between gap-2">
-                <div className="flex items-center gap-2.5">
-                  <span className="px-2 py-0.5 rounded font-mono font-semibold text-slate-700 bg-slate-100 border border-slate-200/60">
-                    {item.action}
-                  </span>
-                  <span className="font-medium text-slate-800 text-xs sm:text-sm">{item.actor_name || item.actor_id}</span>
-                </div>
-                <div className="text-slate-400 font-mono text-xs">{String(item.at || '').slice(0, 19).replace('T', ' ')}</div>
-              </div>
-            ))
-          )}
-        </div>
-      </div>
-
-      {/* 6. Notification Settings Modal */}
+      {/* 5. Notification Settings Modal */}
       {settingsOpen && (
         <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl space-y-4 border border-slate-200/80 animate-in fade-in zoom-in-95 duration-150">
