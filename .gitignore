@@ -17,3 +17,8 @@ __MACOSX/
 
 graphify-out/
 apps/.wrangler/
+
+# Local tooling output (Claude Code settings, wrangler temp, generated outputs)
+.claude/
+.wrangler/
+outputs/
