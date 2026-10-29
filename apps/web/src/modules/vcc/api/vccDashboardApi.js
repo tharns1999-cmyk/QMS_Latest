@@ -4,6 +4,7 @@ import {
   writeJson,
   getLocalAssets,
   assertLocalDcc,
+  assertLocalVccAccess,
   getLocalAudit,
   appendLocalAudit
 } from './vccApi';
@@ -50,7 +51,7 @@ export const fetchVccNotificationSettings = async () => {
     const { settings } = await apiGet('/api/vcc/notification-settings');
     return settings;
   }
-  assertLocalDcc();
+  assertLocalVccAccess();
   return getLocalNotificationSettings();
 };
 
@@ -100,7 +101,7 @@ export const fetchVccDashboard = async ({ year = 2026, reference_date } = {}) =>
     if (reference_date) params.set('reference_date', reference_date);
     return apiGet(`/api/vcc/dashboard?${params.toString()}`);
   }
-  assertLocalDcc();
+  assertLocalVccAccess();
   const refDate = reference_date && /^\d{4}-\d{2}-\d{2}$/.test(reference_date)
     ? reference_date
     : new Date().toISOString().slice(0, 10);
@@ -337,7 +338,7 @@ export const fetchVccAuditLog = async (category = 'VCC_') => {
     const { history } = await apiGet(`/api/vcc/audit-log?category=${encodeURIComponent(category)}`);
     return history || [];
   }
-  assertLocalDcc();
+  assertLocalVccAccess();
   const all = getLocalAudit();
   return all.filter((entry) => String(entry.action || '').startsWith(category));
 };
@@ -347,7 +348,7 @@ export const exportVccAnnualPlanCsv = async (year = 2026) => {
     const blob = await apiBlob(`/api/vcc/export/annual-plan?year=${encodeURIComponent(year)}`);
     return blob.text();
   }
-  assertLocalDcc();
+  assertLocalVccAccess();
   const plans = getLocalPlans().filter((p) => Number(p.plan_year) === Number(year));
   if (plans.length === 0) throw new Error(`ไม่พบแผนประจำปี ${year}`);
   const plan = plans[0];
@@ -388,7 +389,7 @@ export const exportVccWorkOrdersCsv = async () => {
     const blob = await apiBlob('/api/vcc/export/work-orders');
     return blob.text();
   }
-  assertLocalDcc();
+  assertLocalVccAccess();
   const allAssets = new Map(getLocalAssets().map((a) => [a.id, a]));
   const wos = getLocalWos();
   const header = [

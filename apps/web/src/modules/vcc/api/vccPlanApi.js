@@ -6,6 +6,7 @@ import {
   getLocalAssets,
   getDepartmentMap,
   assertLocalDcc,
+  assertLocalVccAccess,
   getLocalAudit,
   appendLocalAudit
 } from './vccApi';
@@ -265,7 +266,7 @@ export const fetchVccPlanSettings = async () => {
   if (isApiMode) {
     return apiGet('/api/vcc/plan-settings');
   }
-  assertLocalDcc();
+  assertLocalVccAccess();
   const providers = getLocalProviders();
   const planSettings = getLocalPlanSettings();
   const thresholds = getLocalThresholds(planSettings.approval_doc_type);
@@ -321,7 +322,7 @@ export const fetchVccPlans = async ({ status = 'DRAFT', year = '', department = 
     const { plans } = await apiGet(`/api/vcc/plans?${params.toString()}`);
     return plans;
   }
-  assertLocalDcc();
+  assertLocalVccAccess();
   const allPlans = getLocalPlans();
   const allItems = getLocalPlanItems();
   const deptMap = getDepartmentMap();
@@ -337,7 +338,7 @@ export const fetchVccPlanDetail = async (id) => {
   if (isApiMode) {
     return apiGet(`/api/vcc/plans/${encodeURIComponent(id)}`);
   }
-  assertLocalDcc();
+  assertLocalVccAccess();
   const allPlans = getLocalPlans();
   const allItems = getLocalPlanItems();
   const allAssets = getLocalAssets();
@@ -364,7 +365,7 @@ export const createVccPlan = async (payload) => {
     const { plan } = await apiPost('/api/vcc/plans', payload);
     return plan;
   }
-  const user = assertLocalDcc();
+  const user = assertLocalVccAccess();
   const allPlans = getLocalPlans();
   const planYear = Number(payload.plan_year);
   const department = String(payload.department || '').trim().toUpperCase();
@@ -426,7 +427,7 @@ export const updateVccPlan = async (id, payload) => {
   if (isApiMode) {
     return apiPut(`/api/vcc/plans/${encodeURIComponent(id)}`, payload);
   }
-  const user = assertLocalDcc();
+  const user = assertLocalVccAccess();
   const allPlans = getLocalPlans();
   const idx = allPlans.findIndex((p) => p.id === id);
   if (idx === -1) throw new Error('ไม่พบแผนการสอบเทียบประจำปี');
@@ -475,7 +476,7 @@ export const saveVccPlanItem = async (planId, payload) => {
   if (isApiMode) {
     return apiPost(`/api/vcc/plans/${encodeURIComponent(planId)}/items`, payload);
   }
-  assertLocalDcc();
+  assertLocalVccAccess();
   const allPlans = getLocalPlans();
   const plan = allPlans.find((p) => p.id === planId);
   if (!plan) throw new Error('ไม่พบแผนการสอบเทียบประจำปี');
@@ -541,7 +542,7 @@ export const deleteVccPlanItem = async (planId, itemId) => {
   if (isApiMode) {
     return apiPost(`/api/vcc/plans/${encodeURIComponent(planId)}/items/${encodeURIComponent(itemId)}/remove`, {});
   }
-  assertLocalDcc();
+  assertLocalVccAccess();
   const allPlans = getLocalPlans();
   const plan = allPlans.find((p) => p.id === planId);
   if (!plan) throw new Error('ไม่พบแผนการสอบเทียบประจำปี');
@@ -563,7 +564,7 @@ export const validateVccPlanItemWorkOrder = async (planId, itemId, childAssetId 
       child_asset_id: childAssetId || undefined
     });
   }
-  assertLocalDcc();
+  assertLocalVccAccess();
   const detail = await fetchVccPlanDetail(planId);
   const item = detail.items.find((i) => i.id === itemId);
   if (!item) throw new Error('ไม่พบรายการในแผนประจำปี');
@@ -590,7 +591,7 @@ export const submitVccPlan = async (planId) => {
     const { plan } = await apiPost(`/api/vcc/plans/${encodeURIComponent(planId)}/submit`, {});
     return plan;
   }
-  const user = assertLocalDcc();
+  const user = assertLocalVccAccess();
   const allPlans = getLocalPlans();
   const idx = allPlans.findIndex((p) => p.id === planId);
   if (idx === -1) throw new Error('ไม่พบแผนการสอบเทียบประจำปี');

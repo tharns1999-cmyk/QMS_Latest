@@ -5,6 +5,23 @@ export const MODULE_STATUS = {
   COMING_SOON: 'COMING_SOON'
 };
 
+export const isUserAuthorizedForModule = (module, user) => {
+  if (!module) return false;
+  if (!module.allowedDepartments && !module.dccOnly) return true;
+  if (!user) return false;
+  if (user.isDcc || user.isQmr) return true;
+  if (Array.isArray(module.allowedDepartments)) {
+    const userDepts = [user.department, ...(user.depts || [])]
+      .filter(Boolean)
+      .map((d) => String(d).toUpperCase());
+    return module.allowedDepartments.some((d) => userDepts.includes(d.toUpperCase()));
+  }
+  if (module.dccOnly) {
+    return Boolean(user.isDcc);
+  }
+  return true;
+};
+
 export const moduleRegistry = [
   {
     moduleId: 'dcc',
@@ -23,7 +40,7 @@ export const moduleRegistry = [
     status: MODULE_STATUS.ACTIVE,
     route: '/vcc',
     icon: Wrench,
-    dccOnly: true,
+    allowedDepartments: ['DC', 'QC', 'QA'],
     order: 2
   }
 ];

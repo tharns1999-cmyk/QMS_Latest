@@ -305,10 +305,27 @@ export const appendLocalAudit = (action, details) => {
   writeJson(STORAGE_AUDIT_KEY, list);
 };
 
+export const isVccAuthorized = (user) => {
+  if (!user) return false;
+  if (user.isDcc || user.isQmr) return true;
+  const userDepts = [user.department, ...(user.depts || [])]
+    .filter(Boolean)
+    .map((d) => String(d).toUpperCase());
+  return userDepts.some((d) => ['DC', 'QC', 'QA'].includes(d));
+};
+
+export const assertLocalVccAccess = () => {
+  const user = useStore.getState().currentUser;
+  if (!isVccAuthorized(user)) {
+    throw new Error('เฉพาะผู้ใช้งานแผนก DCC, QC และ QA เท่านั้นที่สามารถเข้าใช้งานส่วนนี้ได้');
+  }
+  return user;
+};
+
 export const assertLocalDcc = () => {
   const user = useStore.getState().currentUser;
   const isDcc = Boolean(user?.isDcc);
-  if (!isDcc) throw new Error('เฉพาะ DCC เท่านั้นที่ใช้งานส่วนนี้ได้');
+  if (!isDcc) throw new Error('เฉพาะ DCC เท่านั้นที่สามารถตั้งค่าหรือจัดการข้อมูลส่วนนี้ได้');
   return user;
 };
 
@@ -343,7 +360,7 @@ export const fetchVccAssetTypes = async () => {
     const { assetTypes } = await apiGet('/api/vcc/asset-types');
     return assetTypes || DEFAULT_VCC_ASSET_TYPES;
   }
-  assertLocalDcc();
+  assertLocalVccAccess();
   return getLocalTypes();
 };
 
@@ -375,7 +392,7 @@ export const fetchVccAssets = async ({ status = 'ACTIVE', department = '', asset
     const { assets } = await apiGet(`/api/vcc/assets?${params.toString()}`);
     return assets;
   }
-  assertLocalDcc();
+  assertLocalVccAccess();
   const all = getLocalAssets();
   const deptMap = getDepartmentMap();
   const needle = String(q || '').trim().toLowerCase();
@@ -398,7 +415,7 @@ export const fetchVccAssetDetail = async (id) => {
   if (isApiMode) {
     return apiGet(`/api/vcc/assets/${encodeURIComponent(id)}`);
   }
-  assertLocalDcc();
+  assertLocalVccAccess();
   const all = getLocalAssets();
   const deptMap = getDepartmentMap();
   const target = all.find((a) => a.id === id);

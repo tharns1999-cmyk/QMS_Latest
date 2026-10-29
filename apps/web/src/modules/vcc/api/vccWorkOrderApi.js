@@ -6,6 +6,7 @@ import {
   getLocalAssets,
   getDepartmentMap,
   assertLocalDcc,
+  assertLocalVccAccess,
   getLocalAudit,
   appendLocalAudit
 } from './vccApi';
@@ -96,7 +97,7 @@ const enrichLocalWo = (wo, allAssets, deptMap, allPlans) => {
 
 export const fetchVccWorkOrderSettings = async () => {
   if (isApiMode) return apiGet('/api/vcc/work-order-settings');
-  assertLocalDcc();
+  assertLocalVccAccess();
   const settings = getLocalWoSettings();
   return { settings, thresholds: getLocalThresholds(settings.approval_doc_type) };
 };
@@ -136,7 +137,7 @@ export const fetchVccWorkOrders = async ({ status = 'OPEN', nc_status = '', depa
     const { workOrders } = await apiGet(`/api/vcc/work-orders?${params.toString()}`);
     return workOrders;
   }
-  assertLocalDcc();
+  assertLocalVccAccess();
   const allWos = getLocalWos();
   const allAssets = getLocalAssets();
   const deptMap = getDepartmentMap();
@@ -153,7 +154,7 @@ export const fetchVccWorkOrders = async ({ status = 'OPEN', nc_status = '', depa
 
 export const fetchVccWorkOrderDetail = async (id) => {
   if (isApiMode) return apiGet(`/api/vcc/work-orders/${encodeURIComponent(id)}`);
-  assertLocalDcc();
+  assertLocalVccAccess();
   const raw = getLocalWos().find((w) => w.id === id);
   if (!raw) throw new Error('ไม่พบใบสั่งงานทวนสอบ/สอบเทียบ');
   const workOrder = enrichLocalWo(raw, getLocalAssets(), getDepartmentMap(), getLocalPlans());
@@ -170,7 +171,7 @@ export const createVccWorkOrder = async (payload) => {
     const { workOrder } = await apiPost('/api/vcc/work-orders', payload);
     return workOrder;
   }
-  const user = assertLocalDcc();
+  const user = assertLocalVccAccess();
   const allWos = getLocalWos();
   const allAssets = getLocalAssets();
   const allPlans = getLocalPlans();
@@ -285,7 +286,7 @@ export const rescheduleVccWorkOrder = async (id, { new_due_date, reason }) => {
     const { workOrder } = await apiPost(`/api/vcc/work-orders/${encodeURIComponent(id)}/reschedule`, { new_due_date, reason });
     return workOrder;
   }
-  const user = assertLocalDcc();
+  const user = assertLocalVccAccess();
   const allWos = getLocalWos();
   const idx = allWos.findIndex((w) => w.id === id);
   if (idx === -1) throw new Error('ไม่พบใบสั่งงานทวนสอบ/สอบเทียบ');
@@ -322,7 +323,7 @@ export const submitVccWorkOrderResult = async (id, payload) => {
     const { workOrder } = await apiPost(`/api/vcc/work-orders/${encodeURIComponent(id)}/submit-result`, payload);
     return workOrder;
   }
-  const user = assertLocalDcc();
+  const user = assertLocalVccAccess();
   const allWos = getLocalWos();
   const idx = allWos.findIndex((w) => w.id === id);
   if (idx === -1) throw new Error('ไม่พบใบสั่งงานทวนสอบ/สอบเทียบ');
@@ -380,7 +381,7 @@ export const approveVccWorkOrder = async (id, comment = '') => {
     const { workOrder } = await apiPost(`/api/vcc/work-orders/${encodeURIComponent(id)}/approve`, { comment });
     return workOrder;
   }
-  const user = assertLocalDcc();
+  const user = assertLocalVccAccess();
   const allWos = getLocalWos();
   const idx = allWos.findIndex((w) => w.id === id);
   if (idx === -1) throw new Error('ไม่พบใบสั่งงานทวนสอบ/สอบเทียบ');
@@ -427,7 +428,7 @@ export const rejectVccWorkOrder = async (id, reason = '') => {
     const { workOrder } = await apiPost(`/api/vcc/work-orders/${encodeURIComponent(id)}/reject`, { reason });
     return workOrder;
   }
-  const user = assertLocalDcc();
+  const user = assertLocalVccAccess();
   const trimmedReason = String(reason || '').trim();
   if (!trimmedReason) throw new Error('กรุณาระบุเหตุผลในการส่งกลับแก้ไขผลทวนสอบ');
 
@@ -465,7 +466,7 @@ export const releaseVccWorkOrderHold = async (id, impact_assessment = '') => {
     const { workOrder } = await apiPost(`/api/vcc/work-orders/${encodeURIComponent(id)}/release-hold`, { impact_assessment });
     return workOrder;
   }
-  const user = assertLocalDcc();
+  const user = assertLocalVccAccess();
   const trimmedImpact = String(impact_assessment || '').trim();
   if (!trimmedImpact) {
     throw new Error('กรุณาระบุผลการประเมินผลกระทบและการแก้ไข (NC Impact Assessment) ก่อนปลดระงับเครื่องมือ');
