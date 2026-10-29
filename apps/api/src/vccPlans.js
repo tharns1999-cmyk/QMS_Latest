@@ -45,8 +45,7 @@ const parsePlannedMonths = (raw) => {
   if (!Array.isArray(raw)) return null;
   const nums = raw.map((m) => Number(m));
   if (nums.some((m) => !Number.isInteger(m) || m < 1 || m > 12)) return null;
-  const uniqueSorted = [...new Set(nums)].sort((a, b) => a - b);
-  return uniqueSorted.length > 0 ? uniqueSorted : null;
+  return [...new Set(nums)].sort((a, b) => a - b);
 };
 
 const loadProviders = async (db) => {
@@ -131,7 +130,9 @@ const enrichPlanItem = (row, closedWoRows = []) => {
   };
 };
 
-const fetchPlanItems = async (db, planId) => {
+const fetchPlanItems = async (db, planId, planObj = null) => {
+  const plan = planObj || await db.prepare('SELECT id, status, department, plan_year, due_date_rule FROM vcc_annual_plans WHERE id = ?').bind(planId).first();
+
   const { results } = await db.prepare(`
     SELECT i.*,
       a.asset_code,
@@ -163,7 +164,73 @@ const fetchPlanItems = async (db, planId) => {
     .catch(() => ({ results: [] }));
   const closedWoRows = closedWoRes.results || [];
 
-  return results.map((row) => enrichPlanItem(row, closedWoRows));
+  if (!plan || (plan.status !== 'DRAFT' && plan.status !== 'REJECTED')) {
+    return results.map((row) => enrichPlanItem(row, closedWoRows));
+  }
+
+  // Registry-driven: combine persisted items with all eligible assets in plan.department
+  const { results: eligibleAssets } = await db.prepare(`
+    SELECT a.*,
+      p.asset_code AS parent_asset_code,
+      p.name AS parent_name,
+      d.name_th AS department_name_th,
+      (SELECT COUNT(*) FROM vcc_assets c WHERE c.parent_id = a.id AND c.status = 'ACTIVE') AS active_child_count
+    FROM vcc_assets a
+    LEFT JOIN vcc_assets p ON p.id = a.parent_id
+    LEFT JOIN departments d ON d.code = a.department
+    WHERE a.department = ? AND a.status IN ('ACTIVE', 'ON_HOLD', 'UNDER_REPAIR')
+    ORDER BY a.asset_code ASC
+  `).bind(plan.department).all();
+
+  const persistedByAssetId = new Map(results.map((r) => [r.asset_id, r]));
+  const combined = [];
+
+  for (const item of results) {
+    if (item.asset_status !== 'RETIRED') {
+      combined.push(enrichPlanItem({ ...item, is_persisted: 1 }, closedWoRows));
+    }
+  }
+
+  for (const asset of eligibleAssets) {
+    if (!persistedByAssetId.has(asset.id)) {
+      const virtualRow = {
+        id: `virtual-${asset.id}`,
+        plan_id: planId,
+        asset_id: asset.id,
+        provider_name: 'ทวนสอบภายใน',
+        frequency_label: 'รายปี',
+        planned_months: '[]',
+        due_dates: '[]',
+        responsible_dept: asset.department,
+        responsible_label: '',
+        remarks: '',
+        sort_order: 9999,
+        is_persisted: 0,
+        asset_code: asset.asset_code,
+        asset_name: asset.name,
+        asset_type: asset.asset_type,
+        serial_no: asset.serial_no || '',
+        model: asset.model || '',
+        location: asset.location || '',
+        asset_department: asset.department,
+        is_group: Number(asset.is_group) === 1 ? 1 : 0,
+        parent_id: asset.parent_id || null,
+        asset_status: asset.status,
+        parent_asset_code: asset.parent_asset_code || null,
+        parent_name: asset.parent_name || null,
+        responsible_dept_name_th: asset.department_name_th || asset.department,
+        active_child_count: asset.active_child_count || 0
+      };
+      combined.push(enrichPlanItem(virtualRow, closedWoRows));
+    }
+  }
+
+  return combined.sort((a, b) => {
+    const sA = (a.sort_order ?? 9999) < 9000 ? a.sort_order : 9000;
+    const sB = (b.sort_order ?? 9999) < 9000 ? b.sort_order : 9000;
+    if (sA !== sB) return sA - sB;
+    return (a.asset_code || '').localeCompare(b.asset_code || '');
+  });
 };
 
 export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
@@ -445,7 +512,10 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
     if (!assetId) return c.json({ error: 'กรุณาเลือกเครื่องมือจากทะเบียนเครื่องมือ' }, 400);
     if (!providerName) return c.json({ error: 'กรุณาระบุสถาบัน/หน่วยงานที่ทวนสอบ' }, 400);
     if (!frequencyLabel) return c.json({ error: 'กรุณาระบุความถี่ในการทวนสอบ' }, 400);
-    if (!plannedMonths) return c.json({ error: 'กรุณาเลือกเดือนที่วางแผนอย่างน้อย 1 เดือน (1-12)' }, 400);
+    if (plannedMonths === null) return c.json({ error: 'ข้อมูลเดือนที่วางแผนไม่ถูกต้อง' }, 400);
+    if (plannedMonths.length === 0 && !remarks) {
+      return c.json({ error: 'กรุณาเลือกเดือนที่วางแผนอย่างน้อย 1 เดือน (1-12) หรือระบุเหตุผลที่ไม่วางแผน' }, 400);
+    }
     if (!responsibleDept) return c.json({ error: 'กรุณาระบุแผนกผู้รับผิดชอบ' }, 400);
     if (responsibleLabel === null || remarks === null) {
       return c.json({ error: 'ข้อมูลผู้รับผิดชอบหรือหมายเหตุยาวเกินกำหนด' }, 400);
@@ -532,8 +602,8 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
       ]);
     }
 
-    const items = await fetchPlanItems(db, planId);
-    const saved = items.find((i) => i.id === itemId);
+    const items = await fetchPlanItems(db, planId, plan);
+    const saved = items.find((i) => i.id === itemId || i.asset_id === assetId);
     return c.json({ item: saved, items }, existingItem ? 200 : 201);
   });
 
@@ -569,7 +639,7 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
       })
     ]);
 
-    return c.json({ items: await fetchPlanItems(db, planId) });
+    return c.json({ items: await fetchPlanItems(db, planId, plan) });
   };
 
   app.delete('/api/vcc/plans/:id/items/:itemId', requireAuth, requireVccAccess, handleRemoveItem);
@@ -644,12 +714,87 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
       return c.json({ error: `ผู้จัดทำแผนต้องมีระดับอนุมัติ L${thresholds.min_requester_level} ขึ้นไป` }, 403);
     }
 
-    const items = await fetchPlanItems(db, id);
+    const items = await fetchPlanItems(db, id, plan);
     if (items.length === 0) {
       return c.json({ error: 'กรุณาเพิ่มรายการเครื่องมือในแผนอย่างน้อย 1 รายการก่อนส่งขออนุมัติ' }, 400);
     }
 
-    await db.batch([
+    // Submission gate: Check for unplanned items without remarks
+    const groupItems = items.filter((i) => Number(i.is_group) === 1);
+    const standaloneItems = items.filter((i) => Number(i.is_group) === 0 && !i.parent_id);
+    const unplannedWithoutJustification = [];
+
+    for (const item of standaloneItems) {
+      const hasPlan = Array.isArray(item.planned_months) && item.planned_months.length > 0;
+      const hasRemarks = Boolean(item.remarks && item.remarks.trim());
+      if (!hasPlan && !hasRemarks) {
+        unplannedWithoutJustification.push(item);
+      }
+    }
+
+    for (const grp of groupItems) {
+      const grpHasPlan = Array.isArray(grp.planned_months) && grp.planned_months.length > 0;
+      const grpHasRemarks = Boolean(grp.remarks && grp.remarks.trim());
+      const children = items.filter((c) => c.parent_id === grp.asset_id || c.parent_id === grp.id);
+
+      if (children.length === 0) {
+        if (!grpHasPlan && !grpHasRemarks) {
+          unplannedWithoutJustification.push(grp);
+        }
+      } else if (grpHasPlan || grpHasRemarks) {
+        // Group covered at group level
+      } else {
+        // Must be covered at child level
+        for (const ch of children) {
+          const chHasPlan = Array.isArray(ch.planned_months) && ch.planned_months.length > 0;
+          const chHasRemarks = Boolean(ch.remarks && ch.remarks.trim());
+          if (!chHasPlan && !chHasRemarks) {
+            unplannedWithoutJustification.push(ch);
+          }
+        }
+      }
+    }
+
+    if (unplannedWithoutJustification.length > 0) {
+      const codes = unplannedWithoutJustification.map((i) => i.asset_code).join(', ');
+      return c.json({
+        error: `กรุณาวางแผนเดือนทวนสอบหรือระบุเหตุผลที่ไม่วางแผนสำหรับเครื่องมือ (${codes}) ก่อนส่งทบทวน`,
+        unplanned_items: unplannedWithoutJustification.map((i) => ({ id: i.id, asset_code: i.asset_code, asset_name: i.asset_name }))
+      }, 400);
+    }
+
+    // Freeze scope: persist any virtual items into vcc_annual_plan_items
+    const batchStatements = [];
+    for (const item of items) {
+      if (item.is_persisted === 0 || String(item.id).startsWith('virtual-')) {
+        const newId = crypto.randomUUID();
+        const dueDates = computeDueDates(plan.plan_year, item.planned_months || [], plan.due_date_rule);
+        batchStatements.push(
+          db.prepare(`
+            INSERT INTO vcc_annual_plan_items (
+              id, plan_id, asset_id, provider_name, frequency_label, planned_months, due_dates,
+              responsible_dept, responsible_label, remarks, sort_order, created_by, updated_by
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `).bind(
+            newId,
+            id,
+            item.asset_id,
+            item.provider_name || 'ทวนสอบภายใน',
+            item.frequency_label || 'รายปี',
+            JSON.stringify(item.planned_months || []),
+            JSON.stringify(dueDates),
+            item.responsible_dept || plan.department,
+            item.responsible_label || '',
+            item.remarks || '',
+            item.sort_order ?? 0,
+            user.id,
+            user.id
+          )
+        );
+      }
+    }
+
+    batchStatements.push(
       db.prepare(`
         UPDATE vcc_annual_plans
         SET status = 'PENDING_REVIEW',
@@ -676,7 +821,9 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
         before: { status: plan.status },
         after: { status: 'PENDING_REVIEW' }
       })
-    ]);
+    );
+
+    await db.batch(batchStatements);
 
     return c.json({ plan: await fetchPlan(db, id) });
   });

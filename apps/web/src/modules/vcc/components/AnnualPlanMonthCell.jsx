@@ -158,7 +158,12 @@ export const AnnualPlanMonthCell = ({
           : 'bg-white'
       }`}
       onClick={(e) => {
-        if (!isOpen) {
+        if (!hasAnyActivity) {
+          if (canEditPlan && !isSaving) {
+            e.stopPropagation();
+            handleAddConfirm();
+          }
+        } else if (!isOpen) {
           e.stopPropagation();
           setIsOpen(true);
         }
@@ -269,15 +274,20 @@ export const AnnualPlanMonthCell = ({
               );
             })}
           </div>
+        ) : isSaving ? (
+          <span className="w-5 h-5 flex items-center justify-center text-indigo-600 animate-spin">
+            <Loader2 size={12} />
+          </span>
         ) : canEditPlan ? (
           <button
             type="button"
             onClick={(e) => {
               e.stopPropagation();
-              setIsOpen(true);
+              handleAddConfirm();
             }}
-            title={`คลิกเพื่อเพิ่มเป้าหมายทวนสอบเดือน ${month}`}
-            className="w-5 h-5 rounded flex items-center justify-center text-slate-300 hover:text-indigo-600 hover:bg-indigo-100/70 transition-all opacity-0 hover:opacity-100 cursor-pointer"
+            title={`คลิกเพื่อกำหนดเป้าหมายทวนสอบเดือน ${month}`}
+            aria-label={`กำหนดเป้าหมายเดือน ${month}`}
+            className="w-5 h-5 rounded flex items-center justify-center text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 hover:border hover:border-indigo-200 transition-all opacity-40 hover:opacity-100 cursor-pointer"
           >
             <Plus size={12} />
           </button>

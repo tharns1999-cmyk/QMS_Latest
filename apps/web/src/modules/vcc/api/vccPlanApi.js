@@ -347,10 +347,53 @@ export const fetchVccPlanDetail = async (id) => {
   if (!rawPlan) throw new Error('ไม่พบแผนการสอบเทียบประจำปี');
 
   const plan = enrichLocalPlan(rawPlan, allItems, deptMap);
-  const items = allItems
-    .filter((i) => i.plan_id === id)
-    .map((i) => enrichLocalPlanItem(i, allAssets, deptMap))
-    .sort((a, b) => (a.sort_order - b.sort_order) || a.asset_code.localeCompare(b.asset_code));
+  let items = [];
+  if (plan.status === 'DRAFT' || plan.status === 'REJECTED') {
+    const eligibleAssets = allAssets.filter(
+      (a) => a.department === plan.department && a.status !== 'RETIRED'
+    );
+    const persistedForPlan = allItems.filter((i) => i.plan_id === id);
+    const persistedByAssetId = new Map(persistedForPlan.map((i) => [i.asset_id, i]));
+
+    for (const item of persistedForPlan) {
+      const asset = allAssets.find((a) => a.id === item.asset_id);
+      if (asset && asset.status !== 'RETIRED') {
+        items.push(enrichLocalPlanItem({ ...item, is_persisted: 1 }, allAssets, deptMap));
+      }
+    }
+
+    for (const asset of eligibleAssets) {
+      if (!persistedByAssetId.has(asset.id)) {
+        const virtualItem = {
+          id: `virtual-${asset.id}`,
+          plan_id: id,
+          asset_id: asset.id,
+          provider_name: 'ทวนสอบภายใน',
+          frequency_label: 'รายปี',
+          planned_months: [],
+          due_dates: [],
+          responsible_dept: asset.department,
+          responsible_label: '',
+          remarks: '',
+          sort_order: 9999,
+          is_persisted: 0
+        };
+        items.push(enrichLocalPlanItem(virtualItem, allAssets, deptMap));
+      }
+    }
+
+    items.sort((a, b) => {
+      const sortA = (a.sort_order ?? 9999) < 9000 ? a.sort_order : 9000;
+      const sortB = (b.sort_order ?? 9999) < 9000 ? b.sort_order : 9000;
+      if (sortA !== sortB) return sortA - sortB;
+      return (a.asset_code || '').localeCompare(b.asset_code || '');
+    });
+  } else {
+    items = allItems
+      .filter((i) => i.plan_id === id)
+      .map((i) => enrichLocalPlanItem({ ...i, is_persisted: 1 }, allAssets, deptMap))
+      .sort((a, b) => (a.sort_order - b.sort_order) || a.asset_code.localeCompare(b.asset_code));
+  }
   const settings = getLocalPlanSettings();
   const thresholds = getLocalThresholds(settings.approval_doc_type);
   const history = getLocalAudit()
@@ -492,8 +535,9 @@ export const saveVccPlanItem = async (planId, payload) => {
   }
 
   const plannedMonths = [...new Set((payload.planned_months || []).map(Number).filter((m) => m >= 1 && m <= 12))].sort((a, b) => a - b);
-  if (plannedMonths.length === 0) {
-    throw new Error('กรุณาเลือกเดือนที่วางแผนอย่างน้อย 1 เดือน (1-12)');
+  const remarks = String(payload.remarks || '').trim();
+  if (plannedMonths.length === 0 && !remarks) {
+    throw new Error('กรุณาเลือกเดือนที่วางแผนอย่างน้อย 1 เดือน (1-12) หรือระบุเหตุผลที่ไม่วางแผน');
   }
   const providerName = String(payload.provider_name || '').trim();
   if (!providerName) throw new Error('กรุณาระบุสถาบัน/หน่วยงานที่ทวนสอบ');
@@ -599,10 +643,77 @@ export const submitVccPlan = async (planId) => {
   if (plan.status !== 'DRAFT' && plan.status !== 'REJECTED') {
     throw new Error('ส่งทบทวนได้เฉพาะแผนที่อยู่ในสถานะร่าง (DRAFT) หรือส่งกลับแก้ไข (REJECTED) เท่านั้น');
   }
-  const items = getLocalPlanItems().filter((i) => i.plan_id === planId);
+  const detail = await fetchVccPlanDetail(planId);
+  const items = detail.items || [];
   if (items.length === 0) {
     throw new Error('กรุณาเพิ่มรายการเครื่องมือในแผนอย่างน้อย 1 รายการก่อนส่งขออนุมัติ');
   }
+
+  // Submission gate: Check for unplanned items without remarks
+  const groupItems = items.filter((i) => Number(i.is_group) === 1);
+  const standaloneItems = items.filter((i) => Number(i.is_group) === 0 && !i.parent_id);
+  const unplannedWithoutJustification = [];
+
+  for (const item of standaloneItems) {
+    const hasPlan = Array.isArray(item.planned_months) && item.planned_months.length > 0;
+    const hasRemarks = Boolean(item.remarks && item.remarks.trim());
+    if (!hasPlan && !hasRemarks) {
+      unplannedWithoutJustification.push(item);
+    }
+  }
+
+  for (const grp of groupItems) {
+    const grpHasPlan = Array.isArray(grp.planned_months) && grp.planned_months.length > 0;
+    const grpHasRemarks = Boolean(grp.remarks && grp.remarks.trim());
+    const children = items.filter((c) => c.parent_id === grp.asset_id || c.parent_id === grp.id);
+
+    if (children.length === 0) {
+      if (!grpHasPlan && !grpHasRemarks) {
+        unplannedWithoutJustification.push(grp);
+      }
+    } else if (grpHasPlan || grpHasRemarks) {
+      // Group covered at group level
+    } else {
+      // Must be covered at child level
+      for (const ch of children) {
+        const chHasPlan = Array.isArray(ch.planned_months) && ch.planned_months.length > 0;
+        const chHasRemarks = Boolean(ch.remarks && ch.remarks.trim());
+        if (!chHasPlan && !chHasRemarks) {
+          unplannedWithoutJustification.push(ch);
+        }
+      }
+    }
+  }
+
+  if (unplannedWithoutJustification.length > 0) {
+    const codes = unplannedWithoutJustification.map((i) => i.asset_code).join(', ');
+    throw new Error(`กรุณาวางแผนเดือนทวนสอบหรือระบุเหตุผลที่ไม่วางแผนสำหรับเครื่องมือ (${codes}) ก่อนส่งทบทวน`);
+  }
+
+  // Freeze scope: persist any virtual items into local plan items
+  const allPlanItems = getLocalPlanItems();
+  const nextPlanItems = [...allPlanItems];
+  for (const item of items) {
+    if (String(item.id).startsWith('virtual-') || !allPlanItems.some((pi) => pi.plan_id === planId && pi.asset_id === item.asset_id)) {
+      const newId = `vcc-pi-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      const dueDates = computeDueDates(plan.plan_year, item.planned_months || [], plan.due_date_rule);
+      nextPlanItems.push({
+        id: newId,
+        plan_id: planId,
+        asset_id: item.asset_id,
+        provider_name: item.provider_name || 'ทวนสอบภายใน',
+        frequency_label: item.frequency_label || 'รายปี',
+        planned_months: item.planned_months || [],
+        due_dates: dueDates,
+        responsible_dept: item.responsible_dept || plan.department,
+        responsible_label: item.responsible_label || '',
+        remarks: item.remarks || '',
+        sort_order: item.sort_order ?? 9999
+      });
+    }
+  }
+  setLocalPlanItems(nextPlanItems);
+
   const now = new Date().toISOString();
   const updated = {
     ...plan,

@@ -342,5 +342,88 @@ describe('VCC Phase 2: Calibration Schedule Rules, Annual Plan Matrix & Plan App
       ])
     );
   });
+
+  it('registry-driven planning: auto-loads eligible assets, enforces submission justification gate, freezes scope, and ignores new assets after submit', async () => {
+    // 1. Create 2027 DRAFT plan for VPQC
+    const planRes = await call('POST', '/api/vcc/plans', 'VP-DCC', {
+      plan_year: 2027,
+      department: 'VPQC',
+      document_code: 'FM-QC-46',
+      revision: '01',
+      title: '[ข้อมูลทดสอบ] แผนทวนสอบ 2027'
+    });
+    expect(planRes.status).toBe(201);
+    const plan2027Id = planRes.body.plan.id;
+
+    // 2. Fetch plan detail: all eligible active VPQC assets appear automatically as registry-driven items
+    const detailBefore = await call('GET', `/api/vcc/plans/${plan2027Id}`, 'VP-DCC');
+    expect(detailBefore.status).toBe(200);
+    const assetCodes = detailBefore.body.items.map((i) => i.asset_code);
+    expect(assetCodes).toContain('V001');
+    expect(assetCodes).toContain('V002');
+    expect(assetCodes).toContain('GRP-VERNIER-VP');
+    // Retired asset must NOT appear in draft
+    expect(assetCodes).not.toContain('OLD-VP-01');
+
+    // Items are virtual before explicit save
+    const v1Item = detailBefore.body.items.find((i) => i.asset_code === 'V001');
+    expect(v1Item.planned_months).toEqual([]);
+
+    // 3. Submitting without planning or justification is blocked by submission gate -> 400
+    const submitBlocked = await call('POST', `/api/vcc/plans/${plan2027Id}/submit`, 'VP-DCC');
+    expect(submitBlocked.status).toBe(400);
+    expect(submitBlocked.body.error).toMatch(/กรุณาวางแผนเดือนทวนสอบหรือระบุเหตุผลที่ไม่วางแผน/);
+
+    // 4. Plan V001 for month 4, and record justification for V002
+    const v1Asset = detailBefore.body.items.find((i) => i.asset_code === 'V001');
+    const v2Asset = detailBefore.body.items.find((i) => i.asset_code === 'V002');
+
+    const planV1 = await call('POST', `/api/vcc/plans/${plan2027Id}/items`, 'VP-DCC', {
+      asset_id: v1Asset.asset_id,
+      provider_name: 'ห้องปฏิบัติการภายนอก',
+      planned_months: [4],
+      responsible_dept: 'VPQC'
+    });
+    expect(planV1.status).toBe(201);
+
+    const justifyV2 = await call('POST', `/api/vcc/plans/${plan2027Id}/items`, 'VP-DCC', {
+      asset_id: v2Asset.asset_id,
+      provider_name: 'ห้องปฏิบัติการภายนอก',
+      planned_months: [],
+      remarks: 'ยังไม่ถึงกำหนดตามรอบความถี่ (รอบ 2 ปี)',
+      responsible_dept: 'VPQC'
+    });
+    expect(justifyV2.status).toBe(201);
+
+    // 5. Submit now succeeds and freezes scope -> PENDING_REVIEW
+    const submitOk = await call('POST', `/api/vcc/plans/${plan2027Id}/submit`, 'VP-DCC');
+    expect(submitOk.status).toBe(200);
+    expect(submitOk.body.plan.status).toBe('PENDING_REVIEW');
+
+    // 6. Register a new asset in VPQC after submission
+    const newTool = (await call('POST', '/api/vcc/assets', 'VP-DCC', {
+      asset_code: 'NEW-QC-999',
+      name: '[ข้อมูลทดสอบ] เครื่องมือใหม่หลังส่งแผน',
+      asset_type: 'เทอร์โมมิเตอร์',
+      department: 'VPQC',
+      is_group: false
+    })).body.asset;
+
+    // 7. Verify the submitted plan scope is frozen: NEW-QC-999 does NOT appear in 2027 plan
+    const detailAfter = await call('GET', `/api/vcc/plans/${plan2027Id}`, 'VP-DCC');
+    expect(detailAfter.status).toBe(200);
+    expect(detailAfter.body.items.some((i) => i.asset_code === 'NEW-QC-999')).toBe(false);
+
+    // 8. But a new DRAFT plan (2028) WILL automatically include NEW-QC-999
+    const plan2028 = (await call('POST', '/api/vcc/plans', 'VP-DCC', {
+      plan_year: 2028,
+      department: 'VPQC',
+      document_code: 'FM-QC-46',
+      revision: '01',
+      title: '[ข้อมูลทดสอบ] แผนทวนสอบ 2028'
+    })).body.plan;
+    const detail2028 = await call('GET', `/api/vcc/plans/${plan2028.id}`, 'VP-DCC');
+    expect(detail2028.body.items.some((i) => i.asset_code === 'NEW-QC-999')).toBe(true);
+  });
 });
 
