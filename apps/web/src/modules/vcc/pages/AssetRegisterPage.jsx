@@ -394,52 +394,54 @@ const AssetRegisterPageInner = () => {
         </button>
       </div>
 
-      {/* Compact Page Header: breadcrumb + title + one-line description */}
-      <div className="px-1 transition-all">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-          <div className="space-y-0.5 min-w-0">
-            {/* Breadcrumb Navigation Context */}
-            <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
-              <span className="hover:text-slate-700 transition-colors">พอร์ทัลหลัก</span>
-              <span className="text-slate-300">/</span>
-              <span className="text-indigo-600 font-semibold">ศูนย์ทวนสอบและสอบเทียบ (VCC)</span>
-              <span className="text-slate-300">/</span>
-              <span className="text-slate-800 font-semibold truncate">{pageMeta.breadcrumb}</span>
+      {/* Compact Page Header: breadcrumb + title + one-line description (for ASSETS, ANNUAL_PLAN, DASHBOARD) */}
+      {moduleView !== 'WORK_ORDERS' && (
+        <div className="px-1 transition-all">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div className="space-y-0.5 min-w-0">
+              {/* Breadcrumb Navigation Context */}
+              <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
+                <span className="hover:text-slate-700 transition-colors">พอร์ทัลหลัก</span>
+                <span className="text-slate-300">/</span>
+                <span className="text-indigo-600 font-semibold">ศูนย์ทวนสอบและสอบเทียบ (VCC)</span>
+                <span className="text-slate-300">/</span>
+                <span className="text-slate-800 font-semibold truncate">{pageMeta.breadcrumb}</span>
+              </div>
+
+              <h1 className="text-xl md:text-2xl font-bold text-slate-900 tracking-tight">
+                <span className="truncate">{pageMeta.title}</span>
+              </h1>
+
+              <p className="text-sm text-slate-500">
+                {pageMeta.description}
+              </p>
             </div>
 
-            <h1 className="text-xl md:text-2xl font-bold text-slate-900 tracking-tight">
-              <span className="truncate">{pageMeta.title}</span>
-            </h1>
+            {/* Contextual Actions (for ASSETS page) */}
+            {moduleView === 'ASSETS' && (
+              <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={openTypesSettings}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 h-10 rounded-xl border border-slate-300 bg-white text-slate-700 text-sm font-semibold hover:bg-slate-50 transition-colors shadow-2xs cursor-pointer"
+                >
+                  <SlidersHorizontal size={15} />
+                  <span>ตั้งค่าประเภทเครื่องมือ</span>
+                </button>
 
-            <p className="text-sm text-slate-500">
-              {pageMeta.description}
-            </p>
+                <button
+                  type="button"
+                  onClick={openCreateModal}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 h-10 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 transition-colors shadow-xs cursor-pointer"
+                >
+                  <Plus size={16} />
+                  <span>เพิ่มเครื่องมือ / กลุ่มเครื่องมือ</span>
+                </button>
+              </div>
+            )}
           </div>
-
-          {/* Contextual Actions (for ASSETS page) */}
-          {moduleView === 'ASSETS' && (
-            <div className="flex flex-wrap items-center gap-2.5 shrink-0">
-              <button
-                type="button"
-                onClick={openTypesSettings}
-                className="inline-flex items-center gap-2 px-4 py-2.5 h-10 rounded-xl border border-slate-300 bg-white text-slate-700 text-sm font-semibold hover:bg-slate-50 transition-colors shadow-2xs cursor-pointer"
-              >
-                <SlidersHorizontal size={15} />
-                <span>ตั้งค่าประเภทเครื่องมือ</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={openCreateModal}
-                className="inline-flex items-center gap-2 px-4 py-2.5 h-10 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 transition-colors shadow-xs cursor-pointer"
-              >
-                <Plus size={16} />
-                <span>เพิ่มเครื่องมือ / กลุ่มเครื่องมือ</span>
-              </button>
-            </div>
-          )}
         </div>
-      </div>
+      )}
 
       {moduleView === 'ANNUAL_PLAN' ? (
         <AnnualPlanMatrixSection activeDepartments={activeDepartments} />

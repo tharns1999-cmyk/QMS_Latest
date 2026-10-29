@@ -5,8 +5,7 @@ import {
   SlidersHorizontal,
   Search,
   X,
-  FilterX,
-  ClipboardCheck
+  FilterX
 } from 'lucide-react';
 import { fetchVccAssets } from '../api/vccApi';
 import { fetchVccPlanSettings, fetchVccPlans, fetchVccPlanDetail } from '../api/vccPlanApi';
@@ -34,33 +33,28 @@ import WorkOrderTable from './WorkOrderTable';
 const WO_TABS = [
   {
     key: 'OPEN',
-    label: 'เปิดงาน / รอบันทึกผล (OPEN)',
-    activeClass: 'bg-white text-indigo-700 shadow-2xs font-bold border border-slate-200/90',
-    badgeClass: 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+    shortLabel: 'เปิดงาน (OPEN)',
+    fullLabel: 'เปิดงาน / รอบันทึกผล (OPEN)'
   },
   {
     key: 'PENDING_REVIEW',
-    label: 'รอตรวจรับผล (PENDING_REVIEW)',
-    activeClass: 'bg-white text-amber-800 shadow-2xs font-bold border border-slate-200/90',
-    badgeClass: 'bg-amber-50 text-amber-800 border border-amber-200'
+    shortLabel: 'รอตรวจรับ (PENDING_REVIEW)',
+    fullLabel: 'รอตรวจรับ (PENDING_REVIEW)'
   },
   {
     key: 'REJECTED',
-    label: 'ส่งกลับแก้ไขผล (REJECTED)',
-    activeClass: 'bg-white text-rose-700 shadow-2xs font-bold border border-slate-200/90',
-    badgeClass: 'bg-rose-50 text-rose-700 border border-rose-200'
+    shortLabel: 'ส่งกลับแก้ไข (REJECTED)',
+    fullLabel: 'ส่งกลับแก้ไข (REJECTED)'
   },
   {
     key: 'CLOSED',
-    label: 'ตรวจรับปิดงานแล้ว (CLOSED)',
-    activeClass: 'bg-white text-emerald-800 shadow-2xs font-bold border border-slate-200/90',
-    badgeClass: 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+    shortLabel: 'ปิดงานแล้ว (CLOSED)',
+    fullLabel: 'ตรวจรับปิดงานแล้ว (CLOSED)'
   },
   {
     key: 'ON_HOLD',
-    label: 'เครื่องมือระงับใช้ / NC (ON_HOLD)',
-    activeClass: 'bg-white text-purple-800 shadow-2xs font-bold border border-slate-200/90',
-    badgeClass: 'bg-purple-50 text-purple-800 border border-purple-200'
+    shortLabel: 'ระงับใช้ (ON_HOLD)',
+    fullLabel: 'ระงับใช้ (ON_HOLD)'
   }
 ];
 
@@ -401,24 +395,34 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
   return (
     <div className="space-y-4 max-w-full" data-testid="vcc-work-order-section">
       
-      {/* 1. Page Header (Clean, Enterprise SaaS Visual Hierarchy) */}
-      <div className="flex flex-wrap items-center justify-between gap-4 pb-1">
-        <div>
-          <h2 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2.5">
-            <ClipboardCheck size={24} className="text-indigo-600 shrink-0" />
-            <span>ใบสั่งงานและบันทึกผล (Work Orders)</span>
-          </h2>
-          <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            ระบบติดตามการสอบเทียบ/ทวนสอบเครื่องมือวัด บันทึกผลรับรอง และควบคุมการระงับใช้ตามมาตรฐาน QMS
+      {/* 1. Page Header (Single H1 Title, One-line Description, Header Actions) */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-slate-200">
+        <div className="space-y-0.5 min-w-0">
+          <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
+            <span className="hover:text-slate-700 transition-colors">พอร์ทัลหลัก</span>
+            <span className="text-slate-300">/</span>
+            <span className="text-purple-700 font-semibold">ศูนย์ทวนสอบและสอบเทียบ (VCC)</span>
+            <span className="text-slate-300">/</span>
+            <span className="text-slate-800 font-semibold truncate">ใบสั่งงานและบันทึกผล</span>
+          </div>
+
+          <h1 className="text-xl md:text-2xl font-bold text-slate-900 tracking-tight">
+            ใบสั่งงานและบันทึกผล (Work Orders)
+          </h1>
+
+          <p className="text-sm text-slate-500">
+            เปิดใบสั่งงานตามแผน เลื่อนวันครบกำหนด บันทึกผลพร้อมใบรับรอง ตรวจรับปิดงาน และควบคุมการระงับใช้
           </p>
         </div>
 
         {/* Primary and Secondary Actions */}
-        <div className="flex items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <WorkOrderInfoBar thresholds={thresholds} woSettings={woSettings} />
+
           <button
             type="button"
             onClick={openSettings}
-            className="h-9 inline-flex items-center gap-1.5 px-3.5 rounded-xl border border-slate-200/90 bg-white text-slate-700 text-xs sm:text-sm font-semibold hover:bg-slate-50 transition-colors cursor-pointer shadow-2xs"
+            className="h-9 inline-flex items-center gap-1.5 px-3 rounded-lg border border-slate-200 bg-white text-slate-700 text-xs sm:text-sm font-medium hover:bg-slate-50 transition-colors cursor-pointer"
           >
             <SlidersHorizontal size={14} className="text-slate-500" />
             <span>ตั้งค่าเกณฑ์ยอมรับ</span>
@@ -427,7 +431,7 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
           <button
             type="button"
             onClick={openCreateModal}
-            className="h-9 inline-flex items-center gap-1.5 px-4 rounded-xl bg-indigo-600 text-white text-xs sm:text-sm font-semibold hover:bg-indigo-700 shadow-2xs transition-colors cursor-pointer"
+            className="h-9 inline-flex items-center gap-1.5 px-3.5 rounded-lg bg-purple-700 text-white text-xs sm:text-sm font-semibold hover:bg-purple-800 transition-colors shadow-2xs cursor-pointer"
           >
             <Plus size={15} />
             <span>สร้างใบสั่งงานใหม่</span>
@@ -435,127 +439,119 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
         </div>
       </div>
 
-      {/* 2. Collapsible Information Bar for QMS Rules */}
-      <WorkOrderInfoBar thresholds={thresholds} woSettings={woSettings} />
-
-      {/* 3. Control Card: Status Tabs & Unified Filter Toolbar */}
-      <div className="bg-white rounded-2xl border border-slate-200/90 p-3.5 sm:p-4 shadow-2xs space-y-3">
-        
-        {/* 3.1 Status Navigation - Compact Segmented Control on Desktop */}
-        <div className="w-full overflow-x-auto pb-0.5 scrollbar-none">
-          <div
-            className="flex items-center gap-1 p-1 bg-slate-100/90 rounded-xl min-w-max"
-            role="tablist"
-            aria-label="สถานะใบสั่งงาน"
-          >
-            {WO_TABS.map((t) => {
-              const isActive = activeTab === t.key;
-              const count = tabCounts[t.key] ?? 0;
-              return (
-                <button
-                  key={t.key}
-                  type="button"
-                  role="tab"
-                  aria-selected={isActive}
-                  onClick={() => setActiveTab(t.key)}
-                  className={`flex items-center gap-2 px-3.5 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all cursor-pointer whitespace-nowrap select-none ${
-                    isActive
-                      ? t.activeClass
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+      {/* 2. Status Navigation - Minimal Underline Tabs */}
+      <div className="border-b border-slate-200">
+        <nav
+          className="flex items-center gap-2 sm:gap-3.5 xl:gap-6 overflow-x-auto scrollbar-none"
+          role="tablist"
+          aria-label="สถานะใบสั่งงาน"
+        >
+          {WO_TABS.map((t) => {
+            const isActive = activeTab === t.key;
+            const count = tabCounts[t.key] ?? 0;
+            return (
+              <button
+                key={t.key}
+                type="button"
+                role="tab"
+                aria-selected={isActive}
+                aria-label={t.fullLabel}
+                onClick={() => setActiveTab(t.key)}
+                className={`flex items-center gap-1.5 sm:gap-2 pb-3 pt-1 text-xs sm:text-[13px] 2xl:text-sm font-medium border-b-2 transition-all cursor-pointer whitespace-nowrap select-none ${
+                  isActive
+                    ? 'border-purple-600 text-purple-700 font-semibold'
+                    : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+                }`}
+              >
+                <span className="hidden 2xl:inline">{t.fullLabel}</span>
+                <span className="inline 2xl:hidden">{t.shortLabel}</span>
+                <span
+                  className={`px-2 py-0.5 rounded-full text-xs font-mono font-bold transition-colors ${
+                    isActive ? 'bg-purple-100 text-purple-800' : 'bg-slate-100 text-slate-600'
                   }`}
                 >
-                  <span>{t.label}</span>
-                  <span
-                    className={`px-1.5 py-0.2 rounded-full text-[11px] font-mono font-bold transition-colors ${
-                      isActive ? t.badgeClass : 'bg-slate-200/80 text-slate-600'
-                    }`}
-                  >
-                    {count}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </nav>
+      </div>
+
+      {/* 3. Search & Filters Toolbar */}
+      <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+        {/* Search Input (Primary) */}
+        <div className="relative flex-1 min-w-[240px] max-w-sm">
+          <Search
+            size={14}
+            className="text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+          />
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="ค้นหาเลขที่ใบงาน, เครื่องมือ, ใบรับรอง..."
+            className="w-full pl-8.5 pr-8 py-1.5 h-9 bg-white border border-slate-200 rounded-lg text-xs sm:text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-purple-600 focus:ring-1 focus:ring-purple-600 transition-colors shadow-2xs"
+          />
+          {searchTerm && (
+            <button
+              type="button"
+              onClick={() => setSearchTerm('')}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded cursor-pointer"
+              aria-label="ล้างคำค้นหา"
+            >
+              <X size={13} />
+            </button>
+          )}
         </div>
 
-        {/* 3.2 Unified Filter Toolbar */}
-        <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2.5">
-          {/* Left: Search & Filters */}
-          <div className="flex flex-wrap items-center gap-2 flex-1 min-w-[280px]">
-            {/* Search Input */}
-            <div className="relative flex-1 min-w-[190px] max-w-sm">
-              <Search
-                size={14}
-                className="text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
-              />
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="ค้นหาเลขที่ใบงาน, เครื่องมือ, ใบรับรอง..."
-                className="w-full pl-8.5 pr-8 py-1.5 sm:py-2 bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all shadow-2xs"
-              />
-              {searchTerm && (
-                <button
-                  type="button"
-                  onClick={() => setSearchTerm('')}
-                  title="ล้างคำค้นหา"
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded cursor-pointer"
-                >
-                  <X size={13} />
-                </button>
-              )}
-            </div>
+        {/* Secondary Filters */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Department Filter (Master Data) */}
+          <select
+            aria-label="กรองใบสั่งงานตามแผนก"
+            value={filterDept}
+            onChange={(e) => setFilterDept(e.target.value)}
+            className="h-9 px-3 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-700 focus:outline-none focus:border-purple-600 cursor-pointer shadow-2xs truncate max-w-[180px]"
+          >
+            <option value="">ทุกแผนก (Master Data)</option>
+            {activeDepartments.map((d) => (
+              <option key={d.code} value={d.code}>
+                {d.code} — {d.nameTh}
+              </option>
+            ))}
+          </select>
 
-            {/* Department Filter (Master Data) */}
-            <select
-              aria-label="กรองใบสั่งงานตามแผนก"
-              value={filterDept}
-              onChange={(e) => setFilterDept(e.target.value)}
-              className="h-8.5 sm:h-9 px-3 bg-slate-50 hover:bg-white border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all cursor-pointer shadow-2xs truncate max-w-[180px]"
+          {/* Result Status Filter */}
+          <select
+            aria-label="กรองตามผลการตรวจ"
+            value={filterResult}
+            onChange={(e) => setFilterResult(e.target.value)}
+            className="h-9 px-2.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-700 focus:outline-none focus:border-purple-600 cursor-pointer shadow-2xs"
+          >
+            <option value="">ทุกผลตรวจ</option>
+            <option value="PASS">PASS (ผ่านเกณฑ์)</option>
+            <option value="FAIL">FAIL (ไม่ผ่านเกณฑ์)</option>
+            <option value="PENDING">PENDING (รอบันทึกผล)</option>
+          </select>
+
+          {/* Reset Filters button */}
+          {isFiltered && (
+            <button
+              type="button"
+              onClick={handleResetFilters}
+              title="ล้างตัวกรองทั้งหมด"
+              className="inline-flex items-center gap-1 px-2.5 h-9 text-xs font-medium text-rose-600 hover:bg-rose-50 rounded-lg border border-rose-200 transition-colors cursor-pointer shrink-0"
             >
-              <option value="">ทุกแผนก (Master Data)</option>
-              {activeDepartments.map((d) => (
-                <option key={d.code} value={d.code}>
-                  {d.code} — {d.nameTh}
-                </option>
-              ))}
-            </select>
-
-            {/* Result Status Filter */}
-            <select
-              aria-label="กรองตามผลการตรวจ"
-              value={filterResult}
-              onChange={(e) => setFilterResult(e.target.value)}
-              className="h-8.5 sm:h-9 px-2.5 bg-slate-50 hover:bg-white border border-slate-200 rounded-xl text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all cursor-pointer shadow-2xs"
-            >
-              <option value="">ทุกผลตรวจ</option>
-              <option value="PASS">PASS (ผ่านเกณฑ์)</option>
-              <option value="FAIL">FAIL (ไม่ผ่านเกณฑ์)</option>
-              <option value="PENDING">PENDING (รอบันทึกผล)</option>
-            </select>
-
-            {/* Reset Filters button */}
-            {isFiltered && (
-              <button
-                type="button"
-                onClick={handleResetFilters}
-                title="ล้างตัวกรองทั้งหมด"
-                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-rose-600 hover:bg-rose-50 rounded-xl border border-rose-200 transition-all cursor-pointer shrink-0"
-              >
-                <FilterX size={12} />
-                <span>ล้างตัวกรอง</span>
-              </button>
-            )}
-          </div>
+              <FilterX size={13} />
+              <span>ล้างตัวกรอง</span>
+            </button>
+          )}
 
           {/* Right: Total Items Badge */}
-          <div className="flex items-center gap-2 shrink-0">
-            <span className="text-xs text-slate-500 font-medium">
-              แสดง <span className="font-bold text-slate-800">{activeTabWorkOrders.length}</span> รายการ
-            </span>
+          <div className="text-xs font-medium text-slate-500 pl-1 shrink-0">
+            แสดง <span className="font-bold text-slate-800">{activeTabWorkOrders.length}</span> รายการ
           </div>
-
         </div>
       </div>
 
