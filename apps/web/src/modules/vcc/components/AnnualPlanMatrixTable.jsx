@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
   FolderTree,
   CheckCircle2,
@@ -15,10 +15,31 @@ import {
   Check,
   X,
   ChevronDown,
-  ChevronRight
+  ChevronRight,
+  ListFilter
 } from 'lucide-react';
 import AnnualPlanMonthCell from './AnnualPlanMonthCell';
 import AnnualPlanSideInspector from './AnnualPlanSideInspector';
+
+const useDismiss = (open, onClose) => {
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    const onDown = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) onClose();
+    };
+    const onKey = (e) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open, onClose]);
+  return ref;
+};
 
 const MONTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
 
@@ -39,6 +60,12 @@ export const AnnualPlanMatrixTable = ({
   activePlan = null,
   workOrders = [],
   canEditPlan = false,
+  filterYear = '',
+  setFilterYear,
+  availableYears = [],
+  filterDept = '',
+  setFilterDept,
+  activeDepartments = [],
   onOpenAddItem,
   onDeleteItem,
   onOpenGroupWorkOrderCheck,
@@ -54,6 +81,10 @@ export const AnnualPlanMatrixTable = ({
   const [savingCellKey, setSavingCellKey] = useState('');
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   const [collapsedGroupIds, setCollapsedGroupIds] = useState(new Set());
+  const [filterOpen, setFilterOpen] = useState(false);
+
+  const filterRef = useDismiss(filterOpen, () => setFilterOpen(false));
+  const extraFilterCount = (filterYear ? 1 : 0) + (filterDept ? 1 : 0);
 
   const toggleGroupCollapse = (groupId) => {
     setCollapsedGroupIds((prev) => {
@@ -229,6 +260,62 @@ export const AnnualPlanMatrixTable = ({
                 >
                   ✕
                 </button>
+              )}
+            </div>
+          )}
+
+          {/* กรองปี/แผนก ใน Table Toolbar */}
+          {(availableYears.length > 0 || activeDepartments.length > 0) && (
+            <div className="relative" ref={filterRef}>
+              <button
+                type="button"
+                aria-haspopup="true"
+                aria-expanded={filterOpen}
+                onClick={() => setFilterOpen((v) => !v)}
+                className={`inline-flex items-center gap-1.5 h-9 px-3 rounded-xl border text-xs font-semibold cursor-pointer shadow-2xs transition-colors ${
+                  extraFilterCount > 0
+                    ? 'border-indigo-300 bg-indigo-50/70 text-indigo-700'
+                    : 'border-slate-300 bg-white hover:bg-slate-50 text-slate-700'
+                }`}
+              >
+                <ListFilter size={14} className={extraFilterCount > 0 ? 'text-indigo-600' : 'text-slate-500'} />
+                <span>กรองปี/แผนก{extraFilterCount > 0 ? ` (${extraFilterCount})` : ''}</span>
+              </button>
+              {filterOpen && (
+                <div className="absolute left-0 top-full mt-1.5 z-40 w-64 bg-white rounded-xl border border-slate-200 shadow-lg p-3.5 space-y-2.5">
+                  <label className="block text-xs font-semibold text-slate-700">
+                    ปีของแผน
+                    <select
+                      aria-label="กรองตามปีของแผน"
+                      value={filterYear || ''}
+                      onChange={(e) => setFilterYear && setFilterYear(e.target.value)}
+                      className="w-full mt-1 h-9 px-3 rounded-xl border border-slate-300 text-xs font-medium bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                    >
+                      <option value="">ทุกปี</option>
+                      {availableYears.map((yr) => (
+                        <option key={yr} value={String(yr)}>
+                          {yr} (พ.ศ. {yr + 543})
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="block text-xs font-semibold text-slate-700">
+                    แผนก
+                    <select
+                      aria-label="กรองแผนตามแผนก"
+                      value={filterDept || ''}
+                      onChange={(e) => setFilterDept && setFilterDept(e.target.value)}
+                      className="w-full mt-1 h-9 px-3 rounded-xl border border-slate-300 text-xs font-medium bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                    >
+                      <option value="">ทุกแผนก</option>
+                      {activeDepartments.map((d) => (
+                        <option key={d.code} value={d.code}>
+                          {d.code} — {d.nameTh}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
               )}
             </div>
           )}
