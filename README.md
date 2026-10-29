@@ -36,14 +36,14 @@ app  ──►  modules/*  ──►  shared
 ## เริ่มต้นใช้งาน
 
 ```bash
-npm run install:all   # ติดตั้ง dependency ของ apps/web และ apps/api
-npm run dev           # รัน frontend ที่ http://localhost:5173
-npm run dev:api       # รัน backend (ต้องตั้ง DATABASE_URL)
-npm run check         # lint + test + build (ให้ผ่านก่อนเปิด PR)
-npm run test:e2e      # Playwright
+pnpm run install:all   # ติดตั้ง dependency ของ apps/web และ apps/api
+pnpm run dev           # รัน frontend ที่ http://localhost:5173
+pnpm run dev:api       # รัน backend (ต้องตั้ง DATABASE_URL)
+pnpm run check         # lint + test + build (ให้ผ่านก่อนเปิด PR)
+pnpm run test:e2e      # Playwright
 ```
 
-แต่ละ app มี `package.json` และ lockfile แยกกัน จะเข้าไปรันคำสั่งในโฟลเดอร์นั้นตรงๆ ก็ได้ เช่น `cd apps/web && npm test`
+แต่ละ app มี `package.json` และ lockfile (pnpm-lock.yaml) แยกกัน จะเข้าไปรันคำสั่งในโฟลเดอร์นั้นตรงๆ ก็ได้ เช่น `cd apps/web && pnpm test`
 
 ## เพิ่ม module ใหม่ (เช่น CAPA, Audit)
 

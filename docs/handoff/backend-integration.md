@@ -92,17 +92,17 @@ The app has a mock Persona switcher (currently disabled since the UAT harness wa
 
 ```bash
 # Start local dev server
-npm run dev
+pnpm run dev
 
 # Run code linter
-npm run lint
+pnpm run lint
 
 # Run unit and integration tests
-npm run test
+pnpm run test
 
 # Run E2E Playwright tests (Requires backend API or current mock to be intact)
-npm run test:e2e
+pnpm run test:e2e
 
 # Production build
-npm run build
+pnpm run build
 ```

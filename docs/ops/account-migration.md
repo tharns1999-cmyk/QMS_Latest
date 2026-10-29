@@ -21,10 +21,10 @@
 4. `npx wrangler r2 bucket create qms-files`
 5. ตั้งความลับใหม่: `cd apps/api && npx wrangler secret put JWT_SECRET --env production` (ค่าสุ่มยาว ไม่ใช้ซ้ำกับ UAT)
 6. ผูกโดเมนบริษัท (โซนต้องอยู่บัญชีบริษัท) แล้วเปิดบรรทัด `routes` ใน `env.production` ตั้ง `ALLOWED_ORIGIN` เป็นที่อยู่เว็บบริษัท
-7. สร้างโครงสร้างตาราง: `cd apps/api && npm run db:migrate:production` (คำสั่งเดียว สร้างครบ 0001–0021)
+7. สร้างโครงสร้างตาราง: `cd apps/api && pnpm run db:migrate:production` (คำสั่งเดียว สร้างครบ 0001–0021)
 
 ทดสอบก่อนเปิดจริง
-8. `npm run deploy:production` แล้ว build เว็บด้วย `VITE_API_URL=<ที่อยู่ API บริษัท> npm run build` ตามด้วย `npx wrangler deploy` (ล็อกอินบริษัท)
+8. `pnpm run deploy:production` แล้ว build เว็บด้วย `VITE_API_URL=<ที่อยู่ API บริษัท> pnpm run build` ตามด้วย `npx wrangler deploy` (ล็อกอินบริษัท)
 9. สร้างผู้ใช้ DCC คนแรกด้วย `scripts/create-user.js` และลอง login, อัปโหลด PDF, ผ่านขั้น 2FA
 
 ย้ายข้อมูล (ช่วงสั้น ประกาศเวลาให้ผู้ใช้หยุดบันทึก)
