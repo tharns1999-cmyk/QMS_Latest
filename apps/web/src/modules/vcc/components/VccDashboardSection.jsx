@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Bell,
   Download,
@@ -11,8 +11,8 @@ import {
   RefreshCw,
   FileSpreadsheet,
   X,
-  Layers,
-  Calendar
+  ArrowRight,
+  Info
 } from 'lucide-react';
 import {
   fetchVccDashboard,
@@ -25,10 +25,10 @@ import {
 const MONTH_LABELS = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
 
 const ALERT_TABS = [
-  { key: 'ON_HOLD', label: 'ระงับใช้ (ON_HOLD)', badgeClass: 'bg-rose-100 text-rose-800' },
-  { key: 'OVERDUE', label: 'เลยกำหนด (OVERDUE)', badgeClass: 'bg-amber-100 text-amber-800' },
-  { key: 'DUE_SOON', label: 'ใกล้ครบกำหนด (DUE_SOON)', badgeClass: 'bg-blue-100 text-blue-800' },
-  { key: 'PENDING_REVIEW', label: 'รอตรวจรับ (PENDING_REVIEW)', badgeClass: 'bg-indigo-100 text-indigo-800' }
+  { key: 'OVERDUE', label: 'เลยกำหนด (OVERDUE)', alertBadgeClass: 'bg-amber-100 text-amber-900' },
+  { key: 'ON_HOLD', label: 'ระงับใช้ (ON_HOLD)', alertBadgeClass: 'bg-rose-100 text-rose-900' },
+  { key: 'DUE_SOON', label: 'ใกล้ครบกำหนด (DUE_SOON)', alertBadgeClass: 'bg-blue-100 text-blue-900' },
+  { key: 'PENDING_REVIEW', label: 'รอตรวจรับ (PENDING_REVIEW)', alertBadgeClass: 'bg-indigo-100 text-indigo-900' }
 ];
 
 const parseDaysInput = (text) =>
@@ -153,69 +153,85 @@ export default function VccDashboardSection({ onNavigateToWorkOrders }) {
   const wo = dashboard?.work_order_kpi || {};
   const allAlerts = dashboard?.alerts || [];
 
-  const filteredAlerts = allAlerts.filter((a) => {
-    if (alertTab === 'DUE_SOON') return a.alert_type === 'DUE_SOON' || a.alert_type === 'DUE_TODAY';
-    return a.alert_type === alertTab;
-  });
+  const filteredAlerts = useMemo(() => {
+    return allAlerts.filter((a) => {
+      if (alertTab === 'DUE_SOON') return a.alert_type === 'DUE_SOON' || a.alert_type === 'DUE_TODAY';
+      return a.alert_type === alertTab;
+    });
+  }, [allAlerts, alertTab]);
 
-  const countByAlertTab = (tabKey) =>
-    allAlerts.filter((a) => (tabKey === 'DUE_SOON' ? a.alert_type === 'DUE_SOON' || a.alert_type === 'DUE_TODAY' : a.alert_type === tabKey)).length;
+  const countByAlertTab = useCallback(
+    (tabKey) =>
+      allAlerts.filter((a) =>
+        tabKey === 'DUE_SOON' ? a.alert_type === 'DUE_SOON' || a.alert_type === 'DUE_TODAY' : a.alert_type === tabKey
+      ).length,
+    [allAlerts]
+  );
+
+  // Plan vs Act Aggregation
+  const { totalPlanned, totalActual } = useMemo(() => {
+    const list = dashboard?.monthly_comparison || [];
+    return list.reduce(
+      (acc, r) => ({
+        totalPlanned: acc.totalPlanned + (Number(r.planned) || 0),
+        totalActual: acc.totalActual + (Number(r.actual_closed) || 0)
+      }),
+      { totalPlanned: 0, totalActual: 0 }
+    );
+  }, [dashboard?.monthly_comparison]);
 
   return (
-    <div className="space-y-6" data-testid="vcc-dashboard-section">
-      {/* Dashboard Toolbar & Quick Actions */}
-      <div className="bg-white rounded-2xl border border-slate-200/90 p-3.5 sm:p-4 shadow-xs flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200/80 text-slate-600 font-medium text-xs sm:text-sm">
-            <Clock size={15} className="text-indigo-600 shrink-0" />
-            <span>เกณฑ์ On-Time: ปิดงาน (CLOSED) และวันปฏิบัติงานจริงไม่เกินวันครบกำหนด</span>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="inline-flex items-center gap-2 bg-slate-50 border border-slate-200/90 rounded-xl px-3 py-1 text-sm">
-            <label htmlFor="vcc-year-select" className="text-xs font-semibold text-slate-600">
-              ปีแผน:
-            </label>
+    <div className="space-y-6 text-slate-800" data-testid="vcc-dashboard-section">
+      {/* 1. Header Toolbar (Swiss Minimalist Action Bar) */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-2 border-b border-slate-200/80">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+            <span className="text-slate-500 font-normal">ปีแผน:</span>
             <select
-              id="vcc-year-select"
               aria-label="เลือกปีแผน Dashboard"
               value={year}
               onChange={(e) => setYear(Number(e.target.value))}
-              className="h-8 rounded-lg border-0 bg-transparent text-sm font-bold text-slate-900 focus:ring-0 cursor-pointer"
+              className="h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-sm font-semibold text-slate-900 focus:outline-hidden focus:border-slate-400 cursor-pointer shadow-2xs"
             >
               <option value={2026}>2026 (พ.ศ. 2569)</option>
               <option value={2027}>2027 (พ.ศ. 2570)</option>
             </select>
           </div>
 
+          <div className="hidden lg:flex items-center gap-1.5 text-xs text-slate-500 pl-2 border-l border-slate-200">
+            <Clock size={13} className="text-slate-400 shrink-0" />
+            <span>เกณฑ์ On-Time: ปิดงาน (CLOSED) และทำจริงไม่เกินกำหนด</span>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-1.5">
           <button
             type="button"
             onClick={handleExportPlanCsv}
             data-testid="vcc-export-plan-csv-btn"
-            className="h-9 inline-flex items-center gap-1.5 px-3 rounded-xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-200/90 text-xs sm:text-sm font-medium transition-colors shadow-2xs cursor-pointer"
+            className="h-8 inline-flex items-center gap-1.5 px-3 rounded-lg bg-white hover:bg-slate-50 text-slate-700 border border-slate-200/90 text-xs font-medium transition-colors shadow-2xs cursor-pointer"
           >
-            <FileSpreadsheet size={15} className="text-emerald-600 shrink-0" />
-            <span>ส่งออกแผน FM-QC-46 (CSV)</span>
+            <FileSpreadsheet size={14} className="text-emerald-600 shrink-0" />
+            <span>แผน FM-QC-46 (CSV)</span>
           </button>
 
           <button
             type="button"
             onClick={handleExportWoCsv}
             data-testid="vcc-export-wo-csv-btn"
-            className="h-9 inline-flex items-center gap-1.5 px-3 rounded-xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-200/90 text-xs sm:text-sm font-medium transition-colors shadow-2xs cursor-pointer"
+            className="h-8 inline-flex items-center gap-1.5 px-3 rounded-lg bg-white hover:bg-slate-50 text-slate-700 border border-slate-200/90 text-xs font-medium transition-colors shadow-2xs cursor-pointer"
           >
-            <Download size={15} className="text-sky-600 shrink-0" />
-            <span>ส่งออกใบสั่งงาน/ใบรับรอง (CSV)</span>
+            <Download size={14} className="text-sky-600 shrink-0" />
+            <span>ใบงาน/ใบรับรอง (CSV)</span>
           </button>
 
           <button
             type="button"
             onClick={() => setSettingsOpen(true)}
             data-testid="vcc-open-notification-settings-btn"
-            className="h-9 inline-flex items-center gap-1.5 px-3 rounded-xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-200/90 text-xs sm:text-sm font-medium transition-colors shadow-2xs cursor-pointer"
+            className="h-8 inline-flex items-center gap-1.5 px-3 rounded-lg bg-white hover:bg-slate-50 text-slate-700 border border-slate-200/90 text-xs font-medium transition-colors shadow-2xs cursor-pointer"
           >
-            <Settings size={15} className="text-slate-500 shrink-0" />
+            <Settings size={14} className="text-slate-400 shrink-0" />
             <span>ตั้งค่าแจ้งเตือน</span>
           </button>
 
@@ -223,10 +239,9 @@ export default function VccDashboardSection({ onNavigateToWorkOrders }) {
             type="button"
             onClick={loadData}
             title="รีเฟรชข้อมูล"
-            className="h-9 inline-flex items-center gap-1.5 px-3 rounded-xl border border-slate-200/90 bg-white hover:bg-slate-50 text-slate-700 text-xs sm:text-sm font-medium transition-colors shadow-2xs cursor-pointer"
+            className="h-8 w-8 inline-flex items-center justify-center rounded-lg bg-white hover:bg-slate-50 text-slate-600 border border-slate-200/90 transition-colors shadow-2xs cursor-pointer"
           >
-            <RefreshCw size={14} className={`text-slate-500 shrink-0 ${loading ? 'animate-spin' : ''}`} />
-            <span>รีเฟรช</span>
+            <RefreshCw size={14} className={loading ? 'animate-spin text-indigo-600' : ''} />
           </button>
         </div>
       </div>
@@ -243,140 +258,143 @@ export default function VccDashboardSection({ onNavigateToWorkOrders }) {
         </div>
       )}
 
-      {/* KPI Cards — Grouped by Priority */}
-      <div className="grid grid-cols-2 md:grid-cols-3 2xl:grid-cols-6 gap-3.5">
-        {/* Active Assets */}
-        <div className="bg-white rounded-2xl border border-slate-200/90 p-4 shadow-xs hover:border-slate-300 transition-colors flex flex-col justify-between">
-          <div>
-            <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide flex items-center justify-between">
-              <span>เครื่องมือรายตัว (ใช้งานปกติ)</span>
-              <Layers size={14} className="text-slate-400" />
+      {/* 2. Compact Swiss Metrics Strip */}
+      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-hidden">
+        <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 divide-y sm:divide-y-0 sm:divide-x divide-slate-100">
+          {/* Active Assets */}
+          <div className="p-4 sm:p-5 flex flex-col justify-between">
+            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+              เครื่องมือปกติ
+            </span>
+            <div className="mt-2 text-2xl sm:text-3xl font-bold font-mono tracking-tight text-slate-900" data-testid="kpi-active-assets">
+              {eq.active_assets ?? 0} <span className="text-xs font-normal text-slate-400 font-sans">/ {eq.total_assets ?? 0}</span>
             </div>
-            <div className="mt-2 text-2xl font-bold font-mono text-slate-900" data-testid="kpi-active-assets">
-              {eq.active_assets ?? 0} <span className="text-xs font-normal text-slate-500 font-sans">/ {eq.total_assets ?? 0}</span>
+            <div className="mt-2 text-xs text-slate-400 font-medium truncate">
+              กลุ่มแม่ {eq.group_count ?? 0} | ปลดออก {eq.retired_assets ?? 0}
             </div>
           </div>
-          <div className="mt-2 pt-2 border-t border-slate-100 text-xs text-slate-500 font-medium">
-            กลุ่มแม่: {eq.group_count ?? 0} กลุ่ม | ปลดออก: {eq.retired_assets ?? 0}
-          </div>
-        </div>
 
-        {/* ON_HOLD — Critical Attention */}
-        <div className="bg-white rounded-2xl border border-slate-200/90 p-4 shadow-xs hover:border-rose-200 transition-colors flex flex-col justify-between">
-          <div>
-            <div className="text-xs font-semibold text-rose-700 uppercase tracking-wide flex items-center justify-between">
-              <span className="flex items-center gap-1.5">
-                <ShieldAlert size={14} /> ระงับใช้งาน (ON_HOLD)
+          {/* ON_HOLD */}
+          <div className={`p-4 sm:p-5 flex flex-col justify-between transition-colors ${
+            (eq.on_hold_assets ?? 0) > 0 ? 'bg-rose-50/40' : ''
+          }`}>
+            <div className="flex items-center justify-between">
+              <span className={`text-xs font-semibold uppercase tracking-wider ${
+                (eq.on_hold_assets ?? 0) > 0 ? 'text-rose-700' : 'text-slate-500'
+              }`}>
+                ระงับใช้ (ON_HOLD)
               </span>
-              {(eq.on_hold_assets ?? 0) > 0 && (
-                <span className="h-2 w-2 rounded-full bg-rose-500" title="มีเครื่องมือถูกระงับใช้" />
-              )}
+              {(eq.on_hold_assets ?? 0) > 0 && <span className="h-2 w-2 rounded-full bg-rose-500" />}
             </div>
-            <div className="mt-2 text-2xl font-bold font-mono text-rose-700" data-testid="kpi-on-hold-assets">
+            <div className={`mt-2 text-2xl sm:text-3xl font-mono tracking-tight ${
+              (eq.on_hold_assets ?? 0) > 0 ? 'font-bold text-rose-600' : 'font-medium text-slate-300'
+            }`} data-testid="kpi-on-hold-assets">
               {eq.on_hold_assets ?? 0}
             </div>
-          </div>
-          <div className="mt-2 pt-2 border-t border-slate-100 text-xs text-rose-700 font-medium">
-            ผลไม่ผ่าน (FAIL): {wo.fail_count ?? 0} งาน
-          </div>
-        </div>
-
-        {/* OVERDUE — Compliance Attention */}
-        <div className="bg-white rounded-2xl border border-slate-200/90 p-4 shadow-xs hover:border-amber-200 transition-colors flex flex-col justify-between">
-          <div>
-            <div className="text-xs font-semibold text-amber-700 uppercase tracking-wide flex items-center justify-between">
-              <span className="flex items-center gap-1.5">
-                <AlertTriangle size={14} /> เลยกำหนด (OVERDUE)
-              </span>
-              {(wo.overdue_count ?? 0) > 0 && (
-                <span className="h-2 w-2 rounded-full bg-amber-500" title="มีงานเลยกำหนด" />
-              )}
+            <div className={`mt-2 text-xs font-medium truncate ${
+              (eq.on_hold_assets ?? 0) > 0 ? 'text-rose-600' : 'text-slate-400'
+            }`}>
+              ผลไม่ผ่าน (FAIL): {wo.fail_count ?? 0} งาน
             </div>
-            <div className="mt-2 text-2xl font-bold font-mono text-amber-700" data-testid="kpi-overdue-count">
+          </div>
+
+          {/* OVERDUE */}
+          <div className={`p-4 sm:p-5 flex flex-col justify-between transition-colors ${
+            (wo.overdue_count ?? 0) > 0 ? 'bg-amber-50/40' : ''
+          }`}>
+            <div className="flex items-center justify-between">
+              <span className={`text-xs font-semibold uppercase tracking-wider ${
+                (wo.overdue_count ?? 0) > 0 ? 'text-amber-800' : 'text-slate-500'
+              }`}>
+                เลยกำหนด (OVERDUE)
+              </span>
+              {(wo.overdue_count ?? 0) > 0 && <span className="h-2 w-2 rounded-full bg-amber-500" />}
+            </div>
+            <div className={`mt-2 text-2xl sm:text-3xl font-mono tracking-tight ${
+              (wo.overdue_count ?? 0) > 0 ? 'font-bold text-amber-700' : 'font-medium text-slate-300'
+            }`} data-testid="kpi-overdue-count">
               {wo.overdue_count ?? 0}
             </div>
-          </div>
-          <div className="mt-2 pt-2 border-t border-slate-100 text-xs text-slate-500 font-medium">
-            ใกล้ครบใน 7 วัน: {wo.due_in_7_days ?? 0} งาน
-          </div>
-        </div>
-
-        {/* DUE IN 30 DAYS */}
-        <div className="bg-white rounded-2xl border border-slate-200/90 p-4 shadow-xs hover:border-slate-300 transition-colors flex flex-col justify-between">
-          <div>
-            <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide flex items-center justify-between">
-              <span className="flex items-center gap-1.5">
-                <Clock size={14} className="text-indigo-600" /> ใกล้ครบกำหนดใน 30 วัน
-              </span>
-              <Calendar size={14} className="text-slate-400" />
+            <div className={`mt-2 text-xs font-medium truncate ${
+              (wo.overdue_count ?? 0) > 0 ? 'text-amber-700' : 'text-slate-400'
+            }`}>
+              ใกล้ครบ 7 วัน: {wo.due_in_7_days ?? 0} งาน
             </div>
-            <div className="mt-2 text-2xl font-bold font-mono text-indigo-700" data-testid="kpi-due-30-count">
+          </div>
+
+          {/* DUE IN 30 DAYS */}
+          <div className="p-4 sm:p-5 flex flex-col justify-between">
+            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+              ครบใน 30 วัน
+            </span>
+            <div className={`mt-2 text-2xl sm:text-3xl font-mono tracking-tight ${
+              (wo.due_in_30_days ?? 0) > 0 ? 'font-bold text-slate-800' : 'font-medium text-slate-300'
+            }`} data-testid="kpi-due-30-count">
               {wo.due_in_30_days ?? 0}
             </div>
-          </div>
-          <div className="mt-2 pt-2 border-t border-slate-100 text-xs text-slate-500 font-medium">
-            ใบสั่งงานทั้งหมด: {wo.total_work_orders ?? 0}
-          </div>
-        </div>
-
-        {/* PENDING_REVIEW */}
-        <div className="bg-white rounded-2xl border border-slate-200/90 p-4 shadow-xs hover:border-slate-300 transition-colors flex flex-col justify-between">
-          <div>
-            <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide flex items-center justify-between">
-              <span>รอผู้ตรวจรับ (PENDING_REVIEW)</span>
+            <div className="mt-2 text-xs text-slate-400 font-medium truncate">
+              ใบงานทั้งหมด {wo.total_work_orders ?? 0}
             </div>
-            <div className="mt-2 text-2xl font-bold font-mono text-slate-900" data-testid="kpi-pending-review-count">
+          </div>
+
+          {/* PENDING_REVIEW */}
+          <div className="p-4 sm:p-5 flex flex-col justify-between">
+            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+              รอตรวจรับ
+            </span>
+            <div className={`mt-2 text-2xl sm:text-3xl font-mono tracking-tight ${
+              (wo.pending_review_count ?? 0) > 0 ? 'font-bold text-indigo-700' : 'font-medium text-slate-300'
+            }`} data-testid="kpi-pending-review-count">
               {wo.pending_review_count ?? 0}
             </div>
-          </div>
-          <div className="mt-2 pt-2 border-t border-slate-100 text-xs text-slate-500 font-medium">
-            SLA ตรวจรับ: {dashboard?.notification_settings?.review_sla_days ?? 3} วัน
-          </div>
-        </div>
-
-        {/* COMPLETED & ON-TIME RATE */}
-        <div className="bg-white rounded-2xl border border-slate-200/90 p-4 shadow-xs hover:border-emerald-200 transition-colors flex flex-col justify-between">
-          <div>
-            <div className="text-xs font-semibold text-emerald-700 uppercase tracking-wide flex items-center justify-between">
-              <span className="flex items-center gap-1.5">
-                <CheckCircle2 size={14} /> ปิดงานแล้ว / ทันกำหนด
-              </span>
+            <div className="mt-2 text-xs text-slate-400 font-medium truncate">
+              SLA: {dashboard?.notification_settings?.review_sla_days ?? 3} วัน
             </div>
-            <div className="mt-2 text-2xl font-bold font-mono text-emerald-700" data-testid="kpi-completed-count">
+          </div>
+
+          {/* COMPLETED / ON-TIME */}
+          <div className="p-4 sm:p-5 flex flex-col justify-between">
+            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+              ปิดงานแล้ว / ทันกำหนด
+            </span>
+            <div className={`mt-2 text-2xl sm:text-3xl font-mono tracking-tight ${
+              (wo.completed_count ?? 0) > 0 ? 'font-bold text-emerald-700' : 'font-medium text-slate-300'
+            }`} data-testid="kpi-completed-count">
               {wo.completed_count ?? 0} <span className="text-xs font-semibold font-sans">({wo.on_time_rate ?? 0}%)</span>
             </div>
-          </div>
-          <div className="mt-2 pt-2 border-t border-slate-100 text-xs text-emerald-700 font-medium">
-            ทันกำหนด: {wo.on_time_count ?? 0} งาน | ผ่าน: {wo.pass_count ?? 0}
+            <div className="mt-2 text-xs text-slate-400 font-medium truncate">
+              ทันกำหนด: {wo.on_time_count ?? 0} | ผ่าน: {wo.pass_count ?? 0}
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Active Alerts Separated by Status Tab */}
-      <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+      {/* 3. Actionable Alert Worklist */}
+      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs p-5 sm:p-6 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b border-slate-100">
           <div>
             <div className="flex items-center gap-2">
-              <Bell size={18} className="text-slate-700 shrink-0" />
-              <h2 className="text-base font-bold text-slate-900">ศูนย์แจ้งเตือนแยกตามสถานะ (งานที่ปิดแล้วจะไม่แจ้งเตือนซ้ำ)</h2>
+              <Bell size={18} className="text-slate-900 shrink-0" />
+              <h2 className="text-base font-bold text-slate-900 tracking-tight">ศูนย์แจ้งเตือนตามกติกา QMS</h2>
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
-              แสดงเฉพาะรายการที่ต้องติดตามหรือดำเนินการตามสถานะปัจจุบัน
+              แสดงเฉพาะงานที่ต้องดำเนินการตามเงื่อนไข (งานที่ปิดแล้วจะไม่แจ้งเตือนซ้ำ)
             </p>
           </div>
           {onNavigateToWorkOrders && (
             <button
               type="button"
               onClick={onNavigateToWorkOrders}
-              className="inline-flex items-center gap-1 text-xs sm:text-sm font-semibold text-indigo-600 hover:text-indigo-800 transition-colors cursor-pointer group"
+              className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-semibold text-indigo-600 hover:text-indigo-800 transition-colors group cursor-pointer self-start sm:self-auto"
             >
               <span>ไปที่หน้าใบสั่งงานทั้งหมด</span>
-              <span className="transition-transform group-hover:translate-x-0.5">→</span>
+              <ArrowRight size={14} className="group-hover:translate-x-0.5 transition-transform" />
             </button>
           )}
         </div>
 
-        <div className="flex flex-wrap gap-1.5 p-1 bg-slate-100/80 rounded-xl border border-slate-200/60">
+        {/* Minimal Swiss Underline Tabs */}
+        <div className="flex flex-wrap gap-4 sm:gap-6 border-b border-slate-100 pt-1">
           {ALERT_TABS.map((t) => {
             const count = countByAlertTab(t.key);
             const isActive = alertTab === t.key;
@@ -386,20 +404,18 @@ export default function VccDashboardSection({ onNavigateToWorkOrders }) {
                 type="button"
                 onClick={() => setAlertTab(t.key)}
                 data-testid={`alert-tab-${t.key}`}
-                className={`px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all flex items-center gap-2 cursor-pointer ${
+                className={`pb-3 text-xs sm:text-sm font-medium transition-all flex items-center gap-2 cursor-pointer border-b-2 -mb-px ${
                   isActive
-                    ? 'bg-white text-slate-900 shadow-2xs font-semibold border border-slate-200/70'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
+                    ? 'border-slate-900 text-slate-900 font-semibold'
+                    : 'border-transparent text-slate-500 hover:text-slate-800'
                 }`}
               >
                 <span>{t.label}</span>
                 <span
-                  className={`px-2 py-0.5 rounded-full text-xs font-mono font-bold ${
-                    isActive
-                      ? 'bg-slate-100 text-slate-900'
-                      : count > 0 && (t.key === 'ON_HOLD' || t.key === 'OVERDUE')
-                      ? t.badgeClass
-                      : 'bg-slate-200/70 text-slate-600'
+                  className={`text-xs font-mono font-medium px-1.5 py-0.5 rounded ${
+                    count > 0 && (t.key === 'OVERDUE' || t.key === 'ON_HOLD')
+                      ? t.alertBadgeClass
+                      : 'bg-slate-100 text-slate-600'
                   }`}
                 >
                   {count}
@@ -409,68 +425,88 @@ export default function VccDashboardSection({ onNavigateToWorkOrders }) {
           })}
         </div>
 
+        {/* Worklist Items */}
         {loading ? (
-          <div className="py-12 text-center text-sm text-slate-500 font-medium">กำลังประมวลผลรายการแจ้งเตือน...</div>
+          <div className="py-12 text-center text-sm text-slate-400 font-medium">กำลังประมวลผลรายการแจ้งเตือน...</div>
         ) : filteredAlerts.length === 0 ? (
-          <div className="py-12 text-center text-sm text-slate-500 font-medium" data-testid="alert-empty-state">
-            ไม่มีรายการแจ้งเตือนในสถานะนี้
+          <div className="py-12 text-center space-y-1.5" data-testid="alert-empty-state">
+            <div className="text-sm font-medium text-slate-600">ไม่มีรายการแจ้งเตือนในสถานะนี้</div>
+            <div className="text-xs text-slate-400">ทุกรายการได้รับการบันทึกและจัดการเรียบร้อยตามเกณฑ์</div>
           </div>
         ) : (
           <div className="divide-y divide-slate-100" data-testid={`alert-list-${alertTab}`}>
             {filteredAlerts.map((alert) => (
               <div
                 key={alert.dedupe_key}
-                className="py-3 px-3 -mx-3 rounded-xl hover:bg-slate-50/80 transition-colors flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 text-sm"
+                className="py-3.5 px-3 -mx-3 rounded-xl hover:bg-slate-50/80 transition-colors flex flex-col md:flex-row md:items-center md:justify-between gap-3 text-sm"
               >
                 <div className="flex items-center gap-2.5 flex-wrap">
                   <span className="font-mono font-bold text-slate-900">{alert.wo_code}</span>
-                  <span className="font-mono text-xs font-semibold text-indigo-700 bg-indigo-50/80 border border-indigo-200/70 px-2 py-0.5 rounded-md">
+                  <span className="font-mono text-xs font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded">
                     {alert.asset_code}
                   </span>
                   <span className="text-slate-800 font-medium">{alert.asset_name}</span>
-                  <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200/60 text-xs font-medium">
+                  <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-600 text-xs font-medium">
                     {alert.department}
                   </span>
                 </div>
-                <div className="text-slate-700 font-medium text-xs sm:text-sm">{alert.message}</div>
+                <div className="flex items-center gap-4 justify-between md:justify-end">
+                  <span className="text-slate-600 text-xs sm:text-sm font-medium">{alert.message}</span>
+                  {onNavigateToWorkOrders && (
+                    <button
+                      type="button"
+                      onClick={onNavigateToWorkOrders}
+                      className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 whitespace-nowrap inline-flex items-center gap-1 cursor-pointer"
+                    >
+                      จัดการใบงาน <ArrowRight size={12} />
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
           </div>
         )}
       </div>
 
-      {/* Monthly Plan vs Act. Comparison & Department Breakdown */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Monthly Plan vs Act Table */}
-        <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs flex flex-col justify-between">
+      {/* 4. Analytics Section (Plan vs Actual & Department Breakdown) */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        {/* Monthly Plan vs Actual Matrix */}
+        <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs p-5 sm:p-6 flex flex-col justify-between">
           <div>
-            <h2 className="text-base font-bold text-slate-900">
-              เปรียบเทียบแผนที่อนุมัติแล้ว (Plan) กับงานที่ปิดแล้ว (Act.) รายเดือน ปี {year}
-            </h2>
-            <p className="text-xs text-slate-500 mt-0.5 mb-3">
-              ข้อมูลเปรียบเทียบเป้าหมายประจำปีตามแผน FM-QC-46 กับผลการตรวจจริง
-            </p>
-            <div className="overflow-x-auto rounded-xl border border-slate-200/80">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-3">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 tracking-tight">
+                  เปรียบเทียบแผน (Plan) กับปิดงานจริง (Act.) ปี {year}
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">FM-QC-46 เป้าหมายรายเดือน เทียบกับงานที่ตรวจเสร็จสิ้น</p>
+              </div>
+              <div className="text-right">
+                <span className="text-xs text-slate-400">เป้าหมายทั้งปี: </span>
+                <span className="text-xs font-mono font-bold text-slate-700">{totalPlanned} งาน</span>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto rounded-xl border border-slate-200/70">
               <table className="w-full text-xs sm:text-sm border-collapse">
                 <thead>
-                  <tr className="bg-slate-50/80 text-slate-600 border-b border-slate-200/80 font-bold uppercase tracking-wider text-xs">
-                    <th className="py-2.5 px-2.5 text-left w-24 font-semibold">รายการ</th>
+                  <tr className="bg-slate-50/80 text-slate-600 border-b border-slate-200/70 font-semibold uppercase tracking-wider text-xs">
+                    <th className="py-2.5 px-3 text-left w-24">รายการ</th>
                     {MONTH_LABELS.map((m, idx) => (
                       <th key={idx} className="py-2.5 px-1 text-center font-semibold">{m}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-mono">
-                  <tr className="hover:bg-slate-50/50 transition-colors">
-                    <td className="py-2.5 px-2.5 font-semibold text-sky-700 font-sans text-xs sm:text-sm whitespace-nowrap">Plan (แผน)</td>
+                  <tr className="hover:bg-slate-50/40 transition-colors">
+                    <td className="py-2.5 px-3 font-semibold text-slate-700 font-sans text-xs whitespace-nowrap">Plan (แผน)</td>
                     {(dashboard?.monthly_comparison || []).map((row) => (
-                      <td key={row.month} className="py-2.5 px-1 text-center font-medium text-slate-700">
+                      <td key={row.month} className="py-2.5 px-1 text-center font-medium text-slate-600">
                         {row.planned || '-'}
                       </td>
                     ))}
                   </tr>
-                  <tr className="hover:bg-slate-50/50 transition-colors">
-                    <td className="py-2.5 px-2.5 font-semibold text-emerald-700 font-sans text-xs sm:text-sm whitespace-nowrap">Act. (ปิดแล้ว)</td>
+                  <tr className="hover:bg-slate-50/40 transition-colors">
+                    <td className="py-2.5 px-3 font-semibold text-emerald-700 font-sans text-xs whitespace-nowrap">Act. (ปิดแล้ว)</td>
                     {(dashboard?.monthly_comparison || []).map((row) => (
                       <td key={row.month} className="py-2.5 px-1 text-center font-bold text-emerald-700">
                         {row.actual_closed || '-'}
@@ -484,35 +520,48 @@ export default function VccDashboardSection({ onNavigateToWorkOrders }) {
         </div>
 
         {/* Department Summary Table */}
-        <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs flex flex-col justify-between">
+        <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs p-5 sm:p-6 flex flex-col justify-between">
           <div>
-            <h2 className="text-base font-bold text-slate-900">สรุปสถานะแยกตามแผนกเจ้าของเครื่องมือ</h2>
-            <p className="text-xs text-slate-500 mt-0.5 mb-3">
-              แจกแจงจำนวนเครื่องมือและสถานะใบสั่งงานตามแผนกที่รับผิดชอบ
-            </p>
-            <div className="overflow-x-auto rounded-xl border border-slate-200/80">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-3">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 tracking-tight">
+                  สรุปสถานะแยกตามแผนกเจ้าของเครื่องมือ
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">แจกแจงจำนวนเครื่องมือและสถานะใบงานตามแผนกรับผิดชอบ</p>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto rounded-xl border border-slate-200/70">
               <table className="w-full text-xs sm:text-sm border-collapse">
                 <thead>
-                  <tr className="bg-slate-50/80 text-slate-600 border-b border-slate-200/80 font-semibold uppercase tracking-wider text-xs">
+                  <tr className="bg-slate-50/80 text-slate-600 border-b border-slate-200/70 font-semibold uppercase tracking-wider text-xs">
                     <th className="py-2.5 px-3 text-left">แผนก</th>
                     <th className="py-2.5 px-2 text-right">เครื่องมือ</th>
                     <th className="py-2.5 px-2 text-right">ใบงานทั้งหมด</th>
-                    <th className="py-2.5 px-2 text-right">ปิดงานแล้ว</th>
+                    <th className="py-2.5 px-2 text-right">ปิดแล้ว</th>
                     <th className="py-2.5 px-2 text-right">เลยกำหนด</th>
-                    <th className="py-2.5 px-2 text-right">ระงับใช้ (ON_HOLD)</th>
+                    <th className="py-2.5 px-2 text-right">ระงับใช้</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-mono text-xs sm:text-sm">
-                  {(dashboard?.department_breakdown || []).map((d) => (
-                    <tr key={d.department} className="hover:bg-slate-50/60 transition-colors">
-                      <td className="py-2.5 px-3 font-bold text-slate-900 font-sans">{d.department}</td>
-                      <td className="py-2.5 px-2 text-right font-medium text-slate-700">{d.asset_count}</td>
-                      <td className="py-2.5 px-2 text-right font-medium text-slate-700">{d.total_work_orders}</td>
-                      <td className="py-2.5 px-2 text-right text-emerald-700 font-bold">{d.closed_work_orders}</td>
-                      <td className="py-2.5 px-2 text-right text-amber-700 font-bold">{d.overdue_work_orders}</td>
-                      <td className="py-2.5 px-2 text-right text-rose-600 font-bold">{d.on_hold_count}</td>
+                  {(dashboard?.department_breakdown || []).length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="py-8 text-center text-xs text-slate-400 font-sans">
+                        ไม่มีข้อมูลแผนก
+                      </td>
                     </tr>
-                  ))}
+                  ) : (
+                    (dashboard?.department_breakdown || []).map((d) => (
+                      <tr key={d.department} className="hover:bg-slate-50/50 transition-colors">
+                        <td className="py-2.5 px-3 font-bold text-slate-900 font-sans">{d.department}</td>
+                        <td className="py-2.5 px-2 text-right font-medium text-slate-700">{d.asset_count}</td>
+                        <td className="py-2.5 px-2 text-right font-medium text-slate-700">{d.total_work_orders}</td>
+                        <td className="py-2.5 px-2 text-right text-emerald-700 font-bold">{d.closed_work_orders}</td>
+                        <td className="py-2.5 px-2 text-right text-amber-700 font-bold">{d.overdue_work_orders}</td>
+                        <td className="py-2.5 px-2 text-right text-rose-600 font-bold">{d.on_hold_count}</td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
@@ -520,21 +569,18 @@ export default function VccDashboardSection({ onNavigateToWorkOrders }) {
         </div>
       </div>
 
-      {/* VCC Audit Trail */}
-      <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs space-y-3.5">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2">
-              <History size={18} className="text-slate-700 shrink-0" />
-              <h2 className="text-base font-bold text-slate-900">ประวัติการตรวจสอบย้อนหลัง (VCC Audit Trail)</h2>
-            </div>
-            <p className="text-xs text-slate-500 mt-0.5">บันทึกการเปลี่ยนแปลงและกิจกรรมสำคัญทั้งหมดในระบบ VCC</p>
+      {/* 5. VCC Audit Trail (Subtle Bottom Analytical Card) */}
+      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs p-5 sm:p-6 space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-2 border-b border-slate-100">
+          <div className="flex items-center gap-2">
+            <History size={16} className="text-slate-500 shrink-0" />
+            <h3 className="text-sm font-bold text-slate-900 tracking-tight">ประวัติการตรวจสอบย้อนหลัง (VCC Audit Trail)</h3>
           </div>
           <select
             aria-label="กรองหมวดหมู่ประวัติ VCC"
             value={auditCategory}
             onChange={(e) => setAuditCategory(e.target.value)}
-            className="h-9 rounded-xl border border-slate-200/90 bg-white px-3 text-xs sm:text-sm font-medium text-slate-700 focus:outline-hidden focus-visible:ring-2 focus-visible:ring-indigo-500 cursor-pointer shadow-2xs"
+            className="h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 focus:outline-hidden focus:border-slate-400 cursor-pointer shadow-2xs"
           >
             <option value="VCC_">ทั้งหมดใน VCC</option>
             <option value="VCC_ASSET">ทะเบียนเครื่องมือ (VCC_ASSET)</option>
@@ -545,17 +591,17 @@ export default function VccDashboardSection({ onNavigateToWorkOrders }) {
           </select>
         </div>
 
-        <div className="max-h-64 overflow-y-auto divide-y divide-slate-100 text-sm pr-1" data-testid="vcc-audit-trail-list">
+        <div className="max-h-56 overflow-y-auto divide-y divide-slate-100 pr-1 text-xs" data-testid="vcc-audit-trail-list">
           {auditHistory.length === 0 ? (
-            <div className="py-8 text-center text-xs text-slate-400">ยังไม่มีบันทึกประวัติในหมวดหมู่นี้</div>
+            <div className="py-6 text-center text-slate-400 font-medium">ยังไม่มีบันทึกประวัติในหมวดหมู่นี้</div>
           ) : (
             auditHistory.slice(0, 30).map((item) => (
-              <div key={item.id} className="py-2.5 px-2 hover:bg-slate-50/70 rounded-lg transition-colors flex flex-wrap items-center justify-between gap-2">
+              <div key={item.id} className="py-2.5 px-1 hover:bg-slate-50/70 rounded transition-colors flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2.5">
-                  <span className="px-2 py-0.5 rounded-md bg-slate-100 font-mono text-xs font-semibold text-slate-700 border border-slate-200/60">
+                  <span className="px-2 py-0.5 rounded font-mono font-semibold text-slate-700 bg-slate-100 border border-slate-200/60">
                     {item.action}
                   </span>
-                  <span className="font-semibold text-slate-800 text-xs sm:text-sm">{item.actor_name || item.actor_id}</span>
+                  <span className="font-medium text-slate-800 text-xs sm:text-sm">{item.actor_name || item.actor_id}</span>
                 </div>
                 <div className="text-slate-400 font-mono text-xs">{String(item.at || '').slice(0, 19).replace('T', ' ')}</div>
               </div>
@@ -564,7 +610,7 @@ export default function VccDashboardSection({ onNavigateToWorkOrders }) {
         </div>
       </div>
 
-      {/* Notification Settings Modal */}
+      {/* 6. Notification Settings Modal */}
       {settingsOpen && (
         <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl space-y-4 border border-slate-200/80 animate-in fade-in zoom-in-95 duration-150">
