@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import { describe, it, expect, beforeEach } from 'vitest';
 import useStore from '../../../store/useStore';
 import AssetRegisterPage from '../pages/AssetRegisterPage';
@@ -63,9 +63,11 @@ describe('VCC Phase 2 — Annual Calibration Plan (FM-QC-46) & Approval Workflow
     render(<AssetRegisterPage />);
 
     fireEvent.click(await screen.findByRole('button', { name: /แผนการทวนสอบประจำปี \(FM-QC-46\)/i }));
-    expect(await screen.findByText('GRP-SCALE')).toBeInTheDocument();
+    const grpText = await screen.findByText('GRP-SCALE');
+    expect(grpText).toBeInTheDocument();
 
-    const checkBtn = screen.getByRole('button', { name: /ตรวจรหัสลูกก่อนออกใบงาน/i });
+    const grpRow = grpText.closest('tr');
+    const checkBtn = within(grpRow).getByRole('button', { name: /ตรวจรหัสลูกก่อนออกใบงาน/i });
     fireEvent.click(checkBtn);
 
     // Try validating without selecting a child asset -> must show error alert

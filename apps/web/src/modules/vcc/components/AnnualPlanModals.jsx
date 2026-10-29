@@ -721,3 +721,209 @@ export const PlanHistoryModal = ({ open, onClose, history = [] }) => {
     </div>
   );
 };
+
+export const STANDARD_UNPLANNED_REASONS = [
+  'ยังไม่ถึงกำหนดตามรอบความถี่',
+  'อยู่ระหว่างส่งซ่อมภายนอก',
+  'พักการใช้งานชั่วคราว'
+];
+
+export const UnplannedJustificationModal = ({
+  open,
+  onClose,
+  unplannedItems = [],
+  onSaveJustifications,
+  saving = false
+}) => {
+  const [reasons, setReasons] = React.useState({});
+  const [customReasons, setCustomReasons] = React.useState({});
+  const [error, setError] = React.useState('');
+
+  React.useEffect(() => {
+    if (!open) return;
+    const initial = {};
+    const initialCustom = {};
+    for (const item of unplannedItems) {
+      const existing = (item.remarks || '').trim();
+      if (STANDARD_UNPLANNED_REASONS.includes(existing)) {
+        initial[item.asset_id] = existing;
+      } else if (existing) {
+        initial[item.asset_id] = 'CUSTOM';
+        initialCustom[item.asset_id] = existing;
+      } else {
+        initial[item.asset_id] = STANDARD_UNPLANNED_REASONS[0];
+      }
+    }
+    setReasons(initial);
+    setCustomReasons(initialCustom);
+    setError('');
+  }, [open, unplannedItems]);
+
+  if (!open) return null;
+
+  const handleApplyAll = (standardReason) => {
+    const next = { ...reasons };
+    for (const item of unplannedItems) {
+      next[item.asset_id] = standardReason;
+    }
+    setReasons(next);
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    const updates = [];
+    for (const item of unplannedItems) {
+      const selected = reasons[item.asset_id];
+      const finalReason = selected === 'CUSTOM' ? (customReasons[item.asset_id] || '').trim() : selected;
+      if (!finalReason) {
+        setError(`กรุณาระบุเหตุผลสำหรับ ${item.asset_code}`);
+        return;
+      }
+      updates.push({
+        asset_id: item.asset_id,
+        remarks: finalReason
+      });
+    }
+
+    try {
+      await onSaveJustifications(updates);
+      onClose();
+    } catch (err) {
+      setError(err.message || 'ไม่สามารถบันทึกเหตุผลได้');
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-2xl w-full overflow-hidden flex flex-col max-h-[85vh]">
+        <div className="px-6 py-4.5 border-b border-slate-200 flex items-center justify-between shrink-0">
+          <div>
+            <h2 className="text-lg font-bold text-slate-900 tracking-tight">
+              ระบุเหตุผลที่ไม่วางแผนทวนสอบในปีนี้
+            </h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              เครื่องมือที่ไม่มีรอบทวนสอบ ต้องระบุเหตุผลประกอบก่อนส่งขออนุมัติแผนตามข้อกำหนด QMS
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
+          >
+            <X size={20} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="flex flex-col min-h-0 overflow-hidden">
+          <div className="p-6 overflow-y-auto space-y-4">
+            {error && (
+              <div role="alert" className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-sm font-semibold flex items-center gap-2">
+                <AlertTriangle size={17} className="text-rose-600 shrink-0" />
+                <span>{error}</span>
+              </div>
+            )}
+
+            <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs">
+              <span className="text-slate-600 font-medium">ตัวช่วยกรอกด่วน:</span>
+              <button
+                type="button"
+                onClick={() => handleApplyAll('ยังไม่ถึงกำหนดตามรอบความถี่')}
+                className="px-2.5 py-1 rounded-lg bg-white border border-slate-300 text-indigo-700 hover:bg-indigo-50 font-semibold cursor-pointer shadow-2xs transition-colors"
+              >
+                เลือก &ldquo;ยังไม่ถึงกำหนดตามรอบความถี่&rdquo; ให้ทั้งหมด
+              </button>
+            </div>
+
+            <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden">
+              {unplannedItems.map((item) => {
+                const selected = reasons[item.asset_id] || STANDARD_UNPLANNED_REASONS[0];
+                return (
+                  <div key={item.id || item.asset_id} className="p-4 bg-white hover:bg-slate-50/50 space-y-2.5">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-bold text-slate-900 text-sm">{item.asset_code}</span>
+                        <span className="text-xs text-slate-500">•</span>
+                        <span className="text-sm font-semibold text-slate-800">{item.asset_name}</span>
+                      </div>
+                      <span className="text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">
+                        {item.asset_type || item.frequency_label || 'รายปี'}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                      {STANDARD_UNPLANNED_REASONS.map((reason) => (
+                        <label
+                          key={reason}
+                          className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-colors ${
+                            selected === reason
+                              ? 'bg-indigo-50 border-indigo-300 text-indigo-950 font-semibold'
+                              : 'border-slate-200 text-slate-700 hover:bg-slate-50'
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name={`reason-${item.asset_id}`}
+                            checked={selected === reason}
+                            onChange={() => setReasons({ ...reasons, [item.asset_id]: reason })}
+                            className="text-indigo-600 focus:ring-indigo-500"
+                          />
+                          <span>{reason}</span>
+                        </label>
+                      ))}
+
+                      <label
+                        className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-colors ${
+                          selected === 'CUSTOM'
+                            ? 'bg-indigo-50 border-indigo-300 text-indigo-950 font-semibold'
+                            : 'border-slate-200 text-slate-700 hover:bg-slate-50'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name={`reason-${item.asset_id}`}
+                          checked={selected === 'CUSTOM'}
+                          onChange={() => setReasons({ ...reasons, [item.asset_id]: 'CUSTOM' })}
+                          className="text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <span>ระบุเหตุผลเอง...</span>
+                      </label>
+                    </div>
+
+                    {selected === 'CUSTOM' && (
+                      <input
+                        type="text"
+                        value={customReasons[item.asset_id] || ''}
+                        onChange={(e) => setCustomReasons({ ...customReasons, [item.asset_id]: e.target.value })}
+                        placeholder="กรอกเหตุผลที่ไม่วางแผนทวนสอบ..."
+                        className="w-full h-9 px-3 rounded-lg border border-slate-300 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 text-slate-800"
+                      />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-3 shrink-0">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={saving}
+              className="h-9 px-4 rounded-xl border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 text-sm font-semibold cursor-pointer"
+            >
+              ยกเลิก
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="h-9 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold shadow-2xs transition-colors cursor-pointer disabled:opacity-50"
+            >
+              {saving ? 'กำลังบันทึก...' : 'บันทึกเหตุผล'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};

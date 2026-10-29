@@ -155,7 +155,8 @@ export const AnnualPlanWorkspaceHeader = ({
   onOpenSettings,
   onOpenCreatePlan,
   onOpenEditPlan,
-  onOpenHistory
+  onOpenHistory,
+  onOpenJustificationModal
 }) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
@@ -166,6 +167,75 @@ export const AnnualPlanWorkspaceHeader = ({
   const filterRef = useDismiss(filterOpen, () => setFilterOpen(false));
 
   const extraFilterCount = (filterYear ? 1 : 0) + (filterDept ? 1 : 0);
+
+  const summaryMetrics = React.useMemo(() => {
+    const groupItems = planItems.filter((i) => Number(i.is_group) === 1);
+    const standaloneItems = planItems.filter((i) => Number(i.is_group) === 0 && !i.parent_id);
+
+    let inScopeCount = 0;
+    let plannedCount = 0;
+    let unplannedCount = 0;
+    let unplannedWithoutReasonCount = 0;
+    let totalCyclesCount = 0;
+
+    // 1. Standalone items
+    for (const item of standaloneItems) {
+      inScopeCount += 1;
+      const cycles = (item.planned_months || []).length;
+      if (cycles > 0) {
+        plannedCount += 1;
+        totalCyclesCount += cycles;
+      } else {
+        unplannedCount += 1;
+        if (!item.remarks?.trim()) {
+          unplannedWithoutReasonCount += 1;
+        }
+      }
+    }
+
+    // 2. Groups and their children (Prevent double counting!)
+    for (const grp of groupItems) {
+      const grpCycles = (grp.planned_months || []).length;
+      const children = planItems.filter((c) => c.parent_id === grp.asset_id || c.parent_id === grp.id);
+
+      if (grpCycles > 0) {
+        // Group-level planning: count group as 1 instrument in scope
+        inScopeCount += 1;
+        plannedCount += 1;
+        totalCyclesCount += grpCycles;
+      } else if (children.length > 0) {
+        // Child-level planning: count each child as 1 instrument in scope (do NOT count group separately)
+        for (const ch of children) {
+          inScopeCount += 1;
+          const chCycles = (ch.planned_months || []).length;
+          if (chCycles > 0) {
+            plannedCount += 1;
+            totalCyclesCount += chCycles;
+          } else {
+            unplannedCount += 1;
+            if (!ch.remarks?.trim()) {
+              unplannedWithoutReasonCount += 1;
+            }
+          }
+        }
+      } else {
+        // Empty group
+        inScopeCount += 1;
+        unplannedCount += 1;
+        if (!grp.remarks?.trim()) {
+          unplannedWithoutReasonCount += 1;
+        }
+      }
+    }
+
+    return {
+      inScopeCount,
+      plannedCount,
+      unplannedCount,
+      unplannedWithoutReasonCount,
+      totalCyclesCount
+    };
+  }, [planItems]);
 
   const runMenu = (fn) => () => {
     setMenuOpen(false);
@@ -463,6 +533,61 @@ export const AnnualPlanWorkspaceHeader = ({
           )}
         </div>
       </div>
+
+      {/* แถวที่ 3: สรุปภาพรวมเครื่องมือในขอบเขตและเป้าหมายตามแผน (Dynamic Summary Metrics) */}
+      {activePlan && (
+        <div className="pt-2.5 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2.5 text-xs">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 border border-slate-200 text-slate-700">
+              <span className="text-slate-500 font-medium">เครื่องมือในขอบเขต:</span>
+              <strong className="text-slate-900 font-bold font-mono">{summaryMetrics.inScopeCount}</strong>
+              <span className="text-slate-500">เครื่อง</span>
+            </div>
+
+            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-800">
+              <span className="text-indigo-600 font-medium">มีแผนแล้ว:</span>
+              <strong className="text-indigo-950 font-bold font-mono">{summaryMetrics.plannedCount}</strong>
+              <span className="text-indigo-600">เครื่อง</span>
+            </div>
+
+            <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border ${
+              summaryMetrics.unplannedCount === 0
+                ? 'bg-slate-50 border-slate-200 text-slate-600'
+                : summaryMetrics.unplannedWithoutReasonCount > 0
+                ? 'bg-amber-50 border-amber-300 text-amber-900'
+                : 'bg-emerald-50 border-emerald-200 text-emerald-800'
+            }`}>
+              <span className="font-medium">ยังไม่มีแผน:</span>
+              <strong className="font-bold font-mono">{summaryMetrics.unplannedCount}</strong>
+              <span>เครื่อง</span>
+              {summaryMetrics.unplannedWithoutReasonCount > 0 ? (
+                <span className="inline-flex items-center gap-1 font-semibold text-amber-700 ml-1">
+                  (รอระบุเหตุผล {summaryMetrics.unplannedWithoutReasonCount})
+                </span>
+              ) : summaryMetrics.unplannedCount > 0 ? (
+                <span className="text-emerald-700 font-semibold ml-1">(ระบุเหตุผลครบแล้ว)</span>
+              ) : null}
+            </div>
+
+            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800">
+              <span className="text-emerald-600 font-medium">รอบทวนสอบรวม:</span>
+              <strong className="text-emerald-950 font-bold font-mono">{summaryMetrics.totalCyclesCount}</strong>
+              <span className="text-emerald-600">รอบ</span>
+            </div>
+          </div>
+
+          {canEditPlan && summaryMetrics.unplannedWithoutReasonCount > 0 && onOpenJustificationModal && (
+            <button
+              type="button"
+              onClick={onOpenJustificationModal}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-semibold shadow-2xs transition-colors cursor-pointer"
+            >
+              <AlertTriangle size={13} />
+              <span>ระบุเหตุผลที่ไม่วางแผน ({summaryMetrics.unplannedWithoutReasonCount})</span>
+            </button>
+          )}
+        </div>
+      )}
 
       {/* กล่องขยาย: รายละเอียดผู้เกี่ยวข้องในการอนุมัติ 3 ขั้นตอน */}
       {detailOpen && activePlan && (

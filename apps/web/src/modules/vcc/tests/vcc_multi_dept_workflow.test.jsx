@@ -1,12 +1,14 @@
-import React from 'react';
+import React, { act } from 'react';
 import { describe, it, expect, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import useStore from '../../../store/useStore';
 import { resetVccLocalStore } from '../api/vccApi';
 import PortalLandingPage from '../../portal/pages/PortalLandingPage';
 import ProtectedRoute from '../../../app/auth/ProtectedRoute';
 import AnnualPlanWorkspaceHeader from '../components/AnnualPlanWorkspaceHeader';
+import TaskInbox from '../../dcc/pages/Tasks/TaskInbox';
+import { isActionableTask, userMatchesDepartment } from '../../dcc/utils/taskFilter';
 
 const SAMPLE_MASTER_DEPTS = [
   { code: 'DC', name_th: 'ฝ่ายควบคุมเอกสาร', status: 'ACTIVE' },
@@ -195,6 +197,172 @@ describe('VCC Multi-Department Access & Workflow Enablement (Frontend)', () => {
       );
       expect(screen.getByRole('button', { name: /อนุมัติแผนประจำปี/ })).toBeInTheDocument();
       expect(screen.getByRole('button', { name: /ส่งกลับแก้ไข/ })).toBeInTheDocument();
+    });
+  });
+
+  describe('4. TaskInbox Integration & Multi-Department Routing', () => {
+    const creatorUser = {
+      id: 'qc-creator-l4',
+      name: 'QC Staff L4',
+      department: 'QC',
+      primary_department: 'QC',
+      departments: ['QC'],
+      approval_level: 4,
+      isDcc: false
+    };
+
+    const multiDeptReviewer = {
+      id: 'pd-qc-reviewer-l5',
+      name: 'PD/QC Supervisor L5',
+      department: 'PD',
+      primary_department: 'PD',
+      departments: ['PD', 'QC'],
+      approval_level: 5,
+      isDcc: false
+    };
+
+    const singleDeptUser = {
+      id: 'pd-only-l5',
+      name: 'PD Only Supervisor L5',
+      department: 'PD',
+      primary_department: 'PD',
+      departments: ['PD'],
+      approval_level: 5,
+      isDcc: false
+    };
+
+    const approverUser = {
+      id: 'qc-hod-l5',
+      name: 'QC Head of Dept L5',
+      department: 'QC',
+      primary_department: 'QC',
+      departments: ['QC'],
+      approval_level: 5,
+      isDcc: false
+    };
+
+    it('correctly matches multi-department affiliation from departments JSON array', () => {
+      expect(userMatchesDepartment(multiDeptReviewer, 'QC')).toBe(true);
+      expect(userMatchesDepartment(multiDeptReviewer, 'PD')).toBe(true);
+      expect(userMatchesDepartment(multiDeptReviewer, 'QA')).toBe(false);
+
+      expect(userMatchesDepartment(singleDeptUser, 'QC')).toBe(false);
+      expect(userMatchesDepartment(singleDeptUser, 'PD')).toBe(true);
+    });
+
+    it('evaluates actionable tasks for multi-dept reviewers and strictly enforces SoD', () => {
+      const vccReviewTask = {
+        id: 'api-vcc-plan-plan-qc-2026-review',
+        planId: 'plan-qc-2026',
+        referenceId: 'plan-qc-2026',
+        referenceType: 'VCC_PLAN',
+        docCode: 'FM-QC-46',
+        document_code: 'FM-QC-46',
+        docTitle: 'แผนการทวนสอบเครื่องมือประจำปี 2026',
+        docName: 'แผนการทวนสอบเครื่องมือประจำปี 2026',
+        title: '[แผนทวนสอบ VCC ทบทวน] แผนการทวนสอบเครื่องมือประจำปี 2026 (FM-QC-46 Rev.00)',
+        type: 'Review',
+        taskType: 'VCC_PLAN_REVIEW',
+        task_type: 'VCC_PLAN_REVIEW',
+        category: 'REVIEW',
+        department: 'QC',
+        target_department: 'QC',
+        owner_dept: 'QC',
+        required_approval_level: 4,
+        requesterId: 'qc-creator-l4',
+        prepared_by: 'qc-creator-l4',
+        status: 'PENDING',
+        statusTab: 'PENDING_REVIEW',
+        createdAt: '2026-10-29T10:00:00.000Z'
+      };
+
+      // 1. Creator cannot review their own plan (SoD)
+      expect(isActionableTask(vccReviewTask, creatorUser)).toBe(false);
+
+      // 2. PD-Only user cannot review QC plan (Department boundary)
+      expect(isActionableTask(vccReviewTask, singleDeptUser)).toBe(false);
+
+      // 3. Multi-department user (PD primary, QC affiliated, L5) CAN review QC plan
+      expect(isActionableTask(vccReviewTask, multiDeptReviewer)).toBe(true);
+
+      // Now create approval task where multiDeptReviewer was the reviewer
+      const vccApproveTask = {
+        ...vccReviewTask,
+        id: 'api-vcc-plan-plan-qc-2026-approve',
+        type: 'Approve',
+        taskType: 'VCC_PLAN_APPROVE',
+        task_type: 'VCC_PLAN_APPROVE',
+        category: 'APPROVE',
+        required_approval_level: 5,
+        reviewerId: 'pd-qc-reviewer-l5',
+        statusTab: 'PENDING_APPROVAL'
+      };
+
+      // 4. Creator cannot approve own plan (SoD)
+      expect(isActionableTask(vccApproveTask, creatorUser)).toBe(false);
+
+      // 5. Reviewer cannot approve plan they reviewed (SoD)
+      expect(isActionableTask(vccApproveTask, multiDeptReviewer)).toBe(false);
+
+      // 6. Independent QC HOD (L5) can approve
+      expect(isActionableTask(vccApproveTask, approverUser)).toBe(true);
+    });
+
+    it('displays VCC review task in TaskInbox for multi-dept reviewer and filters out for PD-only', async () => {
+      // Seed a pending review plan in local store so syncVccTasks generates it
+      localStorage.setItem(
+        'qms-vcc-local-plans-v1',
+        JSON.stringify([
+          {
+            id: 'plan-qc-2026',
+            plan_year: 2026,
+            department: 'QC',
+            document_code: 'FM-QC-46',
+            revision: '00',
+            title: 'แผนการทวนสอบเครื่องมือประจำปี 2026',
+            status: 'PENDING_REVIEW',
+            prepared_by: 'qc-creator-l4',
+            created_at: '2026-10-29T10:00:00.000Z'
+          }
+        ])
+      );
+
+      // Mount for Multi-Dept Reviewer
+      useStore.setState({
+        currentUser: multiDeptReviewer,
+        tasks: []
+      });
+
+      let renderResult;
+      await act(async () => {
+        renderResult = render(
+          <MemoryRouter>
+            <TaskInbox />
+          </MemoryRouter>
+        );
+      });
+
+      // Should show task and badge
+      expect(screen.getByText(/FM-QC-46/)).toBeInTheDocument();
+      expect(screen.getByText('ทบทวนแผนสอบเทียบประจำปี (VCC)')).toBeInTheDocument();
+      renderResult.unmount();
+
+      // Mount for PD-Only User
+      useStore.setState({
+        currentUser: singleDeptUser,
+        tasks: []
+      });
+
+      await act(async () => {
+        render(
+          <MemoryRouter>
+            <TaskInbox />
+          </MemoryRouter>
+        );
+      });
+
+      // Should NOT show the QC task
+      expect(screen.queryByText('ทบทวนแผนสอบเทียบประจำปี (VCC)')).not.toBeInTheDocument();
     });
   });
 });

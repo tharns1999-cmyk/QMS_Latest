@@ -1,5 +1,6 @@
 import { apiGet, apiPost, apiPut, isApiMode } from '../../../api/client';
 import useStore from '../../../store/useStore';
+import { isSameDepartment } from '../../dcc/utils/taskFilter';
 import {
   readJson,
   writeJson,
@@ -208,6 +209,184 @@ const getLocalThresholds = (docType = 'FM') => {
   return mapByType[docType] || { min_requester_level: 1, required_reviewer_level: 4, required_approver_level: 5 };
 };
 
+export const getUserDepartments = (user) => {
+  if (!user) return [];
+  const depts = new Set();
+  if (user.department) depts.add(String(user.department).toUpperCase());
+  if (user.dept) depts.add(String(user.dept).toUpperCase());
+  if (user.primary_department) depts.add(String(user.primary_department).toUpperCase());
+
+  const parseList = (val) => {
+    if (!val) return;
+    if (Array.isArray(val)) {
+      val.forEach((d) => d && depts.add(String(d).toUpperCase()));
+    } else if (typeof val === 'string') {
+      try {
+        const parsed = JSON.parse(val);
+        if (Array.isArray(parsed)) {
+          parsed.forEach((d) => d && depts.add(String(d).toUpperCase()));
+        } else if (parsed) {
+          depts.add(String(parsed).toUpperCase());
+        }
+      } catch {
+        val.split(',').forEach((d) => d.trim() && depts.add(d.trim().toUpperCase()));
+      }
+    }
+  };
+
+  parseList(user.departments);
+  parseList(user.depts);
+  parseList(user.affiliated_departments);
+  return Array.from(depts);
+};
+
+export const isUserAuthorizedForPlanDept = (user, planDepartment) => {
+  if (!user) return false;
+  const userLevel = Number(user.approval_level ?? user.approvalLevel ?? 1);
+  if (user.isDcc || user.isQmr || userLevel >= 6) return true;
+  const targetDept = String(planDepartment || '').toUpperCase();
+  const userDepts = getUserDepartments(user);
+  return userDepts.some((d) => isSameDepartment(d, targetDept));
+};
+
+export const isVccAuthorized = (user) => {
+  if (!user) return false;
+  const userLevel = Number(user.approval_level ?? user.approvalLevel ?? 1);
+  if (user.isDcc || user.isQmr || userLevel >= 6) return true;
+  const depts = getUserDepartments(user);
+  return depts.some((d) => ['DC', 'QC', 'QA'].some((allowed) => isSameDepartment(d, allowed)));
+};
+
+export const generateLocalVccTasks = (user) => {
+  if (!user) return [];
+  if (!isVccAuthorized(user)) return [];
+
+  const allPlans = getLocalPlans();
+  const settings = getLocalPlanSettings();
+  const thresholds = getLocalThresholds(settings.approval_doc_type);
+  const userLevel = Number(user.approval_level ?? user.approvalLevel ?? 1);
+  const tasks = [];
+
+  for (const p of allPlans) {
+    const isDeptAllowed = isUserAuthorizedForPlanDept(user, p.department);
+    if (p.status === 'PENDING_REVIEW') {
+      if (isDeptAllowed && user.id !== p.prepared_by && userLevel >= thresholds.required_reviewer_level) {
+        tasks.push({
+          id: `api-vcc-plan-${p.id}-review`,
+          planId: p.id,
+          referenceId: p.id,
+          referenceType: 'VCC_PLAN',
+          docCode: p.document_code,
+          document_code: p.document_code,
+          docTitle: p.title,
+          docName: p.title,
+          title: `[แผนทวนสอบ VCC ทบทวน] ${p.title} (${p.document_code} Rev.${p.revision})`,
+          type: 'Review',
+          taskType: 'VCC_PLAN_REVIEW',
+          task_type: 'VCC_PLAN_REVIEW',
+          category: 'REVIEW',
+          department: p.department,
+          target_department: p.department,
+          owner_dept: p.department,
+          required_approval_level: thresholds.required_reviewer_level,
+          requesterId: p.prepared_by,
+          prepared_by: p.prepared_by,
+          status: 'PENDING',
+          statusTab: 'PENDING_REVIEW',
+          createdAt: p.prepared_at || p.created_at
+        });
+      }
+    } else if (p.status === 'PENDING_APPROVAL') {
+      if (isDeptAllowed && user.id !== p.prepared_by && user.id !== p.reviewed_by && userLevel >= thresholds.required_approver_level) {
+        tasks.push({
+          id: `api-vcc-plan-${p.id}-approve`,
+          planId: p.id,
+          referenceId: p.id,
+          referenceType: 'VCC_PLAN',
+          docCode: p.document_code,
+          document_code: p.document_code,
+          docTitle: p.title,
+          docName: p.title,
+          title: `[แผนทวนสอบ VCC อนุมัติ] ${p.title} (${p.document_code} Rev.${p.revision})`,
+          type: 'Approve',
+          taskType: 'VCC_PLAN_APPROVE',
+          task_type: 'VCC_PLAN_APPROVE',
+          category: 'APPROVE',
+          department: p.department,
+          target_department: p.department,
+          owner_dept: p.department,
+          required_approval_level: thresholds.required_approver_level,
+          requesterId: p.prepared_by,
+          reviewerId: p.reviewed_by,
+          status: 'PENDING',
+          statusTab: 'PENDING_APPROVAL',
+          createdAt: p.reviewed_at
+        });
+      }
+    } else if (p.status === 'REJECTED') {
+      if (user.id === p.prepared_by || user.isDcc || user.isQmr) {
+        tasks.push({
+          id: `api-vcc-plan-${p.id}-revise`,
+          planId: p.id,
+          referenceId: p.id,
+          referenceType: 'VCC_PLAN',
+          docCode: p.document_code,
+          document_code: p.document_code,
+          docTitle: p.title,
+          docName: p.title,
+          title: `[แผนทวนสอบ VCC ส่งกลับแก้ไข] ${p.title} (${p.document_code} Rev.${p.revision})`,
+          type: 'Revise',
+          taskType: 'VCC_PLAN_REVISE',
+          task_type: 'VCC_PLAN_REVISE',
+          category: 'REVISE',
+          department: p.department,
+          target_department: p.department,
+          owner_dept: p.department,
+          assigneeId: p.prepared_by,
+          assignee_id: p.prepared_by,
+          requesterId: p.prepared_by,
+          returnReason: p.rejected_reason,
+          status: 'PENDING',
+          statusTab: 'REJECTED',
+          createdAt: p.rejected_at
+        });
+      }
+    }
+  }
+  return tasks;
+};
+
+export const fetchVccTasks = async (currentUser) => {
+  const user = currentUser || useStore.getState().currentUser;
+  if (!user) return [];
+  if (isApiMode) {
+    try {
+      const res = await apiGet('/api/vcc/tasks');
+      return res.tasks || [];
+    } catch {
+      return [];
+    }
+  }
+  return generateLocalVccTasks(user);
+};
+
+export const syncVccTasks = async (currentUser) => {
+  try {
+    const user = currentUser || useStore.getState().currentUser;
+    if (!user) return [];
+    const vccTasks = await fetchVccTasks(user);
+    const state = useStore.getState();
+    const existing = state.tasks || [];
+    const nonVcc = existing.filter((t) => !String(t.id).startsWith('api-vcc-'));
+    const merged = [...nonVcc, ...vccTasks];
+    useStore.setState({ tasks: merged });
+    return vccTasks;
+  } catch (err) {
+    console.error('Failed to sync VCC tasks:', err);
+    return [];
+  }
+};
+
 const enrichLocalPlan = (plan, allItems, deptMap) => {
   const planItems = allItems.filter((i) => i.plan_id === plan.id);
   const assets = getLocalAssets();
@@ -347,10 +526,53 @@ export const fetchVccPlanDetail = async (id) => {
   if (!rawPlan) throw new Error('ไม่พบแผนการสอบเทียบประจำปี');
 
   const plan = enrichLocalPlan(rawPlan, allItems, deptMap);
-  const items = allItems
-    .filter((i) => i.plan_id === id)
-    .map((i) => enrichLocalPlanItem(i, allAssets, deptMap))
-    .sort((a, b) => (a.sort_order - b.sort_order) || a.asset_code.localeCompare(b.asset_code));
+  let items = [];
+  if (plan.status === 'DRAFT' || plan.status === 'REJECTED') {
+    const eligibleAssets = allAssets.filter(
+      (a) => a.department === plan.department && a.status !== 'RETIRED'
+    );
+    const persistedForPlan = allItems.filter((i) => i.plan_id === id);
+    const persistedByAssetId = new Map(persistedForPlan.map((i) => [i.asset_id, i]));
+
+    for (const item of persistedForPlan) {
+      const asset = allAssets.find((a) => a.id === item.asset_id);
+      if (asset && asset.status !== 'RETIRED') {
+        items.push(enrichLocalPlanItem({ ...item, is_persisted: 1 }, allAssets, deptMap));
+      }
+    }
+
+    for (const asset of eligibleAssets) {
+      if (!persistedByAssetId.has(asset.id)) {
+        const virtualItem = {
+          id: `virtual-${asset.id}`,
+          plan_id: id,
+          asset_id: asset.id,
+          provider_name: 'ทวนสอบภายใน',
+          frequency_label: 'รายปี',
+          planned_months: [],
+          due_dates: [],
+          responsible_dept: asset.department,
+          responsible_label: '',
+          remarks: '',
+          sort_order: 9999,
+          is_persisted: 0
+        };
+        items.push(enrichLocalPlanItem(virtualItem, allAssets, deptMap));
+      }
+    }
+
+    items.sort((a, b) => {
+      const sortA = (a.sort_order ?? 9999) < 9000 ? a.sort_order : 9000;
+      const sortB = (b.sort_order ?? 9999) < 9000 ? b.sort_order : 9000;
+      if (sortA !== sortB) return sortA - sortB;
+      return (a.asset_code || '').localeCompare(b.asset_code || '');
+    });
+  } else {
+    items = allItems
+      .filter((i) => i.plan_id === id)
+      .map((i) => enrichLocalPlanItem({ ...i, is_persisted: 1 }, allAssets, deptMap))
+      .sort((a, b) => (a.sort_order - b.sort_order) || a.asset_code.localeCompare(b.asset_code));
+  }
   const settings = getLocalPlanSettings();
   const thresholds = getLocalThresholds(settings.approval_doc_type);
   const history = getLocalAudit()
@@ -492,8 +714,9 @@ export const saveVccPlanItem = async (planId, payload) => {
   }
 
   const plannedMonths = [...new Set((payload.planned_months || []).map(Number).filter((m) => m >= 1 && m <= 12))].sort((a, b) => a - b);
-  if (plannedMonths.length === 0) {
-    throw new Error('กรุณาเลือกเดือนที่วางแผนอย่างน้อย 1 เดือน (1-12)');
+  const remarks = String(payload.remarks || '').trim();
+  if (plannedMonths.length === 0 && !remarks) {
+    throw new Error('กรุณาเลือกเดือนที่วางแผนอย่างน้อย 1 เดือน (1-12) หรือระบุเหตุผลที่ไม่วางแผน');
   }
   const providerName = String(payload.provider_name || '').trim();
   if (!providerName) throw new Error('กรุณาระบุสถาบัน/หน่วยงานที่ทวนสอบ');
@@ -589,20 +812,94 @@ export const validateVccPlanItemWorkOrder = async (planId, itemId, childAssetId 
 export const submitVccPlan = async (planId) => {
   if (isApiMode) {
     const { plan } = await apiPost(`/api/vcc/plans/${encodeURIComponent(planId)}/submit`, {});
+    await syncVccTasks().catch(() => {});
     return plan;
   }
   const user = assertLocalVccAccess();
+  if (!isVccAuthorized(user)) {
+    throw new Error('เฉพาะผู้ใช้งานแผนก DCC, QC และ QA เท่านั้นที่สามารถเข้าใช้งานส่วนนี้ได้');
+  }
   const allPlans = getLocalPlans();
   const idx = allPlans.findIndex((p) => p.id === planId);
   if (idx === -1) throw new Error('ไม่พบแผนการสอบเทียบประจำปี');
   const plan = allPlans[idx];
+  if (!isUserAuthorizedForPlanDept(user, plan.department)) {
+    throw new Error(`คุณไม่มีสิทธิ์ส่งแผนการสอบเทียบของแผนก ${plan.department}`);
+  }
   if (plan.status !== 'DRAFT' && plan.status !== 'REJECTED') {
     throw new Error('ส่งทบทวนได้เฉพาะแผนที่อยู่ในสถานะร่าง (DRAFT) หรือส่งกลับแก้ไข (REJECTED) เท่านั้น');
   }
-  const items = getLocalPlanItems().filter((i) => i.plan_id === planId);
+  const detail = await fetchVccPlanDetail(planId);
+  const items = detail.items || [];
   if (items.length === 0) {
     throw new Error('กรุณาเพิ่มรายการเครื่องมือในแผนอย่างน้อย 1 รายการก่อนส่งขออนุมัติ');
   }
+
+  // Submission gate: Check for unplanned items without remarks
+  const groupItems = items.filter((i) => Number(i.is_group) === 1);
+  const standaloneItems = items.filter((i) => Number(i.is_group) === 0 && !i.parent_id);
+  const unplannedWithoutJustification = [];
+
+  for (const item of standaloneItems) {
+    const hasPlan = Array.isArray(item.planned_months) && item.planned_months.length > 0;
+    const hasRemarks = Boolean(item.remarks && item.remarks.trim());
+    if (!hasPlan && !hasRemarks) {
+      unplannedWithoutJustification.push(item);
+    }
+  }
+
+  for (const grp of groupItems) {
+    const grpHasPlan = Array.isArray(grp.planned_months) && grp.planned_months.length > 0;
+    const grpHasRemarks = Boolean(grp.remarks && grp.remarks.trim());
+    const children = items.filter((c) => c.parent_id === grp.asset_id || c.parent_id === grp.id);
+
+    if (children.length === 0) {
+      if (!grpHasPlan && !grpHasRemarks) {
+        unplannedWithoutJustification.push(grp);
+      }
+    } else if (grpHasPlan || grpHasRemarks) {
+      // Group covered at group level
+    } else {
+      // Must be covered at child level
+      for (const ch of children) {
+        const chHasPlan = Array.isArray(ch.planned_months) && ch.planned_months.length > 0;
+        const chHasRemarks = Boolean(ch.remarks && ch.remarks.trim());
+        if (!chHasPlan && !chHasRemarks) {
+          unplannedWithoutJustification.push(ch);
+        }
+      }
+    }
+  }
+
+  if (unplannedWithoutJustification.length > 0) {
+    const codes = unplannedWithoutJustification.map((i) => i.asset_code).join(', ');
+    throw new Error(`กรุณาวางแผนเดือนทวนสอบหรือระบุเหตุผลที่ไม่วางแผนสำหรับเครื่องมือ (${codes}) ก่อนส่งทบทวน`);
+  }
+
+  // Freeze scope: persist any virtual items into local plan items
+  const allPlanItems = getLocalPlanItems();
+  const nextPlanItems = [...allPlanItems];
+  for (const item of items) {
+    if (String(item.id).startsWith('virtual-') || !allPlanItems.some((pi) => pi.plan_id === planId && pi.asset_id === item.asset_id)) {
+      const newId = `vcc-pi-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      const dueDates = computeDueDates(plan.plan_year, item.planned_months || [], plan.due_date_rule);
+      nextPlanItems.push({
+        id: newId,
+        plan_id: planId,
+        asset_id: item.asset_id,
+        provider_name: item.provider_name || 'ทวนสอบภายใน',
+        frequency_label: item.frequency_label || 'รายปี',
+        planned_months: item.planned_months || [],
+        due_dates: dueDates,
+        responsible_dept: item.responsible_dept || plan.department,
+        responsible_label: item.responsible_label || '',
+        remarks: item.remarks || '',
+        sort_order: item.sort_order ?? 9999
+      });
+    }
+  }
+  setLocalPlanItems(nextPlanItems);
+
   const now = new Date().toISOString();
   const updated = {
     ...plan,
@@ -632,20 +929,28 @@ export const submitVccPlan = async (planId) => {
     before: { status: plan.status },
     after: { status: 'PENDING_REVIEW' }
   });
+  await syncVccTasks(user).catch(() => {});
   return enrichLocalPlan(updated, getLocalPlanItems(), getDepartmentMap());
 };
 
 export const reviewVccPlan = async (planId, comment = '') => {
   if (isApiMode) {
     const { plan } = await apiPost(`/api/vcc/plans/${encodeURIComponent(planId)}/review`, { comment });
+    await syncVccTasks().catch(() => {});
     return plan;
   }
   const user = useStore.getState().currentUser;
   if (!user) throw new Error('กรุณาเข้าสู่ระบบ');
+  if (!isVccAuthorized(user)) {
+    throw new Error('เฉพาะผู้ใช้งานแผนก DCC, QC และ QA เท่านั้นที่สามารถเข้าใช้งานส่วนนี้ได้');
+  }
   const allPlans = getLocalPlans();
   const idx = allPlans.findIndex((p) => p.id === planId);
   if (idx === -1) throw new Error('ไม่พบแผนการสอบเทียบประจำปี');
   const plan = allPlans[idx];
+  if (!isUserAuthorizedForPlanDept(user, plan.department)) {
+    throw new Error(`คุณไม่มีสิทธิ์ทบทวนแผนการสอบเทียบของแผนก ${plan.department}`);
+  }
   if (plan.status !== 'PENDING_REVIEW') {
     throw new Error('แผนนี้ไม่อยู่ในสถานะรอทบทวน (PENDING_REVIEW)');
   }
@@ -679,20 +984,28 @@ export const reviewVccPlan = async (planId, comment = '') => {
     before: { status: 'PENDING_REVIEW' },
     after: { status: 'PENDING_APPROVAL' }
   });
+  await syncVccTasks(user).catch(() => {});
   return enrichLocalPlan(updated, getLocalPlanItems(), getDepartmentMap());
 };
 
 export const approveVccPlan = async (planId, comment = '') => {
   if (isApiMode) {
     const { plan } = await apiPost(`/api/vcc/plans/${encodeURIComponent(planId)}/approve`, { comment });
+    await syncVccTasks().catch(() => {});
     return plan;
   }
   const user = useStore.getState().currentUser;
   if (!user) throw new Error('กรุณาเข้าสู่ระบบ');
+  if (!isVccAuthorized(user)) {
+    throw new Error('เฉพาะผู้ใช้งานแผนก DCC, QC และ QA เท่านั้นที่สามารถเข้าใช้งานส่วนนี้ได้');
+  }
   const allPlans = getLocalPlans();
   const idx = allPlans.findIndex((p) => p.id === planId);
   if (idx === -1) throw new Error('ไม่พบแผนการสอบเทียบประจำปี');
   const plan = allPlans[idx];
+  if (!isUserAuthorizedForPlanDept(user, plan.department)) {
+    throw new Error(`คุณไม่มีสิทธิ์อนุมัติแผนการสอบเทียบของแผนก ${plan.department}`);
+  }
   if (plan.status !== 'PENDING_APPROVAL') {
     throw new Error('แผนนี้ไม่อยู่ในสถานะรออนุมัติ (PENDING_APPROVAL)');
   }
@@ -729,16 +1042,21 @@ export const approveVccPlan = async (planId, comment = '') => {
     before: { status: 'PENDING_APPROVAL' },
     after: { status: 'APPROVED' }
   });
+  await syncVccTasks(user).catch(() => {});
   return enrichLocalPlan(updated, getLocalPlanItems(), getDepartmentMap());
 };
 
 export const rejectVccPlan = async (planId, reason = '') => {
   if (isApiMode) {
     const { plan } = await apiPost(`/api/vcc/plans/${encodeURIComponent(planId)}/reject`, { reason });
+    await syncVccTasks().catch(() => {});
     return plan;
   }
   const user = useStore.getState().currentUser;
   if (!user) throw new Error('กรุณาเข้าสู่ระบบ');
+  if (!isVccAuthorized(user)) {
+    throw new Error('เฉพาะผู้ใช้งานแผนก DCC, QC และ QA เท่านั้นที่สามารถเข้าใช้งานส่วนนี้ได้');
+  }
   const trimmedReason = String(reason || '').trim();
   if (!trimmedReason) throw new Error('กรุณาระบุเหตุผลในการส่งกลับแก้ไข');
 
@@ -746,6 +1064,9 @@ export const rejectVccPlan = async (planId, reason = '') => {
   const idx = allPlans.findIndex((p) => p.id === planId);
   if (idx === -1) throw new Error('ไม่พบแผนการสอบเทียบประจำปี');
   const plan = allPlans[idx];
+  if (!isUserAuthorizedForPlanDept(user, plan.department)) {
+    throw new Error(`คุณไม่มีสิทธิ์ส่งกลับแก้ไขแผนการสอบเทียบของแผนก ${plan.department}`);
+  }
   if (plan.status !== 'PENDING_REVIEW' && plan.status !== 'PENDING_APPROVAL') {
     throw new Error('ส่งกลับแก้ไขได้เฉพาะแผนที่รอทบทวนหรือรออนุมัติเท่านั้น');
   }
@@ -783,5 +1104,6 @@ export const rejectVccPlan = async (planId, reason = '') => {
     before: { status: plan.status },
     after: { status: 'REJECTED' }
   });
+  await syncVccTasks(user).catch(() => {});
   return enrichLocalPlan(updated, getLocalPlanItems(), getDepartmentMap());
 };

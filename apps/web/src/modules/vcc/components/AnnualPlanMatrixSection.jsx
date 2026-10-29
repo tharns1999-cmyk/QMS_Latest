@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { AlertTriangle, Plus } from 'lucide-react';
 import { getPlanStatusLabel } from '../utils/planLabels';
@@ -26,16 +27,27 @@ import {
   PlanWorkflowModal,
   GroupWorkOrderModal,
   PlanSettingsModal,
-  PlanHistoryModal
+  PlanHistoryModal,
+  UnplannedJustificationModal
 } from './AnnualPlanModals';
 import AnnualPlanWorkspaceHeader from './AnnualPlanWorkspaceHeader';
 import AnnualPlanMatrixTable from './AnnualPlanMatrixTable';
 import SmartAssetImportModal from './SmartAssetImportModal';
 
 const AnnualPlanMatrixSection = ({ activeDepartments }) => {
-  const [statusTab, setStatusTab] = useState('DRAFT');
+  const [searchParams] = useSearchParams();
+  const queryTab = searchParams.get('tab');
+  const queryId = searchParams.get('id');
+
+  const [statusTab, setStatusTab] = useState(queryTab || 'DRAFT');
   const [filterYear, setFilterYear] = useState('');
   const [filterDept, setFilterDept] = useState('');
+
+  useEffect(() => {
+    if (queryTab && queryTab !== statusTab) {
+      setStatusTab(queryTab);
+    }
+  }, [queryTab]);
 
   const [plans, setPlans] = useState([]);
   const [selectedPlanId, setSelectedPlanId] = useState('');
@@ -101,6 +113,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
 
   const [historyOpen, setHistoryOpen] = useState(false);
   const [smartImportOpen, setSmartImportOpen] = useState(false);
+  const [justificationModalOpen, setJustificationModalOpen] = useState(false);
 
   const loadPlanWorkOrders = useCallback(async (planId) => {
     if (!planId) {
@@ -161,8 +174,8 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
   }, [statusTab, filterYear, filterDept, loadPlanWorkOrders]);
 
   useEffect(() => {
-    loadPlansAndMeta();
-  }, [loadPlansAndMeta]);
+    loadPlansAndMeta(queryId || '');
+  }, [loadPlansAndMeta, queryId]);
 
   const handleSelectPlan = async (planId) => {
     setSelectedPlanId(planId);
@@ -315,18 +328,15 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
     if (!planDetail?.plan) return;
     const currentMonths = item.planned_months || [];
     if (!currentMonths.includes(month)) return;
-    if (currentMonths.length <= 1) {
-      throw new Error('ต้องมีรอบการทวนสอบอย่างน้อย 1 เดือน หากต้องการนำเครื่องมือออก กรุณากดปุ่มลบรายการ');
-    }
     const updatedMonths = currentMonths.filter((m) => m !== month);
     await saveVccPlanItem(planDetail.plan.id, {
       asset_id: item.asset_id,
-      provider_name: item.provider_name,
+      provider_name: item.provider_name || 'ทวนสอบภายใน',
       frequency_label: item.frequency_label || 'รายปี',
       planned_months: updatedMonths,
-      responsible_dept: item.responsible_dept,
+      responsible_dept: item.responsible_dept || planDetail.plan.department,
       responsible_label: item.responsible_label || '',
-      remarks: item.remarks || ''
+      remarks: item.remarks || (updatedMonths.length === 0 ? 'ยังไม่ถึงกำหนดตามรอบความถี่' : '')
     });
     toast.success(`ยกเลิกรอบเดือน ${month} สำหรับ ${item.asset_code} แล้ว`);
     const refreshed = await fetchVccPlanDetail(planDetail.plan.id);
@@ -370,7 +380,31 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
       const msg = err.message || 'ไม่สามารถส่งทบทวนแผนได้';
       setWorkflowBannerError(msg);
       toast.error(msg);
+      if (msg.includes('ยังไม่ได้วางแผน') || msg.includes('ระบุเหตุผล')) {
+        setJustificationModalOpen(true);
+      }
     }
+  };
+
+  const handleSaveJustifications = async (updates) => {
+    if (!planDetail?.plan) return;
+    for (const u of updates) {
+      const existing = (planDetail.items || []).find((i) => i.asset_id === u.asset_id);
+      if (existing) {
+        await saveVccPlanItem(planDetail.plan.id, {
+          asset_id: u.asset_id,
+          provider_name: existing.provider_name || 'ทวนสอบภายใน',
+          frequency_label: existing.frequency_label || 'รายปี',
+          planned_months: existing.planned_months || [],
+          responsible_dept: existing.responsible_dept || planDetail.plan.department,
+          responsible_label: existing.responsible_label || '',
+          remarks: u.remarks
+        });
+      }
+    }
+    toast.success('บันทึกเหตุผลเรียบร้อยแล้ว');
+    const refreshed = await fetchVccPlanDetail(planDetail.plan.id);
+    setPlanDetail(refreshed);
   };
 
   const openWorkflowModal = (mode) => {
@@ -501,6 +535,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
         onOpenCreatePlan={openCreatePlan}
         onOpenEditPlan={openEditPlan}
         onOpenHistory={() => setHistoryOpen(true)}
+        onOpenJustificationModal={() => setJustificationModalOpen(true)}
       />
 
       {workflowBannerError && (
@@ -627,6 +662,13 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
         open={historyOpen}
         onClose={() => setHistoryOpen(false)}
         history={planDetail?.history || []}
+      />
+
+      <UnplannedJustificationModal
+        open={justificationModalOpen}
+        onClose={() => setJustificationModalOpen(false)}
+        unplannedItems={(planDetail?.items || []).filter((i) => (i.planned_months || []).length === 0)}
+        onSaveJustifications={handleSaveJustifications}
       />
     </div>
   );
