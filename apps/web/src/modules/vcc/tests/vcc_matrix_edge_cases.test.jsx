@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import AnnualPlanMonthCell from '../components/AnnualPlanMonthCell';
 import AnnualPlanSideInspector from '../components/AnnualPlanSideInspector';
+import AnnualPlanMatrixTable from '../components/AnnualPlanMatrixTable';
 import { computeDueDateForMonth } from '../api/vccPlanApi';
 
 describe('VCC FM-QC-46 Interactive Planning Board Edge Cases & Exceptions', () => {
@@ -270,4 +271,93 @@ describe('VCC FM-QC-46 Interactive Planning Board Edge Cases & Exceptions', () =
     expect(screen.getByText(/ดำเนินการจริงในเดือน มีนาคม/)).toBeInTheDocument();
     expect(screen.getByText(/CER-2026-001/)).toBeInTheDocument();
   });
+
+  it('7. Compact Action Column: Displays compact icon buttons with Thai tooltips, accessible labels, inline deletion confirmation, and grouped instrument action', async () => {
+    const onOpenAddItem = vi.fn();
+    const onDeleteItem = vi.fn();
+    const onOpenGroupWorkOrderCheck = vi.fn();
+
+    const groupItem = {
+      ...sampleItem,
+      id: 'ITEM-GROUP',
+      asset_code: 'GRP-SCALE',
+      asset_name: 'ชุดตาชั่งประจำไลน์',
+      is_group: 1
+    };
+
+    const { rerender } = render(
+      <AnnualPlanMatrixTable
+        planItems={[sampleItem, groupItem]}
+        activePlan={samplePlan}
+        workOrders={[]}
+        canEditPlan={true}
+        onOpenAddItem={onOpenAddItem}
+        onDeleteItem={onDeleteItem}
+        onOpenGroupWorkOrderCheck={onOpenGroupWorkOrderCheck}
+      />
+    );
+
+    // Context Actions header is present
+    expect(screen.getByRole('columnheader', { name: 'การจัดการ' })).toBeInTheDocument();
+
+    // Spec buttons have Thai tooltips and accessible labels
+    const specBtns = screen.getAllByRole('button', { name: /สเปก/i });
+    expect(specBtns.length).toBe(2);
+    expect(specBtns[0]).toHaveAttribute('title', 'ดูสเปกและรายละเอียดเครื่องมือ');
+
+    // Edit buttons have Thai tooltips and accessible labels
+    const editBtns = screen.getAllByRole('button', { name: /แก้ไขข้อมูลในแผน/i });
+    expect(editBtns.length).toBe(2);
+    expect(editBtns[0]).toHaveAttribute('title', 'แก้ไขข้อมูลในแผน');
+
+    fireEvent.click(editBtns[0]);
+    expect(onOpenAddItem).toHaveBeenCalledWith(sampleItem);
+
+    // Group check button for grouped instruments
+    const groupCheckBtn = screen.getByRole('button', { name: /ตรวจรหัสลูกก่อนออกใบงาน/i });
+    expect(groupCheckBtn).toBeInTheDocument();
+    expect(groupCheckBtn).toHaveAttribute('title', 'ตรวจรหัสลูกก่อนออกใบงาน');
+    fireEvent.click(groupCheckBtn);
+    expect(onOpenGroupWorkOrderCheck).toHaveBeenCalledWith(groupItem);
+
+    // Delete button has Thai tooltip, accessible label, and requires inline confirmation
+    const deleteBtns = screen.getAllByRole('button', { name: /ลบรายการออกจากแผน/i });
+    expect(deleteBtns.length).toBe(2);
+    expect(deleteBtns[0]).toHaveAttribute('title', 'ลบรายการออกจากแผน');
+
+    // Initial click on delete enters confirmation state without invoking onDeleteItem
+    fireEvent.click(deleteBtns[0]);
+    expect(onDeleteItem).not.toHaveBeenCalled();
+
+    // Confirm button appears
+    const confirmBtn = screen.getByRole('button', { name: 'ยืนยันลบ' });
+    const cancelBtn = screen.getByRole('button', { name: 'ยกเลิก' });
+    expect(confirmBtn).toBeInTheDocument();
+    expect(cancelBtn).toBeInTheDocument();
+
+    // Cancel aborts delete
+    fireEvent.click(cancelBtn);
+    expect(onDeleteItem).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: 'ยืนยันลบ' })).toBeNull();
+
+    // Click delete again and confirm
+    const reDeleteBtns = screen.getAllByRole('button', { name: /ลบรายการออกจากแผน/i });
+    fireEvent.click(reDeleteBtns[0]);
+    const reConfirmBtn = screen.getByRole('button', { name: 'ยืนยันลบ' });
+    fireEvent.click(reConfirmBtn);
+    expect(onDeleteItem).toHaveBeenCalledWith(sampleItem);
+
+    // When canEditPlan is false, Edit and Delete buttons are hidden (read-only view)
+    rerender(
+      <AnnualPlanMatrixTable
+        planItems={[sampleItem]}
+        activePlan={samplePlan}
+        workOrders={[]}
+        canEditPlan={false}
+      />
+    );
+    expect(screen.queryByRole('button', { name: /แก้ไขข้อมูลในแผน/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /ลบรายการออกจากแผน/i })).toBeNull();
+    expect(screen.getByRole('button', { name: /สเปก/i })).toBeInTheDocument();
+  }, 15000);
 });
