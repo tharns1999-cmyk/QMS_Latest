@@ -1,7 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import useStore from '../../../store/useStore';
-import { moduleRegistry, MODULE_STATUS } from '../moduleRegistry';
+import { moduleRegistry, MODULE_STATUS, isUserAuthorizedForModule } from '../moduleRegistry';
 import { usePortalTranslation } from '../locales/portalTranslations';
 import { ArrowRight, Lock, Sparkles } from 'lucide-react';
 
@@ -10,10 +10,8 @@ const PortalLandingPage = () => {
   const { currentUser } = useStore();
   const { t } = usePortalTranslation();
 
-  const isDccUser = Boolean(currentUser?.isDcc);
-
   const visibleModules = moduleRegistry
-    .filter((module) => !module.dccOnly || isDccUser)
+    .filter((module) => isUserAuthorizedForModule(module, currentUser))
     .sort((a, b) => a.order - b.order);
 
   const hasModuleAccess = () => {

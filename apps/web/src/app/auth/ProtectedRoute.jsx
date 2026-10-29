@@ -8,6 +8,8 @@ import toast from 'react-hot-toast';
  * @param {Object} props
  * @param {React.ReactNode} props.children
  * @param {boolean} [props.requireDcc=false] - Requires DCC staff or DCC admin
+ * @param {boolean} [props.requireVcc=false] - Requires VCC authorized staff (DCC, QC, QA, QMR)
+ * @param {string[]} [props.allowedDepartments=null] - Allowed department codes
  * @param {boolean} [props.requireAdmin=false] - Requires DCC admin or Super admin
  * @param {string} [props.redirectPath='/dcc/dashboard'] - Target path on denial
  * @param {string} [props.deniedToastMessage] - Custom toast message when access is denied
@@ -15,6 +17,8 @@ import toast from 'react-hot-toast';
 export const ProtectedRoute = ({
   children,
   requireDcc = false,
+  requireVcc = false,
+  allowedDepartments = null,
   requireAdmin = false,
   redirectPath = '/dcc/dashboard',
   deniedToastMessage
@@ -34,6 +38,16 @@ export const ProtectedRoute = ({
     currentUser?.isDcc
   );
 
+  const userDepts = [currentUser?.department, ...(currentUser?.depts || [])]
+    .filter(Boolean)
+    .map((d) => String(d).toUpperCase());
+
+  const isVccUser = Boolean(
+    currentUser?.isDcc ||
+    currentUser?.isQmr ||
+    userDepts.some((d) => ['DC', 'QC', 'QA'].includes(d))
+  );
+
   let isAllowed = true;
   let fallbackMessage = 'คุณไม่มีสิทธิ์เข้าถึงหน้านี้';
 
@@ -46,6 +60,18 @@ export const ProtectedRoute = ({
     if (!isDccUser) {
       isAllowed = false;
       fallbackMessage = deniedToastMessage || 'คุณไม่มีสิทธิ์เข้าถึงศูนย์ควบคุมงาน DCC';
+    }
+  } else if (requireVcc) {
+    if (!isVccUser) {
+      isAllowed = false;
+      fallbackMessage = deniedToastMessage || 'เฉพาะผู้ใช้งานแผนก DCC, QC และ QA เท่านั้นที่สามารถเข้าใช้งาน VCC ได้';
+    }
+  } else if (Array.isArray(allowedDepartments) && allowedDepartments.length > 0) {
+    const isDeptAllowed = currentUser?.isDcc || currentUser?.isQmr ||
+      userDepts.some((d) => allowedDepartments.map((ad) => ad.toUpperCase()).includes(d));
+    if (!isDeptAllowed) {
+      isAllowed = false;
+      fallbackMessage = deniedToastMessage || 'คุณไม่มีสิทธิ์เข้าถึงหน้านี้';
     }
   }
 

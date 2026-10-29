@@ -1,8 +1,8 @@
 // VCC (Verify and Calibration Center) — Phase 1: Asset Register API.
-// Every endpoint requires a signed-in DCC user (user.isDcc), checked here on the server.
 import { registerVccPlanRoutes } from './vccPlans.js';
 import { registerVccWorkOrderRoutes } from './vccWorkOrders.js';
 import { registerVccDashboardRoutes } from './vccDashboard.js';
+import { requireVccAccess, requireDccOnly } from './vccAuth.js';
 
 const DCC_ONLY = { error: 'เฉพาะ DCC เท่านั้นที่ใช้งานส่วนนี้ได้' };
 const NOW = `strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`;
@@ -41,16 +41,11 @@ const fetchAsset = (db, id) =>
   db.prepare(`${ASSET_SELECT} WHERE a.id = ?`).bind(id).first();
 
 export const registerVccRoutes = (app, { requireAuth, audit }) => {
-  const requireDcc = async (c, next) => {
-    if (!c.get('user')?.isDcc) return c.json(DCC_ONLY, 403);
-    await next();
-  };
-
-  app.get('/api/vcc/asset-types', requireAuth, requireDcc, async (c) => {
+  app.get('/api/vcc/asset-types', requireAuth, requireVccAccess, async (c) => {
     return c.json({ assetTypes: await loadAssetTypes(c.env.DB) });
   });
 
-  app.put('/api/vcc/asset-types', requireAuth, requireDcc, async (c) => {
+  app.put('/api/vcc/asset-types', requireAuth, requireDccOnly, async (c) => {
     const body = await c.req.json().catch(() => ({}));
     const raw = body.assetTypes;
     if (!Array.isArray(raw) || raw.length === 0 || raw.length > 100) {
@@ -73,7 +68,7 @@ export const registerVccRoutes = (app, { requireAuth, audit }) => {
   });
 
   // Never mix statuses in a single list response.
-  app.get('/api/vcc/assets', requireAuth, requireDcc, async (c) => {
+  app.get('/api/vcc/assets', requireAuth, requireVccAccess, async (c) => {
     const status = (c.req.query('status') || 'ACTIVE').toUpperCase();
     if (!PHASE1_STATUSES.includes(status)) {
       return c.json({ error: 'สถานะเครื่องมือไม่ถูกต้อง' }, 400);
@@ -114,7 +109,7 @@ export const registerVccRoutes = (app, { requireAuth, audit }) => {
     return c.json({ assets: results });
   });
 
-  app.get('/api/vcc/assets/:id', requireAuth, requireDcc, async (c) => {
+  app.get('/api/vcc/assets/:id', requireAuth, requireVccAccess, async (c) => {
     const db = c.env.DB;
     const id = c.req.param('id');
     const asset = await fetchAsset(db, id);
@@ -140,7 +135,7 @@ export const registerVccRoutes = (app, { requireAuth, audit }) => {
     return c.json({ asset, children, history });
   });
 
-  app.post('/api/vcc/assets', requireAuth, requireDcc, async (c) => {
+  app.post('/api/vcc/assets', requireAuth, requireDccOnly, async (c) => {
     const db = c.env.DB;
     const user = c.get('user');
     const body = await c.req.json().catch(() => ({}));
@@ -337,10 +332,10 @@ export const registerVccRoutes = (app, { requireAuth, audit }) => {
     return c.json({ asset: await fetchAsset(db, id) });
   };
 
-  app.put('/api/vcc/assets/:id', requireAuth, requireDcc, updateAsset);
-  app.patch('/api/vcc/assets/:id', requireAuth, requireDcc, updateAsset);
+  app.put('/api/vcc/assets/:id', requireAuth, requireDccOnly, updateAsset);
+  app.patch('/api/vcc/assets/:id', requireAuth, requireDccOnly, updateAsset);
 
-  app.post('/api/vcc/assets/:id/retire', requireAuth, requireDcc, async (c) => {
+  app.post('/api/vcc/assets/:id/retire', requireAuth, requireDccOnly, async (c) => {
     const db = c.env.DB;
     const user = c.get('user');
     const id = c.req.param('id');
@@ -378,7 +373,7 @@ export const registerVccRoutes = (app, { requireAuth, audit }) => {
     return c.json({ asset: await fetchAsset(db, id) });
   });
 
-  app.post('/api/vcc/assets/:id/reactivate', requireAuth, requireDcc, async (c) => {
+  app.post('/api/vcc/assets/:id/reactivate', requireAuth, requireDccOnly, async (c) => {
     const db = c.env.DB;
     const user = c.get('user');
     const id = c.req.param('id');

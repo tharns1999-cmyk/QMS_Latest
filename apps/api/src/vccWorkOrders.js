@@ -1,5 +1,6 @@
 import { getThresholds } from './approval.js';
 import { computeDueDateForMonth } from './vccPlans.js';
+import { requireVccAccess, requireDccOnly } from './vccAuth.js';
 
 const NOW = "strftime('%Y-%m-%dT%H:%M:%SZ', 'now')";
 const DCC_ONLY = { error: 'เฉพาะเจ้าหน้าที่ DCC เท่านั้นที่เข้าถึงระบบ VCC ได้' };
@@ -73,19 +74,14 @@ const fetchWorkOrder = async (db, id) =>
   `).bind(id).first();
 
 export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
-  const requireDcc = async (c, next) => {
-    if (!c.get('user')?.isDcc) return c.json(DCC_ONLY, 403);
-    await next();
-  };
-
-  app.get('/api/vcc/work-order-settings', requireAuth, requireDcc, async (c) => {
+  app.get('/api/vcc/work-order-settings', requireAuth, requireVccAccess, async (c) => {
     const db = c.env.DB;
     const settings = await readWorkOrderSettings(db);
     const thresholds = await getThresholds(db, settings.approval_doc_type);
     return c.json({ settings, thresholds });
   });
 
-  app.put('/api/vcc/work-order-settings', requireAuth, requireDcc, async (c) => {
+  app.put('/api/vcc/work-order-settings', requireAuth, requireDccOnly, async (c) => {
     const db = c.env.DB;
     const user = c.get('user');
     const body = await c.req.json().catch(() => ({}));
@@ -139,7 +135,7 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
   });
 
   // List work orders — strictly separated by status or nc_status (never mixing statuses in one list)
-  app.get('/api/vcc/work-orders', requireAuth, requireDcc, async (c) => {
+  app.get('/api/vcc/work-orders', requireAuth, requireVccAccess, async (c) => {
     const db = c.env.DB;
     const status = (c.req.query('status') || '').trim().toUpperCase();
     const ncStatus = (c.req.query('nc_status') || '').trim().toUpperCase();
@@ -206,7 +202,7 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
     return c.json({ workOrders: results });
   });
 
-  app.get('/api/vcc/work-orders/:id', requireAuth, requireDcc, async (c) => {
+  app.get('/api/vcc/work-orders/:id', requireAuth, requireVccAccess, async (c) => {
     const db = c.env.DB;
     const id = c.req.param('id');
     const workOrder = await fetchWorkOrder(db, id);
@@ -235,7 +231,7 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
   });
 
   // Create Work Order (from APPROVED annual plan item OR ad-hoc)
-  app.post('/api/vcc/work-orders', requireAuth, requireDcc, async (c) => {
+  app.post('/api/vcc/work-orders', requireAuth, requireVccAccess, async (c) => {
     const db = c.env.DB;
     const user = c.get('user');
     const body = await c.req.json().catch(() => ({}));
@@ -357,7 +353,7 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
   });
 
   // Reschedule due date — preserves original_due_date and requires reason
-  app.post('/api/vcc/work-orders/:id/reschedule', requireAuth, requireDcc, async (c) => {
+  app.post('/api/vcc/work-orders/:id/reschedule', requireAuth, requireVccAccess, async (c) => {
     const db = c.env.DB;
     const user = c.get('user');
     const id = c.req.param('id');
@@ -395,7 +391,7 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
   });
 
   // Submit execution result + certificate & acceptance criteria (moves to PENDING_REVIEW, never auto-closes)
-  app.post('/api/vcc/work-orders/:id/submit-result', requireAuth, requireDcc, async (c) => {
+  app.post('/api/vcc/work-orders/:id/submit-result', requireAuth, requireVccAccess, async (c) => {
     const db = c.env.DB;
     const user = c.get('user');
     const id = c.req.param('id');
@@ -472,7 +468,7 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
   });
 
   // Reviewer approves result -> status becomes CLOSED (if FAIL, nc_status remains OPEN until L5+ releases hold)
-  app.post('/api/vcc/work-orders/:id/approve', requireAuth, requireDcc, async (c) => {
+  app.post('/api/vcc/work-orders/:id/approve', requireAuth, requireVccAccess, async (c) => {
     const db = c.env.DB;
     const user = c.get('user');
     const id = c.req.param('id');
@@ -527,7 +523,7 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
   });
 
   // Reviewer rejects result -> mandatory reason, status becomes REJECTED
-  app.post('/api/vcc/work-orders/:id/reject', requireAuth, requireDcc, async (c) => {
+  app.post('/api/vcc/work-orders/:id/reject', requireAuth, requireVccAccess, async (c) => {
     const db = c.env.DB;
     const user = c.get('user');
     const id = c.req.param('id');
@@ -581,7 +577,7 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
   });
 
   // Release ON_HOLD / NC -> requires L5+ (required_approver_level) and mandatory impact_assessment
-  app.post('/api/vcc/work-orders/:id/release-hold', requireAuth, requireDcc, async (c) => {
+  app.post('/api/vcc/work-orders/:id/release-hold', requireAuth, requireVccAccess, async (c) => {
     const db = c.env.DB;
     const user = c.get('user');
     const id = c.req.param('id');

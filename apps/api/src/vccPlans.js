@@ -1,5 +1,6 @@
 // VCC (Verify and Calibration Center) — Phase 2: Calibration Schedule Rules, Annual Plan Matrix & Plan Approval API.
 import { getThresholds } from './approval.js';
+import { requireVccAccess, requireDccOnly } from './vccAuth.js';
 
 const DCC_ONLY = { error: 'เฉพาะ DCC เท่านั้นที่ใช้งานส่วนนี้ได้' };
 const NOW = `strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`;
@@ -166,13 +167,8 @@ const fetchPlanItems = async (db, planId) => {
 };
 
 export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
-  const requireDcc = async (c, next) => {
-    if (!c.get('user')?.isDcc) return c.json(DCC_ONLY, 403);
-    await next();
-  };
-
   // Settings: calibration providers & schedule/approval rules (configurable by DCC)
-  app.get('/api/vcc/plan-settings', requireAuth, requireDcc, async (c) => {
+  app.get('/api/vcc/plan-settings', requireAuth, requireVccAccess, async (c) => {
     const db = c.env.DB;
     const [providers, planSettings] = await Promise.all([
       loadProviders(db),
@@ -182,7 +178,7 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
     return c.json({ providers, planSettings, thresholds });
   });
 
-  app.put('/api/vcc/plan-settings', requireAuth, requireDcc, async (c) => {
+  app.put('/api/vcc/plan-settings', requireAuth, requireDccOnly, async (c) => {
     const db = c.env.DB;
     const user = c.get('user');
     const body = await c.req.json().catch(() => ({}));
@@ -241,7 +237,7 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
   });
 
   // Strictly separated by status (never mix statuses in one list).
-  app.get('/api/vcc/plans', requireAuth, requireDcc, async (c) => {
+  app.get('/api/vcc/plans', requireAuth, requireVccAccess, async (c) => {
     const status = (c.req.query('status') || 'DRAFT').toUpperCase();
     if (!PLAN_STATUSES.includes(status)) {
       return c.json({ error: 'สถานะแผนประจำปีไม่ถูกต้อง' }, 400);
@@ -270,7 +266,7 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
     return c.json({ plans: results });
   });
 
-  app.get('/api/vcc/plans/:id', requireAuth, requireDcc, async (c) => {
+  app.get('/api/vcc/plans/:id', requireAuth, requireVccAccess, async (c) => {
     const db = c.env.DB;
     const id = c.req.param('id');
     const plan = await fetchPlan(db, id);
@@ -298,7 +294,7 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
     return c.json({ plan, items, thresholds, history });
   });
 
-  app.post('/api/vcc/plans', requireAuth, requireDcc, async (c) => {
+  app.post('/api/vcc/plans', requireAuth, requireVccAccess, async (c) => {
     const db = c.env.DB;
     const user = c.get('user');
     const body = await c.req.json().catch(() => ({}));
@@ -357,7 +353,7 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
     return c.json({ plan: await fetchPlan(db, id) }, 201);
   });
 
-  app.put('/api/vcc/plans/:id', requireAuth, requireDcc, async (c) => {
+  app.put('/api/vcc/plans/:id', requireAuth, requireVccAccess, async (c) => {
     const db = c.env.DB;
     const user = c.get('user');
     const id = c.req.param('id');
@@ -426,7 +422,7 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
   });
 
   // Add or update a schedule item in an annual plan
-  app.post('/api/vcc/plans/:id/items', requireAuth, requireDcc, async (c) => {
+  app.post('/api/vcc/plans/:id/items', requireAuth, requireVccAccess, async (c) => {
     const db = c.env.DB;
     const user = c.get('user');
     const planId = c.req.param('id');
@@ -576,11 +572,11 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
     return c.json({ items: await fetchPlanItems(db, planId) });
   };
 
-  app.delete('/api/vcc/plans/:id/items/:itemId', requireAuth, requireDcc, handleRemoveItem);
-  app.post('/api/vcc/plans/:id/items/:itemId/remove', requireAuth, requireDcc, handleRemoveItem);
+  app.delete('/api/vcc/plans/:id/items/:itemId', requireAuth, requireVccAccess, handleRemoveItem);
+  app.post('/api/vcc/plans/:id/items/:itemId/remove', requireAuth, requireVccAccess, handleRemoveItem);
 
   // Validate whether a plan item can be used to create a Work Order (Group assets must be split into child assets first)
-  app.post('/api/vcc/plans/:id/items/:itemId/validate-work-order', requireAuth, requireDcc, async (c) => {
+  app.post('/api/vcc/plans/:id/items/:itemId/validate-work-order', requireAuth, requireVccAccess, async (c) => {
     const db = c.env.DB;
     const planId = c.req.param('id');
     const itemId = c.req.param('itemId');
@@ -631,7 +627,7 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
   });
 
   // Submit plan for review (DRAFT or REJECTED -> PENDING_REVIEW)
-  app.post('/api/vcc/plans/:id/submit', requireAuth, requireDcc, async (c) => {
+  app.post('/api/vcc/plans/:id/submit', requireAuth, requireVccAccess, async (c) => {
     const db = c.env.DB;
     const user = c.get('user');
     const id = c.req.param('id');

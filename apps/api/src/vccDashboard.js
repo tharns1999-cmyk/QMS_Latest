@@ -1,3 +1,5 @@
+import { requireVccAccess, requireDccOnly } from './vccAuth.js';
+
 const NOW = "strftime('%Y-%m-%dT%H:%M:%SZ', 'now')";
 const DCC_ONLY = { error: 'เฉพาะเจ้าหน้าที่ DCC เท่านั้นที่ได้รับอนุญาตให้ใช้งานส่วนนี้' };
 
@@ -46,17 +48,12 @@ const diffDays = (targetDateStr, refDateStr) => {
 };
 
 export const registerVccDashboardRoutes = (app, { requireAuth, audit }) => {
-  const requireDcc = async (c, next) => {
-    if (!c.get('user')?.isDcc) return c.json(DCC_ONLY, 403);
-    await next();
-  };
-
-  app.get('/api/vcc/notification-settings', requireAuth, requireDcc, async (c) => {
+  app.get('/api/vcc/notification-settings', requireAuth, requireVccAccess, async (c) => {
     const settings = await loadNotificationSettings(c.env.DB);
     return c.json({ settings });
   });
 
-  app.put('/api/vcc/notification-settings', requireAuth, requireDcc, async (c) => {
+  app.put('/api/vcc/notification-settings', requireAuth, requireDccOnly, async (c) => {
     const db = c.env.DB;
     const user = c.get('user');
     const body = await c.req.json().catch(() => ({}));
@@ -106,7 +103,7 @@ export const registerVccDashboardRoutes = (app, { requireAuth, audit }) => {
     return c.json({ settings: updated });
   });
 
-  app.get('/api/vcc/dashboard', requireAuth, requireDcc, async (c) => {
+  app.get('/api/vcc/dashboard', requireAuth, requireVccAccess, async (c) => {
     const db = c.env.DB;
     const year = Number(c.req.query('year') || 2026);
     const refDateQuery = c.req.query('reference_date');
@@ -360,7 +357,7 @@ export const registerVccDashboardRoutes = (app, { requireAuth, audit }) => {
     });
   });
 
-  app.get('/api/vcc/audit-log', requireAuth, requireDcc, async (c) => {
+  app.get('/api/vcc/audit-log', requireAuth, requireVccAccess, async (c) => {
     const db = c.env.DB;
     const prefix = c.req.query('category') || 'VCC_';
     const safePrefix = ['VCC_', 'VCC_ASSET', 'VCC_PLAN', 'VCC_WO', 'VCC_NOTIFICATION', 'VCC_EXPORT'].includes(prefix)
@@ -399,7 +396,7 @@ export const registerVccDashboardRoutes = (app, { requireAuth, audit }) => {
     return c.json({ history });
   });
 
-  app.get('/api/vcc/export/annual-plan', requireAuth, requireDcc, async (c) => {
+  app.get('/api/vcc/export/annual-plan', requireAuth, requireVccAccess, async (c) => {
     const db = c.env.DB;
     const user = c.get('user');
     const year = Number(c.req.query('year') || 2026);
@@ -517,7 +514,7 @@ export const registerVccDashboardRoutes = (app, { requireAuth, audit }) => {
     });
   });
 
-  app.get('/api/vcc/export/work-orders', requireAuth, requireDcc, async (c) => {
+  app.get('/api/vcc/export/work-orders', requireAuth, requireVccAccess, async (c) => {
     const db = c.env.DB;
     const user = c.get('user');
 
