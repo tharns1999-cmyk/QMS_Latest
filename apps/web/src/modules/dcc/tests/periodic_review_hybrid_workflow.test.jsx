@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+// @vitest-environment jsdom
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import useStore, { canFastTrackExternalReview, canFastTrackReview } from '../../../store/useStore';
 import { isActionableTask } from '../utils/taskFilter';
 

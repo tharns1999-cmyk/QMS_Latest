@@ -142,7 +142,7 @@ const DarDetail = () => {
   const nextRev = String(parseInt(docInfo.docRev || '0', 10) + 1).padStart(2, '0');
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-6 w-full max-w-full overflow-hidden">
+    <div className="space-y-6 w-full min-w-0 pb-6 overflow-hidden">
       {/* Top Bar: Title & Inspector CTA */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">

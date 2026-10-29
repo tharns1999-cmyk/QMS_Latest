@@ -361,7 +361,7 @@ const AssetRegisterPageInner = () => {
   }, [moduleView]);
 
   return (
-    <div className="max-w-7xl mx-auto space-y-4 pb-8">
+    <div className="w-full min-w-0 space-y-4 pb-8">
       {/* Accessible navigation fallback for headless tests & assistive technology */}
       <div className="sr-only" role="navigation" aria-label="เมนูย่อยระบบ VCC">
         <button

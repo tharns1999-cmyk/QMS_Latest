@@ -1498,7 +1498,7 @@ const PeriodicReviewDashboard = () => {
   };
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-12 w-full max-w-full overflow-hidden">
+    <div className="space-y-6 w-full min-w-0 pb-12 overflow-hidden">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>

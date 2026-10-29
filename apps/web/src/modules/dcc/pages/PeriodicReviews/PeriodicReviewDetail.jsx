@@ -457,7 +457,7 @@ const PeriodicReviewDetail = () => {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-6">
+    <div className="w-full min-w-0 pb-12">
       <div className="mb-4">
         <button 
           type="button"

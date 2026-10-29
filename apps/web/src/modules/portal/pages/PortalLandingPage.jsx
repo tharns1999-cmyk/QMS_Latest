@@ -19,7 +19,7 @@ const PortalLandingPage = () => {
   };
 
   return (
-    <div className="p-4 md:p-8 max-w-7xl mx-auto pb-4 space-y-8 w-full max-w-full overflow-hidden">
+    <div className="w-full min-w-0 space-y-6 pb-4">
       {/* Hero Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-8 rounded-xl text-white shadow-none relative overflow-hidden">
         <div className="relative z-10 space-y-2 max-w-2xl">

@@ -19,7 +19,7 @@ const Reports = () => {
   };
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-12 w-full max-w-full overflow-hidden">
+    <div className="space-y-6 w-full min-w-0 pb-12 overflow-hidden">
       <div>
         <h2 className="text-xl font-bold text-[#1E1E1E] tracking-tight">รายงานและสถิติ (Reports & Analytics)</h2>
         <p className="text-xs text-[#666666] mt-0.5">ศูนย์รวมรายงานวิเคราะห์สำหรับผู้บริหารและฝ่ายควบคุมคุณภาพ QMS</p>

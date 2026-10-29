@@ -975,7 +975,7 @@ const ControlledCopyRegister = () => {
   };
 
   return (
-    <div className="space-y-4 pb-16 max-w-7xl mx-auto w-full max-w-full overflow-hidden">
+    <div className="space-y-4 pb-16 w-full min-w-0 overflow-hidden">
       {/* Top Header - Standardized Page Header */}
       <div className="flex items-center justify-between gap-3 px-6 py-4 bg-white border border-slate-200/80 rounded-xl shadow-2xs">
         <div className="flex items-center gap-3">
