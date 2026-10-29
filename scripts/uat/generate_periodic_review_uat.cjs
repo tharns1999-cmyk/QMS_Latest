@@ -101,8 +101,8 @@ let readme_content = "# Periodic Review UAT Package\n\n" +
 "This directory contains the complete User Acceptance Testing (UAT) package for the DCC Periodic Review module.\n\n" +
 "## A. Start the Application\n" +
 "1. **Project Directory:** `c:/Users/User/Desktop/qms-portal`\n" +
-"2. **Dependency Installation Command:** `npm install`\n" +
-"3. **Application Start Command:** `npm run dev`\n" +
+"2. **Dependency Installation Command:** `pnpm install`\n" +
+"3. **Application Start Command:** `pnpm run dev`\n" +
 "4. **Exact Local URL:** `http://localhost:5173`\n" +
 "5. **Supported Browser:** Google Chrome (latest)\n\n" +
 "## B. Persona Usage\n" +

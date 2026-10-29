@@ -10,7 +10,7 @@ Follow the autonomous pipeline:
 2. Architect (.agents/architect.md): Check schema, state, and backward compatibility.
 3. Frontend Coder (.agents/frontend-coder.md): React 19, Tailwind CSS v4, Zustand, DESIGN.md tokens.
 4. Backend Coder (.agents/backend-coder.md): Express 5, PostgreSQL migrations, cron jobs, pdf-lib.
-5. QA Tester (.agents/qa-tester.md): Verify with `npm run lint`, `npm run test`, `npm run build`.
+5. QA Tester (.agents/qa-tester.md): Verify with `pnpm run lint`, `pnpm run test`, `pnpm run build`.
 6. Security Auditor (.agents/security-auditor.md): RBAC, stamps, watermarks, auditability.
 
 # Brownfield Rules (.rules/brownfield-rules.md)
