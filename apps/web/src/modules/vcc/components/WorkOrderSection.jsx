@@ -5,7 +5,8 @@ import {
   SlidersHorizontal,
   Search,
   X,
-  FilterX
+  FilterX,
+  ClipboardCheck
 } from 'lucide-react';
 import { fetchVccAssets } from '../api/vccApi';
 import { fetchVccPlanSettings, fetchVccPlans, fetchVccPlanDetail } from '../api/vccPlanApi';
@@ -66,6 +67,7 @@ const WO_TABS = [
 const WorkOrderSection = ({ activeDepartments = [] }) => {
   const [activeTab, setActiveTab] = useState('OPEN');
   const [filterDept, setFilterDept] = useState('');
+  const [filterResult, setFilterResult] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedDrawerWo, setSelectedDrawerWo] = useState(null);
 
@@ -210,7 +212,14 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
 
   // Filtered work orders for currently active tab
   const activeTabWorkOrders = useMemo(() => {
-    const list = rawWosByTab[activeTab] || [];
+    let list = rawWosByTab[activeTab] || [];
+
+    // Filter by Result Status (PASS / FAIL / PENDING)
+    if (filterResult) {
+      list = list.filter((wo) => wo.result_status === filterResult);
+    }
+
+    // Filter by Search Query
     const query = searchTerm.trim().toLowerCase();
     if (!query) return list;
 
@@ -222,7 +231,7 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
       const matchProvider = (wo.provider_name || '').toLowerCase().includes(query);
       return matchWoCode || matchAssetCode || matchAssetName || matchCertNo || matchProvider;
     });
-  }, [rawWosByTab, activeTab, searchTerm]);
+  }, [rawWosByTab, activeTab, searchTerm, filterResult]);
 
   const openCreateModal = () => {
     setCreateError('');
@@ -384,20 +393,58 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
   const handleResetFilters = () => {
     setSearchTerm('');
     setFilterDept('');
+    setFilterResult('');
   };
+
+  const isFiltered = Boolean(searchTerm || filterDept || filterResult);
 
   return (
     <div className="space-y-4 max-w-full" data-testid="vcc-work-order-section">
-      {/* 1. Page Header & Collapsible Rule Notice Bar */}
+      
+      {/* 1. Page Header (Clean, Enterprise SaaS Visual Hierarchy) */}
+      <div className="flex flex-wrap items-center justify-between gap-4 pb-1">
+        <div>
+          <h2 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2.5">
+            <ClipboardCheck size={24} className="text-indigo-600 shrink-0" />
+            <span>ใบสั่งงานและบันทึกผล (Work Orders)</span>
+          </h2>
+          <p className="text-xs sm:text-sm text-slate-500 mt-1">
+            ระบบติดตามการสอบเทียบ/ทวนสอบเครื่องมือวัด บันทึกผลรับรอง และควบคุมการระงับใช้ตามมาตรฐาน QMS
+          </p>
+        </div>
+
+        {/* Primary and Secondary Actions */}
+        <div className="flex items-center gap-2.5">
+          <button
+            type="button"
+            onClick={openSettings}
+            className="h-9 inline-flex items-center gap-1.5 px-3.5 rounded-xl border border-slate-200/90 bg-white text-slate-700 text-xs sm:text-sm font-semibold hover:bg-slate-50 transition-colors cursor-pointer shadow-2xs"
+          >
+            <SlidersHorizontal size={14} className="text-slate-500" />
+            <span>ตั้งค่าเกณฑ์ยอมรับ</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={openCreateModal}
+            className="h-9 inline-flex items-center gap-1.5 px-4 rounded-xl bg-indigo-600 text-white text-xs sm:text-sm font-semibold hover:bg-indigo-700 shadow-2xs transition-colors cursor-pointer"
+          >
+            <Plus size={15} />
+            <span>สร้างใบสั่งงานใหม่</span>
+          </button>
+        </div>
+      </div>
+
+      {/* 2. Collapsible Information Bar for QMS Rules */}
       <WorkOrderInfoBar thresholds={thresholds} woSettings={woSettings} />
 
-      {/* 2. Control Card: Status Tabs & Unified Toolbar */}
-      <div className="bg-white rounded-2xl border border-slate-200/90 p-4 sm:p-5 shadow-xs space-y-3.5">
+      {/* 3. Control Card: Status Tabs & Unified Filter Toolbar */}
+      <div className="bg-white rounded-2xl border border-slate-200/90 p-3.5 sm:p-4 shadow-2xs space-y-3">
         
-        {/* 2.1 Status Navigation - Single Row on Desktop with reactive counts */}
-        <div className="w-full overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
+        {/* 3.1 Status Navigation - Compact Segmented Control on Desktop */}
+        <div className="w-full overflow-x-auto pb-0.5 scrollbar-none">
           <div
-            className="flex items-center gap-1.5 p-1 bg-slate-100/90 rounded-xl min-w-max"
+            className="flex items-center gap-1 p-1 bg-slate-100/90 rounded-xl min-w-max"
             role="tablist"
             aria-label="สถานะใบสั่งงาน"
           >
@@ -411,7 +458,7 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
                   role="tab"
                   aria-selected={isActive}
                   onClick={() => setActiveTab(t.key)}
-                  className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all cursor-pointer whitespace-nowrap select-none ${
+                  className={`flex items-center gap-2 px-3.5 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all cursor-pointer whitespace-nowrap select-none ${
                     isActive
                       ? t.activeClass
                       : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
@@ -431,14 +478,14 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
           </div>
         </div>
 
-        {/* 2.2 Unified Toolbar - Search, Department Filter, and Actions in one row */}
+        {/* 3.2 Unified Filter Toolbar */}
         <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2.5">
-          {/* Left: Search & Filter */}
+          {/* Left: Search & Filters */}
           <div className="flex flex-wrap items-center gap-2 flex-1 min-w-[280px]">
             {/* Search Input */}
-            <div className="relative flex-1 min-w-[180px] max-w-md">
+            <div className="relative flex-1 min-w-[190px] max-w-sm">
               <Search
-                size={15}
+                size={14}
                 className="text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
               />
               <input
@@ -446,7 +493,7 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="ค้นหาเลขที่ใบงาน, เครื่องมือ, ใบรับรอง..."
-                className="w-full pl-9 pr-8 py-2 bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all shadow-2xs"
+                className="w-full pl-8.5 pr-8 py-1.5 sm:py-2 bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all shadow-2xs"
               />
               {searchTerm && (
                 <button
@@ -455,7 +502,7 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
                   title="ล้างคำค้นหา"
                   className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded cursor-pointer"
                 >
-                  <X size={14} />
+                  <X size={13} />
                 </button>
               )}
             </div>
@@ -465,7 +512,7 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
               aria-label="กรองใบสั่งงานตามแผนก"
               value={filterDept}
               onChange={(e) => setFilterDept(e.target.value)}
-              className="h-9 px-3 bg-slate-50 hover:bg-white border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all cursor-pointer shadow-2xs truncate max-w-[200px]"
+              className="h-8.5 sm:h-9 px-3 bg-slate-50 hover:bg-white border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all cursor-pointer shadow-2xs truncate max-w-[180px]"
             >
               <option value="">ทุกแผนก (Master Data)</option>
               {activeDepartments.map((d) => (
@@ -475,50 +522,44 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
               ))}
             </select>
 
+            {/* Result Status Filter */}
+            <select
+              aria-label="กรองตามผลการตรวจ"
+              value={filterResult}
+              onChange={(e) => setFilterResult(e.target.value)}
+              className="h-8.5 sm:h-9 px-2.5 bg-slate-50 hover:bg-white border border-slate-200 rounded-xl text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all cursor-pointer shadow-2xs"
+            >
+              <option value="">ทุกผลตรวจ</option>
+              <option value="PASS">PASS (ผ่านเกณฑ์)</option>
+              <option value="FAIL">FAIL (ไม่ผ่านเกณฑ์)</option>
+              <option value="PENDING">PENDING (รอบันทึกผล)</option>
+            </select>
+
             {/* Reset Filters button */}
-            {(searchTerm || filterDept) && (
+            {isFiltered && (
               <button
                 type="button"
                 onClick={handleResetFilters}
                 title="ล้างตัวกรองทั้งหมด"
-                className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-50 rounded-xl border border-rose-200 transition-all cursor-pointer shrink-0"
+                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-rose-600 hover:bg-rose-50 rounded-xl border border-rose-200 transition-all cursor-pointer shrink-0"
               >
-                <FilterX size={13} />
+                <FilterX size={12} />
                 <span>ล้างตัวกรอง</span>
               </button>
             )}
-
-            {/* Total items badge */}
-            <span className="text-xs text-slate-500 font-medium hidden lg:inline">
-              แสดง {activeTabWorkOrders.length} รายการ
-            </span>
           </div>
 
-          {/* Right: Actions (Secondary + Primary) */}
+          {/* Right: Total Items Badge */}
           <div className="flex items-center gap-2 shrink-0">
-            <button
-              type="button"
-              onClick={openSettings}
-              className="h-9 inline-flex items-center gap-1.5 px-3 rounded-xl border border-slate-200/90 bg-white text-slate-700 text-xs sm:text-sm font-semibold hover:bg-slate-50 transition-colors cursor-pointer shadow-2xs"
-            >
-              <SlidersHorizontal size={14} className="text-slate-500" />
-              <span>ตั้งค่าเกณฑ์ยอมรับและอายุเก็บเอกสาร</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={openCreateModal}
-              className="h-9 inline-flex items-center gap-1.5 px-3.5 rounded-xl bg-indigo-600 text-white text-xs sm:text-sm font-semibold hover:bg-indigo-700 shadow-2xs transition-colors cursor-pointer"
-            >
-              <Plus size={15} />
-              <span>สร้างใบสั่งงานใหม่</span>
-            </button>
+            <span className="text-xs text-slate-500 font-medium">
+              แสดง <span className="font-bold text-slate-800">{activeTabWorkOrders.length}</span> รายการ
+            </span>
           </div>
 
         </div>
       </div>
 
-      {/* 3. Work Order Table */}
+      {/* 4. Professional Data Grid (Comfortable Row Density, Single Primary Action) */}
       <WorkOrderTable
         workOrders={activeTabWorkOrders}
         loading={loading}
@@ -537,7 +578,7 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
         onOpenCreate={openCreateModal}
       />
 
-      {/* 4. Side Drawer for Work Order Details */}
+      {/* 5. Side Drawer for Work Order Details */}
       <WorkOrderSideDrawer
         workOrder={selectedDrawerWo}
         onClose={() => setSelectedDrawerWo(null)}
@@ -549,7 +590,7 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
         onReleaseHold={(wo) => openAction('RELEASE_HOLD', wo)}
       />
 
-      {/* 5. Modals */}
+      {/* 6. Modals */}
       <CreateWorkOrderModal
         open={createOpen}
         onClose={() => setCreateOpen(false)}
