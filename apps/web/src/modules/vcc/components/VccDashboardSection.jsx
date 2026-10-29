@@ -3,15 +3,10 @@ import {
   Bell,
   Download,
   Settings,
-  ShieldAlert,
   Clock,
-  CheckCircle2,
-  AlertTriangle,
   RefreshCw,
   FileSpreadsheet,
-  X,
-  ArrowRight,
-  Info
+  ArrowRight
 } from 'lucide-react';
 import {
   fetchVccDashboard,
@@ -19,8 +14,11 @@ import {
   exportVccAnnualPlanCsv,
   exportVccWorkOrdersCsv
 } from '../api/vccDashboardApi';
-
-const MONTH_LABELS = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+import DepartmentBadge from '../../../shared/components/ui/DepartmentBadge';
+import VccMetricsStrip from './VccMetricsStrip';
+import VccPlanActualChart from './VccPlanActualChart';
+import VccDepartmentSummary from './VccDepartmentSummary';
+import VccNotificationSettingsModal from './VccNotificationSettingsModal';
 
 const ALERT_TABS = [
   { key: 'OVERDUE', label: 'เลยกำหนด (OVERDUE)', alertBadgeClass: 'bg-amber-100 text-amber-900' },
@@ -53,6 +51,10 @@ const triggerCsvDownload = (csvText, filename) => {
   }
 };
 
+/**
+ * VccDashboardSection
+ * Clean, Minimal, Professional Enterprise SaaS QMS Dashboard for VCC.
+ */
 export default function VccDashboardSection({ onNavigateToWorkOrders }) {
   const [year, setYear] = useState(2026);
   const [dashboard, setDashboard] = useState(null);
@@ -61,6 +63,7 @@ export default function VccDashboardSection({ onNavigateToWorkOrders }) {
   const [errorMsg, setErrorMsg] = useState('');
   const [exportMsg, setExportMsg] = useState('');
 
+  // Settings Modal State
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [monthlyDueSoonText, setMonthlyDueSoonText] = useState('7, 3');
   const [monthlyOverdueText, setMonthlyOverdueText] = useState('1, 3, 7');
@@ -143,7 +146,7 @@ export default function VccDashboardSection({ onNavigateToWorkOrders }) {
 
   const eq = dashboard?.equipment_kpi || {};
   const wo = dashboard?.work_order_kpi || {};
-  const allAlerts = dashboard?.alerts || [];
+  const allAlerts = useMemo(() => dashboard?.alerts || [], [dashboard?.alerts]);
 
   const filteredAlerts = useMemo(() => {
     return allAlerts.filter((a) => {
@@ -160,21 +163,9 @@ export default function VccDashboardSection({ onNavigateToWorkOrders }) {
     [allAlerts]
   );
 
-  // Plan vs Act Aggregation
-  const { totalPlanned, totalActual } = useMemo(() => {
-    const list = dashboard?.monthly_comparison || [];
-    return list.reduce(
-      (acc, r) => ({
-        totalPlanned: acc.totalPlanned + (Number(r.planned) || 0),
-        totalActual: acc.totalActual + (Number(r.actual_closed) || 0)
-      }),
-      { totalPlanned: 0, totalActual: 0 }
-    );
-  }, [dashboard?.monthly_comparison]);
-
   return (
     <div className="space-y-6 text-slate-800" data-testid="vcc-dashboard-section">
-      {/* 1. Header Toolbar (Swiss Minimalist Action Bar) */}
+      {/* 1. Header Toolbar (Clean Minimalist Action Bar) */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-2 border-b border-slate-200/80">
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
@@ -190,18 +181,18 @@ export default function VccDashboardSection({ onNavigateToWorkOrders }) {
             </select>
           </div>
 
-          <div className="hidden lg:flex items-center gap-1.5 text-xs text-slate-500 pl-2 border-l border-slate-200">
+          <div className="hidden lg:flex items-center gap-1.5 text-xs text-slate-500 pl-3 border-l border-slate-200">
             <Clock size={13} className="text-slate-400 shrink-0" />
-            <span>เกณฑ์ On-Time: ปิดงาน (CLOSED) และทำจริงไม่เกินกำหนด</span>
+            <span>เกณฑ์ On-Time: ปิดงาน (CLOSED) และเสร็จภายในกำหนด</span>
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={handleExportPlanCsv}
             data-testid="vcc-export-plan-csv-btn"
-            className="h-8 inline-flex items-center gap-1.5 px-3 rounded-lg bg-white hover:bg-slate-50 text-slate-700 border border-slate-200/90 text-xs font-medium transition-colors shadow-2xs cursor-pointer"
+            className="h-8 inline-flex items-center gap-1.5 px-3 rounded-lg bg-white hover:bg-slate-50 text-slate-700 border border-slate-200/90 text-xs font-semibold transition-colors shadow-2xs cursor-pointer"
           >
             <FileSpreadsheet size={14} className="text-emerald-600 shrink-0" />
             <span>แผน FM-QC-46 (CSV)</span>
@@ -211,7 +202,7 @@ export default function VccDashboardSection({ onNavigateToWorkOrders }) {
             type="button"
             onClick={handleExportWoCsv}
             data-testid="vcc-export-wo-csv-btn"
-            className="h-8 inline-flex items-center gap-1.5 px-3 rounded-lg bg-white hover:bg-slate-50 text-slate-700 border border-slate-200/90 text-xs font-medium transition-colors shadow-2xs cursor-pointer"
+            className="h-8 inline-flex items-center gap-1.5 px-3 rounded-lg bg-white hover:bg-slate-50 text-slate-700 border border-slate-200/90 text-xs font-semibold transition-colors shadow-2xs cursor-pointer"
           >
             <Download size={14} className="text-sky-600 shrink-0" />
             <span>ใบงาน/ใบรับรอง (CSV)</span>
@@ -221,9 +212,9 @@ export default function VccDashboardSection({ onNavigateToWorkOrders }) {
             type="button"
             onClick={() => setSettingsOpen(true)}
             data-testid="vcc-open-notification-settings-btn"
-            className="h-8 inline-flex items-center gap-1.5 px-3 rounded-lg bg-white hover:bg-slate-50 text-slate-700 border border-slate-200/90 text-xs font-medium transition-colors shadow-2xs cursor-pointer"
+            className="h-8 inline-flex items-center gap-1.5 px-3 rounded-lg bg-white hover:bg-slate-50 text-slate-700 border border-slate-200/90 text-xs font-semibold transition-colors shadow-2xs cursor-pointer"
           >
-            <Settings size={14} className="text-slate-400 shrink-0" />
+            <Settings size={14} className="text-slate-500 shrink-0" />
             <span>ตั้งค่าแจ้งเตือน</span>
           </button>
 
@@ -250,123 +241,19 @@ export default function VccDashboardSection({ onNavigateToWorkOrders }) {
         </div>
       )}
 
-      {/* 2. Compact Swiss Metrics Strip */}
-      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-hidden">
-        <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 divide-y sm:divide-y-0 sm:divide-x divide-slate-100">
-          {/* Active Assets */}
-          <div className="p-4 sm:p-5 flex flex-col justify-between">
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-              เครื่องมือปกติ
-            </span>
-            <div className="mt-2 text-2xl sm:text-3xl font-bold font-mono tracking-tight text-slate-900" data-testid="kpi-active-assets">
-              {eq.active_assets ?? 0} <span className="text-xs font-normal text-slate-400 font-sans">/ {eq.total_assets ?? 0}</span>
-            </div>
-            <div className="mt-2 text-xs text-slate-400 font-medium truncate">
-              กลุ่มแม่ {eq.group_count ?? 0} | ปลดออก {eq.retired_assets ?? 0}
-            </div>
-          </div>
-
-          {/* ON_HOLD */}
-          <div className={`p-4 sm:p-5 flex flex-col justify-between transition-colors ${
-            (eq.on_hold_assets ?? 0) > 0 ? 'bg-rose-50/40' : ''
-          }`}>
-            <div className="flex items-center justify-between">
-              <span className={`text-xs font-semibold uppercase tracking-wider ${
-                (eq.on_hold_assets ?? 0) > 0 ? 'text-rose-700' : 'text-slate-500'
-              }`}>
-                ระงับใช้ (ON_HOLD)
-              </span>
-              {(eq.on_hold_assets ?? 0) > 0 && <span className="h-2 w-2 rounded-full bg-rose-500" />}
-            </div>
-            <div className={`mt-2 text-2xl sm:text-3xl font-mono tracking-tight ${
-              (eq.on_hold_assets ?? 0) > 0 ? 'font-bold text-rose-600' : 'font-medium text-slate-300'
-            }`} data-testid="kpi-on-hold-assets">
-              {eq.on_hold_assets ?? 0}
-            </div>
-            <div className={`mt-2 text-xs font-medium truncate ${
-              (eq.on_hold_assets ?? 0) > 0 ? 'text-rose-600' : 'text-slate-400'
-            }`}>
-              ผลไม่ผ่าน (FAIL): {wo.fail_count ?? 0} งาน
-            </div>
-          </div>
-
-          {/* OVERDUE */}
-          <div className={`p-4 sm:p-5 flex flex-col justify-between transition-colors ${
-            (wo.overdue_count ?? 0) > 0 ? 'bg-amber-50/40' : ''
-          }`}>
-            <div className="flex items-center justify-between">
-              <span className={`text-xs font-semibold uppercase tracking-wider ${
-                (wo.overdue_count ?? 0) > 0 ? 'text-amber-800' : 'text-slate-500'
-              }`}>
-                เลยกำหนด (OVERDUE)
-              </span>
-              {(wo.overdue_count ?? 0) > 0 && <span className="h-2 w-2 rounded-full bg-amber-500" />}
-            </div>
-            <div className={`mt-2 text-2xl sm:text-3xl font-mono tracking-tight ${
-              (wo.overdue_count ?? 0) > 0 ? 'font-bold text-amber-700' : 'font-medium text-slate-300'
-            }`} data-testid="kpi-overdue-count">
-              {wo.overdue_count ?? 0}
-            </div>
-            <div className={`mt-2 text-xs font-medium truncate ${
-              (wo.overdue_count ?? 0) > 0 ? 'text-amber-700' : 'text-slate-400'
-            }`}>
-              ใกล้ครบ 7 วัน: {wo.due_in_7_days ?? 0} งาน
-            </div>
-          </div>
-
-          {/* DUE IN 30 DAYS */}
-          <div className="p-4 sm:p-5 flex flex-col justify-between">
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-              ครบใน 30 วัน
-            </span>
-            <div className={`mt-2 text-2xl sm:text-3xl font-mono tracking-tight ${
-              (wo.due_in_30_days ?? 0) > 0 ? 'font-bold text-slate-800' : 'font-medium text-slate-300'
-            }`} data-testid="kpi-due-30-count">
-              {wo.due_in_30_days ?? 0}
-            </div>
-            <div className="mt-2 text-xs text-slate-400 font-medium truncate">
-              ใบงานทั้งหมด {wo.total_work_orders ?? 0}
-            </div>
-          </div>
-
-          {/* PENDING_REVIEW */}
-          <div className="p-4 sm:p-5 flex flex-col justify-between">
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-              รอตรวจรับ
-            </span>
-            <div className={`mt-2 text-2xl sm:text-3xl font-mono tracking-tight ${
-              (wo.pending_review_count ?? 0) > 0 ? 'font-bold text-indigo-700' : 'font-medium text-slate-300'
-            }`} data-testid="kpi-pending-review-count">
-              {wo.pending_review_count ?? 0}
-            </div>
-            <div className="mt-2 text-xs text-slate-400 font-medium truncate">
-              SLA: {dashboard?.notification_settings?.review_sla_days ?? 3} วัน
-            </div>
-          </div>
-
-          {/* COMPLETED / ON-TIME */}
-          <div className="p-4 sm:p-5 flex flex-col justify-between">
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-              ปิดงานแล้ว / ทันกำหนด
-            </span>
-            <div className={`mt-2 text-2xl sm:text-3xl font-mono tracking-tight ${
-              (wo.completed_count ?? 0) > 0 ? 'font-bold text-emerald-700' : 'font-medium text-slate-300'
-            }`} data-testid="kpi-completed-count">
-              {wo.completed_count ?? 0} <span className="text-xs font-semibold font-sans">({wo.on_time_rate ?? 0}%)</span>
-            </div>
-            <div className="mt-2 text-xs text-slate-400 font-medium truncate">
-              ทันกำหนด: {wo.on_time_count ?? 0} | ผ่าน: {wo.pass_count ?? 0}
-            </div>
-          </div>
-        </div>
-      </div>
+      {/* 2. Executive Metrics Strip */}
+      <VccMetricsStrip
+        eq={eq}
+        wo={wo}
+        reviewSlaDays={dashboard?.notification_settings?.review_sla_days ?? 3}
+      />
 
       {/* 3. Actionable Alert Worklist */}
       <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs p-5 sm:p-6 space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b border-slate-100">
           <div>
             <div className="flex items-center gap-2">
-              <Bell size={18} className="text-slate-900 shrink-0" />
+              <Bell size={17} className="text-slate-900 shrink-0" />
               <h2 className="text-base font-bold text-slate-900 tracking-tight">ศูนย์แจ้งเตือนตามกติกา QMS</h2>
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
@@ -385,7 +272,7 @@ export default function VccDashboardSection({ onNavigateToWorkOrders }) {
           )}
         </div>
 
-        {/* Minimal Swiss Underline Tabs */}
+        {/* Compact Segmented Tabs with Underline */}
         <div className="flex flex-wrap gap-4 sm:gap-6 border-b border-slate-100 pt-1">
           {ALERT_TABS.map((t) => {
             const count = countByAlertTab(t.key);
@@ -404,7 +291,7 @@ export default function VccDashboardSection({ onNavigateToWorkOrders }) {
               >
                 <span>{t.label}</span>
                 <span
-                  className={`text-xs font-mono font-medium px-1.5 py-0.5 rounded ${
+                  className={`text-xs font-mono font-medium px-1.5 py-0.2 rounded ${
                     count > 0 && (t.key === 'OVERDUE' || t.key === 'ON_HOLD')
                       ? t.alertBadgeClass
                       : 'bg-slate-100 text-slate-600'
@@ -430,17 +317,15 @@ export default function VccDashboardSection({ onNavigateToWorkOrders }) {
             {filteredAlerts.map((alert) => (
               <div
                 key={alert.dedupe_key}
-                className="py-3.5 px-3 -mx-3 rounded-xl hover:bg-slate-50/80 transition-colors flex flex-col md:flex-row md:items-center md:justify-between gap-3 text-sm"
+                className="py-3 px-2.5 -mx-2.5 rounded-xl hover:bg-slate-50/80 transition-colors flex flex-col md:flex-row md:items-center md:justify-between gap-3 text-sm"
               >
                 <div className="flex items-center gap-2.5 flex-wrap">
                   <span className="font-mono font-bold text-slate-900">{alert.wo_code}</span>
-                  <span className="font-mono text-xs font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded">
+                  <span className="font-mono text-xs font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200/60">
                     {alert.asset_code}
                   </span>
-                  <span className="text-slate-800 font-medium">{alert.asset_name}</span>
-                  <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-600 text-xs font-medium">
-                    {alert.department}
-                  </span>
+                  <span className="text-slate-800 font-medium text-xs sm:text-sm">{alert.asset_name}</span>
+                  <DepartmentBadge department={alert.department} />
                 </div>
                 <div className="flex items-center gap-4 justify-between md:justify-end">
                   <span className="text-slate-600 text-xs sm:text-sm font-medium">{alert.message}</span>
@@ -460,218 +345,37 @@ export default function VccDashboardSection({ onNavigateToWorkOrders }) {
         )}
       </div>
 
-      {/* 4. Analytics Section (Plan vs Actual & Department Breakdown) */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        {/* Monthly Plan vs Actual Matrix */}
-        <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs p-5 sm:p-6 flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-3">
-              <div>
-                <h3 className="text-sm font-bold text-slate-900 tracking-tight">
-                  เปรียบเทียบแผน (Plan) กับปิดงานจริง (Act.) ปี {year}
-                </h3>
-                <p className="text-xs text-slate-500 mt-0.5">FM-QC-46 เป้าหมายรายเดือน เทียบกับงานที่ตรวจเสร็จสิ้น</p>
-              </div>
-              <div className="text-right">
-                <span className="text-xs text-slate-400">เป้าหมายทั้งปี: </span>
-                <span className="text-xs font-mono font-bold text-slate-700">{totalPlanned} งาน</span>
-              </div>
-            </div>
+      {/* 4. Analytics Section (Plan vs Actual Visual Chart & Department Summary) */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+        {/* 12-Month Plan vs Actual Visual Chart */}
+        <VccPlanActualChart
+          monthlyComparison={dashboard?.monthly_comparison || []}
+          year={year}
+        />
 
-            <div className="overflow-x-auto rounded-xl border border-slate-200/70">
-              <table className="w-full text-xs sm:text-sm border-collapse">
-                <thead>
-                  <tr className="bg-slate-50/80 text-slate-600 border-b border-slate-200/70 font-semibold uppercase tracking-wider text-xs">
-                    <th className="py-2.5 px-3 text-left w-24">รายการ</th>
-                    {MONTH_LABELS.map((m, idx) => (
-                      <th key={idx} className="py-2.5 px-1 text-center font-semibold">{m}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 font-mono">
-                  <tr className="hover:bg-slate-50/40 transition-colors">
-                    <td className="py-2.5 px-3 font-semibold text-slate-700 font-sans text-xs whitespace-nowrap">Plan (แผน)</td>
-                    {(dashboard?.monthly_comparison || []).map((row) => (
-                      <td key={row.month} className="py-2.5 px-1 text-center font-medium text-slate-600">
-                        {row.planned || '-'}
-                      </td>
-                    ))}
-                  </tr>
-                  <tr className="hover:bg-slate-50/40 transition-colors">
-                    <td className="py-2.5 px-3 font-semibold text-emerald-700 font-sans text-xs whitespace-nowrap">Act. (ปิดแล้ว)</td>
-                    {(dashboard?.monthly_comparison || []).map((row) => (
-                      <td key={row.month} className="py-2.5 px-1 text-center font-bold text-emerald-700">
-                        {row.actual_closed || '-'}
-                      </td>
-                    ))}
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-
-        {/* Department Summary Table */}
-        <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs p-5 sm:p-6 flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-3">
-              <div>
-                <h3 className="text-sm font-bold text-slate-900 tracking-tight">
-                  สรุปสถานะแยกตามแผนกเจ้าของเครื่องมือ
-                </h3>
-                <p className="text-xs text-slate-500 mt-0.5">แจกแจงจำนวนเครื่องมือและสถานะใบงานตามแผนกรับผิดชอบ</p>
-              </div>
-            </div>
-
-            <div className="overflow-x-auto rounded-xl border border-slate-200/70">
-              <table className="w-full text-xs sm:text-sm border-collapse">
-                <thead>
-                  <tr className="bg-slate-50/80 text-slate-600 border-b border-slate-200/70 font-semibold uppercase tracking-wider text-xs">
-                    <th className="py-2.5 px-3 text-left">แผนก</th>
-                    <th className="py-2.5 px-2 text-right">เครื่องมือ</th>
-                    <th className="py-2.5 px-2 text-right">ใบงานทั้งหมด</th>
-                    <th className="py-2.5 px-2 text-right">ปิดแล้ว</th>
-                    <th className="py-2.5 px-2 text-right">เลยกำหนด</th>
-                    <th className="py-2.5 px-2 text-right">ระงับใช้</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 font-mono text-xs sm:text-sm">
-                  {(dashboard?.department_breakdown || []).length === 0 ? (
-                    <tr>
-                      <td colSpan={6} className="py-8 text-center text-xs text-slate-400 font-sans">
-                        ไม่มีข้อมูลแผนก
-                      </td>
-                    </tr>
-                  ) : (
-                    (dashboard?.department_breakdown || []).map((d) => (
-                      <tr key={d.department} className="hover:bg-slate-50/50 transition-colors">
-                        <td className="py-2.5 px-3 font-bold text-slate-900 font-sans">{d.department}</td>
-                        <td className="py-2.5 px-2 text-right font-medium text-slate-700">{d.asset_count}</td>
-                        <td className="py-2.5 px-2 text-right font-medium text-slate-700">{d.total_work_orders}</td>
-                        <td className="py-2.5 px-2 text-right text-emerald-700 font-bold">{d.closed_work_orders}</td>
-                        <td className="py-2.5 px-2 text-right text-amber-700 font-bold">{d.overdue_work_orders}</td>
-                        <td className="py-2.5 px-2 text-right text-rose-600 font-bold">{d.on_hold_count}</td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
+        {/* Department Summary Compact Visualization */}
+        <VccDepartmentSummary
+          departmentBreakdown={dashboard?.department_breakdown || []}
+        />
       </div>
 
       {/* 5. Notification Settings Modal */}
-      {settingsOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl space-y-4 border border-slate-200/80 animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-base font-bold text-slate-900">ตั้งค่ากติกาวันแจ้งเตือนล่วงหน้าและเลยกำหนด (DCC)</h3>
-                <p className="text-xs text-slate-500 mt-0.5">กำหนดจำนวนวันสำหรับรอบการแจ้งเตือนงานสอบเทียบและ SLA</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setSettingsOpen(false)}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveSettings} className="space-y-3.5 text-sm">
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  งานรายเดือน — แจ้งเตือนล่วงหน้า (วัน คั่นด้วยจุลภาค)
-                </label>
-                <input
-                  type="text"
-                  aria-label="งานรายเดือน แจ้งเตือนล่วงหน้า"
-                  value={monthlyDueSoonText}
-                  onChange={(e) => setMonthlyDueSoonText(e.target.value)}
-                  placeholder="เช่น 7, 3"
-                  className="w-full h-9 rounded-xl border border-slate-200 px-3 text-sm font-medium text-slate-900 focus:outline-hidden focus-visible:ring-2 focus-visible:ring-indigo-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  งานรายเดือน — แจ้งเตือนเมื่อเลยกำหนด (วัน คั่นด้วยจุลภาค)
-                </label>
-                <input
-                  type="text"
-                  aria-label="งานรายเดือน แจ้งเตือนเลยกำหนด"
-                  value={monthlyOverdueText}
-                  onChange={(e) => setMonthlyOverdueText(e.target.value)}
-                  placeholder="เช่น 1, 3, 7"
-                  className="w-full h-9 rounded-xl border border-slate-200 px-3 text-sm font-medium text-slate-900 focus:outline-hidden focus-visible:ring-2 focus-visible:ring-indigo-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  งานรายปี — แจ้งเตือนล่วงหน้า (วัน คั่นด้วยจุลภาค)
-                </label>
-                <input
-                  type="text"
-                  aria-label="งานรายปี แจ้งเตือนล่วงหน้า"
-                  value={annualDueSoonText}
-                  onChange={(e) => setAnnualDueSoonText(e.target.value)}
-                  placeholder="เช่น 30, 14, 7"
-                  className="w-full h-9 rounded-xl border border-slate-200 px-3 text-sm font-medium text-slate-900 focus:outline-hidden focus-visible:ring-2 focus-visible:ring-indigo-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  งานรายปี — แจ้งเตือนเมื่อเลยกำหนด (วัน คั่นด้วยจุลภาค)
-                </label>
-                <input
-                  type="text"
-                  aria-label="งานรายปี แจ้งเตือนเลยกำหนด"
-                  value={annualOverdueText}
-                  onChange={(e) => setAnnualOverdueText(e.target.value)}
-                  placeholder="เช่น 1, 7, 14"
-                  className="w-full h-9 rounded-xl border border-slate-200 px-3 text-sm font-medium text-slate-900 focus:outline-hidden focus-visible:ring-2 focus-visible:ring-indigo-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  SLA รอผู้ตรวจรับ (วัน)
-                </label>
-                <input
-                  type="number"
-                  min={1}
-                  max={60}
-                  aria-label="SLA รอผู้ตรวจรับ"
-                  value={reviewSlaDays}
-                  onChange={(e) => setReviewSlaDays(e.target.value)}
-                  className="w-full h-9 rounded-xl border border-slate-200 px-3 text-sm font-medium text-slate-900 focus:outline-hidden focus-visible:ring-2 focus-visible:ring-indigo-500"
-                />
-              </div>
-
-              <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setSettingsOpen(false)}
-                  className="h-9 px-4 rounded-xl border border-slate-200 text-slate-700 text-xs sm:text-sm font-medium hover:bg-slate-50 cursor-pointer"
-                >
-                  ยกเลิก
-                </button>
-                <button
-                  type="submit"
-                  disabled={savingSettings}
-                  data-testid="vcc-save-notification-settings-btn"
-                  className="h-9 px-5 rounded-xl bg-indigo-600 text-white text-xs sm:text-sm font-medium hover:bg-indigo-700 shadow-xs cursor-pointer disabled:opacity-60 transition-colors"
-                >
-                  {savingSettings ? 'กำลังบันทึก...' : 'บันทึกกติกาแจ้งเตือน'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      <VccNotificationSettingsModal
+        isOpen={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        onSubmit={handleSaveSettings}
+        monthlyDueSoonText={monthlyDueSoonText}
+        setMonthlyDueSoonText={setMonthlyDueSoonText}
+        monthlyOverdueText={monthlyOverdueText}
+        setMonthlyOverdueText={setMonthlyOverdueText}
+        annualDueSoonText={annualDueSoonText}
+        setAnnualDueSoonText={setAnnualDueSoonText}
+        annualOverdueText={annualOverdueText}
+        setAnnualOverdueText={setAnnualOverdueText}
+        reviewSlaDays={reviewSlaDays}
+        setReviewSlaDays={setReviewSlaDays}
+        saving={savingSettings}
+      />
     </div>
   );
 }
