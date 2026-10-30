@@ -104,6 +104,32 @@ export const AssetFormModal = ({
                 * กลุ่มนี้มีเครื่องมือลูกผูกอยู่ ({editingAsset.child_count} รายการ) จึงไม่สามารถเปลี่ยนเป็นเครื่องมือรายตัวได้
               </p>
             )}
+
+            {form.is_group && (
+              <div className="pt-2 border-t border-slate-200/70 mt-2 space-y-1">
+                <label className="block text-xs font-bold text-slate-700">ลักษณะของกลุ่ม</label>
+                <div className="flex flex-wrap gap-3">
+                  <label className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-700 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="group_nature"
+                      checked={form.group_nature !== 'COMPOSITE_SET'}
+                      onChange={() => setForm({ ...form, group_nature: 'LOGICAL_GROUP' })}
+                    />
+                    <span>กลุ่มจัดหมวดหมู่เสมือน (Logical Group — เครื่องมือลูกแยกสอบเทียบ)</span>
+                  </label>
+                  <label className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-700 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="group_nature"
+                      checked={form.group_nature === 'COMPOSITE_SET'}
+                      onChange={() => setForm({ ...form, group_nature: 'COMPOSITE_SET' })}
+                    />
+                    <span>ชุดเครื่องมือจริง (Composite Set — สอบเทียบร่วมกันทั้งชุด)</span>
+                  </label>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

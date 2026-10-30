@@ -48,6 +48,7 @@ const EMPTY_FORM = {
   location: '',
   department: '',
   is_group: false,
+  group_nature: 'LOGICAL_GROUP',
   parent_id: ''
 };
 
@@ -187,6 +188,7 @@ const AssetRegisterPageInner = () => {
       location: asset.location || '',
       department: asset.department || '',
       is_group: Boolean(asset.is_group),
+      group_nature: asset.group_nature || 'LOGICAL_GROUP',
       parent_id: asset.parent_id || ''
     });
     setFormOpen(true);
@@ -206,6 +208,7 @@ const AssetRegisterPageInner = () => {
         location: form.location,
         department: form.department,
         is_group: Boolean(form.is_group),
+        group_nature: form.group_nature || 'LOGICAL_GROUP',
         parent_id: form.is_group ? null : (form.parent_id || null)
       };
       if (editingAsset) {

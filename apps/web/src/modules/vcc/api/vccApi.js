@@ -27,6 +27,7 @@ const INITIAL_LOCAL_ASSETS = [
     location: 'ห้องปฏิบัติการ QC',
     department: 'QC',
     is_group: 0,
+    group_nature: 'LOGICAL_GROUP',
     parent_id: null,
     status: 'ACTIVE',
     retired_reason: null,
@@ -47,6 +48,7 @@ const INITIAL_LOCAL_ASSETS = [
     location: 'ห้องปฏิบัติการ QC',
     department: 'QC',
     is_group: 0,
+    group_nature: 'COMPOSITE_SET',
     parent_id: null,
     status: 'ACTIVE',
     retired_reason: null,
@@ -67,6 +69,7 @@ const INITIAL_LOCAL_ASSETS = [
     location: 'ห้องเย็น F1',
     department: 'QC',
     is_group: 0,
+    group_nature: 'LOGICAL_GROUP',
     parent_id: null,
     status: 'ACTIVE',
     retired_reason: null,
@@ -127,6 +130,7 @@ const INITIAL_LOCAL_ASSETS = [
     location: 'คลังเก็บเครื่องมือปลดระวาง',
     department: 'QC',
     is_group: 0,
+    group_nature: 'COMPOSITE_SET',
     parent_id: null,
     status: 'RETIRED',
     retired_reason: '[ข้อมูลทดสอบ] หน้าจอชำรุด ไม่คุ้มซ่อม',
@@ -446,6 +450,7 @@ export const createVccAsset = async (payload) => {
   const model = String(payload.model || '').trim();
   const location = String(payload.location || '').trim();
   const isGroup = payload.is_group ? 1 : 0;
+  const groupNature = payload.group_nature === 'COMPOSITE_SET' ? 'COMPOSITE_SET' : 'LOGICAL_GROUP';
   const parentId = payload.parent_id ? String(payload.parent_id).trim() : null;
 
   if (!assetCode || !/^[A-Z0-9._/-]{1,50}$/.test(assetCode)) {
@@ -482,6 +487,7 @@ export const createVccAsset = async (payload) => {
     location,
     department,
     is_group: isGroup,
+    group_nature: groupNature,
     parent_id: parentId,
     status: 'ACTIVE',
     retired_reason: null,
@@ -504,6 +510,7 @@ export const createVccAsset = async (payload) => {
     location,
     department,
     is_group: isGroup,
+    group_nature: groupNature,
     parent_id: parentId,
     status: 'ACTIVE'
   });
@@ -532,6 +539,7 @@ export const updateVccAsset = async (id, payload) => {
   const model = payload.model === undefined ? before.model : String(payload.model || '').trim();
   const location = payload.location === undefined ? before.location : String(payload.location || '').trim();
   const isGroup = payload.is_group === undefined ? before.is_group : (payload.is_group ? 1 : 0);
+  const groupNature = payload.group_nature === undefined ? (before.group_nature || 'LOGICAL_GROUP') : (payload.group_nature === 'COMPOSITE_SET' ? 'COMPOSITE_SET' : 'LOGICAL_GROUP');
   const parentId = payload.parent_id === undefined ? before.parent_id : (payload.parent_id ? String(payload.parent_id).trim() : null);
 
   if (!assetCode || !/^[A-Z0-9._/-]{1,50}$/.test(assetCode)) {
@@ -570,6 +578,7 @@ export const updateVccAsset = async (id, payload) => {
     location,
     department,
     is_group: isGroup,
+    group_nature: groupNature,
     parent_id: parentId,
     updated_at: new Date().toISOString(),
     updated_by: user?.id || 'dcc'
@@ -589,6 +598,7 @@ export const updateVccAsset = async (id, payload) => {
       location: before.location,
       department: before.department,
       is_group: before.is_group,
+      group_nature: before.group_nature || 'LOGICAL_GROUP',
       parent_id: before.parent_id
     },
     after: {
@@ -600,6 +610,7 @@ export const updateVccAsset = async (id, payload) => {
       location,
       department,
       is_group: isGroup,
+      group_nature: groupNature,
       parent_id: parentId
     }
   });

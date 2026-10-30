@@ -30,6 +30,7 @@ const ASSET_SELECT = `
     p.asset_code AS parent_asset_code,
     p.name AS parent_name,
     p.status AS parent_status,
+    p.group_nature AS parent_group_nature,
     (SELECT COUNT(*) FROM vcc_assets c WHERE c.parent_id = a.id) AS child_count,
     (SELECT COUNT(*) FROM vcc_assets c WHERE c.parent_id = a.id AND c.status = 'ACTIVE') AS active_child_count
   FROM vcc_assets a
@@ -148,6 +149,7 @@ export const registerVccRoutes = (app, { requireAuth, audit }) => {
     const model = cleanOpt(body.model, 200);
     const location = cleanOpt(body.location, 200);
     const isGroup = body.is_group === true || body.is_group === 1 ? 1 : 0;
+    const groupNature = body.group_nature === 'COMPOSITE_SET' ? 'COMPOSITE_SET' : 'LOGICAL_GROUP';
     const parentId = body.parent_id ? clean(body.parent_id, 100) : null;
 
     if (!assetCode || !ASSET_CODE_RE.test(assetCode)) {
@@ -189,9 +191,9 @@ export const registerVccRoutes = (app, { requireAuth, audit }) => {
     try {
       await db.batch([
         db.prepare(
-          `INSERT INTO vcc_assets (id, asset_code, name, asset_type, serial_no, model, location, department, is_group, parent_id, status, created_by, updated_by)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', ?, ?)`
-        ).bind(id, assetCode, name, assetType, serialNo, model, location, department, isGroup, parentId, user.id, user.id),
+          `INSERT INTO vcc_assets (id, asset_code, name, asset_type, serial_no, model, location, department, is_group, group_nature, parent_id, status, created_by, updated_by)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', ?, ?)`
+        ).bind(id, assetCode, name, assetType, serialNo, model, location, department, isGroup, groupNature, parentId, user.id, user.id),
         audit(db, user.id, 'VCC_ASSET_CREATED', {
           asset_id: id,
           asset_code: assetCode,
@@ -202,6 +204,7 @@ export const registerVccRoutes = (app, { requireAuth, audit }) => {
           location,
           department,
           is_group: isGroup,
+          group_nature: groupNature,
           parent_id: parentId,
           status: 'ACTIVE'
         })
@@ -233,6 +236,9 @@ export const registerVccRoutes = (app, { requireAuth, audit }) => {
     const model = body.model === undefined ? before.model : cleanOpt(body.model, 200);
     const location = body.location === undefined ? before.location : cleanOpt(body.location, 200);
     const isGroup = body.is_group === undefined ? before.is_group : (body.is_group === true || body.is_group === 1 ? 1 : 0);
+    const groupNature = body.group_nature === undefined
+      ? (before.group_nature || 'LOGICAL_GROUP')
+      : (body.group_nature === 'COMPOSITE_SET' ? 'COMPOSITE_SET' : 'LOGICAL_GROUP');
     const parentId = body.parent_id === undefined ? before.parent_id : (body.parent_id ? clean(body.parent_id, 100) : null);
 
     if (!assetCode || !ASSET_CODE_RE.test(assetCode)) {
@@ -295,6 +301,7 @@ export const registerVccRoutes = (app, { requireAuth, audit }) => {
       location: r.location,
       department: r.department,
       is_group: r.is_group,
+      group_nature: r.group_nature || 'LOGICAL_GROUP',
       parent_id: r.parent_id
     });
     const afterSnap = {
@@ -306,6 +313,7 @@ export const registerVccRoutes = (app, { requireAuth, audit }) => {
       location,
       department,
       is_group: isGroup,
+      group_nature: groupNature,
       parent_id: parentId
     };
 
@@ -314,9 +322,9 @@ export const registerVccRoutes = (app, { requireAuth, audit }) => {
         db.prepare(
           `UPDATE vcc_assets
            SET asset_code = ?, name = ?, asset_type = ?, serial_no = ?, model = ?, location = ?,
-               department = ?, is_group = ?, parent_id = ?, updated_at = ${NOW}, updated_by = ?
+               department = ?, is_group = ?, group_nature = ?, parent_id = ?, updated_at = ${NOW}, updated_by = ?
            WHERE id = ?`
-        ).bind(assetCode, name, assetType, serialNo, model, location, department, isGroup, parentId, user.id, id),
+        ).bind(assetCode, name, assetType, serialNo, model, location, department, isGroup, groupNature, parentId, user.id, id),
         audit(db, user.id, 'VCC_ASSET_UPDATED', {
           asset_id: id,
           asset_code: assetCode,
