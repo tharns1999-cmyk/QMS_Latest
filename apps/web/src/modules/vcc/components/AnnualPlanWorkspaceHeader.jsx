@@ -62,10 +62,18 @@ const getNextStepText = (plan, thresholds = {}) => {
       return 'เพิ่มรายการเครื่องมือให้ครบ แล้วส่งทบทวนแผน';
     case 'REJECTED':
       return 'แก้ไขตามเหตุผลที่ส่งกลับ แล้วส่งทบทวนใหม่';
-    case 'PENDING_REVIEW':
-      return `รอผู้ทบทวน (ระดับ L${thresholds.required_reviewer_level || 4} ขึ้นไป)`;
-    case 'PENDING_APPROVAL':
-      return `รอผู้อนุมัติ (ระดับ L${thresholds.required_approver_level || 5} ขึ้นไป)`;
+    case 'PENDING_REVIEW': {
+      const revName = plan.assigned_reviewer_name;
+      return revName
+        ? `รอผู้ทบทวน: ${revName} (ระดับ L${thresholds.required_reviewer_level || 4} ขึ้นไป)`
+        : `รอผู้ทบทวน (ระดับ L${thresholds.required_reviewer_level || 4} ขึ้นไป)`;
+    }
+    case 'PENDING_APPROVAL': {
+      const appName = plan.assigned_approver_name;
+      return appName
+        ? `รอผู้อนุมัติ: ${appName} (ระดับ L${thresholds.required_approver_level || 5} ขึ้นไป)`
+        : `รอผู้อนุมัติ (ระดับ L${thresholds.required_approver_level || 5} ขึ้นไป)`;
+    }
     case 'APPROVED': {
       const by = plan.approved_by_name || plan.approved_by;
       const at = formatThaiDateTime(plan.approved_at);
@@ -284,6 +292,18 @@ export const AnnualPlanWorkspaceHeader = ({
                     <span className="text-slate-300">•</span>
                     <span className="text-slate-500 font-medium">{getDueDateRuleLabel(activePlan.due_date_rule)}</span>
                   </>
+                )}
+
+                {activePlan.status === 'PENDING_REVIEW' && activePlan.assigned_reviewer_name && (
+                  <span className="text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200/80 font-medium">
+                    ผู้ทบทวน: {activePlan.assigned_reviewer_name}
+                  </span>
+                )}
+
+                {activePlan.status === 'PENDING_APPROVAL' && activePlan.assigned_approver_name && (
+                  <span className="text-indigo-800 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200/80 font-medium">
+                    ผู้อนุมัติ: {activePlan.assigned_approver_name}
+                  </span>
                 )}
               </div>
             </div>

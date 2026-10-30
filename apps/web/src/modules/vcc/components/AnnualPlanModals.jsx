@@ -1,5 +1,5 @@
-import React from 'react';
-import { AlertTriangle, CheckCircle2, FolderTree, Trash2, X } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { AlertTriangle, CheckCircle2, FolderTree, Trash2, X, Send, UserCheck, ShieldCheck } from 'lucide-react';
 import { computeDueDates, computeDueDateForMonth } from '../api/vccPlanApi';
 
 const formatThaiDateTime = (iso) => {
@@ -483,6 +483,209 @@ export const PlanWorkflowModal = ({
       </div>
     </div>
   );
+};
+
+const PlanSubmitModalContent = ({
+  open: _open,
+  onClose,
+  plan,
+  masterUsers = [],
+  thresholds = {},
+  currentUser,
+  onSubmit,
+  saving,
+  error
+}) => {
+  const minReviewerLevel = Number(thresholds.required_reviewer_level || 4);
+  const minApproverLevel = Number(thresholds.required_approver_level || 5);
+  const planDept = String(plan.department || 'QC').toUpperCase().trim();
+
+  const isUserEligibleForDept = (u, dept) => {
+    if (!u) return false;
+    if (u.isQmr || Number(u.approval_level || u.level || 0) >= 6) return true;
+    const depts = [
+      u.department, u.dept, u.primary_department, u.primaryDepartment,
+      ...(Array.isArray(u.secondaryDepartments) ? u.secondaryDepartments : []),
+      ...(Array.isArray(u.departments) ? u.departments : []),
+      ...(Array.isArray(u.affiliated_departments) ? u.affiliated_departments : []),
+      ...(Array.isArray(u.depts) ? u.depts : [])
+    ].filter(Boolean).map((d) => String(d).toUpperCase().trim());
+    return depts.some((d) => d === dept);
+  };
+
+  const eligibleReviewers = useMemo(() => {
+    return (masterUsers || []).filter((u) => {
+      if (!u || !u.id || String(u.status || '').toUpperCase() === 'INACTIVE') return false;
+      if (u.id === currentUser?.id) return false; // SoD: ผู้จัดทำห้ามทบทวนงานตนเอง
+      const lvl = Number(u.approval_level || u.level || 0);
+      return lvl >= minReviewerLevel && isUserEligibleForDept(u, planDept);
+    });
+  }, [masterUsers, currentUser, planDept, minReviewerLevel]);
+
+  const [selectedReviewerId, setSelectedReviewerId] = useState(
+    plan.assigned_reviewer_id || eligibleReviewers[0]?.id || ''
+  );
+
+  const eligibleApprovers = useMemo(() => {
+    return (masterUsers || []).filter((u) => {
+      if (!u || !u.id || String(u.status || '').toUpperCase() === 'INACTIVE') return false;
+      if (u.id === currentUser?.id) return false; // SoD: ผู้จัดทำห้ามอนุมัติงานตนเอง
+      if (u.id === selectedReviewerId) return false; // 4-Eyes: ผู้ทบทวนห้ามอนุมัติงานที่ตนทบทวน
+      const lvl = Number(u.approval_level || u.level || 0);
+      return lvl >= minApproverLevel && isUserEligibleForDept(u, planDept);
+    });
+  }, [masterUsers, currentUser, selectedReviewerId, planDept, minApproverLevel]);
+
+  const [selectedApproverId, setSelectedApproverId] = useState(
+    plan.assigned_approver_id || eligibleApprovers[0]?.id || ''
+  );
+
+  useEffect(() => {
+    if (!selectedReviewerId && eligibleReviewers.length > 0) {
+      setSelectedReviewerId(eligibleReviewers[0].id);
+    }
+  }, [eligibleReviewers, selectedReviewerId]);
+
+  useEffect(() => {
+    if ((!selectedApproverId || selectedApproverId === selectedReviewerId) && eligibleApprovers.length > 0) {
+      setSelectedApproverId(eligibleApprovers[0].id);
+    }
+  }, [eligibleApprovers, selectedApproverId, selectedReviewerId]);
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (onSubmit) {
+      onSubmit({ reviewerId: selectedReviewerId, approverId: selectedApproverId });
+    }
+  };
+
+  const hasNoReviewer = eligibleReviewers.length === 0;
+  const hasNoApprover = eligibleApprovers.length === 0;
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-lg w-full overflow-hidden">
+        <div className="px-6 py-4.5 border-b border-slate-200 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
+              <Send size={18} />
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-slate-900 tracking-tight">
+                ส่งแผนประจำปีเข้าสู่กระบวนการทบทวนและอนุมัติ
+              </h2>
+              <p className="text-xs text-slate-500 font-medium">
+                {plan.title} ({plan.document_code} Rev.{plan.revision})
+              </p>
+            </div>
+          </div>
+          <button type="button" onClick={onClose} className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer">
+            <X size={20} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          {error && (
+            <div role="alert" className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-center gap-2">
+              <AlertTriangle size={16} className="text-rose-600 shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
+
+          {/* Controlled Reviewer Picker */}
+          <div className="space-y-1.5">
+            <label className="flex items-center justify-between text-xs font-bold text-slate-700">
+              <span className="flex items-center gap-1.5">
+                <UserCheck size={14} className="text-indigo-600" />
+                ผู้ทบทวนแผน (Reviewer - ขั้นต่ำ L{minReviewerLevel})
+              </span>
+              <span className="text-[11px] font-semibold text-slate-500">แผนก {planDept}</span>
+            </label>
+            {hasNoReviewer ? (
+              <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs">
+                ⚠️ ยังไม่พบผู้ใช้ในแผนก {planDept} หรือผู้มีอำนาจข้ามแผนกที่มีระดับ L{minReviewerLevel}+ กรุณาติดต่อ DCC
+              </div>
+            ) : (
+              <select
+                aria-label="เลือกผู้ทบทวนแผน"
+                value={selectedReviewerId}
+                onChange={(e) => setSelectedReviewerId(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-medium bg-white focus:outline-indigo-500"
+                required
+              >
+                {eligibleReviewers.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name} — {u.position || 'เจ้าหน้าที่'} (L{u.approval_level || u.level || 4}) [{u.department || planDept}]
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+
+          {/* Controlled Approver Picker */}
+          <div className="space-y-1.5">
+            <label className="flex items-center justify-between text-xs font-bold text-slate-700">
+              <span className="flex items-center gap-1.5">
+                <ShieldCheck size={14} className="text-emerald-600" />
+                ผู้อนุมัติแผน (Approver - ขั้นต่ำ L{minApproverLevel})
+              </span>
+              <span className="text-[11px] font-semibold text-slate-500">แผนก {planDept}</span>
+            </label>
+            {hasNoApprover ? (
+              <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs">
+                ⚠️ ยังไม่พบผู้ใช้ในแผนก {planDept} หรือผู้มีอำนาจข้ามแผนกที่มีระดับ L{minApproverLevel}+ กรุณาติดต่อ DCC
+              </div>
+            ) : (
+              <select
+                aria-label="เลือกผู้อนุมัติแผน"
+                value={selectedApproverId}
+                onChange={(e) => setSelectedApproverId(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-medium bg-white focus:outline-indigo-500"
+                required
+              >
+                {eligibleApprovers.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name} — {u.position || 'ผู้จัดการ'} (L{u.approval_level || u.level || 5}) [{u.department || planDept}]
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+
+          <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 text-[11px] text-slate-600 space-y-1">
+            <p className="font-semibold text-slate-800">หลักการควบคุมสายการอนุมัติ (Approval Matrix Governance):</p>
+            <ul className="list-disc list-inside space-y-0.5 pl-1">
+              <li>ผู้จัดทำจะไม่สามารถทบทวนหรืออนุมัติแผนของตนเองได้ (Separation of Duties)</li>
+              <li>ผู้ทบทวนจะไม่สามารถเป็นผู้อนุมัติแผนฉบับเดียวกันได้ (4-Eyes Principle)</li>
+              <li>ผู้รับผิดชอบต้องสังกัดแผนกเจ้าของแผน หรือมีสิทธิ์แผนกรอง/ข้ามแผนกที่ได้รับการรับรอง</li>
+            </ul>
+          </div>
+
+          <div className="pt-2 flex justify-end gap-2.5">
+            <button
+              type="button"
+              onClick={onClose}
+              className="h-9 px-4 rounded-xl border border-slate-300 text-xs font-semibold hover:bg-slate-50 transition-colors cursor-pointer"
+            >
+              ยกเลิก
+            </button>
+            <button
+              type="submit"
+              disabled={saving || hasNoReviewer || hasNoApprover || !selectedReviewerId || !selectedApproverId}
+              className="h-9 px-5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold disabled:opacity-50 transition-colors cursor-pointer shadow-2xs flex items-center gap-1.5"
+            >
+              {saving ? 'กำลังส่งแผน...' : 'ยืนยันส่งทบทวนแผน'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+export const PlanSubmitModal = (props) => {
+  if (!props.open || !props.plan) return null;
+  return <PlanSubmitModalContent {...props} />;
 };
 
 export const GroupWorkOrderModal = ({

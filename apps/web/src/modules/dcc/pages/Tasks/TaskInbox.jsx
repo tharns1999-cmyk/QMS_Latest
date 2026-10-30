@@ -873,7 +873,13 @@ const TaskInbox = () => {
     if (currentUser?.primary_department) list.push(currentUser.primary_department);
     if (currentUser?.department) list.push(currentUser.department);
     if (currentUser?.dept) list.push(currentUser.dept);
-    const sources = [currentUser?.departments, currentUser?.depts, currentUser?.affiliated_departments];
+    const sources = [
+      currentUser?.departments,
+      currentUser?.depts,
+      currentUser?.affiliated_departments,
+      currentUser?.secondaryDepartments,
+      currentUser?.secondary_departments
+    ];
     for (const src of sources) {
       if (Array.isArray(src)) {
         list.push(...src);

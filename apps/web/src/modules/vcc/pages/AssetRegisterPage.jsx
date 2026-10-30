@@ -807,7 +807,7 @@ const AssetRegisterPage = (props) => {
   const inRouter = useInRouterContext();
   if (!inRouter) {
     return (
-      <MemoryRouter initialEntries={['/vcc']}>
+      <MemoryRouter initialEntries={props.initialEntries || ['/vcc']}>
         <AssetRegisterPageInner {...props} />
       </MemoryRouter>
     );

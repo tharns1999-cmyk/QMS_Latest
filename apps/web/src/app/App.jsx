@@ -189,6 +189,18 @@ function App() {
               </ProtectedRoute>
             }
           />
+          <Route
+            path="vcc/tasks"
+            element={
+              <ProtectedRoute
+                requireVcc
+                redirectPath="/portal"
+                deniedToastMessage="เฉพาะผู้ใช้งานแผนก DCC, QC และ QA เท่านั้นที่สามารถเข้าใช้งาน VCC ได้"
+              >
+                {withSuspense(TaskInbox)}
+              </ProtectedRoute>
+            }
+          />
           
           <Route path="dcc">
             <Route index element={<Navigate to="dashboard" replace />} />

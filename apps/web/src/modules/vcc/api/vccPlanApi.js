@@ -215,6 +215,7 @@ export const getUserDepartments = (user) => {
   if (user.department) depts.add(String(user.department).toUpperCase());
   if (user.dept) depts.add(String(user.dept).toUpperCase());
   if (user.primary_department) depts.add(String(user.primary_department).toUpperCase());
+  if (user.primaryDepartment) depts.add(String(user.primaryDepartment).toUpperCase());
 
   const parseList = (val) => {
     if (!val) return;
@@ -236,6 +237,7 @@ export const getUserDepartments = (user) => {
 
   parseList(user.departments);
   parseList(user.depts);
+  parseList(user.secondaryDepartments);
   parseList(user.affiliated_departments);
   return Array.from(depts);
 };
@@ -270,7 +272,8 @@ export const generateLocalVccTasks = (user) => {
   for (const p of allPlans) {
     const isDeptAllowed = isUserAuthorizedForPlanDept(user, p.department);
     if (p.status === 'PENDING_REVIEW') {
-      if (isDeptAllowed && user.id !== p.prepared_by && userLevel >= thresholds.required_reviewer_level) {
+      const isAssigned = p.assigned_reviewer_id ? (user.id === p.assigned_reviewer_id || user.isDcc || user.isQmr || userLevel >= 6) : true;
+      if (isAssigned && isDeptAllowed && user.id !== p.prepared_by && userLevel >= thresholds.required_reviewer_level) {
         tasks.push({
           id: `api-vcc-plan-${p.id}-review`,
           planId: p.id,
@@ -291,13 +294,16 @@ export const generateLocalVccTasks = (user) => {
           required_approval_level: thresholds.required_reviewer_level,
           requesterId: p.prepared_by,
           prepared_by: p.prepared_by,
+          assigneeId: p.assigned_reviewer_id,
+          assignee_id: p.assigned_reviewer_id,
           status: 'PENDING',
           statusTab: 'PENDING_REVIEW',
           createdAt: p.prepared_at || p.created_at
         });
       }
     } else if (p.status === 'PENDING_APPROVAL') {
-      if (isDeptAllowed && user.id !== p.prepared_by && user.id !== p.reviewed_by && userLevel >= thresholds.required_approver_level) {
+      const isAssigned = p.assigned_approver_id ? (user.id === p.assigned_approver_id || user.isDcc || user.isQmr || userLevel >= 6) : true;
+      if (isAssigned && isDeptAllowed && user.id !== p.prepared_by && user.id !== p.reviewed_by && userLevel >= thresholds.required_approver_level) {
         tasks.push({
           id: `api-vcc-plan-${p.id}-approve`,
           planId: p.id,
@@ -318,6 +324,8 @@ export const generateLocalVccTasks = (user) => {
           required_approval_level: thresholds.required_approver_level,
           requesterId: p.prepared_by,
           reviewerId: p.reviewed_by,
+          assigneeId: p.assigned_approver_id,
+          assignee_id: p.assigned_approver_id,
           status: 'PENDING',
           statusTab: 'PENDING_APPROVAL',
           createdAt: p.reviewed_at
@@ -394,11 +402,18 @@ const enrichLocalPlan = (plan, allItems, deptMap) => {
     const a = assets.find((x) => x.id === i.asset_id);
     return a && Number(a.is_group) === 1;
   }).length;
+  const users = useStore.getState().masterUsers || [];
+  const assignedReviewer = users.find((u) => u.id === plan.assigned_reviewer_id);
+  const assignedApprover = users.find((u) => u.id === plan.assigned_approver_id);
   return {
     ...plan,
     department_name_th: deptMap[plan.department] || plan.department,
     item_count: planItems.length,
-    group_item_count: groupCount
+    group_item_count: groupCount,
+    assigned_reviewer_name: plan.assigned_reviewer_name || assignedReviewer?.name || null,
+    assigned_reviewer_position: plan.assigned_reviewer_position || assignedReviewer?.position || null,
+    assigned_approver_name: plan.assigned_approver_name || assignedApprover?.name || null,
+    assigned_approver_position: plan.assigned_approver_position || assignedApprover?.position || null
   };
 };
 
@@ -819,9 +834,21 @@ export const validateVccPlanItemWorkOrder = async (planId, itemId, childAssetId 
   };
 };
 
-export const submitVccPlan = async (planId) => {
+export const submitVccPlan = async (planId, maybeAssignees = {}, maybeApproverId = '') => {
+  let reviewerId = '';
+  let approverId = '';
+  if (typeof maybeAssignees === 'object' && maybeAssignees !== null) {
+    reviewerId = maybeAssignees.reviewerId || maybeAssignees.reviewer_id || '';
+    approverId = maybeAssignees.approverId || maybeAssignees.approver_id || '';
+  } else if (typeof maybeAssignees === 'string') {
+    reviewerId = maybeAssignees;
+    approverId = typeof maybeApproverId === 'string' ? maybeApproverId : '';
+  }
   if (isApiMode) {
-    const { plan } = await apiPost(`/api/vcc/plans/${encodeURIComponent(planId)}/submit`, {});
+    const { plan } = await apiPost(`/api/vcc/plans/${encodeURIComponent(planId)}/submit`, {
+      reviewer_id: reviewerId,
+      approver_id: approverId
+    });
     await syncVccTasks().catch(() => {});
     return plan;
   }
@@ -910,6 +937,10 @@ export const submitVccPlan = async (planId) => {
   }
   setLocalPlanItems(nextPlanItems);
 
+  const users = useStore.getState().masterUsers || [];
+  const assignedReviewer = users.find((u) => u.id === reviewerId);
+  const assignedApprover = users.find((u) => u.id === approverId);
+
   const now = new Date().toISOString();
   const updated = {
     ...plan,
@@ -918,6 +949,12 @@ export const submitVccPlan = async (planId) => {
     prepared_by_name: user.name,
     prepared_by_position: user.position || 'DCC',
     prepared_at: now,
+    assigned_reviewer_id: reviewerId || null,
+    assigned_reviewer_name: assignedReviewer?.name || null,
+    assigned_reviewer_position: assignedReviewer?.position || null,
+    assigned_approver_id: approverId || null,
+    assigned_approver_name: assignedApprover?.name || null,
+    assigned_approver_position: assignedApprover?.position || null,
     reviewed_by: null,
     reviewed_at: null,
     review_comment: null,
@@ -967,6 +1004,9 @@ export const reviewVccPlan = async (planId, comment = '') => {
   const settings = getLocalPlanSettings();
   const thresholds = getLocalThresholds(settings.approval_doc_type);
   const userLevel = Number(user.approval_level ?? user.approvalLevel ?? 4);
+  if (plan.assigned_reviewer_id && user.id !== plan.assigned_reviewer_id && !user.isDcc && !user.isQmr && userLevel < 6) {
+    throw new Error('แผนนี้ถูกมอบหมายให้ผู้ทบทวนรายอื่นดำเนินการ');
+  }
   if (user.id === plan.prepared_by) {
     throw new Error('ผู้จัดทำไม่สามารถทบทวนแผนของตนเองได้');
   }
@@ -1022,6 +1062,9 @@ export const approveVccPlan = async (planId, comment = '') => {
   const settings = getLocalPlanSettings();
   const thresholds = getLocalThresholds(settings.approval_doc_type);
   const userLevel = Number(user.approval_level ?? user.approvalLevel ?? 4);
+  if (plan.assigned_approver_id && user.id !== plan.assigned_approver_id && !user.isDcc && !user.isQmr && userLevel < 6) {
+    throw new Error('แผนนี้ถูกมอบหมายให้ผู้อนุมัติรายอื่นดำเนินการ');
+  }
   if (user.id === plan.prepared_by) {
     throw new Error('ผู้จัดทำไม่สามารถอนุมัติแผนของตนเองได้');
   }
@@ -1102,6 +1145,7 @@ export const rejectVccPlan = async (planId, reason = '') => {
     rejected_by_name: user.name,
     rejected_at: now,
     rejected_reason: trimmedReason,
+    reject_reason: trimmedReason,
     updated_at: now,
     updated_by: user.id
   };

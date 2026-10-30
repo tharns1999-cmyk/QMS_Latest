@@ -38,13 +38,22 @@ export const ProtectedRoute = ({
     currentUser?.isDcc
   );
 
-  const userDepts = [currentUser?.department, ...(currentUser?.depts || [])]
+  const userDepts = [
+    currentUser?.department,
+    currentUser?.dept,
+    currentUser?.primary_department,
+    ...(Array.isArray(currentUser?.depts) ? currentUser.depts : []),
+    ...(Array.isArray(currentUser?.departments) ? currentUser.departments : []),
+    ...(Array.isArray(currentUser?.secondaryDepartments) ? currentUser.secondaryDepartments : []),
+    ...(Array.isArray(currentUser?.affiliated_departments) ? currentUser.affiliated_departments : [])
+  ]
     .filter(Boolean)
     .map((d) => String(d).toUpperCase());
 
   const isVccUser = Boolean(
     currentUser?.isDcc ||
     currentUser?.isQmr ||
+    Number(currentUser?.approval_level || currentUser?.level || 0) >= 6 ||
     userDepts.some((d) => ['DC', 'QC', 'QA'].includes(d))
   );
 

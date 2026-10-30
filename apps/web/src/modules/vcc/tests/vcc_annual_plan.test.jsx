@@ -25,6 +25,30 @@ describe('VCC Phase 2 — Annual Calibration Plan (FM-QC-46) & Approval Workflow
         { code: 'QC', name_th: 'ควบคุมคุณภาพ', status: 'ACTIVE' },
         { code: 'WH', name_th: 'คลังสินค้า', status: 'ACTIVE' }
       ],
+      masterUsers: [
+        {
+          id: 'dc4',
+          name: 'DC หัวหน้า (DCC)',
+          department: 'DC',
+          approval_level: 4,
+          status: 'ACTIVE',
+          isDcc: true
+        },
+        {
+          id: 'qc4',
+          name: 'QC หัวหน้า (L4)',
+          department: 'QC',
+          approval_level: 4,
+          status: 'ACTIVE'
+        },
+        {
+          id: 'qc5',
+          name: 'QC ผู้ช่วยผู้จัดการ (L5)',
+          department: 'QC',
+          approval_level: 5,
+          status: 'ACTIVE'
+        }
+      ],
       approvalMatrix: [
         {
           docType: 'FM',
@@ -91,9 +115,12 @@ describe('VCC Phase 2 — Annual Calibration Plan (FM-QC-46) & Approval Workflow
     fireEvent.click(await screen.findByRole('button', { name: /แผนการทวนสอบประจำปี \(FM-QC-46\)/i }));
     expect(await screen.findByText('ST002')).toBeInTheDocument();
 
-    // 1) Submit plan as dc4 -> moves to PENDING_REVIEW
+    // 1) Submit plan as dc4 -> opens PlanSubmitModal with controlled assignees
     const submitBtn = screen.getByRole('button', { name: 'ส่งทบทวนแผน' });
     fireEvent.click(submitBtn);
+
+    const confirmSubmitBtn = await screen.findByRole('button', { name: 'ยืนยันส่งทบทวนแผน' });
+    fireEvent.click(confirmSubmitBtn);
 
     // Now in PENDING_REVIEW tab
     expect(await screen.findByRole('button', { name: /ยืนยันการทบทวน/i })).toBeInTheDocument();

@@ -34,6 +34,7 @@ import { isApiMode } from '../../api/client';
 import { logout } from '../../api/session';
 import { createPortal } from 'react-dom';
 import ChangePasswordForm from '../auth/ChangePasswordForm';
+import { syncVccTasks } from '../../modules/vcc/api/vccPlanApi';
 
 const Sidebar = () => {
   const navigate = useNavigate();
@@ -92,9 +93,26 @@ const Sidebar = () => {
   const effectiveToday = getEffectiveToday ? getEffectiveToday() : (simulatedSystemDate ? new Date(simulatedSystemDate) : new Date());
   const allDocs = useMemo(() => [...(documents || []), ...(externalDocuments || [])], [documents, externalDocuments]);
 
+  // Sync VCC workflow tasks on mount and when currentUser changes
+  useEffect(() => {
+    syncVccTasks(currentUser).catch(() => {});
+  }, [currentUser]);
+
   // Task Counts Calculations
   const userTasks = (tasks || []).filter(t => isActionableTask(t, currentUser, allDocs, effectiveToday) && !isAssignedToSomeoneElse(t, currentUser));
   const myTaskCount = userTasks.filter(t => t.actionRequired !== false && !t.is_completed && t.status !== 'COMPLETED').length;
+
+  const vccTaskCount = useMemo(() => {
+    return userTasks.filter(t => {
+      const normType = String(t.type || t.taskType || '').toUpperCase();
+      return (
+        t.referenceType === 'VCC_PLAN' ||
+        normType.startsWith('VCC_PLAN_') ||
+        Boolean(t.planId) ||
+        normType.startsWith('VCC_')
+      );
+    }).length;
+  }, [userTasks]);
 
   const ccTaskCount = (controlledCopyInstances || []).filter(inst => {
     const doc = (documents || []).find(d => d.id === (inst.doc_id || inst.docId));
@@ -435,6 +453,16 @@ const Sidebar = () => {
         {/* VCC MODULE NAVIGATION (Shown only when active in VCC module route) */}
         {isVccModule && (
           <>
+            <SectionHeader title="กล่องงาน" />
+            <NavItem
+              to="/vcc/tasks"
+              icon={Inbox}
+              label="งานที่ต้องดำเนินการ"
+              badgeCount={vccTaskCount}
+              badgeColor="amber"
+              pulsePing={vccTaskCount > 0}
+            />
+
             <SectionHeader title="การปฏิบัติงานและภาพรวม" />
             <NavItem
               to="/vcc/dashboard"

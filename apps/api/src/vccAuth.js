@@ -8,10 +8,18 @@ export const VCC_ALLOWED_DEPTS = ['DC', 'QC', 'QA'];
  */
 export const isVccAuthorized = (user) => {
   if (!user) return false;
-  if (user.isDcc || user.isQmr) return true;
-  const userDepts = [user.department, ...(user.depts || [])]
+  if (user.isDcc || user.isQmr || Number(user.approval_level || user.approvalLevel || 0) >= 6) return true;
+  const userDepts = [
+    user.department,
+    user.dept,
+    user.primary_department,
+    ...(Array.isArray(user.depts) ? user.depts : []),
+    ...(Array.isArray(user.departments) ? user.departments : []),
+    ...(Array.isArray(user.secondaryDepartments) ? user.secondaryDepartments : []),
+    ...(Array.isArray(user.affiliated_departments) ? user.affiliated_departments : [])
+  ]
     .filter(Boolean)
-    .map((d) => String(d).toUpperCase());
+    .map((d) => String(d).toUpperCase().trim());
   return userDepts.some((d) => VCC_ALLOWED_DEPTS.includes(d));
 };
 
