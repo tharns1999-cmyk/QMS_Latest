@@ -561,14 +561,28 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
               ? `ยังไม่มีแผนสำหรับปี ${filterYear} (พ.ศ. ${Number(filterYear) + 543}) คุณสามารถสร้างแผนใหม่ได้ทันที`
               : 'เลือกสถานะอื่นจากตัวกรองด้านบน หรือสร้างแผนประจำปีใหม่'}
           </p>
-          <button
-            type="button"
-            onClick={() => openCreatePlan(filterYear)}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold cursor-pointer"
-          >
-            <Plus size={13} />
-            <span>สร้างแผนประจำปีใหม่</span>
-          </button>
+          <div className="flex items-center justify-center gap-2">
+            <button
+              type="button"
+              onClick={() => openCreatePlan(filterYear)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold cursor-pointer"
+            >
+              <Plus size={13} />
+              <span>สร้างแผนประจำปีใหม่</span>
+            </button>
+            {(filterYear || filterDept) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setFilterYear('');
+                  setFilterDept('');
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold cursor-pointer"
+              >
+                <span>ล้างตัวกรอง</span>
+              </button>
+            )}
+          </div>
         </div>
       ) : (
         <div className="space-y-2.5">
@@ -577,6 +591,12 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
             activePlan={activePlan}
             workOrders={planWorkOrders}
             canEditPlan={canEditPlan}
+            filterYear={filterYear}
+            setFilterYear={setFilterYear}
+            availableYears={availableYears}
+            filterDept={filterDept}
+            setFilterDept={setFilterDept}
+            activeDepartments={activeDepartments}
             onOpenAddItem={openAddItem}
             onDeleteItem={handleDeleteItem}
             onOpenGroupWorkOrderCheck={openGroupWorkOrderCheck}
