@@ -61,19 +61,21 @@ describe('VCC FM-QC-46 Registry-Driven Annual Planning Board', () => {
     await openPlanPage();
 
     // Summary cards exist in workspace header
-    expect(screen.getByText(/เครื่องมือในขอบเขต/i)).toBeInTheDocument();
-    expect(screen.getByText(/มีแผนแล้ว/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/เครื่องมือในขอบเขต/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/มีแผนแล้ว/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/ยังไม่มีแผน/i)).toBeInTheDocument();
     expect(screen.getByText(/รอบทวนสอบรวม/i)).toBeInTheDocument();
   });
 
-  it('3. การย่อ/ขยายกลุ่มเครื่องมือ (Expand/Collapse Group) ใน AnnualPlanMatrixTable', () => {
+  it('3. การแสดงผลแบบ Flat Table และการกรองตาม Category (Flat Instrument Planning & Category Filter) ใน AnnualPlanMatrixTable', () => {
     const parentGroup = {
       id: 'GRP-01',
       asset_id: 'ASSET-GRP-01',
       asset_code: 'GRP-SCALE',
       asset_name: 'ชุดเครื่องชั่งประจำไลน์',
+      asset_type: 'เครื่องชั่ง',
       is_group: 1,
+      group_nature: 'LOGICAL_GROUP',
       planned_months: [1, 2],
       due_dates: ['2026-01-31', '2026-02-28']
     };
@@ -82,8 +84,10 @@ describe('VCC FM-QC-46 Registry-Driven Annual Planning Board', () => {
       asset_id: 'ASSET-CH-01',
       asset_code: 'SCALE-01',
       asset_name: 'เครื่องชั่ง 1',
+      asset_type: 'เครื่องชั่ง',
       is_group: 0,
       parent_id: 'ASSET-GRP-01',
+      parent_asset_code: 'GRP-SCALE',
       planned_months: [],
       due_dates: []
     };
@@ -92,38 +96,70 @@ describe('VCC FM-QC-46 Registry-Driven Annual Planning Board', () => {
       asset_id: 'ASSET-CH-02',
       asset_code: 'SCALE-02',
       asset_name: 'เครื่องชั่ง 2',
+      asset_type: 'เครื่องชั่ง',
       is_group: 0,
       parent_id: 'ASSET-GRP-01',
+      parent_asset_code: 'GRP-SCALE',
       planned_months: [],
       due_dates: []
     };
+    const thermometer = {
+      id: 'TH-01',
+      asset_id: 'ASSET-TH-01',
+      asset_code: 'TH-001',
+      asset_name: 'เทอร์โมมิเตอร์ห้องเย็น',
+      asset_type: 'เทอร์โมมิเตอร์',
+      is_group: 0,
+      planned_months: [4],
+      due_dates: ['2026-04-30']
+    };
 
-    render(
+    const { rerender } = render(
       <AnnualPlanMatrixTable
-        planItems={[parentGroup, child1, child2]}
+        planItems={[parentGroup, child1, child2, thermometer]}
         activePlan={{ id: 'PLAN-01', status: 'DRAFT', plan_year: 2026 }}
         workOrders={[]}
         canEditPlan={true}
       />
     );
 
-    // Group and children are visible initially
+    // All instruments are visible in a flat structure without nested tree chevrons
     expect(screen.getAllByText('GRP-SCALE').length).toBeGreaterThan(0);
     expect(screen.getAllByText('SCALE-01').length).toBeGreaterThan(0);
     expect(screen.getAllByText('SCALE-02').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('TH-001').length).toBeGreaterThan(0);
 
-    // Click collapse button
-    const collapseBtn = screen.getByRole('button', { name: /ย่อกลุ่มเครื่องมือ/i });
-    fireEvent.click(collapseBtn);
+    // Children display parent traceability badge cleanly
+    const parentBadges = screen.getAllByText(/กลุ่ม:/);
+    expect(parentBadges.length).toBe(2);
 
-    // Now button switches to expand and children are hidden
-    expect(screen.getByRole('button', { name: /ขยายกลุ่มเครื่องมือ/i })).toBeInTheDocument();
+    // When category filter is set to "เครื่องชั่ง", only scales appear
+    rerender(
+      <AnnualPlanMatrixTable
+        planItems={[parentGroup, child1, child2, thermometer]}
+        activePlan={{ id: 'PLAN-01', status: 'DRAFT', plan_year: 2026 }}
+        workOrders={[]}
+        canEditPlan={true}
+        categoryFilter="เครื่องชั่ง"
+      />
+    );
+    expect(screen.getAllByText('SCALE-01').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('SCALE-02').length).toBeGreaterThan(0);
+    expect(screen.queryByText('TH-001')).not.toBeInTheDocument();
+
+    // When category filter is set to "เทอร์โมมิเตอร์", only thermometer appears
+    rerender(
+      <AnnualPlanMatrixTable
+        planItems={[parentGroup, child1, child2, thermometer]}
+        activePlan={{ id: 'PLAN-01', status: 'DRAFT', plan_year: 2026 }}
+        workOrders={[]}
+        canEditPlan={true}
+        categoryFilter="เทอร์โมมิเตอร์"
+      />
+    );
+    expect(screen.getByText('TH-001')).toBeInTheDocument();
     expect(screen.queryByText('SCALE-01')).not.toBeInTheDocument();
     expect(screen.queryByText('SCALE-02')).not.toBeInTheDocument();
-
-    // Click expand button
-    fireEvent.click(screen.getByRole('button', { name: /ขยายกลุ่มเครื่องมือ/i }));
-    expect(screen.getAllByText('SCALE-01').length).toBeGreaterThan(0);
   });
 
   it('4. ช่องเดือนที่ยังไม่มีแผน คลิกตรงเพื่อเพิ่มรอบเดือนได้ทันที (Direct Month Interaction)', async () => {

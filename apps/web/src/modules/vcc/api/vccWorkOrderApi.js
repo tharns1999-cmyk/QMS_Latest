@@ -194,7 +194,9 @@ export const createVccWorkOrder = async (payload) => {
     const planItem = allPlanItems.find((i) => i.id === planItemId && i.plan_id === planId);
     if (!planItem) throw new Error('ไม่พบรายการเครื่องมือในแผนประจำปี');
     const itemAsset = allAssets.find((a) => a.id === planItem.asset_id);
-    if (Number(itemAsset?.is_group) === 1) {
+    if (Number(itemAsset?.is_group) === 1 && itemAsset?.group_nature === 'COMPOSITE_SET' && !payload.child_asset_id) {
+      targetAssetId = planItem.asset_id;
+    } else if (Number(itemAsset?.is_group) === 1) {
       const childId = String(payload.child_asset_id || '').trim();
       if (!childId) {
         throw new Error('เครื่องมือแบบกลุ่มต้องแยกรหัสเครื่องมือรายตัวก่อนสร้างใบสั่งงาน');
@@ -221,7 +223,7 @@ export const createVccWorkOrder = async (payload) => {
   if (!targetAssetId) throw new Error('กรุณาเลือกเครื่องมือรายตัวสำหรับสร้างใบสั่งงาน');
   const asset = allAssets.find((a) => a.id === targetAssetId);
   if (!asset) throw new Error('ไม่พบเครื่องมือในทะเบียน');
-  if (Number(asset.is_group) === 1) {
+  if (Number(asset.is_group) === 1 && asset.group_nature !== 'COMPOSITE_SET') {
     throw new Error('เครื่องมือแบบกลุ่มต้องแยกรหัสเครื่องมือรายตัวก่อนสร้างใบสั่งงาน');
   }
   if (asset.status !== 'ACTIVE') {

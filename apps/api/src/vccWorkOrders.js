@@ -257,7 +257,7 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
       }
 
       const planItem = await db.prepare(`
-        SELECT i.*, a.is_group, a.asset_code, a.status AS asset_status
+        SELECT i.*, a.is_group, a.group_nature, a.asset_code, a.status AS asset_status
         FROM vcc_annual_plan_items i
         JOIN vcc_assets a ON a.id = i.asset_id
         WHERE i.id = ? AND i.plan_id = ?
@@ -271,7 +271,9 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
         return c.json({ error: `เดือน ${plannedMonth} ไม่ได้อยู่ในตารางแผนของรายการนี้` }, 400);
       }
 
-      if (Number(planItem.is_group) === 1) {
+      if (Number(planItem.is_group) === 1 && planItem.group_nature === 'COMPOSITE_SET' && !body.child_asset_id) {
+        targetAssetId = planItem.asset_id;
+      } else if (Number(planItem.is_group) === 1) {
         const childId = String(body.child_asset_id || '').trim();
         if (!childId) {
           return c.json({ error: 'เครื่องมือแบบกลุ่มต้องแยกรหัสเครื่องมือรายตัวก่อนสร้างใบสั่งงาน' }, 400);
@@ -303,7 +305,7 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
     if (!targetAssetId) return c.json({ error: 'กรุณาเลือกเครื่องมือรายตัวสำหรับสร้างใบสั่งงาน' }, 400);
     const asset = await db.prepare('SELECT * FROM vcc_assets WHERE id = ?').bind(targetAssetId).first();
     if (!asset) return c.json({ error: 'ไม่พบเครื่องมือในทะเบียน' }, 404);
-    if (Number(asset.is_group) === 1) {
+    if (Number(asset.is_group) === 1 && asset.group_nature !== 'COMPOSITE_SET') {
       return c.json({ error: 'เครื่องมือแบบกลุ่มต้องแยกรหัสเครื่องมือรายตัวก่อนสร้างใบสั่งงาน' }, 400);
     }
     if (asset.status !== 'ACTIVE') {

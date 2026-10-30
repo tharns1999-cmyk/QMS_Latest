@@ -1,0 +1,298 @@
+import React from 'react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import useStore from '../../../store/useStore';
+import AnnualPlanMatrixTable from '../components/AnnualPlanMatrixTable';
+import AnnualPlanCategoryChips from '../components/AnnualPlanCategoryChips';
+import { DraftGroupConversionModal } from '../components/AnnualPlanModals';
+import AnnualPlanMonthCell from '../components/AnnualPlanMonthCell';
+import { resetVccLocalStore } from '../api/vccApi';
+
+describe('VCC Category-Based Overview & Flat Instrument Planning Matrix', () => {
+  beforeEach(() => {
+    resetVccLocalStore();
+    useStore.setState({
+      currentUser: {
+        id: 'dc4',
+        name: 'DC หัวหน้า (DCC)',
+        role: 'STAFF',
+        department: 'DC',
+        approval_level: 4,
+        isDcc: true
+      }
+    });
+  });
+
+  const sampleChild1 = {
+    id: 'PI-CH-01',
+    plan_id: 'PLAN-001',
+    asset_id: 'ASSET-CH-01',
+    asset_code: 'V001',
+    asset_name: 'เวอร์เนียร์คาลิปเปอร์ 01',
+    asset_type: 'Vernier Caliper',
+    is_group: 0,
+    parent_id: 'ASSET-GRP-01',
+    parent_asset_code: 'GRP-VERNIER',
+    planned_months: [2],
+    due_dates: ['2026-02-28'],
+    responsible_dept: 'QC',
+    provider_name: 'ทวนสอบภายใน'
+  };
+
+  const sampleChild2 = {
+    id: 'PI-CH-02',
+    plan_id: 'PLAN-001',
+    asset_id: 'ASSET-CH-02',
+    asset_code: 'V002',
+    asset_name: 'เวอร์เนียร์คาลิปเปอร์ 02',
+    asset_type: 'Vernier Caliper',
+    is_group: 0,
+    parent_id: 'ASSET-GRP-01',
+    parent_asset_code: 'GRP-VERNIER',
+    planned_months: [9],
+    due_dates: ['2026-09-30'],
+    responsible_dept: 'QC',
+    provider_name: 'ทวนสอบภายใน'
+  };
+
+  const sampleCompositeSet = {
+    id: 'PI-SW001',
+    plan_id: 'PLAN-001',
+    asset_id: 'ASSET-SW001',
+    asset_code: 'SW001',
+    asset_name: 'ชุดตุ้มน้ำหนักมาตรฐาน Class E2 (1mg - 1kg)',
+    asset_type: 'Standard Weight Set',
+    is_group: 1,
+    group_nature: 'COMPOSITE_SET',
+    is_composite_set: true,
+    is_calibratable_unit: true,
+    planned_months: [5],
+    due_dates: ['2026-05-31'],
+    responsible_dept: 'QC',
+    provider_name: 'ห้องปฏิบัติการภายนอก'
+  };
+
+  const sampleScale = {
+    id: 'PI-SC01',
+    plan_id: 'PLAN-001',
+    asset_id: 'ASSET-SC01',
+    asset_code: 'SC-WH-001',
+    asset_name: 'เครื่องชั่งดิจิทัล 30kg',
+    asset_type: 'Digital Scale',
+    is_group: 0,
+    planned_months: [1, 7],
+    due_dates: ['2026-01-31', '2026-07-31'],
+    responsible_dept: 'QC',
+    provider_name: 'ห้องปฏิบัติการภายนอก'
+  };
+
+  it('1. Flat Table Rendering: Each calibratable unit is an independent row with zero tree chevrons and proper parent/composite badge', () => {
+    const items = [sampleChild1, sampleChild2, sampleCompositeSet, sampleScale];
+
+    render(
+      <AnnualPlanMatrixTable
+        planItems={items}
+        activePlan={{ id: 'PLAN-001', status: 'DRAFT', plan_year: 2026 }}
+        workOrders={[]}
+        canEditPlan={true}
+      />
+    );
+
+    // 1 row per calibratable unit
+    expect(screen.getByText('V001')).toBeInTheDocument();
+    expect(screen.getByText('V002')).toBeInTheDocument();
+    expect(screen.getByText('SW001')).toBeInTheDocument();
+    expect(screen.getByText('SC-WH-001')).toBeInTheDocument();
+
+    // Verify parent badge for child instruments (Traceability intact)
+    const parentBadges = screen.getAllByText(/กลุ่ม:/);
+    expect(parentBadges.length).toBe(2);
+    expect(screen.getAllByText('GRP-VERNIER').length).toBe(2);
+
+    // Verify Composite Set badge
+    expect(screen.getByText('ชุดเครื่องมือ (Composite Set)')).toBeInTheDocument();
+
+    // No tree chevrons (expand/collapse) exist in flat table
+    expect(screen.queryByRole('button', { name: /ขยายกลุ่มเครื่องมือ/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /ย่อกลุ่มเครื่องมือ/i })).toBeNull();
+  });
+
+  it('2. Category Overview: Clean & minimal category chips with accurate separation of instrument units vs cycle counts', () => {
+    const items = [sampleChild1, sampleChild2, sampleCompositeSet, sampleScale];
+    // Work order closing Month 2 of V001
+    const closedWo = {
+      id: 'WO-V001-M2',
+      plan_item_id: 'PI-CH-01',
+      asset_id: 'ASSET-CH-01',
+      planned_month: 2,
+      status: 'CLOSED',
+      result_status: 'PASS',
+      certificate_no: 'CER-2026-001'
+    };
+
+    const onSelectCategory = vi.fn();
+
+    render(
+      <AnnualPlanCategoryChips
+        planItems={items}
+        workOrders={[closedWo]}
+        selectedCategory=""
+        onSelectCategory={onSelectCategory}
+      />
+    );
+
+    // Instruments count: 4 total instruments, all 4 planned, 1 completed (V001 completed all planned cycles)
+    expect(screen.getByText(/เครื่องมือในขอบเขต:/i)).toBeInTheDocument();
+    expect(screen.getAllByText('4').length).toBeGreaterThanOrEqual(1); // total instruments & pending cycles
+
+    // Cycle counts strictly separated:
+    // sampleChild1: 1 cycle (m2)
+    // sampleChild2: 1 cycle (m9)
+    // sampleCompositeSet: 1 cycle (m5)
+    // sampleScale: 2 cycles (m1, m7)
+    // Total planned cycles = 1 + 1 + 1 + 2 = 5
+    // Completed cycles = 1 (closedWo)
+    // Pending cycles = 4
+    expect(screen.getByText(/รอบตามแผน:/i)).toBeInTheDocument();
+    expect(screen.getByText('5')).toBeInTheDocument(); // total planned cycles
+    expect(screen.getByText(/ปิดงานแล้ว:/i)).toBeInTheDocument();
+    expect(screen.getAllByText('1').length).toBeGreaterThanOrEqual(1); // total completed cycles & completed instruments
+    expect(screen.getByText(/ค้างดำเนินการ:/i)).toBeInTheDocument();
+
+    // Verify category chips
+    expect(screen.getByText('Vernier Caliper')).toBeInTheDocument();
+    expect(screen.getByText('Standard Weight Set')).toBeInTheDocument();
+    expect(screen.getByText('Digital Scale')).toBeInTheDocument();
+
+    // Clicking a category chip triggers selection callback
+    fireEvent.click(screen.getByText('Vernier Caliper'));
+    expect(onSelectCategory).toHaveBeenCalledWith('Vernier Caliper');
+  });
+
+  it('3. Approved Plan Historical Freeze: Preserves historical group items without auto-mutation or deletion', () => {
+    const historicalGroup = {
+      id: 'PI-HIST-GRP',
+      plan_id: 'PLAN-APPROVED',
+      asset_id: 'ASSET-GRP-HIST',
+      asset_code: 'GRP-HISTORICAL',
+      asset_name: 'ชุดเครื่องมือประวัติเดิม',
+      is_group: 1,
+      group_nature: 'LOGICAL_GROUP',
+      planned_months: [3, 8],
+      due_dates: ['2026-03-31', '2026-08-31'],
+      responsible_dept: 'QC'
+    };
+
+    render(
+      <AnnualPlanMatrixTable
+        planItems={[historicalGroup, sampleScale]}
+        activePlan={{ id: 'PLAN-APPROVED', status: 'APPROVED', plan_year: 2026 }}
+        workOrders={[]}
+        canEditPlan={false} // Approved plan cannot be edited
+      />
+    );
+
+    // Historical group row is preserved intact in approved view
+    expect(screen.getByText('GRP-HISTORICAL')).toBeInTheDocument();
+    expect(screen.getByText('กลุ่มเครื่องมือ (Group)')).toBeInTheDocument();
+
+    // In approved mode, Edit and Delete buttons are hidden
+    expect(screen.queryByRole('button', { name: /แก้ไขข้อมูลในแผน/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /ลบรายการออกจากแผน/i })).toBeNull();
+  });
+
+  it('4. Draft Group Conversion Modal: Previews child instruments, checks for duplicates, and confirms conversion', async () => {
+    const draftGroup = {
+      id: 'PI-GRP-DRAFT',
+      plan_id: 'PLAN-DRAFT',
+      asset_id: 'ASSET-GRP-01',
+      asset_code: 'GRP-VERNIER',
+      asset_name: 'ชุดเวอร์เนียร์',
+      is_group: 1,
+      group_nature: 'LOGICAL_GROUP',
+      planned_months: [2, 9],
+      is_persisted: 1
+    };
+
+    const activeAssetsInRegister = [
+      { id: 'ASSET-CH-01', asset_code: 'V001', name: 'เวอร์เนียร์ 01', parent_id: 'ASSET-GRP-01', status: 'ACTIVE', department: 'QC' },
+      { id: 'ASSET-CH-02', asset_code: 'V002', name: 'เวอร์เนียร์ 02', parent_id: 'ASSET-GRP-01', status: 'ACTIVE', department: 'QC' }
+    ];
+
+    // Child 1 is already in plan, Child 2 is not
+    const existingPlanItems = [
+      draftGroup,
+      { id: 'PI-V001-EXISTING', asset_id: 'ASSET-CH-01', asset_code: 'V001' }
+    ];
+
+    const onConfirmConvert = vi.fn();
+    const onClose = vi.fn();
+
+    render(
+      <DraftGroupConversionModal
+        open={true}
+        onClose={onClose}
+        groupItem={draftGroup}
+        activeAssets={activeAssetsInRegister}
+        existingPlanItems={existingPlanItems}
+        onConfirmConvert={onConfirmConvert}
+        converting={false}
+      />
+    );
+
+    // Modal title & group identification
+    expect(screen.getByText(/แปลงกลุ่มเครื่องมือเป็นรายการรายตัว/i)).toBeInTheDocument();
+    expect(screen.getByText('GRP-VERNIER')).toBeInTheDocument();
+
+    // Lists both children with duplicate detection
+    expect(screen.getByText('V001')).toBeInTheDocument();
+    expect(screen.getByText('V002')).toBeInTheDocument();
+    expect(screen.getByText(/มีในแผนแล้ว \(จะอัปเดต\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/เพิ่มเข้าแผนใหม่/i)).toBeInTheDocument();
+
+    // Confirm conversion
+    const confirmBtn = screen.getByRole('button', { name: /ยืนยันการแปลง/i });
+    fireEvent.click(confirmBtn);
+
+    expect(onConfirmConvert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        groupItem: draftGroup,
+        childAssets: activeAssetsInRegister,
+        copyMonths: true
+      })
+    );
+  });
+
+  it('5. Floating Overlay Stability: Month cell popover opens with zero layout shift and closes on Escape/Outside Click', async () => {
+    render(
+      <table>
+        <tbody>
+          <tr>
+            <AnnualPlanMonthCell
+              month={2}
+              item={sampleChild1}
+              plan={{ id: 'PLAN-001', status: 'DRAFT', plan_year: 2026 }}
+              workOrders={[]}
+              canEditPlan={true}
+            />
+          </tr>
+        </tbody>
+      </table>
+    );
+
+    // Planned badge P2 is visible
+    const badge = screen.getByText('P2');
+    expect(badge).toBeInTheDocument();
+
+    // Click badge opens floating overlay popover
+    fireEvent.click(badge);
+    expect(screen.getByText(/รอบตามแผนประจำปี/i)).toBeInTheDocument();
+    expect(screen.getByText(/เดือนที่ 2/i)).toBeInTheDocument();
+
+    // Press Escape closes the floating popover
+    fireEvent.keyDown(document, { key: 'Escape' });
+    await waitFor(() => {
+      expect(screen.queryByText(/รอบตามแผนประจำปี/i)).toBeNull();
+    });
+  });
+});

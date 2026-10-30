@@ -407,6 +407,11 @@ const enrichLocalPlanItem = (item, allAssets, deptMap) => {
   const parent = asset.parent_id ? allAssets.find((p) => p.id === asset.parent_id) : null;
   const activeChildren = allAssets.filter((c) => c.parent_id === asset.id && c.status === 'ACTIVE');
   const isGroup = Number(asset.is_group) === 1;
+  const groupNature = asset.group_nature || 'LOGICAL_GROUP';
+  const isLogicalGroup = isGroup && groupNature !== 'COMPOSITE_SET';
+  const isCompositeSet = groupNature === 'COMPOSITE_SET';
+  const isCalibratableUnit = !isLogicalGroup;
+
   const closedWos = readJson('qms-vcc-local-work-orders-v1', () => []).filter(
     (w) => w.plan_item_id === item.id && w.status === 'CLOSED' && w.result_status === 'PASS'
   );
@@ -422,19 +427,24 @@ const enrichLocalPlanItem = (item, allAssets, deptMap) => {
     location: asset.location || '',
     asset_department: asset.department || '',
     is_group: isGroup ? 1 : 0,
+    group_nature: groupNature,
+    is_logical_group: isLogicalGroup,
+    is_composite_set: isCompositeSet,
+    is_calibratable_unit: isCalibratableUnit,
     parent_id: asset.parent_id || null,
     asset_status: asset.status || 'ACTIVE',
     parent_asset_code: parent?.asset_code || null,
     parent_name: parent?.name || null,
+    parent_group_nature: parent?.group_nature || null,
     responsible_dept_name_th: deptMap[item.responsible_dept] || item.responsible_dept,
     active_child_count: activeChildren.length,
     actual_months: actualMonths,
     has_evidence: hasEvidence,
     completion_status: actualMonths.length > 0 ? 'COMPLETED' : 'PLANNED_ONLY',
-    requires_child_selection: isGroup,
-    work_order_ready: !isGroup && asset.status === 'ACTIVE',
-    work_order_block_reason: isGroup
-      ? 'เครื่องมือแบบกลุ่มต้องแยกรหัสเครื่องมือรายตัวก่อนสร้างใบสั่งงาน'
+    requires_child_selection: isLogicalGroup,
+    work_order_ready: isCalibratableUnit && asset.status === 'ACTIVE',
+    work_order_block_reason: isLogicalGroup
+      ? 'เครื่องมือแบบกลุ่มจัดหมวดหมู่ต้องแยกรหัสเครื่องมือรายตัวก่อนสร้างใบสั่งงาน'
       : asset.status !== 'ACTIVE'
         ? 'เครื่องมือไม่ได้อยู่ในสถานะใช้งานปกติ (ACTIVE)'
         : null
@@ -791,7 +801,7 @@ export const validateVccPlanItemWorkOrder = async (planId, itemId, childAssetId 
   const detail = await fetchVccPlanDetail(planId);
   const item = detail.items.find((i) => i.id === itemId);
   if (!item) throw new Error('ไม่พบรายการในแผนประจำปี');
-  if (item.is_group === 1) {
+  if (item.is_group === 1 && item.group_nature !== 'COMPOSITE_SET') {
     if (!childAssetId) {
       throw new Error('เครื่องมือแบบกลุ่มต้องแยกรหัสเครื่องมือรายตัวก่อนสร้างใบสั่งงาน');
     }

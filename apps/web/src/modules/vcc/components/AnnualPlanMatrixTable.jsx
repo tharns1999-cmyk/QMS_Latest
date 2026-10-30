@@ -14,8 +14,6 @@ import {
   AlertTriangle,
   Check,
   X,
-  ChevronDown,
-  ChevronRight,
   ListFilter
 } from 'lucide-react';
 import AnnualPlanMonthCell from './AnnualPlanMonthCell';
@@ -66,6 +64,8 @@ export const AnnualPlanMatrixTable = ({
   filterDept = '',
   setFilterDept,
   activeDepartments = [],
+  categoryFilter = '',
+  selectedCategory = '',
   onOpenAddItem,
   onDeleteItem,
   onOpenGroupWorkOrderCheck,
@@ -80,101 +80,44 @@ export const AnnualPlanMatrixTable = ({
   const [inspectorItem, setInspectorItem] = useState(null);
   const [savingCellKey, setSavingCellKey] = useState('');
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
-  const [collapsedGroupIds, setCollapsedGroupIds] = useState(new Set());
   const [filterOpen, setFilterOpen] = useState(false);
 
   const filterRef = useDismiss(filterOpen, () => setFilterOpen(false));
   const extraFilterCount = (filterYear ? 1 : 0) + (filterDept ? 1 : 0);
+  const activeCategory = (categoryFilter || selectedCategory || '').trim();
 
-  const toggleGroupCollapse = (groupId) => {
-    setCollapsedGroupIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(groupId)) {
-        next.delete(groupId);
-      } else {
-        next.add(groupId);
-      }
-      return next;
-    });
-  };
-
-  const hierarchicalRows = useMemo(() => {
+  // 1 row = 1 Calibratable Instrument Unit (Flat Table)
+  const flatInstrumentRows = useMemo(() => {
     const q = tableSearch.toLowerCase().trim();
-    const matchesFilter = (item) => {
-      if (!q) return true;
-      const code = (item.asset_code || '').toLowerCase();
-      const name = (item.asset_name || '').toLowerCase();
-      const provider = (item.provider_name || '').toLowerCase();
-      const dept = (item.responsible_dept || '').toLowerCase();
-      return code.includes(q) || name.includes(q) || provider.includes(q) || dept.includes(q);
-    };
 
-    const groups = planItems.filter((i) => Number(i.is_group) === 1);
-    const groupAssetIds = new Set(groups.map((g) => g.asset_id || g.id));
-
-    // Map parent_id -> children list
-    const childrenMap = new Map();
-    for (const item of planItems) {
-      if (Number(item.is_group) === 1) continue;
-      if (item.parent_id && groupAssetIds.has(item.parent_id)) {
-        if (!childrenMap.has(item.parent_id)) childrenMap.set(item.parent_id, []);
-        childrenMap.get(item.parent_id).push(item);
+    return planItems.filter((item) => {
+      // 1. Category Filter
+      if (activeCategory) {
+        const itemCat = item.asset_type || 'ไม่ระบุประเภท';
+        if (itemCat !== activeCategory) return false;
       }
-    }
 
-    const rows = [];
-    const renderedChildIds = new Set();
-
-    for (const item of planItems) {
-      const isGroup = Number(item.is_group) === 1;
-      if (isGroup) {
-        const children = [
-          ...(childrenMap.get(item.asset_id) || []),
-          ...(childrenMap.get(item.id) || [])
-        ];
-        const uniqueChildren = Array.from(new Map(children.map((c) => [c.asset_id || c.id, c])).values());
-        const grpMatches = matchesFilter(item);
-        const matchingChildren = uniqueChildren.filter(matchesFilter);
-
-        if (q && !grpMatches && matchingChildren.length === 0) continue;
-
-        const isCollapsed = collapsedGroupIds.has(item.asset_id) || collapsedGroupIds.has(item.id);
-        rows.push({
-          type: 'GROUP',
-          item,
-          childCount: uniqueChildren.length,
-          isCollapsed
-        });
-
-        if (!isCollapsed || (q && matchingChildren.length > 0)) {
-          for (const child of (q ? matchingChildren : uniqueChildren)) {
-            rows.push({
-              type: 'CHILD',
-              item: child,
-              parentItem: item
-            });
-            renderedChildIds.add(child.asset_id || child.id);
-          }
-        } else {
-          for (const child of uniqueChildren) {
-            renderedChildIds.add(child.asset_id || child.id);
-          }
-        }
-      } else {
-        if (renderedChildIds.has(item.asset_id || item.id) || (item.parent_id && groupAssetIds.has(item.parent_id))) {
-          continue;
-        }
-        if (matchesFilter(item)) {
-          rows.push({
-            type: 'STANDALONE',
-            item
-          });
-        }
+      // 2. Search Query Filter
+      if (q) {
+        const code = (item.asset_code || '').toLowerCase();
+        const name = (item.asset_name || '').toLowerCase();
+        const provider = (item.provider_name || '').toLowerCase();
+        const dept = (item.responsible_dept || item.asset_department || '').toLowerCase();
+        const parentCode = (item.parent_asset_code || '').toLowerCase();
+        const itemType = (item.asset_type || '').toLowerCase();
+        const matches =
+          code.includes(q) ||
+          name.includes(q) ||
+          provider.includes(q) ||
+          dept.includes(q) ||
+          parentCode.includes(q) ||
+          itemType.includes(q);
+        if (!matches) return false;
       }
-    }
 
-    return rows;
-  }, [planItems, tableSearch, collapsedGroupIds]);
+      return true;
+    });
+  }, [planItems, tableSearch, activeCategory]);
 
   const handleCellAddMonth = async (item, month) => {
     const key = `${item.id}-${month}`;
@@ -420,7 +363,7 @@ export const AnnualPlanMatrixTable = ({
           </thead>
 
           <tbody className="divide-y divide-slate-100">
-            {hierarchicalRows.length === 0 ? (
+            {flatInstrumentRows.length === 0 ? (
               <tr>
                 <td colSpan={viewMode === '12_MONTHS' ? 15 : 7} className="py-12 text-center text-slate-500 bg-white">
                   <div className="max-w-md mx-auto space-y-3">
@@ -431,6 +374,8 @@ export const AnnualPlanMatrixTable = ({
                       <h4 className="text-sm font-bold text-slate-800">
                         {planItems.length === 0
                           ? 'แผนประจำปีฉบับนี้ยังไม่มีรายการเครื่องมือวัด'
+                          : activeCategory
+                          ? `ไม่พบเครื่องมือในประเภท “${activeCategory}”`
                           : 'ไม่พบเครื่องมือที่ตรงกับคำค้นหา'}
                       </h4>
                       <p className="text-xs text-slate-500 mt-1">
@@ -438,6 +383,8 @@ export const AnnualPlanMatrixTable = ({
                           ? canEditPlan
                             ? 'กดปุ่ม “เพิ่มเครื่องมือจากทะเบียน” ด้านบน เพื่อเลือกเครื่องมือและกำหนดรอบการทวนสอบ'
                             : 'แผนในสถานะนี้ไม่สามารถเพิ่มรายการได้'
+                          : activeCategory
+                          ? `ไม่พบเครื่องมือประเภท "${activeCategory}" ในแผนฉบับนี้`
                           : `ไม่พบข้อมูลที่ตรงกับ "${tableSearch}" ในตาราง`}
                       </p>
                     </div>
@@ -457,10 +404,12 @@ export const AnnualPlanMatrixTable = ({
                 </td>
               </tr>
             ) : (
-              hierarchicalRows.map((row) => {
-                const { type, item, childCount, isCollapsed, parentItem } = row;
-                const isGroup = type === 'GROUP' || Number(item.is_group) === 1;
-                const isChild = type === 'CHILD';
+              flatInstrumentRows.map((item) => {
+                const isGroup = Number(item.is_group) === 1;
+                const isCompositeSet = item.is_composite_set || item.group_nature === 'COMPOSITE_SET';
+                const isLogicalGroup = isGroup && !isCompositeSet;
+                const isChild = Boolean(item.parent_id || item.parent_asset_code);
+
                 const itemWos = (workOrders || []).filter(
                   (w) => w.plan_item_id === item.id || (w.plan_id === activePlan?.id && w.asset_id === item.asset_id)
                 );
@@ -471,38 +420,17 @@ export const AnnualPlanMatrixTable = ({
                 return (
                   <tr
                     key={item.id}
-                    className={`transition-colors group ${
-                      isGroup
-                        ? 'bg-slate-50/80 hover:bg-slate-100/70'
-                        : isChild
-                        ? 'bg-white hover:bg-slate-50/60'
-                        : 'hover:bg-slate-50/60'
+                    className={`transition-colors group hover:bg-slate-50/60 ${
+                      isLogicalGroup ? 'bg-slate-50/50' : 'bg-white'
                     }`}
                   >
-                    {/* Sticky Left: Asset Code & Operation Context */}
+                    {/* Sticky Left: Asset Code & Operation Context (Flat Row, Zero Indentation) */}
                     <td className={`py-2.5 px-3.5 align-middle sticky left-0 z-10 shadow-[1px_0_0_0_#e2e8f0] min-w-[240px] ${
-                      isGroup ? 'bg-slate-50/95' : 'bg-white'
-                    } ${isChild ? 'pl-8' : ''}`}>
+                      isLogicalGroup ? 'bg-slate-50/95' : 'bg-white'
+                    }`}>
                       <div className="flex items-start justify-between gap-2">
                         <div className="space-y-1">
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            {isGroup && childCount > 0 && (
-                              <button
-                                type="button"
-                                onClick={() => toggleGroupCollapse(item.asset_id || item.id)}
-                                aria-label={isCollapsed ? 'ขยายกลุ่มเครื่องมือ' : 'ย่อกลุ่มเครื่องมือ'}
-                                title={isCollapsed ? 'ขยายเพื่อดูเครื่องมือลูก' : 'ย่อรายการเครื่องมือลูก'}
-                                className="p-0.5 rounded text-slate-500 hover:text-slate-900 hover:bg-slate-200/80 transition-colors cursor-pointer"
-                              >
-                                {isCollapsed ? <ChevronRight size={15} /> : <ChevronDown size={15} />}
-                              </button>
-                            )}
-                            {isGroup && (
-                              <FolderTree size={14} className="text-purple-600 shrink-0" />
-                            )}
-                            {isChild && (
-                              <span className="text-slate-400 font-mono text-sm mr-0.5 select-none">↳</span>
-                            )}
                             <button
                               type="button"
                               onClick={() => setInspectorItem(item)}
@@ -511,11 +439,28 @@ export const AnnualPlanMatrixTable = ({
                             >
                               {item.asset_code}
                             </button>
+
                             {item.asset_status === 'ON_HOLD' && (
                               <span className="px-1.5 py-0.5 rounded bg-rose-100 text-rose-800 text-[11px] font-bold border border-rose-200">
                                 ระงับใช้งาน
                               </span>
                             )}
+
+                            {/* Clean Badges: Composite Set / Parent Reference */}
+                            {isCompositeSet ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-teal-50 border border-teal-200 text-teal-800 font-semibold text-xs">
+                                ชุดเครื่องมือ (Composite Set)
+                              </span>
+                            ) : isChild && item.parent_asset_code ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200 text-slate-700 text-xs">
+                                กลุ่ม: <strong className="font-mono font-semibold">{item.parent_asset_code}</strong>
+                              </span>
+                            ) : isLogicalGroup ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-purple-50 border border-purple-200 text-purple-900 font-bold text-xs">
+                                <FolderTree size={12} className="text-purple-600 shrink-0" />
+                                <span>กลุ่มเครื่องมือ (Group)</span>
+                              </span>
+                            ) : null}
                           </div>
 
                           <div className="text-sm font-semibold text-slate-900 leading-snug">
@@ -527,18 +472,19 @@ export const AnnualPlanMatrixTable = ({
                             <span>{item.provider_name || 'ทวนสอบภายใน'}</span>
                             <span>•</span>
                             <span className="text-slate-600">แผนก {item.responsible_dept || item.asset_department}</span>
+                            {item.asset_type && (
+                              <>
+                                <span>•</span>
+                                <span className="text-slate-500 font-medium">{item.asset_type}</span>
+                              </>
+                            )}
                           </div>
 
-                          {isGroup ? (
+                          {isLogicalGroup && onOpenGroupWorkOrderCheck && (
                             <div className="flex flex-wrap items-center gap-2 pt-0.5">
-                              {childCount > 0 && (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-purple-50 border border-purple-200 text-purple-900 font-bold text-xs">
-                                  <span>กลุ่มเครื่องมือ (Group) · {childCount} เครื่องมือลูก</span>
-                                </span>
-                              )}
                               <button
                                 type="button"
-                                onClick={() => onOpenGroupWorkOrderCheck && onOpenGroupWorkOrderCheck(item)}
+                                onClick={() => onOpenGroupWorkOrderCheck(item)}
                                 title="ตรวจรหัสลูกก่อนออกใบงาน"
                                 aria-label="ตรวจรหัสลูกก่อนออกใบงาน"
                                 className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-purple-100/70 hover:bg-purple-200 border border-purple-300 text-purple-950 font-bold text-xs transition-colors cursor-pointer text-left"
@@ -547,11 +493,7 @@ export const AnnualPlanMatrixTable = ({
                                 <span>ตรวจรหัสลูกก่อนออกใบงาน</span>
                               </button>
                             </div>
-                          ) : isChild || item.parent_asset_code ? (
-                            <div className="mt-1 inline-block px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200 text-slate-700 text-xs">
-                              ลูกของกลุ่ม: <span className="font-mono font-semibold">{parentItem?.asset_code || item.parent_asset_code}</span>
-                            </div>
-                          ) : null}
+                          )}
 
                           {plannedMonthsCount === 0 && item.remarks && (
                             <div className="text-xs text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 mt-1 inline-block">
@@ -749,9 +691,10 @@ export const AnnualPlanMatrixTable = ({
       {/* Discrete Table Footer with Legend & Summary (Linear style) */}
       <div className="bg-slate-50/90 border-t border-slate-200/80 px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-600">
         <div>
-          {tableSearch.trim() ? (
+          {tableSearch.trim() || activeCategory ? (
             <>
-              พบ <strong className="text-slate-900">{hierarchicalRows.length}</strong> จาก {planItems.length} รายการ
+              พบ <strong className="text-slate-900">{flatInstrumentRows.length}</strong> จาก {planItems.length} รายการ
+              {activeCategory && <span className="ml-1.5 text-slate-500">(ประเภท: “{activeCategory}”)</span>}
             </>
           ) : (
             <span>รวมทั้งหมด <strong className="text-slate-900">{planItems.length}</strong> รายการเครื่องมือวัด</span>
@@ -772,8 +715,8 @@ export const AnnualPlanMatrixTable = ({
             <span className="text-slate-700 font-medium">✓ (PASS): ปิดงานตรวจรับเสร็จสิ้นแล้ว</span>
           </span>
           <span className="inline-flex items-center gap-1.5">
-            <FolderTree size={13} className="text-purple-700 shrink-0" />
-            <span className="text-purple-900 font-semibold">กลุ่มแม่: ต้องแยกรหัสลูกก่อนออกใบงาน</span>
+            <span className="px-1.5 py-0.5 rounded bg-teal-100 text-teal-800 text-[10px] font-bold">ชุดเครื่องมือ</span>
+            <span className="text-slate-700 font-medium">Composite Set (1 ใบรับรอง)</span>
           </span>
         </div>
       </div>

@@ -128,23 +128,32 @@ const enrichPlanItem = (row, closedWoRows = []) => {
     }
   })();
   const isGroup = Number(row.is_group) === 1;
+  const groupNature = row.group_nature || 'LOGICAL_GROUP';
+  const isLogicalGroup = isGroup && groupNature !== 'COMPOSITE_SET';
+  const isCompositeSet = groupNature === 'COMPOSITE_SET';
+  const isCalibratableUnit = !isLogicalGroup;
+
   const itemWos = closedWoRows.filter((w) => w.plan_item_id === row.id);
   const actualMonths = [...new Set(itemWos.map((w) => Number(w.planned_month)).filter((m) => m >= 1 && m <= 12))].sort((a, b) => a - b);
   const hasEvidence = itemWos.length > 0 && itemWos.every((w) => Boolean(w.certificate_no));
   return {
     ...row,
     is_group: isGroup ? 1 : 0,
+    group_nature: groupNature,
+    is_logical_group: isLogicalGroup,
+    is_composite_set: isCompositeSet,
+    is_calibratable_unit: isCalibratableUnit,
     planned_months: plannedMonths,
     due_dates: dueDates,
     // Highlighted months in the plan are NEVER proof of completion; actual execution requires a CLOSED work order + certificate.
     actual_months: actualMonths,
     has_evidence: hasEvidence,
     completion_status: actualMonths.length > 0 ? 'COMPLETED' : 'PLANNED_ONLY',
-    // Group rows in the plan must be broken down into individual child assets before generating work orders.
-    requires_child_selection: isGroup,
-    work_order_ready: !isGroup && Number(row.active_child_count || 0) >= 0 && row.asset_status === 'ACTIVE',
-    work_order_block_reason: isGroup
-      ? 'เครื่องมือแบบกลุ่มต้องแยกรหัสเครื่องมือรายตัวก่อนสร้างใบสั่งงาน'
+    // Logical group rows in the plan must be broken down into individual child assets before generating work orders.
+    requires_child_selection: isLogicalGroup,
+    work_order_ready: isCalibratableUnit && row.asset_status === 'ACTIVE',
+    work_order_block_reason: isLogicalGroup
+      ? 'เครื่องมือแบบกลุ่มจัดหมวดหมู่ต้องแยกรหัสเครื่องมือรายตัวก่อนสร้างใบสั่งงาน'
       : row.asset_status !== 'ACTIVE'
         ? 'เครื่องมือไม่ได้อยู่ในสถานะใช้งานปกติ (ACTIVE)'
         : null
@@ -164,10 +173,12 @@ const fetchPlanItems = async (db, planId, planObj = null) => {
       a.location,
       a.department AS asset_department,
       a.is_group,
+      a.group_nature,
       a.parent_id,
       a.status AS asset_status,
       p.asset_code AS parent_asset_code,
       p.name AS parent_name,
+      p.group_nature AS parent_group_nature,
       rd.name_th AS responsible_dept_name_th,
       (SELECT COUNT(*) FROM vcc_assets c WHERE c.parent_id = a.id AND c.status = 'ACTIVE') AS active_child_count
     FROM vcc_annual_plan_items i
@@ -194,6 +205,7 @@ const fetchPlanItems = async (db, planId, planObj = null) => {
     SELECT a.*,
       p.asset_code AS parent_asset_code,
       p.name AS parent_name,
+      p.group_nature AS parent_group_nature,
       d.name_th AS department_name_th,
       (SELECT COUNT(*) FROM vcc_assets c WHERE c.parent_id = a.id AND c.status = 'ACTIVE') AS active_child_count
     FROM vcc_assets a
@@ -235,10 +247,12 @@ const fetchPlanItems = async (db, planId, planObj = null) => {
         location: asset.location || '',
         asset_department: asset.department,
         is_group: Number(asset.is_group) === 1 ? 1 : 0,
+        group_nature: asset.group_nature || 'LOGICAL_GROUP',
         parent_id: asset.parent_id || null,
         asset_status: asset.status,
         parent_asset_code: asset.parent_asset_code || null,
         parent_name: asset.parent_name || null,
+        parent_group_nature: asset.parent_group_nature || null,
         responsible_dept_name_th: asset.department_name_th || asset.department,
         active_child_count: asset.active_child_count || 0
       };
@@ -677,7 +691,7 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
     const item = items.find((i) => i.id === itemId);
     if (!item) return c.json({ error: 'ไม่พบรายการในแผนประจำปี' }, 404);
 
-    if (item.is_group === 1) {
+    if (item.is_group === 1 && item.group_nature !== 'COMPOSITE_SET') {
       const childAssetId = clean(body.child_asset_id, 100);
       if (!childAssetId) {
         return c.json({

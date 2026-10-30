@@ -28,10 +28,12 @@ import {
   GroupWorkOrderModal,
   PlanSettingsModal,
   PlanHistoryModal,
-  UnplannedJustificationModal
+  UnplannedJustificationModal,
+  DraftGroupConversionModal
 } from './AnnualPlanModals';
 import AnnualPlanWorkspaceHeader from './AnnualPlanWorkspaceHeader';
 import AnnualPlanMatrixTable from './AnnualPlanMatrixTable';
+import AnnualPlanCategoryChips from './AnnualPlanCategoryChips';
 import SmartAssetImportModal from './SmartAssetImportModal';
 
 const AnnualPlanMatrixSection = ({ activeDepartments }) => {
@@ -114,6 +116,9 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [smartImportOpen, setSmartImportOpen] = useState(false);
   const [justificationModalOpen, setJustificationModalOpen] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState('');
+  const [groupConversionModal, setGroupConversionModal] = useState(null);
+  const [convertingGroup, setConvertingGroup] = useState(false);
 
   const loadPlanWorkOrders = useCallback(async (planId) => {
     if (!planId) {
@@ -511,6 +516,42 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
     return Array.from(yearSet).sort((a, b) => b - a);
   }, [plans, filterYear]);
 
+  const draftLogicalGroupItems = useMemo(() => {
+    if (!canEditPlan) return [];
+    return planItems.filter(
+      (i) => Number(i.is_group) === 1 && i.group_nature !== 'COMPOSITE_SET' && i.is_persisted
+    );
+  }, [canEditPlan, planItems]);
+
+  const handleConfirmConvertGroup = async ({ groupItem, childAssets, copyMonths }) => {
+    if (!planDetail?.plan || !groupItem) return;
+    setConvertingGroup(true);
+    try {
+      if (groupItem.is_persisted && !String(groupItem.id).startsWith('virtual-')) {
+        await deleteVccPlanItem(planDetail.plan.id, groupItem.id);
+      }
+      const monthsToAssign = copyMonths ? (groupItem.planned_months || []) : [];
+      for (const child of childAssets) {
+        await saveVccPlanItem(planDetail.plan.id, {
+          asset_id: child.id,
+          provider_name: groupItem.provider_name || 'ทวนสอบภายใน',
+          frequency_label: groupItem.frequency_label || 'รายปี',
+          planned_months: monthsToAssign,
+          responsible_dept: child.department || groupItem.responsible_dept,
+          responsible_label: groupItem.responsible_label || '',
+          remarks: ''
+        });
+      }
+      toast.success(`แปลงกลุ่ม ${groupItem.asset_code} เป็นเครื่องมือรายตัว ${childAssets.length} รายการแล้ว`);
+      setGroupConversionModal(null);
+      await loadPlansAndMeta(planDetail.plan.id);
+    } catch (err) {
+      toast.error(err.message || 'ไม่สามารถแปลงกลุ่มเครื่องมือได้');
+    } finally {
+      setConvertingGroup(false);
+    }
+  };
+
   return (
     <div className="space-y-3" data-testid="annual-plan-matrix">
       <AnnualPlanWorkspaceHeader
@@ -542,6 +583,24 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
         <div role="alert" className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-center gap-2 shadow-2xs">
           <AlertTriangle size={15} className="text-rose-600 shrink-0" />
           <span>{workflowBannerError}</span>
+        </div>
+      )}
+
+      {draftLogicalGroupItems.length > 0 && (
+        <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex flex-wrap items-center justify-between gap-2 shadow-2xs">
+          <div className="flex items-center gap-2">
+            <AlertTriangle size={15} className="text-amber-600 shrink-0" />
+            <span>
+              พบกลุ่มจัดหมวดหมู่ ({draftLogicalGroupItems.map((g) => g.asset_code).join(', ')}) ในแผนร่าง — สามารถแปลงเป็นรายการเครื่องมือรายตัว (Flat Table) เพื่อให้สามารถออกใบงานและบันทึกผลได้โดยตรง
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setGroupConversionModal(draftLogicalGroupItems[0])}
+            className="px-3 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-semibold transition-colors cursor-pointer shadow-2xs text-xs"
+          >
+            ดูตัวอย่างการแปลงรายการ (Preview)
+          </button>
         </div>
       )}
 
@@ -586,6 +645,13 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
         </div>
       ) : (
         <div className="space-y-2.5">
+          <AnnualPlanCategoryChips
+            planItems={planItems}
+            workOrders={planWorkOrders}
+            selectedCategory={selectedCategory}
+            onSelectCategory={setSelectedCategory}
+          />
+
           <AnnualPlanMatrixTable
             planItems={planItems}
             activePlan={activePlan}
@@ -597,6 +663,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
             filterDept={filterDept}
             setFilterDept={setFilterDept}
             activeDepartments={activeDepartments}
+            selectedCategory={selectedCategory}
             onOpenAddItem={openAddItem}
             onDeleteItem={handleDeleteItem}
             onOpenGroupWorkOrderCheck={openGroupWorkOrderCheck}
@@ -689,6 +756,16 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
         onClose={() => setJustificationModalOpen(false)}
         unplannedItems={(planDetail?.items || []).filter((i) => (i.planned_months || []).length === 0)}
         onSaveJustifications={handleSaveJustifications}
+      />
+
+      <DraftGroupConversionModal
+        open={Boolean(groupConversionModal)}
+        onClose={() => setGroupConversionModal(null)}
+        groupItem={groupConversionModal}
+        activeAssets={activeAssets}
+        existingPlanItems={planItems}
+        onConfirmConvert={handleConfirmConvertGroup}
+        converting={convertingGroup}
       />
     </div>
   );
