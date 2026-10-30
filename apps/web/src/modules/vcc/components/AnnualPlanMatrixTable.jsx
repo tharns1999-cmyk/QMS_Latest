@@ -446,14 +446,10 @@ export const AnnualPlanMatrixTable = ({
                               </span>
                             )}
 
-                            {/* Clean Badges: Composite Set / Parent Reference */}
+                            {/* Clean Badges: Composite Set / Historical Frozen Group */}
                             {isCompositeSet ? (
                               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-teal-50 border border-teal-200 text-teal-800 font-semibold text-xs">
                                 ชุดเครื่องมือ (Composite Set)
-                              </span>
-                            ) : isChild && item.parent_asset_code ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200 text-slate-700 text-xs">
-                                กลุ่ม: <strong className="font-mono font-semibold">{item.parent_asset_code}</strong>
                               </span>
                             ) : isLogicalGroup ? (
                               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-purple-50 border border-purple-200 text-purple-900 font-bold text-xs">

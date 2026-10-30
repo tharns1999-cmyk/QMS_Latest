@@ -97,7 +97,7 @@ describe('VCC Enterprise Navigation & Sidebar Spoke Integration Tests', () => {
       </MemoryRouter>
     );
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /เพิ่มเครื่องมือ \/ กลุ่มเครื่องมือ/i })).toBeTruthy();
+      expect(screen.getByRole('button', { name: /^เพิ่มเครื่องมือ$/i })).toBeTruthy();
     });
   });
 
@@ -109,7 +109,7 @@ describe('VCC Enterprise Navigation & Sidebar Spoke Integration Tests', () => {
     );
 
     // Initial view defaults to ASSETS when rendered at root
-    expect(screen.getByRole('button', { name: /เพิ่มเครื่องมือ \/ กลุ่มเครื่องมือ/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^เพิ่มเครื่องมือ$/i })).toBeTruthy();
 
     // Clicking top switcher buttons switches views
     fireEvent.click(screen.getByRole('button', { name: /ภาพรวมและรายงาน/i }));

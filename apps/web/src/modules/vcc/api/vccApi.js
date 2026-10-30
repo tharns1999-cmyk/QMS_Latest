@@ -90,6 +90,7 @@ const INITIAL_LOCAL_ASSETS = [
     location: 'คลังสินค้า (WH)',
     department: 'WH',
     is_group: 1,
+    group_nature: 'LOGICAL_GROUP',
     parent_id: null,
     status: 'ACTIVE',
     retired_reason: null,
@@ -130,7 +131,7 @@ const INITIAL_LOCAL_ASSETS = [
     location: 'คลังเก็บเครื่องมือปลดระวาง',
     department: 'QC',
     is_group: 0,
-    group_nature: 'COMPOSITE_SET',
+    group_nature: 'LOGICAL_GROUP',
     parent_id: null,
     status: 'RETIRED',
     retired_reason: '[ข้อมูลทดสอบ] หน้าจอชำรุด ไม่คุ้มซ่อม',
@@ -151,6 +152,7 @@ const INITIAL_LOCAL_ASSETS = [
     location: 'ห้องปฏิบัติการ QC',
     department: 'QC',
     is_group: 1,
+    group_nature: 'LOGICAL_GROUP',
     parent_id: null,
     status: 'ACTIVE',
     retired_reason: null,
@@ -384,13 +386,24 @@ export const saveVccAssetTypes = async (assetTypes) => {
   return cleaned;
 };
 
-export const fetchVccAssets = async ({ status = 'ACTIVE', department = '', asset_type = '', parent_id = '', is_group = '', q = '' } = {}) => {
+export const fetchVccAssets = async ({
+  status = 'ACTIVE',
+  department = '',
+  asset_type = '',
+  parent_id = '',
+  is_group = '',
+  calibratable_only = false,
+  logical_groups_only = false,
+  q = ''
+} = {}) => {
   if (isApiMode) {
     const params = new URLSearchParams();
     params.set('status', status);
     if (department) params.set('department', department);
     if (asset_type) params.set('asset_type', asset_type);
     if (parent_id) params.set('parent_id', parent_id);
+    if (calibratable_only) params.set('calibratable_only', '1');
+    if (logical_groups_only) params.set('logical_groups_only', '1');
     if (is_group !== '' && is_group !== undefined && is_group !== null) params.set('is_group', String(is_group));
     if (q) params.set('q', q);
     const { assets } = await apiGet(`/api/vcc/assets?${params.toString()}`);
@@ -405,14 +418,27 @@ export const fetchVccAssets = async ({ status = 'ACTIVE', department = '', asset
     .filter((a) => (!department ? true : a.department === department))
     .filter((a) => (!asset_type ? true : a.asset_type === asset_type))
     .filter((a) => (!parent_id ? true : a.parent_id === parent_id))
-    .filter((a) => (is_group === '' || is_group === undefined || is_group === null ? true : a.is_group === Number(is_group)))
+    .filter((a) => {
+      if (calibratable_only) {
+        return a.is_group === 0 || a.group_nature === 'COMPOSITE_SET';
+      }
+      if (logical_groups_only) {
+        return a.is_group === 1 && (a.group_nature === 'LOGICAL_GROUP' || !a.group_nature);
+      }
+      return is_group === '' || is_group === undefined || is_group === null ? true : a.is_group === Number(is_group);
+    })
     .filter((a) => {
       if (!needle) return true;
       return [a.asset_code, a.name, a.serial_no, a.model, a.location]
         .some((f) => String(f || '').toLowerCase().includes(needle));
     })
     .map((a) => enrichLocalAsset(a, all, deptMap))
-    .sort((a, b) => (b.is_group - a.is_group) || a.asset_code.localeCompare(b.asset_code));
+    .sort((a, b) => {
+      if (calibratable_only) {
+        return a.asset_code.localeCompare(b.asset_code);
+      }
+      return (b.is_group - a.is_group) || a.asset_code.localeCompare(b.asset_code);
+    });
 };
 
 export const fetchVccAssetDetail = async (id) => {

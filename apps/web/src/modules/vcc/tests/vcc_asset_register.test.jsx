@@ -167,7 +167,7 @@ describe('VCC Phase 1 Frontend: Portal Access, Asset Tabs, Mandatory Reason, and
     });
 
     // Click Add asset
-    fireEvent.click(screen.getByRole('button', { name: /เพิ่มเครื่องมือ \/ กลุ่มเครื่องมือ/i }));
+    fireEvent.click(screen.getByRole('button', { name: /เพิ่มเครื่องมือ/i }));
 
     // Fill form with already existing asset_code 'ST002'
     const codeInput = screen.getByPlaceholderText(/เช่น ST002, SW001, TC001/i);
@@ -209,13 +209,16 @@ describe('VCC Phase 1 Frontend: Portal Access, Asset Tabs, Mandatory Reason, and
       </MemoryRouter>
     );
 
+    // Open Logical Group Admin Modal (as DCC user)
+    fireEvent.click(screen.getByRole('button', { name: /จัดการกลุ่มเครื่องมือ/i }));
+
     await waitFor(() => {
       expect(screen.getByText('GRP-SCALE')).toBeInTheDocument();
     });
 
-    // Open detail / history modal for GRP-SCALE
-    const grpRow = screen.getByText('GRP-SCALE').closest('tr');
-    fireEvent.click(within(grpRow).getByRole('button', { name: /ประวัติ/i }));
+    // Open detail / history modal for GRP-SCALE from the logical group admin
+    const grpCard = screen.getByText('GRP-SCALE').closest('div.border');
+    fireEvent.click(within(grpCard).getByTitle('ดูประวัติกลุ่ม'));
 
     await waitFor(() => {
       expect(screen.getByTestId('group-children-active')).toBeInTheDocument();
@@ -251,7 +254,7 @@ describe('VCC Phase 1 Frontend: Portal Access, Asset Tabs, Mandatory Reason, and
       expect(screen.getByText('ST002')).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole('button', { name: /เพิ่มเครื่องมือ \/ กลุ่มเครื่องมือ/i }));
+    fireEvent.click(screen.getByRole('button', { name: /เพิ่มเครื่องมือ/i }));
 
     // Must display message that Master Data departments could not be loaded
     expect(screen.getByText(/ไม่สามารถโหลดแผนกจาก Master Data ได้/i)).toBeInTheDocument();

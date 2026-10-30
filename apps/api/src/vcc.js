@@ -78,6 +78,8 @@ export const registerVccRoutes = (app, { requireAuth, audit }) => {
     const assetType = clean(c.req.query('asset_type'), 100);
     const parentId = clean(c.req.query('parent_id'), 100);
     const isGroupParam = c.req.query('is_group');
+    const calibratableOnly = c.req.query('calibratable_only') === '1' || c.req.query('calibratable_only') === 'true';
+    const logicalGroupsOnly = c.req.query('logical_groups_only') === '1' || c.req.query('logical_groups_only') === 'true';
     const q = clean(c.req.query('q'), 200);
 
     const clauses = ['a.status = ?'];
@@ -95,7 +97,11 @@ export const registerVccRoutes = (app, { requireAuth, audit }) => {
       clauses.push('a.parent_id = ?');
       args.push(parentId);
     }
-    if (isGroupParam === '1' || isGroupParam === '0') {
+    if (calibratableOnly) {
+      clauses.push('(a.is_group = 0 OR a.group_nature = "COMPOSITE_SET")');
+    } else if (logicalGroupsOnly) {
+      clauses.push('(a.is_group = 1 AND (a.group_nature = "LOGICAL_GROUP" OR a.group_nature IS NULL))');
+    } else if (isGroupParam === '1' || isGroupParam === '0') {
       clauses.push('a.is_group = ?');
       args.push(Number(isGroupParam));
     }
@@ -105,7 +111,8 @@ export const registerVccRoutes = (app, { requireAuth, audit }) => {
       args.push(like, like, like, like, like);
     }
 
-    const sql = `${ASSET_SELECT} WHERE ${clauses.join(' AND ')} ORDER BY a.is_group DESC, a.asset_code ASC`;
+    const orderBy = calibratableOnly ? 'a.asset_code ASC' : 'a.is_group DESC, a.asset_code ASC';
+    const sql = `${ASSET_SELECT} WHERE ${clauses.join(' AND ')} ORDER BY ${orderBy}`;
     const { results } = await c.env.DB.prepare(sql).bind(...args).all();
     return c.json({ assets: results });
   });

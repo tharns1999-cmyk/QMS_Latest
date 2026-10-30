@@ -361,7 +361,8 @@ describe('VCC Phase 2: Calibration Schedule Rules, Annual Plan Matrix & Plan App
     const assetCodes = detailBefore.body.items.map((i) => i.asset_code);
     expect(assetCodes).toContain('V001');
     expect(assetCodes).toContain('V002');
-    expect(assetCodes).toContain('GRP-VERNIER-VP');
+    // Logical group container must NOT be auto-loaded as a calibratable plan item (flat instrument-centric)
+    expect(assetCodes).not.toContain('GRP-VERNIER-VP');
     // Retired asset must NOT appear in draft
     expect(assetCodes).not.toContain('OLD-VP-01');
 

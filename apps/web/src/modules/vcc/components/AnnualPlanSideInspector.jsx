@@ -144,6 +144,15 @@ export const AnnualPlanSideInspector = ({
                     <span>แผนก {item.responsible_dept} ({item.responsible_label || '-'})</span>
                   </span>
                 </div>
+                {item.parent_asset_code && (
+                  <div className="col-span-2">
+                    <span className="text-slate-500 block text-xs font-medium">กลุ่มเครื่องมือที่สังกัด (Logical Group)</span>
+                    <span className="font-semibold text-slate-900 text-sm font-mono flex items-center gap-1.5 pt-0.5">
+                      <FolderTree size={13} className="text-purple-600 shrink-0" />
+                      <span>{item.parent_asset_code}</span>
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
 

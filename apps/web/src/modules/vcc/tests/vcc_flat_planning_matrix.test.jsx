@@ -104,10 +104,8 @@ describe('VCC Category-Based Overview & Flat Instrument Planning Matrix', () => 
     expect(screen.getByText('SW001')).toBeInTheDocument();
     expect(screen.getByText('SC-WH-001')).toBeInTheDocument();
 
-    // Verify parent badge for child instruments (Traceability intact)
-    const parentBadges = screen.getAllByText(/กลุ่ม:/);
-    expect(parentBadges.length).toBe(2);
-    expect(screen.getAllByText('GRP-VERNIER').length).toBe(2);
+    // Option B: No parent badge in main table row (traceability visible in inspector)
+    expect(screen.queryByText(/กลุ่ม:/)).toBeNull();
 
     // Verify Composite Set badge
     expect(screen.getByText('ชุดเครื่องมือ (Composite Set)')).toBeInTheDocument();
