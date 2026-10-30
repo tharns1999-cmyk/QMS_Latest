@@ -212,6 +212,7 @@ const fetchPlanItems = async (db, planId, planObj = null) => {
     LEFT JOIN vcc_assets p ON p.id = a.parent_id
     LEFT JOIN departments d ON d.code = a.department
     WHERE a.department = ? AND a.status IN ('ACTIVE', 'ON_HOLD', 'UNDER_REPAIR')
+      AND (a.is_group = 0 OR a.group_nature = 'COMPOSITE_SET')
     ORDER BY a.asset_code ASC
   `).bind(plan.department).all();
 
@@ -757,15 +758,19 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
       return c.json({ error: 'กรุณาเพิ่มรายการเครื่องมือในแผนอย่างน้อย 1 รายการก่อนส่งขออนุมัติ' }, 400);
     }
 
-    // Submission gate: Check for unplanned items without remarks
-    const groupItems = items.filter((i) => Number(i.is_group) === 1);
-    const standaloneItems = items.filter((i) => Number(i.is_group) === 0 && !i.parent_id);
+    // Submission gate: Check for unplanned items without remarks (Calibratable Units must be planned or justified)
+    const groupItems = items.filter((i) => Number(i.is_group) === 1 && i.group_nature !== 'COMPOSITE_SET');
+    const calibratableUnits = items.filter((i) => Number(i.is_group) === 0 || i.group_nature === 'COMPOSITE_SET');
     const unplannedWithoutJustification = [];
 
-    for (const item of standaloneItems) {
+    for (const item of calibratableUnits) {
       const hasPlan = Array.isArray(item.planned_months) && item.planned_months.length > 0;
       const hasRemarks = Boolean(item.remarks && item.remarks.trim());
-      if (!hasPlan && !hasRemarks) {
+      // If item has parent group, check if the parent group is in plan and has plan or remarks (legacy inheritance)
+      const parentInPlan = item.parent_id ? groupItems.find((g) => g.asset_id === item.parent_id || g.id === item.parent_id) : null;
+      const parentCovered = parentInPlan && ((Array.isArray(parentInPlan.planned_months) && parentInPlan.planned_months.length > 0) || Boolean(parentInPlan.remarks && parentInPlan.remarks.trim()));
+
+      if (!hasPlan && !hasRemarks && !parentCovered) {
         unplannedWithoutJustification.push(item);
       }
     }
@@ -786,7 +791,7 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
         for (const ch of children) {
           const chHasPlan = Array.isArray(ch.planned_months) && ch.planned_months.length > 0;
           const chHasRemarks = Boolean(ch.remarks && ch.remarks.trim());
-          if (!chHasPlan && !chHasRemarks) {
+          if (!chHasPlan && !chHasRemarks && !unplannedWithoutJustification.includes(ch)) {
             unplannedWithoutJustification.push(ch);
           }
         }

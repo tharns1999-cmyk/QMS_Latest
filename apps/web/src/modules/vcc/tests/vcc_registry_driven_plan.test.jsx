@@ -129,9 +129,8 @@ describe('VCC FM-QC-46 Registry-Driven Annual Planning Board', () => {
     expect(screen.getAllByText('SCALE-02').length).toBeGreaterThan(0);
     expect(screen.getAllByText('TH-001').length).toBeGreaterThan(0);
 
-    // Children display parent traceability badge cleanly
-    const parentBadges = screen.getAllByText(/กลุ่ม:/);
-    expect(parentBadges.length).toBe(2);
+    // Option B: Flat matrix does not clutter rows with parent group badges
+    expect(screen.queryByText(/กลุ่ม:/)).toBeNull();
 
     // When category filter is set to "เครื่องชั่ง", only scales appear
     rerender(

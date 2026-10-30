@@ -113,7 +113,7 @@ export const registerVccDashboardRoutes = (app, { requireAuth, audit }) => {
 
     const notificationSettings = await loadNotificationSettings(db);
 
-    const { results: assetRows } = await db.prepare('SELECT id, department, is_group, status FROM vcc_assets').all();
+    const { results: assetRows } = await db.prepare('SELECT id, department, is_group, group_nature, status FROM vcc_assets').all();
     const { results: woRows } = await db
       .prepare(
         `SELECT w.*, a.asset_code, a.name AS asset_name, a.department,
@@ -126,14 +126,14 @@ export const registerVccDashboardRoutes = (app, { requireAuth, audit }) => {
       .all();
 
     const onHoldAssetIds = new Set(woRows.filter((w) => w.nc_status === 'OPEN').map((w) => w.asset_id));
-    const individualAssets = assetRows.filter((a) => a.is_group === 0);
-    const activeGroups = assetRows.filter((a) => a.is_group === 1 && a.status === 'ACTIVE');
+    const calibratableAssets = assetRows.filter((a) => a.is_group === 0 || a.group_nature === 'COMPOSITE_SET');
+    const activeGroups = assetRows.filter((a) => a.is_group === 1 && a.group_nature !== 'COMPOSITE_SET' && a.status === 'ACTIVE');
 
     const equipmentKpi = {
-      total_assets: individualAssets.length,
-      active_assets: individualAssets.filter((a) => a.status === 'ACTIVE' && !onHoldAssetIds.has(a.id)).length,
+      total_assets: calibratableAssets.length,
+      active_assets: calibratableAssets.filter((a) => a.status === 'ACTIVE' && !onHoldAssetIds.has(a.id)).length,
       on_hold_assets: onHoldAssetIds.size,
-      retired_assets: individualAssets.filter((a) => a.status === 'RETIRED').length,
+      retired_assets: calibratableAssets.filter((a) => a.status === 'RETIRED').length,
       group_count: activeGroups.length
     };
 
@@ -295,9 +295,9 @@ export const registerVccDashboardRoutes = (app, { requireAuth, audit }) => {
       }
     }
 
-    // Department summary
+    // Department summary (calibratable units)
     const deptMap = new Map();
-    for (const a of individualAssets) {
+    for (const a of calibratableAssets) {
       if (!deptMap.has(a.department)) {
         deptMap.set(a.department, {
           department: a.department,
