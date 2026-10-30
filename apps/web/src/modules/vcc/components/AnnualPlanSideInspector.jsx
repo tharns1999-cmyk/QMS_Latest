@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   X,
   Clock,
@@ -35,7 +36,26 @@ export const AnnualPlanSideInspector = ({
   onDeleteItem,
   onOpenGroupWorkOrderCheck
 }) => {
+  useEffect(() => {
+    if (!item) return;
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        onClose?.();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [item, onClose]);
+
   if (!item) return null;
+  if (typeof document === 'undefined') return null;
 
   const isGroup = Number(item.is_group) === 1;
 
@@ -49,8 +69,8 @@ export const AnnualPlanSideInspector = ({
   const plannedCount = (item.planned_months || []).length;
   const isAllPlannedCompleted = plannedCount > 0 && plannedCount === closedPassWos.length;
 
-  return (
-    <div className="fixed inset-0 z-50 overflow-hidden">
+  return createPortal(
+    <div className="fixed inset-0 z-50 overflow-hidden" role="dialog" aria-modal="true" aria-label="รายละเอียดเครื่องมือวัด">
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-slate-900/40 backdrop-blur-xs transition-opacity"
@@ -362,7 +382,8 @@ export const AnnualPlanSideInspector = ({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 

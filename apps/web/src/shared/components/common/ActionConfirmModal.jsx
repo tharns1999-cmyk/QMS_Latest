@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   CheckCircle, 
   AlertTriangle, 
@@ -71,6 +71,24 @@ const ActionConfirmModal = ({
   const [typedConfirmation, setTypedConfirmation] = useState('');
   const [isSuccess, setIsSuccess] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && !isLoading && !isSubmitting) {
+        onClose?.();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen, isLoading, isSubmitting, onClose]);
 
   // Normalized items
   const items = useMemo(() => {

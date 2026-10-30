@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   CheckCircle2,
   Clock,
@@ -11,6 +11,7 @@ import {
   Trash2
 } from 'lucide-react';
 import { computeDueDateForMonth } from '../api/vccPlanApi';
+import { FloatingOverlay } from '../../../shared/components/ui/FloatingOverlay';
 
 export const THAI_MONTH_NAMES = [
   'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
@@ -39,21 +40,13 @@ export const AnnualPlanMonthCell = ({
   const [isOpen, setIsOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [actionError, setActionError] = useState('');
-  const popoverRef = useRef(null);
+  const cellRef = useRef(null);
 
-  // Close on outside click
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleClickOutside = (e) => {
-      if (popoverRef.current && !popoverRef.current.contains(e.target)) {
-        setIsOpen(false);
-        setConfirmDelete(false);
-        setActionError('');
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [isOpen]);
+  const handleClose = () => {
+    setIsOpen(false);
+    setConfirmDelete(false);
+    setActionError('');
+  };
 
   const isPlanned = (item.planned_months || []).includes(month);
 
@@ -135,13 +128,11 @@ export const AnnualPlanMonthCell = ({
     }
   };
 
-  // Popover placement
-  const popoverAlignment =
-    month <= 3 ? 'left-0' : month >= 10 ? 'right-0' : 'left-1/2 -translate-x-1/2';
   const isCompact = density === 'compact';
 
   return (
     <td
+      ref={cellRef}
       className={`relative text-center border-l border-b border-slate-100 transition-colors select-none ${
         isCompact ? 'py-1 px-0.5' : 'py-2 px-1'
       } ${
@@ -296,13 +287,19 @@ export const AnnualPlanMonthCell = ({
         )}
       </div>
 
-      {/* Contextual Popover */}
-      {isOpen && (
-        <div
-          ref={popoverRef}
-          onClick={(e) => e.stopPropagation()}
-          className={`absolute top-full ${popoverAlignment} mt-1.5 z-50 w-84 sm:w-96 bg-white rounded-xl shadow-xl border border-slate-200/90 p-4 text-left animate-in fade-in zoom-in-95 duration-100`}
-        >
+      {/* Contextual Popover rendered via FloatingPortal into document.body */}
+      <FloatingOverlay
+        isOpen={isOpen}
+        onClose={handleClose}
+        triggerRef={cellRef}
+        placement={month <= 3 ? 'bottom-start' : month >= 10 ? 'bottom-end' : 'bottom-center'}
+        offset={6}
+        viewportPadding={12}
+        zIndex={9999}
+        role="dialog"
+        ariaLabel={`รายละเอียดการทวนสอบเดือน ${month}`}
+        className="w-84 sm:w-96 max-w-[calc(100vw-24px)] bg-white rounded-xl shadow-2xl border border-slate-200/90 p-4 text-left animate-in fade-in zoom-in-95 duration-100 max-h-[85vh] overflow-y-auto"
+      >
           {/* Popover Header */}
           <div className="flex items-center justify-between pb-2.5 border-b border-slate-100">
             <div className="flex items-center gap-2">
@@ -540,8 +537,7 @@ export const AnnualPlanMonthCell = ({
               </>
             )}
           </div>
-        </div>
-      )}
+        </FloatingOverlay>
     </td>
   );
 };

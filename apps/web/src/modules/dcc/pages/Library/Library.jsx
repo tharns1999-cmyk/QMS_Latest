@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import FloatingOverlay from '../../../../shared/components/ui/FloatingOverlay';
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import useStore from '../../../../store/useStore';
 import { 
@@ -74,6 +75,173 @@ export const filterDocumentsByScope = (documents, selectedScope, currentUser) =>
         return true;
     }
   });
+};
+
+const LibraryRowActions = ({
+  primaryDoc,
+  docCode,
+  isDccUser,
+  isOwner,
+  isEffective,
+  isFormDoc,
+  hasActiveCopiesToReport,
+  myDeptActiveCopies,
+  controlledCopyInstances,
+  setReplacementInstance,
+  handleDownloadCleanMaster,
+  handleDownloadExternal,
+  handleRequestAdditionalCopy,
+  handleInitiateRevision,
+  handleInitiateObsolete,
+  isMenuOpen,
+  onToggleMenu,
+  onCloseMenu
+}) => {
+  const triggerRef = useRef(null);
+
+  return (
+    <div className="relative">
+      <button
+        ref={triggerRef}
+        type="button"
+        title="เมนูการจัดการเพิ่มเติม"
+        aria-label="เมนูเพิ่มเติม"
+        onClick={(e) => {
+          e.stopPropagation();
+          onToggleMenu();
+        }}
+        className={`p-1.5 rounded transition-colors cursor-pointer ${
+          isMenuOpen
+            ? 'bg-slate-900 text-white shadow-xs'
+            : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
+        }`}
+      >
+        <MoreHorizontal size={14} />
+      </button>
+
+      {/* Overflow Dropdown Menu */}
+      <FloatingOverlay
+        isOpen={isMenuOpen}
+        onClose={onCloseMenu}
+        triggerRef={triggerRef}
+        placement="bottom-end"
+        offset={6}
+        keepMounted={true}
+        portal={false}
+        className={`overflow-dropdown-menu w-60 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1.5 divide-y divide-slate-100 animate-in fade-in-50 zoom-in-95 duration-100 ${
+          isMenuOpen ? 'block' : 'hidden'
+        }`}
+      >
+        <div onClick={(e) => e.stopPropagation()}>
+          {/* กลุ่มที่ 2: ฟังก์ชัน DCC */}
+          {isDccUser && (
+            <div className="py-1">
+              <button
+                type="button"
+                title="ดาวน์โหลดไฟล์ต้นฉบับแท้โดยไม่มีการประทับลายน้ำ (Clean Master ISO 9001)"
+                onClick={(e) => {
+                  onCloseMenu();
+                  handleDownloadCleanMaster(primaryDoc, e);
+                }}
+                className="w-full px-3.5 py-2 text-left text-xs text-emerald-800 hover:bg-emerald-50 flex items-center gap-2.5 transition-colors font-semibold group cursor-pointer"
+              >
+                <ShieldCheck className="text-emerald-600 shrink-0" size={14} />
+                <span>ดาวน์โหลดต้นฉบับ (ไม่ติดลายน้ำ)</span>
+              </button>
+
+              <button
+                type="button"
+                title="ดาวน์โหลดสำหรับแจกจ่ายภายนอก (External Release)"
+                onClick={(e) => {
+                  onCloseMenu();
+                  handleDownloadExternal(primaryDoc, e);
+                }}
+                className="w-full px-3.5 py-2 text-left text-xs text-slate-700 hover:bg-slate-50 hover:text-emerald-600 flex items-center gap-2.5 transition-colors font-medium group cursor-pointer"
+              >
+                <Globe className="text-slate-400 group-hover:text-emerald-500 shrink-0" size={14} />
+                <span>ดาวน์โหลด External Release</span>
+              </button>
+            </div>
+          )}
+
+          {/* กลุ่มที่ 3: การขอสำเนาควบคุม */}
+          {isOwner && isEffective && !isFormDoc && (
+            <div className="py-1">
+              <button
+                type="button"
+                title="ขอสำเนาควบคุมเพิ่มเติม"
+                onClick={() => {
+                  onCloseMenu();
+                  handleRequestAdditionalCopy(primaryDoc);
+                }}
+                className="w-full px-3.5 py-2 text-left text-xs text-slate-700 hover:bg-slate-50 hover:text-blue-600 flex items-center gap-2.5 transition-colors font-medium group cursor-pointer"
+              >
+                <PlusCircle className="text-blue-500 shrink-0" size={14} />
+                <span>ขอสำเนาควบคุมเพิ่มเติม</span>
+              </button>
+            </div>
+          )}
+
+          {/* กลุ่มที่ 4: DAR Workflow Actions */}
+          {isOwner && isEffective && (
+            <div className="py-1">
+              <button
+                type="button"
+                title="ยื่นคำร้องขอแก้ไขฉบับใหม่"
+                onClick={() => {
+                  onCloseMenu();
+                  handleInitiateRevision(primaryDoc);
+                }}
+                className="w-full px-3.5 py-2 text-left text-xs text-slate-700 hover:bg-amber-50 hover:text-amber-700 flex items-center gap-2.5 transition-colors font-medium group cursor-pointer"
+              >
+                <Edit3 className="text-amber-500 shrink-0" size={14} />
+                <span>ยื่นคำร้องขอแก้ไขฉบับใหม่</span>
+              </button>
+
+              <button
+                type="button"
+                title="ขอยกเลิกเอกสารฉบับนี้"
+                onClick={() => {
+                  onCloseMenu();
+                  handleInitiateObsolete(primaryDoc);
+                }}
+                className="w-full px-3.5 py-2 text-left text-xs text-rose-600 hover:bg-rose-50 flex items-center gap-2.5 transition-colors font-medium group cursor-pointer"
+              >
+                <GitFork className="text-rose-500 shrink-0" size={14} />
+                <span>ขอยกเลิกเอกสารฉบับนี้</span>
+              </button>
+            </div>
+          )}
+
+          {hasActiveCopiesToReport && (
+            <div className="py-1">
+              <button
+                type="button"
+                title="แจ้งเอกสารชำรุด หรือสูญหาย เพื่อขอออกเล่มทดแทน"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onCloseMenu();
+                  const targetCopy = myDeptActiveCopies[0] || (controlledCopyInstances || []).find(c => 
+                    (String(c.docId || c.doc_id) === String(primaryDoc.id) || c.doc_code === docCode) &&
+                    ['ISSUED_ACTIVE', 'ACTIVE'].includes(c.status)
+                  );
+                  if (targetCopy) {
+                    setReplacementInstance(targetCopy);
+                  } else {
+                    toast.error('ไม่พบสำเนาควบคุมที่ใช้งานอยู่สำหรับเอกสารนี้');
+                  }
+                }}
+                className="w-full px-3.5 py-2 text-left text-xs text-rose-600 hover:bg-rose-50 flex items-center gap-2.5 transition-colors font-medium group cursor-pointer"
+              >
+                <AlertTriangle className="text-rose-500 shrink-0" size={14} />
+                <span>แจ้งชำรุด หรือสูญหาย</span>
+              </button>
+            </div>
+          )}
+        </div>
+      </FloatingOverlay>
+    </div>
+  );
 };
 
 const Library = () => {
@@ -1609,140 +1777,26 @@ const Library = () => {
                           )}
 
                           {/* ปุ่มเปิดเมนูเพิ่มเติม (...) */}
-                          <div className="relative">
-                            <button
-                              type="button"
-                              title="เมนูการจัดการเพิ่มเติม"
-                              aria-label="เมนูเพิ่มเติม"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setOpenMenuDocId(isMenuOpen ? null : primaryDoc.id);
-                              }}
-                              className={`p-1.5 rounded transition-colors cursor-pointer ${
-                                isMenuOpen
-                                  ? 'bg-slate-900 text-white shadow-xs'
-                                  : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
-                              }`}
-                            >
-                              <MoreHorizontal size={14} />
-                            </button>
-
-                            {/* Overflow Dropdown Menu */}
-                            <div
-                              onClick={(e) => e.stopPropagation()}
-                              className={`overflow-dropdown-menu absolute right-0 top-full mt-1.5 w-60 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1.5 divide-y divide-slate-100 animate-in fade-in-50 zoom-in-95 duration-100 ${
-                                isMenuOpen ? 'block' : 'hidden'
-                              }`}
-                            >
-
-                              {/* กลุ่มที่ 2: ฟังก์ชัน DCC */}
-                              {isDccUser && (
-                                <div className="py-1">
-                                  <button
-                                    type="button"
-                                    title="ดาวน์โหลดไฟล์ต้นฉบับแท้โดยไม่มีการประทับลายน้ำ (Clean Master ISO 9001)"
-                                    onClick={(e) => {
-                                      setOpenMenuDocId(null);
-                                      handleDownloadCleanMaster(primaryDoc, e);
-                                    }}
-                                    className="w-full px-3.5 py-2 text-left text-xs text-emerald-800 hover:bg-emerald-50 flex items-center gap-2.5 transition-colors font-semibold group cursor-pointer"
-                                  >
-                                    <ShieldCheck className="text-emerald-600 shrink-0" size={14} />
-                                    <span>ดาวน์โหลดต้นฉบับ (ไม่ติดลายน้ำ)</span>
-                                  </button>
-
-                                  <button
-                                    type="button"
-                                    title="ดาวน์โหลดสำหรับแจกจ่ายภายนอก (External Release)"
-                                    onClick={(e) => {
-                                      setOpenMenuDocId(null);
-                                      handleDownloadExternal(primaryDoc, e);
-                                    }}
-                                    className="w-full px-3.5 py-2 text-left text-xs text-slate-700 hover:bg-slate-50 hover:text-emerald-600 flex items-center gap-2.5 transition-colors font-medium group cursor-pointer"
-                                  >
-                                    <Globe className="text-slate-400 group-hover:text-emerald-500 shrink-0" size={14} />
-                                    <span>ดาวน์โหลด External Release</span>
-                                  </button>
-
-                                </div>
-                              )}
-
-                              {/* กลุ่มที่ 3: การขอสำเนาควบคุม */}
-                              {isOwner && isEffective && !isFormDoc && (
-                                <div className="py-1">
-                                  <button
-                                    type="button"
-                                    title="ขอสำเนาควบคุมเพิ่มเติม"
-                                    onClick={() => {
-                                      setOpenMenuDocId(null);
-                                      handleRequestAdditionalCopy(primaryDoc);
-                                    }}
-                                    className="w-full px-3.5 py-2 text-left text-xs text-slate-700 hover:bg-slate-50 hover:text-blue-600 flex items-center gap-2.5 transition-colors font-medium group cursor-pointer"
-                                  >
-                                    <PlusCircle className="text-blue-500 shrink-0" size={14} />
-                                    <span>ขอสำเนาควบคุมเพิ่มเติม</span>
-                                  </button>
-                                </div>
-                              )}
-
-                              {/* กลุ่มที่ 4: DAR Workflow Actions */}
-                              {isOwner && isEffective && (
-                                <div className="py-1">
-                                  <button
-                                    type="button"
-                                    title="ยื่นคำร้องขอแก้ไขฉบับใหม่"
-                                    onClick={() => {
-                                      setOpenMenuDocId(null);
-                                      handleInitiateRevision(primaryDoc);
-                                    }}
-                                    className="w-full px-3.5 py-2 text-left text-xs text-slate-700 hover:bg-amber-50 hover:text-amber-700 flex items-center gap-2.5 transition-colors font-medium group cursor-pointer"
-                                  >
-                                    <Edit3 className="text-amber-500 shrink-0" size={14} />
-                                    <span>ยื่นคำร้องขอแก้ไขฉบับใหม่</span>
-                                  </button>
-
-                                  <button
-                                    type="button"
-                                    title="ขอยกเลิกเอกสารฉบับนี้"
-                                    onClick={() => {
-                                      setOpenMenuDocId(null);
-                                      handleInitiateObsolete(primaryDoc);
-                                    }}
-                                    className="w-full px-3.5 py-2 text-left text-xs text-rose-600 hover:bg-rose-50 flex items-center gap-2.5 transition-colors font-medium group cursor-pointer"
-                                  >
-                                    <GitFork className="text-rose-500 shrink-0" size={14} />
-                                    <span>ขอยกเลิกเอกสารฉบับนี้</span>
-                                  </button>
-                                </div>
-                              )}
-
-                              {hasActiveCopiesToReport && (
-                                <div className="py-1">
-                                  <button
-                                    type="button"
-                                    title="แจ้งเอกสารชำรุด หรือสูญหาย เพื่อขอออกเล่มทดแทน"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setOpenMenuDocId(null);
-                                      const targetCopy = myDeptActiveCopies[0] || (controlledCopyInstances || []).find(c => 
-                                        (String(c.docId || c.doc_id) === String(primaryDoc.id) || c.doc_code === docCode) &&
-                                        ['ISSUED_ACTIVE', 'ACTIVE'].includes(c.status)
-                                      );
-                                      if (targetCopy) {
-                                        setReplacementInstance(targetCopy);
-                                      } else {
-                                        toast.error('ไม่พบสำเนาควบคุมที่ใช้งานอยู่สำหรับเอกสารนี้');
-                                      }
-                                    }}
-                                    className="w-full px-3.5 py-2 text-left text-xs text-rose-600 hover:bg-rose-50 flex items-center gap-2.5 transition-colors font-medium group cursor-pointer"
-                                  >
-                                    <AlertTriangle className="text-rose-500 shrink-0" size={14} />
-                                    <span>แจ้งชำรุด หรือสูญหาย</span>
-                                  </button>
-                                </div>
-                              )}
-                            </div>
-                          </div>
+                          <LibraryRowActions
+                            primaryDoc={primaryDoc}
+                            docCode={docCode}
+                            isDccUser={isDccUser}
+                            isOwner={isOwner}
+                            isEffective={isEffective}
+                            isFormDoc={isFormDoc}
+                            hasActiveCopiesToReport={hasActiveCopiesToReport}
+                            myDeptActiveCopies={myDeptActiveCopies}
+                            controlledCopyInstances={controlledCopyInstances}
+                            setReplacementInstance={setReplacementInstance}
+                            handleDownloadCleanMaster={handleDownloadCleanMaster}
+                            handleDownloadExternal={handleDownloadExternal}
+                            handleRequestAdditionalCopy={handleRequestAdditionalCopy}
+                            handleInitiateRevision={handleInitiateRevision}
+                            handleInitiateObsolete={handleInitiateObsolete}
+                            isMenuOpen={isMenuOpen}
+                            onToggleMenu={() => setOpenMenuDocId(isMenuOpen ? null : primaryDoc.id)}
+                            onCloseMenu={() => setOpenMenuDocId(null)}
+                          />
                         </div>
                       </td>
                     )}

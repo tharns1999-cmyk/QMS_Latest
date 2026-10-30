@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React from 'react';
 import {
   FileCheck2,
   CalendarClock,
@@ -12,6 +12,136 @@ import {
   FilterX,
   MoreHorizontal
 } from 'lucide-react';
+import { FloatingOverlay } from '../../../shared/components/ui/FloatingOverlay';
+
+/**
+ * WorkOrderRowActions - Renders primary action and floating overflow menu for each row
+ * Uses FloatingOverlay (React Portal) to completely eliminate table overflow clipping and layout shift.
+ */
+const WorkOrderRowActions = ({
+  wo,
+  reqApproverLevel,
+  onRecordResult,
+  onApprove,
+  onReleaseHold,
+  onReschedule,
+  onReject,
+  onRowClick
+}) => {
+  const [isMenuOpen, setIsMenuOpen] = React.useState(false);
+  const triggerRef = React.useRef(null);
+
+  const handleClose = () => setIsMenuOpen(false);
+
+  return (
+    <div className="relative inline-flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+      {/* Primary Row Action (ตามสถานะงาน) */}
+      {(wo.status === 'OPEN' || wo.status === 'REJECTED') && (
+        <button
+          type="button"
+          onClick={() => onRecordResult(wo)}
+          className="h-8 inline-flex items-center gap-1.5 px-3 rounded-lg bg-purple-700 text-white font-medium hover:bg-purple-800 transition-colors cursor-pointer text-xs shadow-2xs whitespace-nowrap"
+        >
+          <FileCheck2 size={13} />
+          <span>บันทึกผลและใบรับรอง</span>
+        </button>
+      )}
+
+      {wo.status === 'PENDING_REVIEW' && (
+        <button
+          type="button"
+          onClick={() => onApprove(wo)}
+          className="h-8 inline-flex items-center gap-1.5 px-3 rounded-lg bg-emerald-700 text-white font-medium hover:bg-emerald-800 transition-colors cursor-pointer text-xs shadow-2xs whitespace-nowrap"
+        >
+          <CheckCircle2 size={13} />
+          <span>ตรวจรับปิดงาน</span>
+        </button>
+      )}
+
+      {wo.nc_status === 'OPEN' && (
+        <button
+          type="button"
+          onClick={() => onReleaseHold(wo)}
+          className="h-8 inline-flex items-center gap-1.5 px-3 rounded-lg bg-purple-700 text-white font-medium hover:bg-purple-800 transition-colors cursor-pointer text-xs shadow-2xs whitespace-nowrap"
+        >
+          <ShieldAlert size={13} />
+          <span>ปลดระงับ ON_HOLD (L{reqApproverLevel}+)</span>
+        </button>
+      )}
+
+      {/* Secondary Actions Trigger (More Menu Icon) */}
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={() => setIsMenuOpen((prev) => !prev)}
+        aria-label={`การจัดการเพิ่มเติมสำหรับ ${wo.wo_code}`}
+        aria-haspopup="menu"
+        aria-expanded={isMenuOpen}
+        title="ตัวเลือกเพิ่มเติม"
+        className={`h-8 w-8 rounded-lg border text-slate-500 hover:text-slate-800 hover:bg-slate-100 flex items-center justify-center cursor-pointer transition-colors ${
+          isMenuOpen ? 'border-purple-300 bg-purple-50 text-purple-700' : 'border-slate-200'
+        }`}
+      >
+        <MoreHorizontal size={15} />
+      </button>
+
+      {/* Floating Action Menu rendered outside table overflow via FloatingOverlay */}
+      <FloatingOverlay
+        isOpen={isMenuOpen}
+        onClose={handleClose}
+        triggerRef={triggerRef}
+        placement="bottom-end"
+        offset={4}
+        viewportPadding={8}
+        zIndex={9999}
+        role=""
+        ariaLabel={`การจัดการเพิ่มเติมสำหรับ ${wo.wo_code}`}
+        keepMounted={true}
+        className="min-w-[170px] bg-white rounded-xl shadow-xl border border-slate-200 py-1 text-left animate-in fade-in zoom-in-95 duration-100"
+      >
+        {(wo.status === 'OPEN' || wo.status === 'REJECTED') && (
+          <button
+            type="button"
+            onClick={() => {
+              handleClose();
+              onReschedule(wo);
+            }}
+            className="w-full text-left px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 flex items-center gap-2 transition-colors cursor-pointer"
+          >
+            <CalendarClock size={13} className="text-slate-500" />
+            <span>เลื่อนวันครบกำหนด</span>
+          </button>
+        )}
+
+        {wo.status === 'PENDING_REVIEW' && (
+          <button
+            type="button"
+            onClick={() => {
+              handleClose();
+              onReject(wo);
+            }}
+            className="w-full text-left px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-50 flex items-center gap-2 transition-colors cursor-pointer"
+          >
+            <XCircle size={13} className="text-rose-500" />
+            <span>ส่งกลับแก้ไข</span>
+          </button>
+        )}
+
+        <button
+          type="button"
+          onClick={() => {
+            handleClose();
+            onRowClick(wo);
+          }}
+          className="w-full text-left px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 flex items-center gap-2 border-t border-slate-100 transition-colors cursor-pointer"
+        >
+          <Eye size={13} className="text-slate-500" />
+          <span>ดูรายละเอียดใบสั่งงาน</span>
+        </button>
+      </FloatingOverlay>
+    </div>
+  );
+};
 
 export const WorkOrderTable = ({
   workOrders = [],
@@ -31,23 +161,6 @@ export const WorkOrderTable = ({
   onOpenCreate
 }) => {
   const reqApproverLevel = thresholds.required_approver_level ?? 5;
-  const [activeMenuWoId, setActiveMenuWoId] = useState(null);
-  const menuRef = useRef(null);
-
-  // Close more menu when clicking outside
-  useEffect(() => {
-    const handleOutsideClick = (e) => {
-      if (menuRef.current && !menuRef.current.contains(e.target)) {
-        setActiveMenuWoId(null);
-      }
-    };
-    document.addEventListener('mousedown', handleOutsideClick);
-    return () => document.removeEventListener('mousedown', handleOutsideClick);
-  }, []);
-
-  const toggleMenu = (woId) => {
-    setActiveMenuWoId((prev) => (prev === woId ? null : woId));
-  };
 
   if (loading) {
     return (
@@ -179,7 +292,7 @@ export const WorkOrderTable = ({
   };
 
   return (
-    <div className="w-full bg-white rounded-xl border border-slate-200 shadow-2xs overflow-x-auto min-h-[300px]" ref={menuRef}>
+    <div className="w-full bg-white rounded-xl border border-slate-200 shadow-2xs overflow-x-auto min-h-[300px]">
       <table className="w-full text-left border-collapse min-w-[960px]">
         <thead>
           <tr className="bg-slate-50 border-b border-slate-200 text-slate-700 text-xs font-semibold uppercase tracking-wider select-none">
@@ -192,10 +305,7 @@ export const WorkOrderTable = ({
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
-          {workOrders.map((wo, index) => {
-            const isMenuOpen = activeMenuWoId === wo.id;
-            const isNearBottom = index >= workOrders.length - 2 && workOrders.length > 2;
-
+          {workOrders.map((wo) => {
             return (
               <tr
                 key={wo.id}
@@ -297,105 +407,18 @@ export const WorkOrderTable = ({
                   )}
                 </td>
 
-                {/* Column 6: การจัดการ (Single Primary Action + More Menu) */}
+                {/* Column 6: การจัดการ (Single Primary Action + More Menu via FloatingOverlay) */}
                 <td className="py-3 px-4 align-middle text-right" onClick={(e) => e.stopPropagation()}>
-                  <div className="relative inline-flex items-center justify-end gap-1.5">
-                    
-                    {/* Primary Row Action (ตามสถานะงาน) */}
-                    {(wo.status === 'OPEN' || wo.status === 'REJECTED') && (
-                      <button
-                        type="button"
-                        onClick={() => onRecordResult(wo)}
-                        className="h-8 inline-flex items-center gap-1.5 px-3 rounded-lg bg-purple-700 text-white font-medium hover:bg-purple-800 transition-colors cursor-pointer text-xs shadow-2xs whitespace-nowrap"
-                      >
-                        <FileCheck2 size={13} />
-                        <span>บันทึกผลและใบรับรอง</span>
-                      </button>
-                    )}
-
-                    {wo.status === 'PENDING_REVIEW' && (
-                      <button
-                        type="button"
-                        onClick={() => onApprove(wo)}
-                        className="h-8 inline-flex items-center gap-1.5 px-3 rounded-lg bg-emerald-700 text-white font-medium hover:bg-emerald-800 transition-colors cursor-pointer text-xs shadow-2xs whitespace-nowrap"
-                      >
-                        <CheckCircle2 size={13} />
-                        <span>ตรวจรับปิดงาน</span>
-                      </button>
-                    )}
-
-                    {wo.nc_status === 'OPEN' && (
-                      <button
-                        type="button"
-                        onClick={() => onReleaseHold(wo)}
-                        className="h-8 inline-flex items-center gap-1.5 px-3 rounded-lg bg-purple-700 text-white font-medium hover:bg-purple-800 transition-colors cursor-pointer text-xs shadow-2xs whitespace-nowrap"
-                      >
-                        <ShieldAlert size={13} />
-                        <span>ปลดระงับ ON_HOLD (L{reqApproverLevel}+)</span>
-                      </button>
-                    )}
-
-                    {/* Secondary Actions Trigger (More Menu Icon) */}
-                    <button
-                      type="button"
-                      onClick={() => toggleMenu(wo.id)}
-                      aria-label={`การจัดการเพิ่มเติมสำหรับ ${wo.wo_code}`}
-                      title="ตัวเลือกเพิ่มเติม"
-                      className="h-8 w-8 rounded-lg border border-slate-200 text-slate-500 hover:text-slate-800 hover:bg-slate-100 flex items-center justify-center cursor-pointer transition-colors"
-                    >
-                      <MoreHorizontal size={15} />
-                    </button>
-
-                    {/* Secondary Action Dropdown Menu */}
-                    <div
-                      className={`absolute right-0 z-50 min-w-[170px] bg-white rounded-xl shadow-lg border border-slate-200 py-1 transition-all text-left ${
-                        isNearBottom ? 'bottom-full mb-1.5' : 'top-full mt-1.5'
-                      } ${
-                        isMenuOpen ? 'opacity-100 pointer-events-auto scale-100' : 'opacity-0 pointer-events-none scale-95'
-                      }`}
-                    >
-                      {(wo.status === 'OPEN' || wo.status === 'REJECTED') && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setActiveMenuWoId(null);
-                            onReschedule(wo);
-                          }}
-                          className="w-full text-left px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 flex items-center gap-2 transition-colors cursor-pointer"
-                        >
-                          <CalendarClock size={13} className="text-slate-500" />
-                          <span>เลื่อนวันครบกำหนด</span>
-                        </button>
-                      )}
-
-                      {wo.status === 'PENDING_REVIEW' && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setActiveMenuWoId(null);
-                            onReject(wo);
-                          }}
-                          className="w-full text-left px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-50 flex items-center gap-2 transition-colors cursor-pointer"
-                        >
-                          <XCircle size={13} className="text-rose-500" />
-                          <span>ส่งกลับแก้ไข</span>
-                        </button>
-                      )}
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setActiveMenuWoId(null);
-                          onRowClick(wo);
-                        }}
-                        className="w-full text-left px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 flex items-center gap-2 border-t border-slate-100 transition-colors cursor-pointer"
-                      >
-                        <Eye size={13} className="text-slate-500" />
-                        <span>ดูรายละเอียดใบสั่งงาน</span>
-                      </button>
-                    </div>
-
-                  </div>
+                  <WorkOrderRowActions
+                    wo={wo}
+                    reqApproverLevel={reqApproverLevel}
+                    onRecordResult={onRecordResult}
+                    onApprove={onApprove}
+                    onReleaseHold={onReleaseHold}
+                    onReschedule={onReschedule}
+                    onReject={onReject}
+                    onRowClick={onRowClick}
+                  />
                 </td>
               </tr>
             );
