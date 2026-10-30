@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   X,
   Wrench,
@@ -56,7 +57,26 @@ export const WorkOrderSideDrawer = ({
     };
   }, [workOrder?.id]);
 
+  useEffect(() => {
+    if (!workOrder) return;
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        onClose?.();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [workOrder, onClose]);
+
   if (!workOrder) return null;
+  if (typeof document === 'undefined') return null;
 
   const currentWo = detail?.workOrder || workOrder;
   const historyList = detail?.history || [];
@@ -107,7 +127,7 @@ export const WorkOrderSideDrawer = ({
     );
   };
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 overflow-hidden" aria-labelledby="slide-over-title" role="dialog" aria-modal="true">
       {/* Backdrop */}
       <div
@@ -418,7 +438,8 @@ export const WorkOrderSideDrawer = ({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 
