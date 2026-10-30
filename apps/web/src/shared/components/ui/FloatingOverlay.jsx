@@ -39,6 +39,7 @@ export const FloatingOverlay = ({
   closeOnOutsideClick = true,
   lockScroll = false,
   keepMounted = false,
+  portal = true,
   ...rest
 }) => {
   const overlayRef = useRef(null);
@@ -61,7 +62,7 @@ export const FloatingOverlay = ({
 
   const isVisible = isOpen && isCalculated;
 
-  return createPortal(
+  const content = (
     <div
       ref={overlayRef}
       role={role || undefined}
@@ -82,9 +83,10 @@ export const FloatingOverlay = ({
       {...rest}
     >
       {children}
-    </div>,
-    document.body
+    </div>
   );
+
+  return portal ? createPortal(content, document.body) : content;
 };
 
 export default FloatingOverlay;

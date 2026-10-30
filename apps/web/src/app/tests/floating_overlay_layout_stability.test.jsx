@@ -5,6 +5,7 @@ import FloatingOverlay from '../../shared/components/ui/FloatingOverlay';
 import AnnualPlanSideInspector from '../../modules/vcc/components/AnnualPlanSideInspector';
 import WorkOrderSideDrawer from '../../modules/vcc/components/WorkOrderSideDrawer';
 import ActionConfirmModal from '../../shared/components/common/ActionConfirmModal';
+import UserSelector from '../../modules/dcc/components/UserSelector';
 
 // Test harness component simulating a high-density table cell with a popover
 function TestTableWithPopover({ keepMounted = false, initialOpen = false }) {
@@ -226,5 +227,30 @@ describe('System-Wide Floating Overlay & Layout Stability Verification', () => {
     // Unmount restores body overflow
     unmount();
     expect(document.body.style.overflow).toBe('');
+  });
+
+  it('7. UserSelector closes on Escape key and outside click without breaking container flow', () => {
+    const handleChange = vi.fn();
+    const users = [
+      { id: 'u1', name: 'สมชาย รักชาติ', department: 'QA' },
+      { id: 'u2', name: 'สมหญิง จริงใจ', department: 'PD' }
+    ];
+
+    render(
+      <UserSelector
+        value=""
+        onChange={handleChange}
+        users={users}
+      />
+    );
+
+    const input = screen.getByPlaceholderText(/ค้นหาชื่อ หรือแผนก/i);
+    fireEvent.focus(input);
+
+    expect(screen.getByText('สมชาย รักชาติ')).toBeDefined();
+
+    // Escape closes user list
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.queryByText('สมชาย รักชาติ')).toBeNull();
   });
 });
