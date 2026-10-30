@@ -4,6 +4,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import FloatingOverlay from '../../shared/components/ui/FloatingOverlay';
 import AnnualPlanSideInspector from '../../modules/vcc/components/AnnualPlanSideInspector';
 import WorkOrderSideDrawer from '../../modules/vcc/components/WorkOrderSideDrawer';
+import ActionConfirmModal from '../../shared/components/common/ActionConfirmModal';
 
 // Test harness component simulating a high-density table cell with a popover
 function TestTableWithPopover({ keepMounted = false, initialOpen = false }) {
@@ -190,6 +191,35 @@ describe('System-Wide Floating Overlay & Layout Stability Verification', () => {
     expect(document.body.style.overflow).toBe('hidden');
 
     // Escape closes drawer
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(handleClose).toHaveBeenCalledTimes(1);
+
+    // Unmount restores body overflow
+    unmount();
+    expect(document.body.style.overflow).toBe('');
+  });
+
+  it('6. ActionConfirmModal locks scroll, handles Escape, and supports responsive viewports', () => {
+    const handleClose = vi.fn();
+    const handleConfirm = vi.fn();
+
+    const { unmount } = render(
+      <ActionConfirmModal
+        isOpen={true}
+        onClose={handleClose}
+        onConfirm={handleConfirm}
+        title="ยืนยันการอนุมัติ (Approve)"
+        actionType="approve"
+        summaryData={[
+          { label: 'ผู้อนุมัติ', value: 'สมชาย รักชาติ' }
+        ]}
+      />
+    );
+
+    // Body scroll locked
+    expect(document.body.style.overflow).toBe('hidden');
+
+    // Escape closes modal
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(handleClose).toHaveBeenCalledTimes(1);
 
