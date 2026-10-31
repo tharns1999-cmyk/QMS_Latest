@@ -27,6 +27,7 @@ const PLAN_AUDIT_LABELS = {
   VCC_PLAN_REVIEWED: { label: 'ยืนยันการทบทวนแผน (Review)', badge: 'bg-cyan-50 text-cyan-700 border-cyan-200' },
   VCC_PLAN_APPROVED: { label: 'อนุมัติแผนประจำปี (Approve)', badge: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
   VCC_PLAN_REJECTED: { label: 'ส่งกลับแก้ไข (Reject)', badge: 'bg-rose-50 text-rose-700 border-rose-200' },
+  VCC_PLAN_GROUP_CONVERTED: { label: 'แปลงรายการกลุ่มเดิมเป็นรายตัว', badge: 'bg-purple-50 text-purple-700 border-purple-200' },
   VCC_PLAN_SETTINGS_UPDATED: { label: 'แก้ไขตั้งค่าแผนประจำปี', badge: 'bg-slate-100 text-slate-700 border-slate-200' }
 };
 
@@ -269,7 +270,7 @@ export const PlanItemModal = ({
 
           <div>
             <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-              เครื่องมือวัด / กลุ่มเครื่องมือ (เฉพาะสถานะ ACTIVE) <span className="text-rose-600">*</span>
+              เครื่องมือวัด / ชุดเครื่องมือ (เฉพาะสถานะ ACTIVE) <span className="text-rose-600">*</span>
             </label>
             <select
               required
@@ -278,11 +279,13 @@ export const PlanItemModal = ({
               className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium bg-white"
             >
               <option value="" disabled>-- เลือกเครื่องมือจากทะเบียน --</option>
-              {activeAssets.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.asset_code} — {a.name} {a.is_group ? '(กลุ่มเครื่องมือแม่)' : ''}
-                </option>
-              ))}
+              {activeAssets
+                .filter((a) => Number(a.is_group) === 0 || a.group_nature === 'COMPOSITE_SET')
+                .map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.asset_code} — {a.name} {a.group_nature === 'COMPOSITE_SET' ? '(ชุดเครื่องมือ)' : ''}
+                  </option>
+                ))}
             </select>
           </div>
 
@@ -1145,156 +1148,5 @@ export const UnplannedJustificationModal = ({
   );
 };
 
-export const DraftGroupConversionModal = ({
-  open,
-  onClose,
-  groupItem,
-  activeAssets = [],
-  existingPlanItems = [],
-  onConfirmConvert,
-  converting = false
-}) => {
-  const [copyMonths, setCopyMonths] = React.useState(true);
+export { LegacyGroupConversionModal as DraftGroupConversionModal } from './LegacyGroupConversionModal';
 
-  if (!open || !groupItem) return null;
-
-  const targetGroupId = groupItem.asset_id || groupItem.id;
-  const childAssets = activeAssets.filter(
-    (a) => (a.parent_id === targetGroupId || a.parent_id === groupItem.asset_id) && a.status !== 'RETIRED'
-  );
-
-  const existingAssetIds = new Set(
-    existingPlanItems
-      .filter((i) => i.id !== groupItem.id)
-      .map((i) => i.asset_id)
-  );
-
-  const plannedMonths = Array.isArray(groupItem.planned_months) ? groupItem.planned_months : [];
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in duration-200">
-      <div className="bg-white rounded-2xl max-w-2xl w-full border border-slate-200/80 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-        <div className="px-6 py-4 border-b border-slate-200/80 flex items-center justify-between bg-slate-50/50 shrink-0">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-amber-100 flex items-center justify-center text-amber-700">
-              <FolderTree size={18} />
-            </div>
-            <div>
-              <h3 className="text-base font-bold text-slate-800">
-                แปลงกลุ่มเครื่องมือเป็นรายการรายตัว (Flat Matrix)
-              </h3>
-              <p className="text-xs text-slate-500">
-                กลุ่ม: <span className="font-mono font-semibold text-slate-700">{groupItem.asset_code}</span> — {groupItem.asset_name}
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
-          >
-            <X size={18} />
-          </button>
-        </div>
-
-        <div className="p-6 overflow-y-auto space-y-4 text-sm text-slate-700">
-          <div className="p-3.5 rounded-xl bg-amber-50/80 border border-amber-200/80 text-amber-900 text-xs space-y-1">
-            <div className="font-bold flex items-center gap-1.5">
-              <AlertTriangle size={14} className="text-amber-600 shrink-0" />
-              <span>การแปลงรายการในแผนร่าง (Draft Plan)</span>
-            </div>
-            <p>
-              ตามมาตรฐาน Flat Instrument Planning กลุ่มจัดหมวดหมู่เสมือน (Logical Group) จะถูกแทนที่ด้วยรายการเครื่องมือจริงรายตัว เพื่อให้สามารถออกใบงาน (Work Order) กำหนดเดือน และแนบผลตรวจรับได้โดยตรง
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <div className="flex items-center justify-between text-xs font-semibold text-slate-700">
-              <span>รายการเครื่องมือลูกในทะเบียน ({childAssets.length} เครื่อง):</span>
-              <label className="inline-flex items-center gap-2 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={copyMonths}
-                  onChange={(e) => setCopyMonths(e.target.checked)}
-                  className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500/20"
-                />
-                <span className="font-normal text-slate-600">
-                  คัดลอกรอบเดือนตามแผนของกลุ่ม ({plannedMonths.length > 0 ? plannedMonths.map((m) => `ด.${m}`).join(', ') : 'ไม่มีรอบ'}) ไปยังเครื่องมือลูก
-                </span>
-              </label>
-            </div>
-
-            {childAssets.length === 0 ? (
-              <div className="p-4 rounded-xl border border-dashed border-slate-200 text-center text-xs text-slate-400">
-                ไม่พบเครื่องมือลูกที่เชื่อมโยงกับกลุ่มนี้ในทะเบียนเครื่องมือวัด
-              </div>
-            ) : (
-              <div className="border border-slate-200 rounded-xl overflow-hidden max-h-60 overflow-y-auto">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
-                    <tr>
-                      <th className="py-2 px-3">รหัสเครื่องมือ</th>
-                      <th className="py-2 px-3">ชื่อเครื่องมือ</th>
-                      <th className="py-2 px-3">สถานะในแผน</th>
-                      <th className="py-2 px-3">รอบเดือนที่จะได้</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 font-medium">
-                    {childAssets.map((child) => {
-                      const alreadyInPlan = existingAssetIds.has(child.id);
-                      return (
-                        <tr key={child.id} className="hover:bg-slate-50/50">
-                          <td className="py-2 px-3 font-mono font-bold text-indigo-700">
-                            {child.asset_code}
-                          </td>
-                          <td className="py-2 px-3 text-slate-800">
-                            {child.name}
-                          </td>
-                          <td className="py-2 px-3">
-                            {alreadyInPlan ? (
-                              <span className="px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200 font-semibold text-[11px]">
-                                มีในแผนแล้ว (จะอัปเดต)
-                              </span>
-                            ) : (
-                              <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200 font-semibold text-[11px]">
-                                เพิ่มเข้าแผนใหม่
-                              </span>
-                            )}
-                          </td>
-                          <td className="py-2 px-3 font-mono text-slate-600">
-                            {copyMonths && plannedMonths.length > 0
-                              ? plannedMonths.map((m) => `P${m}`).join(', ')
-                              : '-'}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-3 shrink-0">
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={converting}
-            className="h-9 px-4 rounded-xl border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 text-sm font-semibold cursor-pointer"
-          >
-            ยกเลิก
-          </button>
-          <button
-            type="button"
-            disabled={converting || childAssets.length === 0}
-            onClick={() => onConfirmConvert && onConfirmConvert({ groupItem, childAssets, copyMonths })}
-            className="h-9 px-4 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-sm font-semibold shadow-2xs transition-colors cursor-pointer disabled:opacity-50"
-          >
-            {converting ? 'กำลังแปลงรายการ...' : `ยืนยันการแปลง (${childAssets.length} เครื่อง)`}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-};

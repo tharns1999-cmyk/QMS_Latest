@@ -164,19 +164,6 @@ const INITIAL_LOCAL_PLAN_ITEMS = [
     responsible_label: 'QC Sup.',
     remarks: '[ข้อมูลทดสอบ] V002 ทวนสอบเดือน 9 (ยึดตามหมายเหตุ)',
     sort_order: 5
-  },
-  {
-    id: 'vcc-pi-2026-grp-scale',
-    plan_id: 'vcc-plan-2026-qc',
-    asset_id: 'vcc-seed-grp-scale',
-    provider_name: 'ทวนสอบภายใน',
-    frequency_label: 'รายเดือน',
-    planned_months: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
-    due_dates: computeDueDates(2026, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], 'END_OF_MONTH'),
-    responsible_dept: 'WH',
-    responsible_label: 'เจ้าหน้าที่ Store',
-    remarks: '[ข้อมูลทดสอบ] ฝ่าย Store เป็นฝ่ายสอบเทียบ FM-ST-31',
-    sort_order: 6
   }
 ];
 
@@ -446,6 +433,7 @@ const enrichLocalPlanItem = (item, allAssets, deptMap) => {
     is_logical_group: isLogicalGroup,
     is_composite_set: isCompositeSet,
     is_calibratable_unit: isCalibratableUnit,
+    composite_details: asset.composite_details || '',
     parent_id: asset.parent_id || null,
     asset_status: asset.status || 'ACTIVE',
     parent_asset_code: parent?.asset_code || null,
@@ -561,7 +549,10 @@ export const fetchVccPlanDetail = async (id) => {
   let items = [];
   if (plan.status === 'DRAFT' || plan.status === 'REJECTED') {
     const eligibleAssets = allAssets.filter(
-      (a) => a.department === plan.department && a.status !== 'RETIRED'
+      (a) =>
+        a.department === plan.department &&
+        a.status !== 'RETIRED' &&
+        (Number(a.is_group) === 0 || a.group_nature === 'COMPOSITE_SET')
     );
     const persistedForPlan = allItems.filter((i) => i.plan_id === id);
     const persistedByAssetId = new Map(persistedForPlan.map((i) => [i.asset_id, i]));
@@ -741,6 +732,9 @@ export const saveVccPlanItem = async (planId, payload) => {
   const allAssets = getLocalAssets();
   const asset = allAssets.find((a) => a.id === payload.asset_id);
   if (!asset) throw new Error('ไม่พบเครื่องมือที่ระบุในทะเบียนเครื่องมือ');
+  if (Number(asset.is_group) === 1 && asset.group_nature !== 'COMPOSITE_SET') {
+    throw new Error('ยกเลิกการเพิ่มกลุ่มเครื่องมือแม่เข้าแผนประจำปีแล้ว กรุณาเลือกเครื่องมือวัดรายตัวหรือชุดเครื่องมือจริง');
+  }
   if (asset.status !== 'ACTIVE') {
     throw new Error('ไม่สามารถเพิ่มเครื่องมือที่ไม่ได้ใช้งานปกติ (ACTIVE) เข้าแผนประจำปีได้');
   }
@@ -813,6 +807,114 @@ export const deleteVccPlanItem = async (planId, itemId) => {
   return { items: detail.items };
 };
 
+export const convertVccPlanGroupItem = async (planId, itemId, payload = {}) => {
+  if (isApiMode) {
+    return apiPost(`/api/vcc/plans/${encodeURIComponent(planId)}/items/${encodeURIComponent(itemId)}/convert-group`, payload);
+  }
+  assertLocalVccAccess();
+  const allPlans = getLocalPlans();
+  const plan = allPlans.find((p) => p.id === planId);
+  if (!plan) throw new Error('ไม่พบแผนการสอบเทียบประจำปี');
+  if (plan.status !== 'DRAFT' && plan.status !== 'REJECTED') {
+    throw new Error('ปรับรายการกลุ่มเดิมได้เฉพาะแผนในสถานะร่าง (DRAFT) หรือส่งกลับแก้ไข (REJECTED) เท่านั้น ห้ามแก้แผนที่อนุมัติแล้ว');
+  }
+
+  const allItems = getLocalPlanItems();
+  const allAssets = getLocalAssets();
+  const groupItem = allItems.find((i) => i.id === itemId && i.plan_id === planId);
+  if (!groupItem) throw new Error('ไม่พบรายการกลุ่มเดิมในแผนนี้');
+  const groupAsset = allAssets.find((a) => a.id === groupItem.asset_id);
+  if (!groupAsset || Number(groupAsset.is_group) !== 1 || groupAsset.group_nature === 'COMPOSITE_SET') {
+    throw new Error('รายการที่ระบุไม่ใช่กลุ่มเครื่องมือเดิม (Logical Group)');
+  }
+
+  const rawSelections = Array.isArray(payload.selections)
+    ? payload.selections
+    : (Array.isArray(payload.items) ? payload.items : []);
+  const confirmRemoveEmpty = payload.confirm_remove_empty === true;
+  if (rawSelections.length === 0 && !confirmRemoveEmpty) {
+    throw new Error('กรุณาเลือกเครื่องมือวัดรายตัวอย่างน้อย 1 รายการ หรือยืนยันการลบรายการกลุ่มเดิมออก');
+  }
+
+  const seenAssetIds = new Set();
+  const validated = [];
+  for (const sel of rawSelections) {
+    const targetAssetId = String(sel?.asset_id || '').trim();
+    if (!targetAssetId) throw new Error('รหัสเครื่องมือในรายการที่เลือกไม่ถูกต้อง');
+    if (seenAssetIds.has(targetAssetId)) throw new Error('พบการเลือกเครื่องมือซ้ำกันในรายการแปลงข้อมูล');
+    seenAssetIds.add(targetAssetId);
+
+    const targetAsset = allAssets.find((a) => a.id === targetAssetId);
+    if (!targetAsset) throw new Error(`ไม่พบเครื่องมือรหัส ${targetAssetId} ในทะเบียนเครื่องมือ`);
+    if (Number(targetAsset.is_group) === 1 && targetAsset.group_nature !== 'COMPOSITE_SET') {
+      throw new Error(`ไม่สามารถเลือกกลุ่มเครื่องมือแม่ (${targetAsset.asset_code}) แทนเครื่องมือรายตัวได้`);
+    }
+    if (targetAsset.status !== 'ACTIVE') {
+      throw new Error(`เครื่องมือ ${targetAsset.asset_code} ไม่ได้อยู่ในสถานะใช้งานปกติ (ACTIVE)`);
+    }
+
+    const plannedMonths = [...new Set((sel.planned_months || []).map(Number).filter((m) => m >= 1 && m <= 12))].sort((a, b) => a - b);
+    const remarks = String(sel.remarks || '').trim();
+    if (plannedMonths.length === 0 && !remarks) {
+      throw new Error(`กรุณากำหนดเดือนทวนสอบด้วยตนเอง หรือระบุเหตุผลที่ไม่วางแผนของเครื่องมือ ${targetAsset.asset_code}`);
+    }
+
+    validated.push({
+      asset: targetAsset,
+      plannedMonths,
+      dueDates: computeDueDates(plan.plan_year, plannedMonths, plan.due_date_rule),
+      remarks,
+      providerName: String(sel.provider_name || groupItem.provider_name || 'ทวนสอบภายใน').trim(),
+      frequencyLabel: String(sel.frequency_label || groupItem.frequency_label || 'รายปี').trim(),
+      responsibleDept: String(sel.responsible_dept || targetAsset.department || plan.department).trim().toUpperCase(),
+      responsibleLabel: String(sel.responsible_label ?? groupItem.responsible_label ?? '').trim()
+    });
+  }
+
+  const nextItems = allItems.filter((i) => i.id !== itemId);
+  const convertedSummary = [];
+  for (const entry of validated) {
+    const existingIdx = nextItems.findIndex((i) => i.plan_id === planId && i.asset_id === entry.asset.id);
+    const itemObj = {
+      id: existingIdx >= 0 ? nextItems[existingIdx].id : `vcc-pi-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      plan_id: planId,
+      asset_id: entry.asset.id,
+      provider_name: entry.providerName,
+      frequency_label: entry.frequencyLabel,
+      planned_months: entry.plannedMonths,
+      due_dates: entry.dueDates,
+      responsible_dept: entry.responsibleDept,
+      responsible_label: entry.responsibleLabel,
+      remarks: entry.remarks,
+      sort_order: existingIdx >= 0 ? nextItems[existingIdx].sort_order : (groupItem.sort_order ?? nextItems.length + 1)
+    };
+    if (existingIdx >= 0) {
+      nextItems[existingIdx] = itemObj;
+    } else {
+      nextItems.push(itemObj);
+    }
+    convertedSummary.push({
+      item_id: itemObj.id,
+      asset_id: entry.asset.id,
+      asset_code: entry.asset.asset_code,
+      planned_months: entry.plannedMonths,
+      remarks: entry.remarks
+    });
+  }
+
+  setLocalPlanItems(nextItems);
+  appendLocalAudit('VCC_PLAN_GROUP_CONVERTED', {
+    plan_id: planId,
+    removed_group_item_id: itemId,
+    removed_group_asset_id: groupItem.asset_id,
+    removed_group_asset_code: groupAsset.asset_code,
+    converted_items: convertedSummary
+  });
+
+  const detail = await fetchVccPlanDetail(planId);
+  return { items: detail.items };
+};
+
 export const validateVccPlanItemWorkOrder = async (planId, itemId, childAssetId = '') => {
   if (isApiMode) {
     return apiPost(`/api/vcc/plans/${encodeURIComponent(planId)}/items/${encodeURIComponent(itemId)}/validate-work-order`, {
@@ -879,39 +981,22 @@ export const submitVccPlan = async (planId, maybeAssignees = {}, maybeApproverId
     throw new Error('กรุณาเพิ่มรายการเครื่องมือในแผนอย่างน้อย 1 รายการก่อนส่งขออนุมัติ');
   }
 
-  // Submission gate: Check for unplanned items without remarks
-  const groupItems = items.filter((i) => Number(i.is_group) === 1);
-  const standaloneItems = items.filter((i) => Number(i.is_group) === 0 && !i.parent_id);
+  // Submission gate 1: Block submission if any legacy Logical Group items remain unresolved in DRAFT/REJECTED plan
+  const groupItems = items.filter((i) => Number(i.is_group) === 1 && i.group_nature !== 'COMPOSITE_SET');
+  if (groupItems.length > 0) {
+    const groupCodes = groupItems.map((i) => i.asset_code).join(', ');
+    throw new Error(`พบรายการกลุ่มเครื่องมือเดิม (${groupCodes}) ค้างอยู่ในแผน กรุณาปรับเป็นเครื่องมือรายตัวก่อนส่งทบทวนแผน`);
+  }
+
+  // Submission gate 2: Every independent Calibratable Unit must have planned months or an unplanned justification
+  const calibratableUnits = items.filter((i) => Number(i.is_group) === 0 || i.group_nature === 'COMPOSITE_SET');
   const unplannedWithoutJustification = [];
 
-  for (const item of standaloneItems) {
+  for (const item of calibratableUnits) {
     const hasPlan = Array.isArray(item.planned_months) && item.planned_months.length > 0;
     const hasRemarks = Boolean(item.remarks && item.remarks.trim());
     if (!hasPlan && !hasRemarks) {
       unplannedWithoutJustification.push(item);
-    }
-  }
-
-  for (const grp of groupItems) {
-    const grpHasPlan = Array.isArray(grp.planned_months) && grp.planned_months.length > 0;
-    const grpHasRemarks = Boolean(grp.remarks && grp.remarks.trim());
-    const children = items.filter((c) => c.parent_id === grp.asset_id || c.parent_id === grp.id);
-
-    if (children.length === 0) {
-      if (!grpHasPlan && !grpHasRemarks) {
-        unplannedWithoutJustification.push(grp);
-      }
-    } else if (grpHasPlan || grpHasRemarks) {
-      // Group covered at group level
-    } else {
-      // Must be covered at child level
-      for (const ch of children) {
-        const chHasPlan = Array.isArray(ch.planned_months) && ch.planned_months.length > 0;
-        const chHasRemarks = Boolean(ch.remarks && ch.remarks.trim());
-        if (!chHasPlan && !chHasRemarks) {
-          unplannedWithoutJustification.push(ch);
-        }
-      }
     }
   }
 

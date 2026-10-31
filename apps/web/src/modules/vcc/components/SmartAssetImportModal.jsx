@@ -5,7 +5,6 @@ import {
   Search,
   CheckCircle2,
   AlertTriangle,
-  FolderTree,
   Calendar,
   Clock,
   Sparkles,
@@ -33,8 +32,7 @@ export const SmartAssetImportModal = ({
   onImportSuccess
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [deptFilter, setDeptFilter] = useState(plan?.department || '');
-  const [typeFilter, setTypeFilter] = useState('');
+  const [deptFilter, setDeptFilter] = useState('');
   const [selectedAssetIds, setSelectedAssetIds] = useState([]);
   const [saving, setSaving] = useState(false);
   const [importError, setImportError] = useState('');
@@ -53,28 +51,25 @@ export const SmartAssetImportModal = ({
     return new Set((existingPlanItems || []).map((i) => i.asset_id));
   }, [existingPlanItems]);
 
-  const assetTypes = useMemo(() => {
-    return Array.from(new Set(activeAssets.map((a) => a.asset_type).filter(Boolean)));
-  }, [activeAssets]);
-
   const filteredAssets = useMemo(() => {
     return activeAssets.filter((a) => {
       if (a.status !== 'ACTIVE') return false;
+      if (Number(a.is_group) === 1 && a.group_nature !== 'COMPOSITE_SET') return false;
       if (deptFilter && a.department !== deptFilter) return false;
-      if (typeFilter && a.asset_type !== typeFilter) return false;
       if (searchTerm) {
         const q = searchTerm.toLowerCase();
         const code = (a.asset_code || '').toLowerCase();
         const name = (a.name || '').toLowerCase();
         const model = (a.model || '').toLowerCase();
         const location = (a.location || '').toLowerCase();
-        if (!code.includes(q) && !name.includes(q) && !model.includes(q) && !location.includes(q)) {
+        const dept = (a.department || '').toLowerCase();
+        if (!code.includes(q) && !name.includes(q) && !model.includes(q) && !location.includes(q) && !dept.includes(q)) {
           return false;
         }
       }
       return true;
     });
-  }, [activeAssets, deptFilter, typeFilter, searchTerm]);
+  }, [activeAssets, deptFilter, searchTerm]);
 
   if (!open || !plan) return null;
 
@@ -200,13 +195,13 @@ export const SmartAssetImportModal = ({
           {/* Top Filter Bar */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 bg-slate-50 p-3 rounded-xl border border-slate-200/80">
             {/* Search Input */}
-            <div className="relative">
+            <div className="relative md:col-span-2">
               <Search size={16} className="absolute left-3.5 top-3 text-slate-400" />
               <input
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="ค้นหารหัส, ชื่อ, รุ่น, จุดติดตั้ง..."
+                placeholder="ค้นหารหัส, ชื่อ, แผนก, รุ่น, จุดติดตั้ง..."
                 className="w-full h-10 pl-9 pr-3.5 rounded-xl border border-slate-300 text-sm font-medium bg-white focus:outline-none focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600"
               />
             </div>
@@ -215,26 +210,13 @@ export const SmartAssetImportModal = ({
             <select
               value={deptFilter}
               onChange={(e) => setDeptFilter(e.target.value)}
+              aria-label="กรองตามแผนกในทะเบียน"
               className="h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium bg-white focus:outline-none focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600"
             >
-              <option value="">ทุกแผนก (Master Data)</option>
+              <option value="">ทุกแผนกในทะเบียน ({activeAssets.filter((a) => a.status === 'ACTIVE').length} เครื่อง)</option>
               {activeDepartments.map((d) => (
                 <option key={d.code} value={d.code}>
                   แผนก {d.code} — {d.nameTh}
-                </option>
-              ))}
-            </select>
-
-            {/* Asset Type Filter */}
-            <select
-              value={typeFilter}
-              onChange={(e) => setTypeFilter(e.target.value)}
-              className="h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium bg-white focus:outline-none focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600"
-            >
-              <option value="">ทุกประเภทเครื่องมือ</option>
-              {assetTypes.map((t) => (
-                <option key={t} value={t}>
-                  {t}
                 </option>
               ))}
             </select>
@@ -283,7 +265,7 @@ export const SmartAssetImportModal = ({
                     filteredAssets.map((asset) => {
                       const isAlreadyInPlan = existingAssetIdSet.has(asset.id);
                       const isSelected = selectedAssetIds.includes(asset.id);
-                      const isGroup = Number(asset.is_group) === 1;
+                      const isComposite = asset.group_nature === 'COMPOSITE_SET';
 
                       return (
                         <tr
@@ -311,9 +293,9 @@ export const SmartAssetImportModal = ({
                           </td>
                           <td className="py-2.5 px-3.5 font-semibold text-slate-800">
                             <div>{asset.name}</div>
-                            {isGroup && (
-                              <span className="inline-flex items-center gap-1 text-xs text-purple-700 font-semibold mt-0.5">
-                                <FolderTree size={12} /> กลุ่มแม่
+                            {isComposite && (
+                              <span className="inline-flex items-center gap-1 text-xs text-teal-700 font-semibold mt-0.5">
+                                ชุดเครื่องมือ (Composite Set)
                               </span>
                             )}
                           </td>
@@ -324,6 +306,11 @@ export const SmartAssetImportModal = ({
                             {isAlreadyInPlan ? (
                               <span className="inline-flex items-center gap-1 text-xs font-bold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-lg">
                                 <CheckCircle2 size={13} className="text-slate-400" /> อยู่ในแผนแล้ว
+                              </span>
+                            ) : asset.department !== plan.department ? (
+                              <span className="inline-flex flex-col items-end gap-0.5 text-xs text-amber-800 font-semibold bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200">
+                                <span>สังกัดแผนก {asset.department} (นอกแผน {plan.department})</span>
+                                <span className="text-[10px] text-indigo-700">เลือกเพื่อเพิ่มเข้าแผนได้</span>
                               </span>
                             ) : (
                               <span className="text-xs text-indigo-700 font-semibold bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-200">

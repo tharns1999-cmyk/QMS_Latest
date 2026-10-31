@@ -134,6 +134,7 @@ export const registerVccDashboardRoutes = (app, { requireAuth, audit }) => {
       active_assets: calibratableAssets.filter((a) => a.status === 'ACTIVE' && !onHoldAssetIds.has(a.id)).length,
       on_hold_assets: onHoldAssetIds.size,
       retired_assets: calibratableAssets.filter((a) => a.status === 'RETIRED').length,
+      composite_set_count: calibratableAssets.filter((a) => a.status === 'ACTIVE' && a.group_nature === 'COMPOSITE_SET').length,
       group_count: activeGroups.length
     };
 

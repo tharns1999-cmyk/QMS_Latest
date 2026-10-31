@@ -4,7 +4,7 @@ import { render, screen, fireEvent, waitFor, within } from '@testing-library/rea
 import { MemoryRouter } from 'react-router-dom';
 import useStore from '../../../store/useStore';
 import AssetRegisterPage from '../pages/AssetRegisterPage';
-import { resetVccLocalStore, createVccAsset, fetchVccAssets } from '../api/vccApi';
+import { resetVccLocalStore } from '../api/vccApi';
 
 const SAMPLE_MASTER_DEPTS = [
   { code: 'QC', name_th: 'ควบคุมคุณภาพ', status: 'ACTIVE' },
@@ -62,15 +62,16 @@ describe('VCC Instrument-Centric Architecture: Flat Table, Option B, Category Ch
     expect(within(scRow).queryByText(/อยู่ในกลุ่ม/i)).not.toBeInTheDocument();
     expect(within(scRow).queryByText(/GRP-SCALE/i)).not.toBeInTheDocument();
 
-    // 2c. Group relationship is visible inside the History / Detail modal
+    // 2c. Detail modal treats SC-WH-001 as a clean standalone Single Instrument (no parent group clutter)
     fireEvent.click(within(scRow).getByRole('button', { name: /ประวัติ/i }));
     await waitFor(() => {
-      expect(screen.getByText(/กลุ่มเครื่องมือที่สังกัด/i)).toBeInTheDocument();
-      expect(screen.getByText('GRP-SCALE')).toBeInTheDocument();
+      expect(screen.getByText(/ลักษณะหน่วย:/i)).toBeInTheDocument();
+      expect(screen.getByText('เครื่องมือเดี่ยว')).toBeInTheDocument();
     });
+    expect(screen.queryByText(/กลุ่มเครื่องมือที่สังกัด/i)).not.toBeInTheDocument();
   });
 
-  it('3. Category Overview chips filter instruments by category with live counts', async () => {
+  it('3. Instrument-First UX: Removes Category Chips and 0-count categories from Register, keeping only status tabs, search, department filter, and Add Instrument CTA', async () => {
     render(
       <MemoryRouter>
         <AssetRegisterPage />
@@ -80,30 +81,34 @@ describe('VCC Instrument-Centric Architecture: Flat Table, Option B, Category Ch
     await waitFor(() => {
       expect(screen.getByText('ST002')).toBeInTheDocument();
       expect(screen.getByText('SW001')).toBeInTheDocument();
+      expect(screen.getByText('SC-WH-001')).toBeInTheDocument();
+      expect(screen.getByText('V001')).toBeInTheDocument();
+      expect(screen.getByText('V002')).toBeInTheDocument();
     });
 
-    // Look for category chip "เทอร์โมมิเตอร์"
-    const thermoChip = screen.getByRole('button', { name: /เทอร์โมมิเตอร์/i });
-    expect(thermoChip).toBeInTheDocument();
+    // Category chips ("ทุกประเภท", "เครื่องตรวจจับโลหะ", etc.) must NOT appear on the main Register view
+    expect(screen.queryByRole('button', { name: /ทุกประเภท/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /เครื่องตรวจจับโลหะ/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /นาฬิกาจับเวลา/i })).not.toBeInTheDocument();
 
-    // Click "เทอร์โมมิเตอร์" chip
-    fireEvent.click(thermoChip);
+    // Search box filters across code, name, department, and asset_type directly
+    const searchInput = screen.getByPlaceholderText(/ค้นหารหัสเครื่องมือ/i);
+    fireEvent.change(searchInput, { target: { value: 'เทอร์โมมิเตอร์' } });
 
-    // Only Thermometers should be visible (ST002, TC001)
-    expect(screen.getByText('ST002')).toBeInTheDocument();
-    expect(screen.queryByText('SW001')).not.toBeInTheDocument(); // SW001 is ชุดตุ้มน้ำหนัก
+    await waitFor(() => {
+      expect(screen.getByText('ST002')).toBeInTheDocument();
+      expect(screen.queryByText('SW001')).not.toBeInTheDocument();
+    });
 
-    // Click "ทุกประเภท" to reset filter
-    const allChip = screen.getByRole('button', { name: /ทุกประเภท/i });
-    fireEvent.click(allChip);
-
-    // Both appear again
-    expect(screen.getByText('ST002')).toBeInTheDocument();
-    expect(screen.getByText('SW001')).toBeInTheDocument();
+    // Clear search -> all 6 active instruments appear again
+    fireEvent.change(searchInput, { target: { value: '' } });
+    await waitFor(() => {
+      expect(screen.getByText('ST002')).toBeInTheDocument();
+      expect(screen.getByText('SW001')).toBeInTheDocument();
+    });
   });
 
-  it('4. DCC Logical Group Admin Modal is restricted to DCC and allows managing logical groups', async () => {
-    // 4a. Check DCC button visibility for DCC user
+  it('4. Operational Register completely removes Logical Group Admin button and parent_id selector for all roles', async () => {
     const { unmount } = render(
       <MemoryRouter>
         <AssetRegisterPage />
@@ -111,23 +116,15 @@ describe('VCC Instrument-Centric Architecture: Flat Table, Option B, Category Ch
     );
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /จัดการกลุ่มเครื่องมือ/i })).toBeInTheDocument();
+      expect(screen.getByText('ST002')).toBeInTheDocument();
     });
 
-    // Click "จัดการกลุ่มเครื่องมือ"
-    fireEvent.click(screen.getByRole('button', { name: /จัดการกลุ่มเครื่องมือ/i }));
+    expect(screen.queryByRole('button', { name: /จัดการกลุ่มเครื่องมือ/i })).not.toBeInTheDocument();
 
-    // Modal opens with Logical Group Admin title
-    await waitFor(() => {
-      expect(screen.getByText(/จัดการกลุ่มเครื่องมือเชิงตรรกะ \(Logical Group Admin\)/i)).toBeInTheDocument();
-      expect(screen.getByText('GRP-SCALE')).toBeInTheDocument();
-    });
-
-    // Close modal
-    fireEvent.click(screen.getByTitle('ปิด'));
+    fireEvent.click(screen.getByRole('button', { name: /^เพิ่มเครื่องมือ$/i }));
+    expect(screen.queryByText(/กลุ่มเครื่องมือที่สังกัด/i)).not.toBeInTheDocument();
     unmount();
 
-    // 4b. Non-DCC user must NOT see "จัดการกลุ่มเครื่องมือ" button
     useStore.setState({
       currentUser: { id: 'qc1', name: 'เจ้าหน้าที่ QC ทั่วไป', department: 'QC', isDcc: false }
     });

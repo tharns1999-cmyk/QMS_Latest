@@ -64,32 +64,30 @@ describe('VCC Phase 3: Work Orders, Execution, Review, Close & Hold/NC Control',
     expect((await call('POST', '/api/vcc/work-orders', 'VWO-L2', {})).status).toBe(403);
   });
 
-  it('creates work orders from APPROVED plan (requiring child asset for groups and preventing duplicates) and updates plan Act. row only after reviewer closes the work order', async () => {
-    // 1. Register group + child + standalone asset
-    const grp = await call('POST', '/api/vcc/assets', 'VWO-DCC', {
-      asset_code: 'GRP-WO-SCALE',
-      name: '[ข้อมูลทดสอบ] กลุ่มเครื่องชั่ง WO',
-      asset_type: 'เครื่องชั่ง',
-      department: 'VWOQC',
-      is_group: true
-    });
-    const child = await call('POST', '/api/vcc/assets', 'VWO-DCC', {
+  it('creates work orders from APPROVED flat & composite-set plan items (plus legacy historical approved groups), prevents duplicates, and updates plan Act. row only after reviewer closes the work order', async () => {
+    // 1. Register flat instruments + Physical Composite Set
+    const scaleUnit = await call('POST', '/api/vcc/assets', 'VWO-DCC', {
       asset_code: 'SC-WO-01',
       name: '[ข้อมูลทดสอบ] เครื่องชั่งรายตัว 01',
       asset_type: 'เครื่องชั่ง',
+      department: 'VWOQC'
+    });
+    const compositeSet = await call('POST', '/api/vcc/assets', 'VWO-DCC', {
+      asset_code: 'SW-WO-01',
+      name: '[ข้อมูลทดสอบ] ชุดตุ้มน้ำหนักมาตรฐาน 01',
+      asset_type: 'ตุ้มน้ำหนักมาตรฐาน',
       department: 'VWOQC',
-      is_group: false,
-      parent_id: grp.body.asset.id
+      group_nature: 'COMPOSITE_SET',
+      composite_details: '1 g - 500 g รวม 8 ชิ้น'
     });
     const standalone = await call('POST', '/api/vcc/assets', 'VWO-DCC', {
       asset_code: 'TM-WO-01',
       name: '[ข้อมูลทดสอบ] เทอร์โมมิเตอร์ 01',
       asset_type: 'เทอร์โมมิเตอร์',
-      department: 'VWOQC',
-      is_group: false
+      department: 'VWOQC'
     });
 
-    // 2. Create 2026 plan and add both items
+    // 2. Create 2026 plan and schedule all three calibratable units
     const planRes = await call('POST', '/api/vcc/plans', 'VWO-DCC', {
       plan_year: 2026,
       department: 'VWOQC',
@@ -97,10 +95,16 @@ describe('VCC Phase 3: Work Orders, Execution, Review, Close & Hold/NC Control',
     });
     const planId = planRes.body.plan.id;
 
-    const grpItemRes = await call('POST', `/api/vcc/plans/${planId}/items`, 'VWO-DCC', {
-      asset_id: grp.body.asset.id,
+    const scItemRes = await call('POST', `/api/vcc/plans/${planId}/items`, 'VWO-DCC', {
+      asset_id: scaleUnit.body.asset.id,
       provider_name: 'ทวนสอบภายใน',
       planned_months: [3],
+      responsible_dept: 'VWOQC'
+    });
+    const swItemRes = await call('POST', `/api/vcc/plans/${planId}/items`, 'VWO-DCC', {
+      asset_id: compositeSet.body.asset.id,
+      provider_name: 'ห้องปฏิบัติการภายนอก',
+      planned_months: [6],
       responsible_dept: 'VWOQC'
     });
     const tmItemRes = await call('POST', `/api/vcc/plans/${planId}/items`, 'VWO-DCC', {
@@ -123,36 +127,75 @@ describe('VCC Phase 3: Work Orders, Execution, Review, Close & Hold/NC Control',
     await call('POST', `/api/vcc/plans/${planId}/review`, 'VWO-REV4');
     await call('POST', `/api/vcc/plans/${planId}/approve`, 'VWO-APP6');
 
-    // 5. Group item without child_asset_id is blocked
-    const grpBlocked = await call('POST', '/api/vcc/work-orders', 'VWO-DCC', {
+    // 5. Physical Composite Set creates 1 Work Order directly as 1 calibratable unit (no child_asset_id needed!)
+    const swWo = await call('POST', '/api/vcc/work-orders', 'VWO-DCC', {
       plan_id: planId,
-      plan_item_id: grpItemRes.body.item.id,
+      plan_item_id: swItemRes.body.item.id,
+      planned_month: 6
+    });
+    expect(swWo.status).toBe(201);
+    expect(swWo.body.workOrder.asset_code).toBe('SW-WO-01');
+    expect(swWo.body.workOrder.composite_details).toBe('1 g - 500 g รวม 8 ชิ้น');
+
+    // Duplicate Composite Set WO in same cycle is blocked (409)
+    expect((await call('POST', '/api/vcc/work-orders', 'VWO-DCC', {
+      plan_id: planId,
+      plan_item_id: swItemRes.body.item.id,
+      planned_month: 6
+    })).status).toBe(409);
+
+    // 6. Flat instrument Work Order succeeds directly, and duplicate is blocked
+    const scWo = await call('POST', '/api/vcc/work-orders', 'VWO-DCC', {
+      plan_id: planId,
+      plan_item_id: scItemRes.body.item.id,
       planned_month: 3
     });
-    expect(grpBlocked.status).toBe(400);
-    expect(grpBlocked.body.error).toMatch(/แยกรหัสเครื่องมือรายตัว/);
-
-    // 6. Group item with child_asset_id succeeds, and duplicate is blocked
-    const grpWo = await call('POST', '/api/vcc/work-orders', 'VWO-DCC', {
-      plan_id: planId,
-      plan_item_id: grpItemRes.body.item.id,
-      planned_month: 3,
-      child_asset_id: child.body.asset.id
-    });
-    expect(grpWo.status).toBe(201);
-    expect(grpWo.body.workOrder.asset_code).toBe('SC-WO-01');
-    expect(grpWo.body.workOrder.due_date).toBe('2026-03-31');
+    expect(scWo.status).toBe(201);
+    expect(scWo.body.workOrder.asset_code).toBe('SC-WO-01');
+    expect(scWo.body.workOrder.due_date).toBe('2026-03-31');
 
     const dupWo = await call('POST', '/api/vcc/work-orders', 'VWO-DCC', {
       plan_id: planId,
-      plan_item_id: grpItemRes.body.item.id,
-      planned_month: 3,
-      child_asset_id: child.body.asset.id
+      plan_item_id: scItemRes.body.item.id,
+      planned_month: 3
     });
     expect(dupWo.status).toBe(409);
 
+    // 6b. Historical APPROVED plan with a legacy Logical Group item still enforces child_asset_id backward-compatibly
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO vcc_assets (id, asset_code, name, asset_type, department, is_group, group_nature, parent_id, status, created_by, updated_by)
+         VALUES ('vwo-hist-grp', 'GRP-WO-SCALE', '[ข้อมูลทดสอบ] กลุ่มเครื่องชั่งเดิม', 'เครื่องชั่ง', 'VWOQC', 1, 'LOGICAL_GROUP', NULL, 'ACTIVE', 'VWO-DCC', 'VWO-DCC')`
+      ),
+      env.DB.prepare("UPDATE vcc_assets SET parent_id = 'vwo-hist-grp' WHERE id = ?").bind(scaleUnit.body.asset.id),
+      env.DB.prepare(
+        `INSERT INTO vcc_annual_plans (id, plan_year, department, document_code, revision, title, due_date_rule, status, prepared_by, reviewed_by, approved_by, created_by, updated_by)
+         VALUES ('vwo-hist-plan-2025', 2025, 'VWOQC', 'FM-QC-46', '00', '[ข้อมูลทดสอบ] แผนปี 2025 เดิม', 'END_OF_MONTH', 'APPROVED', 'VWO-DCC', 'VWO-REV4', 'VWO-APP6', 'VWO-DCC', 'VWO-APP6')`
+      ),
+      env.DB.prepare(
+        `INSERT INTO vcc_annual_plan_items (id, plan_id, asset_id, provider_name, frequency_label, planned_months, due_dates, responsible_dept, sort_order, created_by, updated_by)
+         VALUES ('vwo-hist-pi-grp', 'vwo-hist-plan-2025', 'vwo-hist-grp', 'ทวนสอบภายใน', 'รายปี', '[5]', '["2025-05-31"]', 'VWOQC', 1, 'VWO-DCC', 'VWO-DCC')`
+      )
+    ]);
+    const histGrpBlocked = await call('POST', '/api/vcc/work-orders', 'VWO-DCC', {
+      plan_id: 'vwo-hist-plan-2025',
+      plan_item_id: 'vwo-hist-pi-grp',
+      planned_month: 5
+    });
+    expect(histGrpBlocked.status).toBe(400);
+    expect(histGrpBlocked.body.error).toMatch(/แยกรหัสเครื่องมือรายตัว/);
+
+    const histGrpOk = await call('POST', '/api/vcc/work-orders', 'VWO-DCC', {
+      plan_id: 'vwo-hist-plan-2025',
+      plan_item_id: 'vwo-hist-pi-grp',
+      planned_month: 5,
+      child_asset_id: scaleUnit.body.asset.id
+    });
+    expect(histGrpOk.status).toBe(201);
+    expect(histGrpOk.body.workOrder.asset_code).toBe('SC-WO-01');
+
     // 7. Reschedule preserves original_due_date and requires reason
-    const woId = grpWo.body.workOrder.id;
+    const woId = scWo.body.workOrder.id;
     expect((await call('POST', `/api/vcc/work-orders/${woId}/reschedule`, 'VWO-DCC', { new_due_date: '2026-04-10', reason: '' })).status).toBe(400);
     const resched = await call('POST', `/api/vcc/work-orders/${woId}/reschedule`, 'VWO-DCC', {
       new_due_date: '2026-04-10',
@@ -192,10 +235,10 @@ describe('VCC Phase 3: Work Orders, Execution, Review, Close & Hold/NC Control',
     expect(approved.body.workOrder.status).toBe('CLOSED');
 
     const planDetail = await call('GET', `/api/vcc/plans/${planId}`, 'VWO-DCC');
-    const updatedGrpItem = planDetail.body.items.find((i) => i.id === grpItemRes.body.item.id);
-    expect(updatedGrpItem.actual_months).toEqual([3]);
-    expect(updatedGrpItem.has_evidence).toBe(true);
-    expect(updatedGrpItem.completion_status).toBe('COMPLETED');
+    const updatedScItem = planDetail.body.items.find((i) => i.id === scItemRes.body.item.id);
+    expect(updatedScItem.actual_months).toEqual([3]);
+    expect(updatedScItem.has_evidence).toBe(true);
+    expect(updatedScItem.completion_status).toBe('COMPLETED');
   });
 
   it('triggers ON_HOLD (nc_status = OPEN) on FAIL, does not auto-release on close, and requires L5+ approver with impact assessment to release hold', async () => {

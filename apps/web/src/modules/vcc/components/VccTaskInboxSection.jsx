@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import {
-  Inbox,
   CheckCircle2,
   XCircle,
   ShieldCheck,
@@ -13,11 +12,8 @@ import {
   ArrowLeft,
   ArrowRight,
   Calendar,
-  Building2,
-  User,
   History,
-  CheckSquare,
-  Layers
+  CheckSquare
 } from 'lucide-react';
 import useStore from '../../../store/useStore';
 import {

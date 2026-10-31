@@ -116,14 +116,15 @@ export const fetchVccDashboard = async ({ year = 2026, reference_date } = {}) =>
   const planItemMap = new Map(allPlanItems.map((i) => [i.id, i]));
 
   const onHoldAssetIds = new Set(allWos.filter((w) => w.nc_status === 'OPEN').map((w) => w.asset_id));
-  const individualAssets = allAssets.filter((a) => a.is_group === 0);
-  const activeGroups = allAssets.filter((a) => a.is_group === 1 && a.status === 'ACTIVE');
+  const individualAssets = allAssets.filter((a) => Number(a.is_group) === 0 || a.group_nature === 'COMPOSITE_SET');
+  const activeGroups = allAssets.filter((a) => Number(a.is_group) === 1 && a.group_nature !== 'COMPOSITE_SET' && a.status === 'ACTIVE');
 
   const equipmentKpi = {
     total_assets: individualAssets.length,
     active_assets: individualAssets.filter((a) => a.status === 'ACTIVE' && !onHoldAssetIds.has(a.id)).length,
     on_hold_assets: onHoldAssetIds.size,
     retired_assets: individualAssets.filter((a) => a.status === 'RETIRED').length,
+    composite_set_count: individualAssets.filter((a) => a.status === 'ACTIVE' && a.group_nature === 'COMPOSITE_SET').length,
     group_count: activeGroups.length
   };
 

@@ -50,6 +50,7 @@ const INITIAL_LOCAL_ASSETS = [
     is_group: 0,
     group_nature: 'COMPOSITE_SET',
     parent_id: null,
+    composite_details: 'ตุ้มน้ำหนักมาตรฐาน 100 mg - 500 g (Class E2)',
     status: 'ACTIVE',
     retired_reason: null,
     retired_at: null,
@@ -352,6 +353,7 @@ const enrichLocalAsset = (asset, allAssets, deptMap) => {
   const activeChildren = children.filter((c) => c.status === 'ACTIVE');
   return {
     ...asset,
+    composite_details: asset.composite_details || '',
     department_name_th: deptMap[asset.department] || asset.department,
     parent_asset_code: parent?.asset_code || null,
     parent_name: parent?.name || null,
@@ -393,6 +395,7 @@ export const fetchVccAssets = async ({
   parent_id = '',
   is_group = '',
   calibratable_only = false,
+  include_logical_groups = false,
   logical_groups_only = false,
   q = ''
 } = {}) => {
@@ -403,6 +406,7 @@ export const fetchVccAssets = async ({
     if (asset_type) params.set('asset_type', asset_type);
     if (parent_id) params.set('parent_id', parent_id);
     if (calibratable_only) params.set('calibratable_only', '1');
+    if (include_logical_groups) params.set('include_logical_groups', '1');
     if (logical_groups_only) params.set('logical_groups_only', '1');
     if (is_group !== '' && is_group !== undefined && is_group !== null) params.set('is_group', String(is_group));
     if (q) params.set('q', q);
@@ -419,25 +423,28 @@ export const fetchVccAssets = async ({
     .filter((a) => (!asset_type ? true : a.asset_type === asset_type))
     .filter((a) => (!parent_id ? true : a.parent_id === parent_id))
     .filter((a) => {
-      if (calibratable_only) {
-        return a.is_group === 0 || a.group_nature === 'COMPOSITE_SET';
-      }
       if (logical_groups_only) {
         return a.is_group === 1 && (a.group_nature === 'LOGICAL_GROUP' || !a.group_nature);
       }
-      return is_group === '' || is_group === undefined || is_group === null ? true : a.is_group === Number(is_group);
+      if (String(is_group) === '1') {
+        return a.is_group === 1;
+      }
+      if (!include_logical_groups) {
+        return a.is_group === 0 || a.group_nature === 'COMPOSITE_SET';
+      }
+      return true;
     })
     .filter((a) => {
       if (!needle) return true;
-      return [a.asset_code, a.name, a.serial_no, a.model, a.location]
+      return [a.asset_code, a.name, a.serial_no, a.model, a.location, a.department, a.asset_type, a.composite_details]
         .some((f) => String(f || '').toLowerCase().includes(needle));
     })
     .map((a) => enrichLocalAsset(a, all, deptMap))
     .sort((a, b) => {
-      if (calibratable_only) {
-        return a.asset_code.localeCompare(b.asset_code);
+      if (include_logical_groups) {
+        return (b.is_group - a.is_group) || a.asset_code.localeCompare(b.asset_code);
       }
-      return (b.is_group - a.is_group) || a.asset_code.localeCompare(b.asset_code);
+      return a.asset_code.localeCompare(b.asset_code);
     });
 };
 
@@ -475,31 +482,27 @@ export const createVccAsset = async (payload) => {
   const serialNo = String(payload.serial_no || '').trim();
   const model = String(payload.model || '').trim();
   const location = String(payload.location || '').trim();
-  const isGroup = payload.is_group ? 1 : 0;
+  const compositeDetails = String(payload.composite_details || '').trim();
+  const wantsLogicalGroup = Boolean(payload.is_group) && payload.group_nature !== 'COMPOSITE_SET';
+  const hasParentInput = payload.parent_id !== undefined && payload.parent_id !== null && String(payload.parent_id).trim() !== '';
+  const isGroup = 0;
   const groupNature = payload.group_nature === 'COMPOSITE_SET' ? 'COMPOSITE_SET' : 'LOGICAL_GROUP';
-  const parentId = payload.parent_id ? String(payload.parent_id).trim() : null;
+  const parentId = null;
 
+  if (wantsLogicalGroup) {
+    throw new Error('ยกเลิกการสร้างกลุ่มเครื่องมือแม่ (Logical Group) แล้ว กรุณาขึ้นทะเบียนเป็นเครื่องมือรายตัว หรือชุดเครื่องมือจริง (Composite Set)');
+  }
+  if (hasParentInput) {
+    throw new Error('ยกเลิกการผูกเครื่องมือเข้ากับกลุ่มแม่ (Parent-Child) แล้ว กรุณาขึ้นทะเบียนเป็นเครื่องมืออิสระ');
+  }
   if (!assetCode || !/^[A-Z0-9._/-]{1,50}$/.test(assetCode)) {
     throw new Error('รหัสเครื่องมือไม่ถูกต้อง (ใช้ A-Z, 0-9, ., _, /, - ไม่เกิน 50 ตัวอักษร)');
   }
   if (!name) throw new Error('กรุณาระบุชื่อเครื่องมือ');
   if (!assetType) throw new Error('กรุณาระบุประเภทเครื่องมือ');
   if (!department) throw new Error('กรุณาระบุแผนกเจ้าของเครื่องมือ');
-  if (isGroup && parentId) {
-    throw new Error('กลุ่มเครื่องมือไม่สามารถอยู่ภายใต้กลุ่มอื่นได้ (ห้ามกลุ่มซ้อนกลุ่ม)');
-  }
   if (all.some((a) => a.asset_code.toUpperCase() === assetCode)) {
     throw new Error(`รหัสเครื่องมือ ${assetCode} มีอยู่ในระบบแล้ว`);
-  }
-  if (parentId) {
-    const parent = all.find((a) => a.id === parentId);
-    if (!parent) throw new Error('ไม่พบกลุ่มเครื่องมือแม่ที่ระบุ');
-    if (parent.is_group !== 1 || parent.parent_id !== null) {
-      throw new Error('เครื่องมือแม่ต้องเป็นกลุ่มเครื่องมือเท่านั้น (ห้ามซ้อนเกิน 1 ระดับ)');
-    }
-    if (parent.status !== 'ACTIVE') {
-      throw new Error('ไม่สามารถเพิ่มเครื่องมือลูกเข้ากลุ่มที่ปลดออกแล้วได้');
-    }
   }
 
   const now = new Date().toISOString();
@@ -515,6 +518,7 @@ export const createVccAsset = async (payload) => {
     is_group: isGroup,
     group_nature: groupNature,
     parent_id: parentId,
+    composite_details: compositeDetails,
     status: 'ACTIVE',
     retired_reason: null,
     retired_at: null,
@@ -538,6 +542,7 @@ export const createVccAsset = async (payload) => {
     is_group: isGroup,
     group_nature: groupNature,
     parent_id: parentId,
+    composite_details: compositeDetails,
     status: 'ACTIVE'
   });
   return enrichLocalAsset(created, next, getDepartmentMap());
@@ -564,8 +569,19 @@ export const updateVccAsset = async (id, payload) => {
   const serialNo = payload.serial_no === undefined ? before.serial_no : String(payload.serial_no || '').trim();
   const model = payload.model === undefined ? before.model : String(payload.model || '').trim();
   const location = payload.location === undefined ? before.location : String(payload.location || '').trim();
-  const isGroup = payload.is_group === undefined ? before.is_group : (payload.is_group ? 1 : 0);
+  const compositeDetails = payload.composite_details === undefined ? (before.composite_details || '') : String(payload.composite_details || '').trim();
   const groupNature = payload.group_nature === undefined ? (before.group_nature || 'LOGICAL_GROUP') : (payload.group_nature === 'COMPOSITE_SET' ? 'COMPOSITE_SET' : 'LOGICAL_GROUP');
+
+  const requestedIsGroup = payload.is_group === undefined ? before.is_group : (payload.is_group ? 1 : 0);
+  if (before.is_group === 0 && requestedIsGroup === 1 && groupNature !== 'COMPOSITE_SET') {
+    throw new Error('ไม่สามารถแปลงเครื่องมือรายตัวเป็นกลุ่มเครื่องมือแม่ (Logical Group) ได้');
+  }
+  const isGroup = before.is_group === 1 && groupNature !== 'COMPOSITE_SET' ? requestedIsGroup : 0;
+
+  const hasNewParentInput = payload.parent_id !== undefined && payload.parent_id !== null && String(payload.parent_id).trim() !== '' && payload.parent_id !== before.parent_id;
+  if (hasNewParentInput) {
+    throw new Error('ยกเลิกการผูกเครื่องมือเข้ากับกลุ่มแม่ (Parent-Child) แล้ว');
+  }
   const parentId = payload.parent_id === undefined ? before.parent_id : (payload.parent_id ? String(payload.parent_id).trim() : null);
 
   if (!assetCode || !/^[A-Z0-9._/-]{1,50}$/.test(assetCode)) {
@@ -574,24 +590,11 @@ export const updateVccAsset = async (id, payload) => {
   if (!name) throw new Error('กรุณาระบุชื่อเครื่องมือ');
   if (!assetType) throw new Error('กรุณาระบุประเภทเครื่องมือ');
   if (!department) throw new Error('กรุณาระบุแผนกเจ้าของเครื่องมือ');
-  if (isGroup && parentId) {
-    throw new Error('กลุ่มเครื่องมือไม่สามารถอยู่ภายใต้กลุ่มอื่นได้ (ห้ามกลุ่มซ้อนกลุ่ม)');
-  }
   if (all.some((a) => a.id !== id && a.asset_code.toUpperCase() === assetCode)) {
     throw new Error(`รหัสเครื่องมือ ${assetCode} มีอยู่ในระบบแล้ว`);
   }
   if (before.is_group !== isGroup && all.some((c) => c.parent_id === id)) {
     throw new Error('ไม่สามารถเปลี่ยนสถานะกลุ่มได้ เนื่องจากยังมีเครื่องมือลูกผูกอยู่');
-  }
-  if (parentId) {
-    const parent = all.find((a) => a.id === parentId);
-    if (!parent) throw new Error('ไม่พบกลุ่มเครื่องมือแม่ที่ระบุ');
-    if (parent.is_group !== 1 || parent.parent_id !== null) {
-      throw new Error('เครื่องมือแม่ต้องเป็นกลุ่มเครื่องมือเท่านั้น (ห้ามซ้อนเกิน 1 ระดับ)');
-    }
-    if (parent.status !== 'ACTIVE') {
-      throw new Error('ไม่สามารถเพิ่มหรือย้ายเครื่องมือลูกเข้ากลุ่มที่ปลดออกแล้วได้');
-    }
   }
 
   const updated = {
@@ -606,6 +609,7 @@ export const updateVccAsset = async (id, payload) => {
     is_group: isGroup,
     group_nature: groupNature,
     parent_id: parentId,
+    composite_details: compositeDetails,
     updated_at: new Date().toISOString(),
     updated_by: user?.id || 'dcc'
   };
@@ -625,7 +629,8 @@ export const updateVccAsset = async (id, payload) => {
       department: before.department,
       is_group: before.is_group,
       group_nature: before.group_nature || 'LOGICAL_GROUP',
-      parent_id: before.parent_id
+      parent_id: before.parent_id,
+      composite_details: before.composite_details || ''
     },
     after: {
       asset_code: assetCode,
@@ -637,7 +642,8 @@ export const updateVccAsset = async (id, payload) => {
       department,
       is_group: isGroup,
       group_nature: groupNature,
-      parent_id: parentId
+      parent_id: parentId,
+      composite_details: compositeDetails
     }
   });
   return enrichLocalAsset(updated, next, getDepartmentMap());
@@ -696,12 +702,6 @@ export const reactivateVccAsset = async (id, reason) => {
   if (index === -1) throw new Error('ไม่พบเครื่องมือ');
   const before = all[index];
   if (before.status !== 'RETIRED') throw new Error('เครื่องมือนี้ไม่ได้อยู่ในสถานะปลดออก');
-  if (before.parent_id) {
-    const parent = all.find((p) => p.id === before.parent_id);
-    if (parent && parent.status !== 'ACTIVE') {
-      throw new Error('ไม่สามารถนำเครื่องมือลูกกลับมาใช้งานได้ เนื่องจากกลุ่มแม่ยังถูกปลดออกอยู่ กรุณาเปิดใช้งานกลุ่มแม่ก่อน');
-    }
-  }
   const now = new Date().toISOString();
   const updated = {
     ...before,

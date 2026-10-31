@@ -9,6 +9,7 @@ import { Layers } from 'lucide-react';
  */
 export const AnnualPlanCategoryChips = ({
   planItems = [],
+  activePlan = null,
   workOrders = [],
   selectedCategory = '',
   onSelectCategory
@@ -16,16 +17,20 @@ export const AnnualPlanCategoryChips = ({
   // 1. Identify calibratable instruments (filters out logical group containers)
   const calibratableItems = useMemo(() => {
     return planItems.filter((i) => {
-      // In historical approved plans, if a group item was planned and has no children in plan, keep it as calibratable
-      if (Number(i.is_group) === 1 && (i.group_nature === 'LOGICAL_GROUP' || !i.group_nature)) {
+      if (i.group_nature === 'COMPOSITE_SET') return true;
+      if (Number(i.is_group) === 1) {
+        // Never count unresolved Logical Groups in Draft/Rejected plans as real instruments
+        if (activePlan && (activePlan.status === 'DRAFT' || activePlan.status === 'REJECTED')) {
+          return false;
+        }
         const hasChildrenInPlan = planItems.some(
           (c) => (c.parent_id === i.asset_id || c.parent_id === i.id) && Number(c.is_group) === 0
         );
-        if (hasChildrenInPlan) return false; // Child instruments represent the real units
+        if (hasChildrenInPlan) return false;
       }
       return true;
     });
-  }, [planItems]);
+  }, [planItems, activePlan]);
 
   // 2. Compute category-level counts
   const categoryStats = useMemo(() => {

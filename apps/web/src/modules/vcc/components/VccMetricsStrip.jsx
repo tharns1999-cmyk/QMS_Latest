@@ -29,7 +29,7 @@ export default function VccMetricsStrip({ eq = {}, wo = {}, reviewSlaDays = 3 })
             </span>
           </div>
           <div className="mt-2 text-xs text-slate-400 font-medium truncate">
-            กลุ่มแม่ {eq.group_count ?? 0} · ปลดระวาง {eq.retired_assets ?? 0}
+            ชุดเครื่องมือ {eq.composite_set_count ?? 0} · ปลดระวาง {eq.retired_assets ?? 0}
           </div>
         </div>
 

@@ -11,8 +11,7 @@ import {
   ShieldAlert,
   Clock,
   History,
-  AlertTriangle,
-  FolderTree
+  AlertTriangle
 } from 'lucide-react';
 import { fetchVccWorkOrderDetail } from '../api/vccWorkOrderApi';
 
@@ -55,7 +54,7 @@ export const WorkOrderSideDrawer = ({
     return () => {
       isMounted = false;
     };
-  }, [workOrder?.id]);
+  }, [workOrder, thresholds]);
 
   useEffect(() => {
     if (!workOrder) return;
@@ -200,10 +199,10 @@ export const WorkOrderSideDrawer = ({
                   <span className="text-slate-500 text-xs block">สถานที่ติดตั้ง/จัดเก็บ:</span>
                   <span className="font-medium text-slate-800">{currentWo.location || '-'}</span>
                 </div>
-                {currentWo.parent_asset_code && (
-                  <div className="col-span-2 flex items-center gap-1.5 text-xs text-purple-700 font-medium">
-                    <FolderTree size={13} />
-                    <span>สังกัดกลุ่มแม่: {currentWo.parent_asset_code}</span>
+                {currentWo.group_nature === 'COMPOSITE_SET' && (
+                  <div className="col-span-2 bg-teal-50 border border-teal-200 rounded-lg px-3 py-1.5 text-xs text-teal-900">
+                    <span className="font-bold">ชุดเครื่องมือ (Composite Set)</span>
+                    {currentWo.composite_details ? ` — ${currentWo.composite_details}` : ''}
                   </div>
                 )}
               </div>
