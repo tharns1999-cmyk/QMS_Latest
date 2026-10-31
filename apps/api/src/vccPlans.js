@@ -1229,6 +1229,83 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
     });
   });
 
+  // Explicit resolution for ambiguous work order candidates during reconciliation
+  app.post('/api/vcc/plans/:id/reconcile-work-orders/resolve-ambiguous', requireAuth, requireVccAccess, async (c) => {
+    const db = c.env.DB;
+    const user = c.get('user');
+    const planId = c.req.param('id');
+    const body = await c.req.json().catch(() => ({}));
+
+    const cycleId = clean(body.cycle_id, 100);
+    const chosenWoId = clean(body.chosen_work_order_id, 100);
+    const reason = clean(body.reason, 500);
+
+    if (!cycleId || !chosenWoId) {
+      return c.json({ error: 'กรุณาระบุ cycle_id และ chosen_work_order_id' }, 400);
+    }
+    if (!reason) {
+      return c.json({ error: 'กรุณาระบุเหตุผลในการตัดสินใจจับคู่ใบสั่งงาน' }, 400);
+    }
+
+    const plan = await fetchPlan(db, planId);
+    if (!plan) return c.json({ error: 'ไม่พบแผนการสอบเทียบประจำปี' }, 404);
+    if (plan.status !== 'APPROVED') {
+      return c.json({ error: 'จัดการใบสั่งงานได้เฉพาะแผนที่ได้รับการอนุมัติแล้วเท่านั้น' }, 409);
+    }
+    if (!isUserAuthorizedForPlanDept(user, plan.department)) {
+      return c.json({ error: 'ไม่มีสิทธิ์จัดการใบสั่งงานของแผนกนี้' }, 403);
+    }
+
+    const cycle = await db.prepare('SELECT * FROM vcc_plan_cycles WHERE id = ? AND plan_id = ?').bind(cycleId, planId).first();
+    if (!cycle) return c.json({ error: 'ไม่พบรอบสอบเทียบที่ระบุในแผนนี้' }, 404);
+
+    const wo = await db.prepare('SELECT * FROM vcc_work_orders WHERE id = ?').bind(chosenWoId).first();
+    if (!wo) return c.json({ error: 'ไม่พบใบสั่งงานที่เลือก' }, 404);
+
+    if (wo.asset_id !== cycle.asset_id) {
+      return c.json({ error: 'ใบสั่งงานที่เลือกไม่ตรงกับเครื่องมือของรอบสอบเทียบนี้' }, 400);
+    }
+
+    if (wo.cycle_id && wo.cycle_id !== cycleId && wo.status !== 'CANCELLED') {
+      return c.json({ error: `ใบสั่งงานนี้ถูกจับคู่กับรอบสอบเทียบ ${wo.cycle_id} อยู่แล้ว` }, 409);
+    }
+
+    await db.batch([
+      db.prepare(`
+        UPDATE vcc_work_orders
+        SET cycle_id = ?,
+            plan_id = ?,
+            plan_item_id = ?,
+            plan_year = ?,
+            updated_at = ${NOW},
+            updated_by = ?
+        WHERE id = ?
+      `).bind(cycleId, planId, cycle.plan_item_id, plan.plan_year, user.id, chosenWoId),
+      audit(db, user.id, 'VCC_RECON_AMBIGUOUS_RESOLVED', {
+        plan_id: planId,
+        cycle_id: cycleId,
+        chosen_work_order_id: chosenWoId,
+        wo_code: wo.wo_code,
+        asset_id: cycle.asset_id,
+        reason
+      })
+    ]);
+
+    const reconResult = await generateWorkOrdersForApprovedPlan(db, planId, user.id, audit);
+
+    return c.json({
+      success: true,
+      resolved: {
+        cycle_id: cycleId,
+        work_order_id: chosenWoId,
+        wo_code: wo.wo_code,
+        reason
+      },
+      plan: await fetchPlan(db, planId),
+      work_orders_generation: reconResult
+    });
+  });
+
   // Reject / Return plan for revision (PENDING_REVIEW or PENDING_APPROVAL -> REJECTED) with mandatory reason
   app.post('/api/vcc/plans/:id/reject', requireAuth, requireVccAccess, async (c) => {
     const db = c.env.DB;

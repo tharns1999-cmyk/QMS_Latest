@@ -1,5 +1,5 @@
 import { getThresholds } from './approval.js';
-import { computeDueDateForMonth } from './vccPlans.js';
+import { computeDueDateForMonth, isUserAuthorizedForPlanDept } from './vccPlans.js';
 import { requireVccAccess, requireDccOnly } from './vccAuth.js';
 
 const NOW = "strftime('%Y-%m-%dT%H:%M:%SZ', 'now')";
@@ -19,6 +19,7 @@ export const DEFAULT_WORK_ORDER_SETTINGS = {
 };
 
 const VALID_WO_STATUSES = new Set(['SCHEDULED', 'OPEN', 'IN_PROGRESS', 'PENDING_REVIEW', 'REJECTED', 'CLOSED', 'CANCELLED']);
+export const VALID_CANCELLATION_CATEGORIES = new Set(['PLAN_REVISION', 'MISTAKE_CREATION', 'ASSET_RETIRED', 'AUTHORIZED_CANCEL']);
 const VALID_RESULT_STATUSES = new Set(['PASS', 'FAIL', 'INCONCLUSIVE']);
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -63,7 +64,8 @@ const fetchWorkOrder = async (db, id) =>
       pl.revision AS plan_revision,
       u_perf.name AS performed_by_name,
       u_rev.name AS reviewed_by_name,
-      u_rel.name AS hold_released_by_name
+      u_rel.name AS hold_released_by_name,
+      u_canc.name AS cancelled_by_name
     FROM vcc_work_orders w
     JOIN vcc_assets a ON a.id = w.asset_id
     LEFT JOIN vcc_assets p ON p.id = a.parent_id
@@ -72,16 +74,28 @@ const fetchWorkOrder = async (db, id) =>
     LEFT JOIN users u_perf ON u_perf.id = w.performed_by
     LEFT JOIN users u_rev ON u_rev.id = w.reviewed_by
     LEFT JOIN users u_rel ON u_rel.id = w.hold_released_by
+    LEFT JOIN users u_canc ON u_canc.id = w.cancelled_by
     WHERE w.id = ?
   `).bind(id).first();
 
 export const generateWorkOrdersForApprovedPlan = async (db, planId, actorId, audit) => {
-  try {
-    return await _generateWorkOrdersForApprovedPlan(db, planId, actorId, audit);
-  } catch (err) {
-    console.error('generateWorkOrdersForApprovedPlan failed with error:', err);
-    throw err;
+  const maxRetries = 3;
+  let lastError;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await _generateWorkOrdersForApprovedPlan(db, planId, actorId, audit);
+    } catch (err) {
+      lastError = err;
+      const isConcurrency = /UNIQUE|conflict|busy|locked/i.test(String(err?.message));
+      if (isConcurrency && attempt < maxRetries) {
+        await new Promise((res) => setTimeout(res, 50 * attempt + Math.floor(Math.random() * 50)));
+        continue;
+      }
+      console.error(`generateWorkOrdersForApprovedPlan attempt ${attempt} failed:`, err);
+      throw err;
+    }
   }
+  throw lastError;
 };
 
 const _generateWorkOrdersForApprovedPlan = async (db, planId, actorId, audit) => {
@@ -120,19 +134,44 @@ const _generateWorkOrdersForApprovedPlan = async (db, planId, actorId, audit) =>
     (i) => Number(i.is_group) === 0 || i.group_nature === 'COMPOSITE_SET'
   );
 
-  // Retrieve existing cycle records for this plan if already created
+  // Retrieve existing cycle records across revisions of this plan year & department
   const { results: existingCycles } = await db
-    .prepare('SELECT id, plan_item_id, cycle_seq, planned_month FROM vcc_plan_cycles WHERE plan_id = ?')
-    .bind(planId)
+    .prepare(`
+      SELECT c.id, c.plan_id, c.plan_item_id, c.asset_id, c.cycle_seq, c.planned_month, c.cycle_status
+      FROM vcc_plan_cycles c
+      JOIN vcc_annual_plans p ON p.id = c.plan_id
+      WHERE p.plan_year = ? AND p.department = ?
+      ORDER BY p.revision ASC, c.created_at ASC
+    `)
+    .bind(planYear, planDept)
     .all();
 
-  const existingCyclesMap = new Map();
+  const existingPlanCyclesMap = new Map();
+  const existingAssetSeqCycleMap = new Map();
   for (const c of (existingCycles || [])) {
-    existingCyclesMap.set(`${c.plan_item_id}:${c.cycle_seq}`, c);
+    if (c.plan_id === planId) {
+      existingPlanCyclesMap.set(`${c.plan_item_id}:${c.cycle_seq}`, c);
+    }
+    existingAssetSeqCycleMap.set(`${c.asset_id}:${c.cycle_seq}`, c);
   }
+
+  // Query permanently cancelled work orders
+  const { results: permanentlyCancelledWos } = await db
+    .prepare(`
+      SELECT cycle_id, cancellation_category
+      FROM vcc_work_orders
+      WHERE status = 'CANCELLED'
+        AND cycle_id IS NOT NULL
+        AND cancellation_category IN ('ASSET_RETIRED', 'PLAN_REVISION')
+    `)
+    .all();
+  const permanentlyCancelledCycleIds = new Set(
+    (permanentlyCancelledWos || []).map((w) => w.cycle_id)
+  );
 
   const targetCycles = [];
   const cycleBatchInserts = [];
+  const activeCycleIdsInNewRevision = new Set();
 
   for (const item of calibratableItems) {
     let months = [];
@@ -156,23 +195,40 @@ const _generateWorkOrdersForApprovedPlan = async (db, planId, actorId, audit) =>
       const seen = (monthSeen.get(month) || 0) + 1;
       monthSeen.set(month, seen);
 
-      const existingCycle = existingCyclesMap.get(`${item.id}:${seq}`);
-      const cycleId = existingCycle ? existingCycle.id : crypto.randomUUID();
+      const existingPlanCycle = existingPlanCyclesMap.get(`${item.id}:${seq}`);
+      const existingCrossRevCycle = existingAssetSeqCycleMap.get(`${item.asset_id}:${seq}`);
+      const cycleId = existingPlanCycle?.id || existingCrossRevCycle?.id || crypto.randomUUID();
+      activeCycleIdsInNewRevision.add(cycleId);
       const dueDate = computeDueDateForMonth(planYear, month, dueDateRule);
 
-      // Stable legacy-compatible cycle key:
-      // If multiple cycles occur in the same month, suffix with occurrence index
+      // Stable legacy-compatible cycle key
       const cycleKey = (monthCounts.get(month) > 1 && seen > 1)
         ? `${planYear}:${planDept}:${item.asset_id}:${month}:${seen}`
         : `${planYear}:${planDept}:${item.asset_id}:${month}`;
 
-      if (!existingCycle) {
+      if (!existingPlanCycle && !existingCrossRevCycle) {
         cycleBatchInserts.push(
           db.prepare(`
             INSERT OR IGNORE INTO vcc_plan_cycles (
-              id, plan_id, plan_item_id, asset_id, cycle_seq, planned_month, baseline_planned_date, cycle_status, created_by
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, 'SCHEDULED', ?)
-          `).bind(cycleId, planId, item.id, item.asset_id, seq, month, dueDate, actorId)
+              id, plan_id, plan_item_id, asset_id, cycle_seq, planned_month, baseline_planned_date, cycle_status, plan_revision, created_by
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, 'SCHEDULED', ?, ?)
+          `).bind(cycleId, planId, item.id, item.asset_id, seq, month, dueDate, planRevision, actorId)
+        );
+      } else if (!existingPlanCycle && existingCrossRevCycle) {
+        // Carry over stable cycle identity to the new revision and update scheduled month & date
+        cycleBatchInserts.push(
+          db.prepare(`
+            UPDATE vcc_plan_cycles
+            SET plan_id = ?,
+                plan_item_id = ?,
+                planned_month = ?,
+                baseline_planned_date = ?,
+                cycle_status = CASE WHEN cycle_status = 'CANCELLED' THEN 'SCHEDULED' ELSE cycle_status END,
+                plan_revision = ?,
+                updated_at = ${NOW},
+                updated_by = ?
+            WHERE id = ?
+          `).bind(planId, item.id, month, dueDate, planRevision, actorId, cycleId)
         );
       }
 
@@ -182,8 +238,37 @@ const _generateWorkOrdersForApprovedPlan = async (db, planId, actorId, audit) =>
         item,
         month,
         cycleKey,
-        dueDate
+        dueDate,
+        isCancelled: permanentlyCancelledCycleIds.has(cycleId) || existingCrossRevCycle?.cycle_status === 'CANCELLED'
       });
+    }
+  }
+
+  // Controlled cancellation for cycles removed in this revision
+  for (const c of (existingCycles || [])) {
+    if (!activeCycleIdsInNewRevision.has(c.id) && c.cycle_status !== 'CANCELLED') {
+      cycleBatchInserts.push(
+        db.prepare(`
+          UPDATE vcc_plan_cycles
+          SET cycle_status = 'CANCELLED',
+              updated_at = ${NOW},
+              updated_by = ?
+          WHERE id = ?
+        `).bind(actorId, c.id)
+      );
+      cycleBatchInserts.push(
+        db.prepare(`
+          UPDATE vcc_work_orders
+          SET status = 'CANCELLED',
+              cancellation_category = 'PLAN_REVISION',
+              cancellation_reason = 'รอบสอบเทียบถูกตัดออกจากแผนในการปรับปรุงแผน (Revision)',
+              cancelled_by = ?,
+              cancelled_at = ${NOW},
+              updated_at = ${NOW},
+              updated_by = ?
+          WHERE cycle_id = ? AND status != 'CLOSED' AND status != 'CANCELLED'
+        `).bind(actorId, actorId, c.id)
+      );
     }
   }
 
@@ -249,7 +334,17 @@ const _generateWorkOrdersForApprovedPlan = async (db, planId, actorId, audit) =>
   const boundWoIds = new Set();
 
   for (const cycle of targetCycles) {
-    const { cycleId, item, month, cycleKey, dueDate } = cycle;
+    const { cycleId, item, month, cycleKey, dueDate, isCancelled } = cycle;
+
+    if (isCancelled) {
+      skipped.push({
+        cycle_id: cycleId,
+        asset_id: item.asset_id,
+        planned_month: month,
+        reason: 'รอบสอบเทียบนี้ถูกยกเลิกอย่างถาวรแล้ว (CANCELLED)'
+      });
+      continue;
+    }
 
     // Check direct match first
     const directWo = byCycleId.get(cycleId) || byCycleKey.get(cycleKey);
@@ -298,8 +393,15 @@ const _generateWorkOrdersForApprovedPlan = async (db, planId, actorId, audit) =>
           skipped.push({ wo_id: matchedWo.id, wo_code: matchedWo.wo_code, cycle_id: cycleId });
         }
       } else {
-        // Non-closed work order: bind cycle_id, cycle_key, plan references and baseline dates
-        if (matchedWo.cycle_id !== cycleId || matchedWo.plan_id !== planId || !matchedWo.plan_item_id) {
+        // Non-closed work order: bind cycle_id, cycle_key, plan references and update rescheduled dates if needed
+        const needsUpdate = (
+          matchedWo.cycle_id !== cycleId ||
+          matchedWo.plan_id !== planId ||
+          !matchedWo.plan_item_id ||
+          matchedWo.planned_month !== month ||
+          matchedWo.due_date !== dueDate
+        );
+        if (needsUpdate) {
           batchStatements.push(
             db.prepare(`
               UPDATE vcc_work_orders
@@ -309,13 +411,15 @@ const _generateWorkOrdersForApprovedPlan = async (db, planId, actorId, audit) =>
                   plan_item_id = ?,
                   plan_year = ?,
                   plan_revision = ?,
+                  planned_month = ?,
+                  due_date = ?,
                   baseline_planned_date = COALESCE(baseline_planned_date, original_due_date, due_date),
-                  scheduled_date = COALESCE(scheduled_date, due_date),
-                  required_due_date = COALESCE(required_due_date, due_date),
+                  scheduled_date = COALESCE(scheduled_date, ?),
+                  required_due_date = COALESCE(required_due_date, ?),
                   updated_at = ${NOW},
                   updated_by = ?
               WHERE id = ?
-            `).bind(cycleId, cycleKey, planId, item.id, planYear, planRevision, actorId, matchedWo.id)
+            `).bind(cycleId, cycleKey, planId, item.id, planYear, planRevision, month, dueDate, dueDate, dueDate, actorId, matchedWo.id)
           );
           reconciled.push({ wo_id: matchedWo.id, wo_code: matchedWo.wo_code, cycle_id: cycleId });
         } else {
@@ -421,6 +525,11 @@ const _generateWorkOrdersForApprovedPlan = async (db, planId, actorId, audit) =>
     await db.batch(batchStatements);
   }
 
+  const reconciliationStatus = ambiguous.length > 0
+    ? 'HAS_AMBIGUITIES'
+    : (unmatched.length > 0 ? 'INCOMPLETE' : 'COMPLETE');
+  const isFullyReconciled = ambiguous.length === 0 && unmatched.length === 0;
+
   return {
     total_cycles: targetCycles.length,
     matched_count: matched.length,
@@ -429,6 +538,8 @@ const _generateWorkOrdersForApprovedPlan = async (db, planId, actorId, audit) =>
     generated_count: generated.length,
     reconciled_count: reconciled.length,
     skipped_count: skipped.length,
+    reconciliation_status: reconciliationStatus,
+    is_fully_reconciled: isFullyReconciled,
     matched,
     unmatched,
     ambiguous,
@@ -1089,6 +1200,77 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
         after: { nc_status: 'RELEASED' }
       })
     ]);
+
+    return c.json({ workOrder: await fetchWorkOrder(db, id) });
+  });
+
+  // Cancel work order with mandatory category and reason (Permanent cancellations prevent auto-recreation)
+  app.post('/api/vcc/work-orders/:id/cancel', requireAuth, requireVccAccess, async (c) => {
+    const db = c.env.DB;
+    const user = c.get('user');
+    const id = c.req.param('id');
+    const body = await c.req.json().catch(() => ({}));
+
+    const existing = await fetchWorkOrder(db, id);
+    if (!existing) return c.json({ error: 'ไม่พบใบสั่งงานทวนสอบ/สอบเทียบ' }, 404);
+    if (existing.status === 'CLOSED') {
+      return c.json({ error: 'ไม่สามารถยกเลิกใบสั่งงานที่ปิดงาน (CLOSED) สำเร็จแล้วได้' }, 409);
+    }
+    if (existing.status === 'CANCELLED') {
+      return c.json({ error: 'ใบสั่งงานนี้ถูกยกเลิกไปแล้ว' }, 409);
+    }
+
+    if (!isUserAuthorizedForPlanDept(user, existing.department)) {
+      return c.json({ error: 'ไม่มีสิทธิ์ยกเลิกใบสั่งงานของแผนกนี้' }, 403);
+    }
+
+    const category = String(body.cancellation_category || '').trim().toUpperCase();
+    const reason = String(body.cancellation_reason || '').trim();
+
+    if (!VALID_CANCELLATION_CATEGORIES.has(category)) {
+      return c.json({ error: 'ประเภทการยกเลิกต้องเป็น PLAN_REVISION, MISTAKE_CREATION, ASSET_RETIRED หรือ AUTHORIZED_CANCEL' }, 400);
+    }
+    if (!reason) {
+      return c.json({ error: 'กรุณาระบุเหตุผลในการขอยกเลิกใบสั่งงาน' }, 400);
+    }
+
+    const batchStmts = [
+      db.prepare(`
+        UPDATE vcc_work_orders
+        SET status = 'CANCELLED',
+            cancellation_category = ?,
+            cancellation_reason = ?,
+            cancelled_by = ?,
+            cancelled_at = ${NOW},
+            updated_at = ${NOW},
+            updated_by = ?
+        WHERE id = ?
+      `).bind(category, reason, user.id, user.id, id),
+      audit(db, user.id, 'VCC_WO_CANCELLED', {
+        wo_id: id,
+        wo_code: existing.wo_code,
+        asset_id: existing.asset_id,
+        cycle_id: existing.cycle_id,
+        cancellation_category: category,
+        cancellation_reason: reason,
+        before: { status: existing.status },
+        after: { status: 'CANCELLED' }
+      })
+    ];
+
+    if ((category === 'ASSET_RETIRED' || category === 'PLAN_REVISION') && existing.cycle_id) {
+      batchStmts.push(
+        db.prepare(`
+          UPDATE vcc_plan_cycles
+          SET cycle_status = 'CANCELLED',
+              updated_at = ${NOW},
+              updated_by = ?
+          WHERE id = ?
+        `).bind(user.id, existing.cycle_id)
+      );
+    }
+
+    await db.batch(batchStmts);
 
     return c.json({ workOrder: await fetchWorkOrder(db, id) });
   });

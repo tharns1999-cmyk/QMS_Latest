@@ -71,14 +71,21 @@ describe('VCC Phase 2.5: Stable Planned Cycle Identity, Reconciliation & E2E Ver
     }
   });
 
-  beforeEach(async () => {
+  const cleanDb = async () => {
     await env.DB.batch([
+      env.DB.prepare("UPDATE vcc_annual_plans SET status = 'DRAFT'"),
+      env.DB.prepare("UPDATE vcc_work_orders SET status = 'CANCELLED', certificate_no = NULL"),
+      env.DB.prepare("UPDATE vcc_plan_cycles SET cycle_status = 'CANCELLED'"),
       env.DB.prepare('DELETE FROM vcc_work_orders'),
       env.DB.prepare('DELETE FROM vcc_plan_cycles'),
       env.DB.prepare('DELETE FROM vcc_annual_plan_items'),
       env.DB.prepare('DELETE FROM vcc_annual_plans'),
       env.DB.prepare('DELETE FROM vcc_assets')
     ]);
+  };
+
+  beforeEach(async () => {
+    await cleanDb();
   });
 
   it('1. End-to-End: 5 instruments with 17 planned cycles generate 0 in draft/review, exactly 17 on approve, and 0 duplicates on concurrency/retry', async () => {
@@ -509,12 +516,6 @@ describe('VCC Phase 2.5: Stable Planned Cycle Identity, Reconciliation & E2E Ver
   });
 
   afterAll(async () => {
-    await env.DB.batch([
-      env.DB.prepare('DELETE FROM vcc_work_orders'),
-      env.DB.prepare('DELETE FROM vcc_plan_cycles'),
-      env.DB.prepare('DELETE FROM vcc_annual_plan_items'),
-      env.DB.prepare('DELETE FROM vcc_annual_plans'),
-      env.DB.prepare("DELETE FROM vcc_assets WHERE asset_code LIKE 'QC-%'")
-    ]);
+    await cleanDb();
   });
 });
