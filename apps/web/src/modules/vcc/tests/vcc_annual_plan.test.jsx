@@ -208,7 +208,7 @@ describe('VCC Phase 2 — Annual Calibration Plan (FM-QC-46) & Approval Workflow
     // Verify plan moved to PENDING_APPROVAL and qc4 (reviewer) now sees non-actionable banner
     expect(await screen.findByText(/สถานะ: รออนุมัติ/i)).toBeInTheDocument();
     expect(await screen.findByTestId('vcc-task-non-actionable-banner')).toHaveTextContent(
-      /(งานทบทวนนี้ดำเนินการเสร็จสิ้นแล้ว|ผู้ทบทวนไม่สามารถอนุมัติแผนที่ตนเป็นผู้ทบทวนได้)/i
+      /(งานทบทวนนี้ดำเนินการเสร็จสิ้นแล้ว|ผู้ทบทวนไม่สามารถอนุมัติแผนที่ตน(เอง)?เป็นผู้ทบทวนได้)/i
     );
 
     // 4) Switch user to Approver L5 (qc5) and Approve -> moves to APPROVED
