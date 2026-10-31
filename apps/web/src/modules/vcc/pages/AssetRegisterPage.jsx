@@ -40,6 +40,7 @@ import {
 import AnnualPlanMatrixSection from '../components/AnnualPlanMatrixSection';
 import WorkOrderSection from '../components/WorkOrderSection';
 import VccDashboardSection from '../components/VccDashboardSection';
+import VccTaskInboxSection from '../components/VccTaskInboxSection';
 
 const EMPTY_FORM = {
   asset_code: '',
@@ -75,6 +76,7 @@ const AssetRegisterPageInner = () => {
   // URL-driven navigation synchronized with Sidebar
   const routeView = useMemo(() => {
     const p = location?.pathname || '';
+    if (p.includes('/vcc/tasks')) return 'TASKS';
     if (p.includes('/vcc/work-orders')) return 'WORK_ORDERS';
     if (p.includes('/vcc/plans')) return 'ANNUAL_PLAN';
     if (p.includes('/vcc/assets')) return 'ASSETS';
@@ -90,6 +92,7 @@ const AssetRegisterPageInner = () => {
     setLocalModuleView(nextView);
     if (navigate && location?.pathname && location.pathname.startsWith('/vcc')) {
       const targetPath =
+        nextView === 'TASKS' ? '/vcc/tasks' :
         nextView === 'WORK_ORDERS' ? '/vcc/work-orders' :
         nextView === 'ANNUAL_PLAN' ? '/vcc/plans' :
         nextView === 'ASSETS' ? '/vcc/assets' : '/vcc/dashboard';
@@ -363,11 +366,18 @@ const AssetRegisterPageInner = () => {
           description: 'เปิดใบสั่งงานตามแผน เลื่อนวันครบกำหนด บันทึกผลพร้อมใบรับรอง ตรวจรับปิดงาน และควบคุมการระงับใช้',
           Icon: ClipboardList
         };
+      case 'TASKS':
+        return {
+          breadcrumb: 'งานที่ต้องดำเนินการ',
+          title: 'งานที่ต้องดำเนินการ (VCC Task Inbox)',
+          description: 'ศูนย์กลางการทบทวนและอนุมัติแผนการทวนสอบเครื่องมือประจำปีตามสิทธิ์และผู้รับผิดชอบ',
+          Icon: ClipboardList
+        };
       case 'ANNUAL_PLAN':
         return {
           breadcrumb: 'แผนการทวนสอบประจำปี',
           title: 'แผนการทวนสอบเครื่องมือประจำปี',
-          description: 'วางรอบทวนสอบและสอบเทียบเครื่องมือตลอด 12 เดือน และอนุมัติแผนตามลำดับขั้น',
+          description: 'วางรอบทวนสอบและสอบเทียบเครื่องมือตลอด 12 เดือน และส่งเข้าสู่กระบวนการทบทวน',
           Icon: Calendar
         };
       case 'ASSETS':
@@ -405,6 +415,13 @@ const AssetRegisterPageInner = () => {
           aria-label="แผนการทวนสอบประจำปี (FM-QC-46)"
         >
           แผนการทวนสอบประจำปี (FM-QC-46)
+        </button>
+        <button
+          type="button"
+          onClick={() => setModuleView('TASKS')}
+          aria-label="งานที่ต้องดำเนินการ (VCC Task Inbox)"
+        >
+          งานที่ต้องดำเนินการ (VCC Task Inbox)
         </button>
         <button
           type="button"
@@ -475,7 +492,9 @@ const AssetRegisterPageInner = () => {
         </div>
       )}
 
-      {moduleView === 'ANNUAL_PLAN' ? (
+      {moduleView === 'TASKS' ? (
+        <VccTaskInboxSection />
+      ) : moduleView === 'ANNUAL_PLAN' ? (
         <AnnualPlanMatrixSection activeDepartments={activeDepartments} />
       ) : moduleView === 'WORK_ORDERS' ? (
         <WorkOrderSection activeDepartments={activeDepartments} />

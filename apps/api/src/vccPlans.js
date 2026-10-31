@@ -907,9 +907,12 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
         plan_id: id,
         plan_year: plan.plan_year,
         department: plan.department,
+        revision: plan.revision,
         item_count: items.length,
         assigned_reviewer_id: reviewerId || null,
         assigned_approver_id: approverId || null,
+        task_reference: `api-vcc-plan-${id}-review`,
+        is_resubmission: plan.status === 'REJECTED',
         before: { status: plan.status },
         after: { status: 'PENDING_REVIEW' }
       })
@@ -950,7 +953,7 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
       return c.json({ error: `ผู้ทบทวนต้องมีระดับอนุมัติ L${thresholds.required_reviewer_level} ขึ้นไปตาม Approval Matrix` }, 403);
     }
 
-    await db.batch([
+    const batchRes = await db.batch([
       db.prepare(`
         UPDATE vcc_annual_plans
         SET status = 'PENDING_APPROVAL',
@@ -964,12 +967,19 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
       audit(db, user.id, 'VCC_PLAN_REVIEWED', {
         plan_id: id,
         plan_year: plan.plan_year,
+        department: plan.department,
+        revision: plan.revision,
         comment,
         required_reviewer_level: thresholds.required_reviewer_level,
+        task_reference: `api-vcc-plan-${id}-review`,
+        next_task_reference: `api-vcc-plan-${id}-approve`,
         before: { status: 'PENDING_REVIEW' },
         after: { status: 'PENDING_APPROVAL' }
       })
     ]);
+    if (batchRes?.[0]?.meta?.changes === 0) {
+      return c.json({ error: 'แผนนี้ถูกดำเนินการไปแล้ว กรุณารีเฟรชหน้าจอ' }, 409);
+    }
 
     return c.json({ plan: await fetchPlan(db, id) });
   });
@@ -1007,7 +1017,7 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
       return c.json({ error: `ผู้อนุมัติต้องมีระดับอนุมัติ L${thresholds.required_approver_level} ขึ้นไปตาม Approval Matrix` }, 403);
     }
 
-    await db.batch([
+    const batchRes = await db.batch([
       db.prepare(`
         UPDATE vcc_annual_plans
         SET status = 'APPROVED',
@@ -1021,12 +1031,18 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
       audit(db, user.id, 'VCC_PLAN_APPROVED', {
         plan_id: id,
         plan_year: plan.plan_year,
+        department: plan.department,
+        revision: plan.revision,
         comment,
         required_approver_level: thresholds.required_approver_level,
+        task_reference: `api-vcc-plan-${id}-approve`,
         before: { status: 'PENDING_APPROVAL' },
         after: { status: 'APPROVED' }
       })
     ]);
+    if (batchRes?.[0]?.meta?.changes === 0) {
+      return c.json({ error: 'แผนนี้ถูกดำเนินการไปแล้ว กรุณารีเฟรชหน้าจอ' }, 409);
+    }
 
     return c.json({ plan: await fetchPlan(db, id) });
   });
@@ -1054,6 +1070,16 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
       ? thresholds.required_reviewer_level
       : thresholds.required_approver_level;
 
+    if (plan.status === 'PENDING_REVIEW' && plan.assigned_reviewer_id && user.id !== plan.assigned_reviewer_id && !user.isDcc && !user.isQmr && user.approval_level < 6) {
+      return c.json({ error: 'แผนนี้ถูกมอบหมายให้ผู้ทบทวนรายอื่นดำเนินการ' }, 403);
+    }
+    if (plan.status === 'PENDING_APPROVAL' && plan.assigned_approver_id && user.id !== plan.assigned_approver_id && !user.isDcc && !user.isQmr && user.approval_level < 6) {
+      return c.json({ error: 'แผนนี้ถูกมอบหมายให้ผู้อนุมัติรายอื่นดำเนินการ' }, 403);
+    }
+    if (plan.status === 'PENDING_APPROVAL' && user.id === plan.reviewed_by) {
+      return c.json({ error: 'ผู้ทบทวนไม่สามารถพิจารณาอนุมัติหรือส่งกลับแผนในขั้นตอนอนุมัติได้' }, 403);
+    }
+
     if (!isUserAuthorizedForPlanDept(user, plan.department)) {
       return c.json({ error: 'เฉพาะผู้ใช้งานที่สังกัดแผนกของแผน หรือ DCC/QMR เท่านั้นที่สามารถส่งกลับแผนได้' }, 403);
     }
@@ -1064,7 +1090,7 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
       return c.json({ error: `ต้องมีระดับอนุมัติ L${requiredLevel} ขึ้นไปตาม Approval Matrix` }, 403);
     }
 
-    await db.batch([
+    const batchRes = await db.batch([
       db.prepare(`
         UPDATE vcc_annual_plans
         SET status = 'REJECTED',
@@ -1073,17 +1099,24 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
             rejected_reason = ?,
             updated_at = ${NOW},
             updated_by = ?
-        WHERE id = ?
+        WHERE id = ? AND status IN ('PENDING_REVIEW', 'PENDING_APPROVAL')
       `).bind(user.id, reason, user.id, id),
       audit(db, user.id, 'VCC_PLAN_REJECTED', {
         plan_id: id,
         plan_year: plan.plan_year,
+        department: plan.department,
+        revision: plan.revision,
         reason,
         stage: plan.status,
+        task_reference: plan.status === 'PENDING_REVIEW' ? `api-vcc-plan-${id}-review` : `api-vcc-plan-${id}-approve`,
+        next_task_reference: `api-vcc-plan-${id}-revise`,
         before: { status: plan.status },
         after: { status: 'REJECTED' }
       })
     ]);
+    if (batchRes?.[0]?.meta?.changes === 0) {
+      return c.json({ error: 'แผนนี้ถูกดำเนินการไปแล้ว กรุณารีเฟรชหน้าจอ' }, 409);
+    }
 
     return c.json({ plan: await fetchPlan(db, id) });
   });

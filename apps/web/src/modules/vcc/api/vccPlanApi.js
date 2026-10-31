@@ -519,6 +519,13 @@ export const saveVccPlanSettings = async ({ providers, planSettings }) => {
 
 export const fetchVccPlans = async ({ status = 'DRAFT', year = '', department = '' } = {}) => {
   if (isApiMode) {
+    if (status === 'ALL' || !status) {
+      const statuses = ['DRAFT', 'PENDING_REVIEW', 'PENDING_APPROVAL', 'APPROVED', 'REJECTED'];
+      const results = await Promise.all(
+        statuses.map((st) => fetchVccPlans({ status: st, year, department }).catch(() => []))
+      );
+      return results.flat();
+    }
     const params = new URLSearchParams();
     params.set('status', status);
     if (year !== '' && year !== undefined && year !== null) params.set('year', String(year));
@@ -531,7 +538,7 @@ export const fetchVccPlans = async ({ status = 'DRAFT', year = '', department = 
   const allItems = getLocalPlanItems();
   const deptMap = getDepartmentMap();
   return allPlans
-    .filter((p) => p.status === status)
+    .filter((p) => (status === 'ALL' || !status ? true : p.status === status))
     .filter((p) => (year === '' || year === undefined || year === null ? true : Number(p.plan_year) === Number(year)))
     .filter((p) => (!department ? true : p.department === department))
     .map((p) => enrichLocalPlan(p, allItems, deptMap))
@@ -941,6 +948,11 @@ export const submitVccPlan = async (planId, maybeAssignees = {}, maybeApproverId
   const assignedReviewer = users.find((u) => u.id === reviewerId);
   const assignedApprover = users.find((u) => u.id === approverId);
 
+  const prevAudit = getLocalAudit().filter(
+    (h) => String(h.action || '') === 'VCC_PLAN_SUBMITTED' && h.details?.plan_id === planId
+  );
+  const workflowRound = prevAudit.length + 1;
+
   const now = new Date().toISOString();
   const updated = {
     ...plan,
@@ -964,6 +976,7 @@ export const submitVccPlan = async (planId, maybeAssignees = {}, maybeApproverId
     rejected_by: null,
     rejected_at: null,
     rejected_reason: null,
+    workflow_round: workflowRound,
     updated_at: now,
     updated_by: user.id
   };
@@ -973,6 +986,13 @@ export const submitVccPlan = async (planId, maybeAssignees = {}, maybeApproverId
   appendLocalAudit('VCC_PLAN_SUBMITTED', {
     plan_id: planId,
     plan_year: plan.plan_year,
+    department: plan.department,
+    revision: plan.revision,
+    workflow_round: workflowRound,
+    is_resubmission: plan.status === 'REJECTED',
+    assigned_reviewer_id: reviewerId || null,
+    assigned_approver_id: approverId || null,
+    task_reference: `api-vcc-plan-${planId}-review`,
     before: { status: plan.status },
     after: { status: 'PENDING_REVIEW' }
   });
@@ -1030,7 +1050,13 @@ export const reviewVccPlan = async (planId, comment = '') => {
   setLocalPlans(next);
   appendLocalAudit('VCC_PLAN_REVIEWED', {
     plan_id: planId,
+    plan_year: plan.plan_year,
+    department: plan.department,
+    revision: plan.revision,
+    workflow_round: plan.workflow_round || 1,
     comment: updated.review_comment,
+    task_reference: `api-vcc-plan-${planId}-review`,
+    next_task_reference: `api-vcc-plan-${planId}-approve`,
     before: { status: 'PENDING_REVIEW' },
     after: { status: 'PENDING_APPROVAL' }
   });
@@ -1091,7 +1117,12 @@ export const approveVccPlan = async (planId, comment = '') => {
   setLocalPlans(next);
   appendLocalAudit('VCC_PLAN_APPROVED', {
     plan_id: planId,
+    plan_year: plan.plan_year,
+    department: plan.department,
+    revision: plan.revision,
+    workflow_round: plan.workflow_round || 1,
     comment: updated.approval_comment,
+    task_reference: `api-vcc-plan-${planId}-approve`,
     before: { status: 'PENDING_APPROVAL' },
     after: { status: 'APPROVED' }
   });
@@ -1130,6 +1161,15 @@ export const rejectVccPlan = async (planId, reason = '') => {
     : thresholds.required_approver_level;
   const userLevel = Number(user.approval_level ?? user.approvalLevel ?? 4);
 
+  if (plan.status === 'PENDING_REVIEW' && plan.assigned_reviewer_id && user.id !== plan.assigned_reviewer_id && !user.isDcc && !user.isQmr && userLevel < 6) {
+    throw new Error('แผนนี้ถูกมอบหมายให้ผู้ทบทวนรายอื่นดำเนินการ');
+  }
+  if (plan.status === 'PENDING_APPROVAL' && plan.assigned_approver_id && user.id !== plan.assigned_approver_id && !user.isDcc && !user.isQmr && userLevel < 6) {
+    throw new Error('แผนนี้ถูกมอบหมายให้ผู้อนุมัติรายอื่นดำเนินการ');
+  }
+  if (plan.status === 'PENDING_APPROVAL' && user.id === plan.reviewed_by) {
+    throw new Error('ผู้ทบทวนไม่สามารถพิจารณาอนุมัติหรือส่งกลับแผนในขั้นตอนอนุมัติได้');
+  }
   if (user.id === plan.prepared_by) {
     throw new Error('ผู้จัดทำไม่สามารถพิจารณาแผนของตนเองได้');
   }
@@ -1154,7 +1194,15 @@ export const rejectVccPlan = async (planId, reason = '') => {
   setLocalPlans(next);
   appendLocalAudit('VCC_PLAN_REJECTED', {
     plan_id: planId,
+    plan_year: plan.plan_year,
+    department: plan.department,
+    revision: plan.revision,
+    workflow_round: plan.workflow_round || 1,
     reason: trimmedReason,
+    return_reason: trimmedReason,
+    stage: plan.status,
+    task_reference: plan.status === 'PENDING_REVIEW' ? `api-vcc-plan-${planId}-review` : `api-vcc-plan-${planId}-approve`,
+    next_task_reference: `api-vcc-plan-${planId}-revise`,
     before: { status: plan.status },
     after: { status: 'REJECTED' }
   });

@@ -101,12 +101,14 @@ describe('VCC FM-QC-46 — สถาปัตยกรรมข้อมูล�
     // ไม่มีปุ่มเน้นสีหลักซ้ำใน header เดิม
     expect(screen.queryByRole('button', { name: /เพิ่มเครื่องมือเข้าแผน/ })).toBeNull();
 
-    // ส่งทบทวนแล้ว แผนถูกล็อก ปุ่มเพิ่มต้องหายไป
+    // ส่งทบทวนแล้ว แผนถูกล็อก ปุ่มเพิ่มและปุ่มดำเนินการ Workflow ต้องไม่อยู่ในหน้า Planning Workspace
     fireEvent.click(screen.getByRole('button', { name: 'ส่งทบทวนแผน' }));
     const confirmBtn = await screen.findByRole('button', { name: 'ยืนยันส่งทบทวนแผน' });
     fireEvent.click(confirmBtn);
-    expect(await screen.findByRole('button', { name: 'ยืนยันการทบทวน' })).toBeInTheDocument();
+    expect(await screen.findByText(/สถานะ: รอทบทวน/, { selector: 'span' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /เพิ่มเครื่องมือจากทะเบียน/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /ยืนยันการทบทวน/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /ส่งกลับแก้ไข/ })).toBeNull();
   }, 15000);
 
   it('6. สรุปสถานะบอกขั้นตอนถัดไป และรายละเอียดผู้ทบทวน/ผู้อนุมัติขยายดูได้', async () => {

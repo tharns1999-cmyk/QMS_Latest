@@ -167,36 +167,55 @@ describe('VCC Multi-Department Access & Workflow Enablement (Frontend)', () => {
       expect(screen.getByRole('button', { name: /ส่งทบทวนแผน/ })).toBeInTheDocument();
     });
 
-    it('shows [ยืนยันการทบทวน] and [ส่งกลับแก้ไข] for PENDING_REVIEW plan', () => {
-      render(
+    it('does NOT show Review/Approve/Reject buttons on AnnualPlanWorkspaceHeader for PENDING_REVIEW or PENDING_APPROVAL', () => {
+      const { rerender } = render(
         <AnnualPlanWorkspaceHeader
           statusTab="PENDING_REVIEW"
           setStatusTab={() => {}}
           activePlan={mockReviewPlan}
           canEditPlan={false}
-          onOpenWorkflowModal={() => {}}
           availablePlans={[mockReviewPlan]}
           planItems={[{ id: 'item-1' }]}
         />
       );
-      expect(screen.getByRole('button', { name: /ยืนยันการทบทวน/ })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /ส่งกลับแก้ไข/ })).toBeInTheDocument();
-    });
+      expect(screen.queryByRole('button', { name: /ยืนยันการทบทวน/ })).toBeNull();
+      expect(screen.queryByRole('button', { name: /ส่งกลับแก้ไข/ })).toBeNull();
 
-    it('shows [อนุมัติแผนประจำปี] and [ส่งกลับแก้ไข] for PENDING_APPROVAL plan', () => {
-      render(
+      rerender(
         <AnnualPlanWorkspaceHeader
           statusTab="PENDING_APPROVAL"
           setStatusTab={() => {}}
           activePlan={mockApprovePlan}
           canEditPlan={false}
-          onOpenWorkflowModal={() => {}}
           availablePlans={[mockApprovePlan]}
           planItems={[{ id: 'item-1' }]}
         />
       );
-      expect(screen.getByRole('button', { name: /อนุมัติแผนประจำปี/ })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /ส่งกลับแก้ไข/ })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /อนุมัติแผน/ })).toBeNull();
+      expect(screen.queryByRole('button', { name: /ส่งกลับแก้ไข/ })).toBeNull();
+    });
+
+    it('shows [ส่งทบทวนอีกครั้ง] and full return reason banner for REJECTED plan', () => {
+      const mockRejectedPlan = {
+        ...mockDraftPlan,
+        status: 'REJECTED',
+        rejected_reason: 'กรุณาปรับรอบสอบเทียบเครื่องชั่งเป็นทุก 6 เดือน'
+      };
+      render(
+        <AnnualPlanWorkspaceHeader
+          statusTab="REJECTED"
+          setStatusTab={() => {}}
+          activePlan={mockRejectedPlan}
+          canEditPlan={true}
+          onSubmitPlan={() => {}}
+          availablePlans={[mockRejectedPlan]}
+          planItems={[{ id: 'item-1' }]}
+        />
+      );
+      expect(screen.getByRole('button', { name: /ส่งทบทวนอีกครั้ง/ })).toBeInTheDocument();
+      expect(screen.getByTestId('plan-rejected-reason-banner')).toHaveTextContent(
+        /กรุณาปรับรอบสอบเทียบเครื่องชั่งเป็นทุก 6 เดือน/
+      );
     });
   });
 

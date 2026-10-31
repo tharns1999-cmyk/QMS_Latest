@@ -16,21 +16,18 @@ import {
   deleteVccPlanItem,
   validateVccPlanItemWorkOrder,
   submitVccPlan,
-  reviewVccPlan,
-  approveVccPlan,
-  rejectVccPlan
+  isUserAuthorizedForPlanDept,
 } from '../api/vccPlanApi';
 import { fetchVccWorkOrders, createVccWorkOrder } from '../api/vccWorkOrderApi';
 import {
   PlanFormModal,
   PlanItemModal,
-  PlanWorkflowModal,
   PlanSubmitModal,
   GroupWorkOrderModal,
   PlanSettingsModal,
   PlanHistoryModal,
   UnplannedJustificationModal,
-  DraftGroupConversionModal
+  DraftGroupConversionModal,
 } from './AnnualPlanModals';
 import AnnualPlanWorkspaceHeader from './AnnualPlanWorkspaceHeader';
 import AnnualPlanMatrixTable from './AnnualPlanMatrixTable';
@@ -50,6 +47,11 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
       (t) => (t.referenceType === 'VCC_PLAN' || String(t.type || t.taskType).startsWith('VCC_PLAN_') || t.planId) &&
              t.status !== 'COMPLETED'
     );
+    const hasRevise = vccTasks.some(
+      (t) => (t.taskType === 'VCC_PLAN_REVISE' || t.type === 'Revise') &&
+             (!t.assigneeId || t.assigneeId === currentUser?.id || t.assigneeId === currentUser?.empId)
+    );
+    if (hasRevise) return 'REJECTED';
     const hasReview = vccTasks.some(
       (t) => (t.taskType === 'VCC_PLAN_REVIEW' || t.type === 'Review') &&
              (!t.assigneeId || t.assigneeId === currentUser?.id || t.assigneeId === currentUser?.empId)
@@ -128,11 +130,6 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
   });
   const [itemError, setItemError] = useState('');
   const [savingItem, setSavingItem] = useState(false);
-
-  const [workflowModal, setWorkflowModal] = useState(null);
-  const [workflowComment, setWorkflowComment] = useState('');
-  const [workflowError, setWorkflowError] = useState('');
-  const [savingWorkflow, setSavingWorkflow] = useState(false);
 
   const [groupCheckModal, setGroupCheckModal] = useState(null);
   const [selectedChildId, setSelectedChildId] = useState('');
@@ -504,44 +501,6 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
     setPlanDetail(refreshed);
   };
 
-  const openWorkflowModal = (mode) => {
-    setWorkflowModal({ mode });
-    setWorkflowComment('');
-    setWorkflowError('');
-    setWorkflowBannerError('');
-  };
-
-  const handleConfirmWorkflow = async (e) => {
-    e.preventDefault();
-    if (!planDetail?.plan || !workflowModal) return;
-    setSavingWorkflow(true);
-    setWorkflowError('');
-    try {
-      if (workflowModal.mode === 'REVIEW') {
-        await reviewVccPlan(planDetail.plan.id, workflowComment);
-        toast.success('ยืนยันการทบทวนแผนแล้ว สถานะเปลี่ยนเป็นรออนุมัติ (PENDING_APPROVAL)');
-        setWorkflowModal(null);
-        setStatusTab('PENDING_APPROVAL');
-      } else if (workflowModal.mode === 'APPROVE') {
-        await approveVccPlan(planDetail.plan.id, workflowComment);
-        toast.success('อนุมัติแผนประจำปีเรียบร้อยแล้ว (APPROVED)');
-        setWorkflowModal(null);
-        setStatusTab('APPROVED');
-      } else if (workflowModal.mode === 'REJECT') {
-        await rejectVccPlan(planDetail.plan.id, workflowComment);
-        toast.success('ส่งแผนกลับไปแก้ไข (REJECTED) แล้ว');
-        setWorkflowModal(null);
-        setStatusTab('REJECTED');
-      }
-    } catch (err) {
-      const msg = err.message || 'ไม่สามารถดำเนินการอนุมัติได้';
-      setWorkflowError(msg);
-      setWorkflowBannerError(msg);
-    } finally {
-      setSavingWorkflow(false);
-    }
-  };
-
   const openGroupWorkOrderCheck = (item) => {
     const childAssets = activeAssets.filter((a) => a.parent_id === item.asset_id && a.status === 'ACTIVE');
     setGroupCheckModal({ item, childAssets });
@@ -591,7 +550,29 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
 
   const activePlan = planDetail?.plan;
   const planItems = planDetail?.items || [];
-  const canEditPlan = activePlan && (activePlan.status === 'DRAFT' || activePlan.status === 'REJECTED');
+  const isUserEligibleEditor = useMemo(() => {
+    if (!activePlan) return false;
+    if (!currentUser) return true;
+    const isDeptOk = isUserAuthorizedForPlanDept(currentUser, activePlan.department);
+    const lvl = Number(currentUser.approval_level ?? currentUser.approvalLevel ?? 1);
+    if (lvl < (thresholds.min_requester_level || 1)) return false;
+    if (activePlan.status === 'REJECTED' && activePlan.prepared_by) {
+      return (
+        currentUser.id === activePlan.prepared_by ||
+        Boolean(currentUser.isDcc) ||
+        Boolean(currentUser.isQmr) ||
+        lvl >= 6 ||
+        isDeptOk
+      );
+    }
+    return isDeptOk;
+  }, [activePlan, currentUser, thresholds.min_requester_level]);
+
+  const canEditPlan = Boolean(
+    activePlan &&
+    (activePlan.status === 'DRAFT' || activePlan.status === 'REJECTED') &&
+    isUserEligibleEditor
+  );
 
   const availableYears = useMemo(() => {
     const currentYear = new Date().getFullYear();
@@ -663,7 +644,6 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
         canEditPlan={canEditPlan}
         thresholds={thresholds}
         onSubmitPlan={handleSubmitPlan}
-        onOpenWorkflowModal={openWorkflowModal}
         onOpenSettings={openSettings}
         onOpenCreatePlan={openCreatePlan}
         onOpenEditPlan={openEditPlan}
@@ -803,16 +783,6 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
         activeAssets={activeAssets}
         providers={providers}
         activeDepartments={activeDepartments}
-      />
-
-      <PlanWorkflowModal
-        modalState={workflowModal}
-        onClose={() => setWorkflowModal(null)}
-        commentOrReason={workflowComment}
-        setCommentOrReason={setWorkflowComment}
-        error={workflowError}
-        saving={savingWorkflow}
-        onConfirm={handleConfirmWorkflow}
       />
 
       <GroupWorkOrderModal

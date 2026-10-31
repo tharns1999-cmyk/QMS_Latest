@@ -109,7 +109,7 @@ describe('VCC Phase 2 — Annual Calibration Plan (FM-QC-46) & Approval Workflow
     expect(await screen.findByText(/พร้อมสร้างใบสั่งงานสำหรับเครื่องมือรายตัว: SC-WH-001/i)).toBeInTheDocument();
   }, 15000);
 
-  it('3. การอนุมัติแผน 3 ขั้นตอนตาม Approval Matrix, บังคับกรอกเหตุผลเมื่อส่งกลับแก้ไข, และแสดง error จาก API เมื่อผู้จัดทำทบทวนเองหรือระดับอนุมัติไม่ถึง', async () => {
+  it('3. การอนุมัติแผน 3 ขั้นตอนผ่านหน้า Task Inbox, หน้าแผนไม่มีปุ่มอนุมัติ/ทบทวน, บังคับกรอกเหตุผลเมื่อส่งกลับแก้ไข, และป้องกันผู้จัดทำทบทวนเอง', async () => {
     render(<AssetRegisterPage />);
 
     fireEvent.click(await screen.findByRole('button', { name: /แผนการทวนสอบประจำปี \(FM-QC-46\)/i }));
@@ -122,19 +122,22 @@ describe('VCC Phase 2 — Annual Calibration Plan (FM-QC-46) & Approval Workflow
     const confirmSubmitBtn = await screen.findByRole('button', { name: 'ยืนยันส่งทบทวนแผน' });
     fireEvent.click(confirmSubmitBtn);
 
-    // Now in PENDING_REVIEW tab
-    expect(await screen.findByRole('button', { name: /ยืนยันการทบทวน/i })).toBeInTheDocument();
+    // Now in PENDING_REVIEW tab on Planning Workspace — NO review/approve/reject buttons allowed here
+    expect(await screen.findByText(/สถานะ: รอทบทวน/i, { selector: 'span' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /ยืนยันการทบทวน/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /อนุมัติแผน/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /ส่งกลับแก้ไข/i })).toBeNull();
 
-    // 2) Try reviewing as same user (dc4) -> must display API error
-    fireEvent.click(screen.getByRole('button', { name: /ยืนยันการทบทวน/i }));
-    const confirmReviewBtn = await screen.findByRole('button', { name: 'บันทึกผลการทบทวน' });
-    fireEvent.click(confirmReviewBtn);
+    // 2) Navigate to VCC Task Inbox as dc4 (requester) -> open the pending plan from WAITING_OTHERS tab
+    fireEvent.click(screen.getByRole('button', { name: /งานที่ต้องดำเนินการ \(VCC Task Inbox\)/i }));
+    const trackingTab = await screen.findByTestId('vcc-inbox-tab-WAITING_OTHERS');
+    fireEvent.click(trackingTab);
+    fireEvent.click(await screen.findByTestId('vcc-inbox-open-vcc-plan-2026-qc'));
 
-    const selfReviewErrors = await screen.findAllByRole('alert');
-    expect(selfReviewErrors[0]).toHaveTextContent(/ผู้จัดทำไม่สามารถทบทวนแผนของตนเองได้/i);
-
-    // Close modal
-    fireEvent.click(screen.getByRole('button', { name: 'ยกเลิก' }));
+    // Requester sees non-actionable SoD banner and NO review/approve buttons
+    const nonActionableBanner = await screen.findByTestId('vcc-task-non-actionable-banner');
+    expect(nonActionableBanner).toHaveTextContent(/ผู้จัดทำไม่สามารถทบทวนแผนของตนเองได้/i);
+    expect(screen.queryByTestId('vcc-task-btn-review')).toBeNull();
 
     // 3) Switch user to Reviewer L4 (qc4) and test Reject mandatory reason first
     useStore.setState({
@@ -150,17 +153,21 @@ describe('VCC Phase 2 — Annual Calibration Plan (FM-QC-46) & Approval Workflow
       }
     });
 
-    fireEvent.click(screen.getByRole('button', { name: /ส่งกลับแก้ไข/i }));
+    const rejectBtn = await screen.findByTestId('vcc-task-btn-reject');
+    fireEvent.click(rejectBtn);
     const confirmRejectBtn = await screen.findByRole('button', { name: /ยืนยันส่งกลับแก้ไข/i });
     expect(confirmRejectBtn).toBeDisabled();
 
     // Cancel reject and perform Review as qc4 (L4) -> moves to PENDING_APPROVAL
     fireEvent.click(screen.getByRole('button', { name: 'ยกเลิก' }));
-    fireEvent.click(screen.getByRole('button', { name: /ยืนยันการทบทวน/i }));
+    fireEvent.click(screen.getByTestId('vcc-task-btn-review'));
     fireEvent.click(await screen.findByRole('button', { name: 'บันทึกผลการทบทวน' }));
 
-    // Now in PENDING_APPROVAL tab
-    expect(await screen.findByRole('button', { name: /อนุมัติแผนประจำปี/i })).toBeInTheDocument();
+    // Verify plan moved to PENDING_APPROVAL and qc4 (reviewer) now sees non-actionable banner
+    expect(await screen.findByText(/สถานะ: รออนุมัติ/i)).toBeInTheDocument();
+    expect(await screen.findByTestId('vcc-task-non-actionable-banner')).toHaveTextContent(
+      /(งานทบทวนนี้ดำเนินการเสร็จสิ้นแล้ว|ผู้ทบทวนไม่สามารถอนุมัติแผนที่ตนเป็นผู้ทบทวนได้)/i
+    );
 
     // 4) Switch user to Approver L5 (qc5) and Approve -> moves to APPROVED
     useStore.setState({
@@ -176,11 +183,12 @@ describe('VCC Phase 2 — Annual Calibration Plan (FM-QC-46) & Approval Workflow
       }
     });
 
-    fireEvent.click(screen.getByRole('button', { name: /อนุมัติแผนประจำปี/i }));
+    const approveBtn = await screen.findByTestId('vcc-task-btn-approve');
+    fireEvent.click(approveBtn);
     fireEvent.click(await screen.findByRole('button', { name: 'บันทึกการอนุมัติแผน' }));
 
     // Verify plan is now in APPROVED status
-    expect(await screen.findByText(/สถานะ: อนุมัติแล้ว/i, { selector: 'span' })).toBeInTheDocument();
+    expect(await screen.findByText(/สถานะ: อนุมัติแล้ว/i)).toBeInTheDocument();
   }, 15000);
 
   it('4. เมื่อโหลดแผนกจาก Master Data ไม่ได้ จะแสดงข้อความแจ้งเตือนและปิดปุ่มบันทึกแผนประจำปี', async () => {

@@ -561,6 +561,7 @@ const PlanSubmitModalContent = ({
 
   const hasNoReviewer = eligibleReviewers.length === 0;
   const hasNoApprover = eligibleApprovers.length === 0;
+  const isResubmit = plan.status === 'REJECTED';
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
@@ -572,7 +573,9 @@ const PlanSubmitModalContent = ({
             </div>
             <div>
               <h2 className="text-base font-bold text-slate-900 tracking-tight">
-                ส่งแผนประจำปีเข้าสู่กระบวนการทบทวนและอนุมัติ
+                {isResubmit
+                  ? 'ส่งทบทวนอีกครั้ง — ส่งแผนประจำปีเข้าสู่กระบวนการทบทวนและอนุมัติ'
+                  : 'ส่งแผนประจำปีเข้าสู่กระบวนการทบทวนและอนุมัติ'}
               </h2>
               <p className="text-xs text-slate-500 font-medium">
                 {plan.title} ({plan.document_code} Rev.{plan.revision})
@@ -589,6 +592,13 @@ const PlanSubmitModalContent = ({
             <div role="alert" className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-center gap-2">
               <AlertTriangle size={16} className="text-rose-600 shrink-0" />
               <span>{error}</span>
+            </div>
+          )}
+
+          {isResubmit && plan.rejected_reason && (
+            <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs space-y-0.5">
+              <div className="font-bold">ส่งทบทวนรอบใหม่หลังแก้ไขตามเหตุผลที่ส่งกลับ:</div>
+              <div className="text-amber-800">{plan.rejected_reason}</div>
             </div>
           )}
 
@@ -674,7 +684,11 @@ const PlanSubmitModalContent = ({
               disabled={saving || hasNoReviewer || hasNoApprover || !selectedReviewerId || !selectedApproverId}
               className="h-9 px-5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold disabled:opacity-50 transition-colors cursor-pointer shadow-2xs flex items-center gap-1.5"
             >
-              {saving ? 'กำลังส่งแผน...' : 'ยืนยันส่งทบทวนแผน'}
+              {saving
+                ? 'กำลังส่งแผน...'
+                : isResubmit
+                  ? 'ยืนยันส่งทบทวนอีกครั้ง (ยืนยันส่งทบทวนแผน)'
+                  : 'ยืนยันส่งทบทวนแผน'}
             </button>
           </div>
         </form>
