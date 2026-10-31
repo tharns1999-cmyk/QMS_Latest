@@ -1200,6 +1200,60 @@ export const approveVccPlan = async (planId, comment = '') => {
   const next = [...allPlans];
   next[idx] = updated;
   setLocalPlans(next);
+
+  // Auto-generate local work orders for all calibratable planned cycles
+  try {
+    const STORAGE_WO_KEY = 'qms-vcc-local-work-orders-v1';
+    const existingWos = readJson(STORAGE_WO_KEY, () => []);
+    const planItems = getLocalPlanItems().filter((i) => i.plan_id === planId);
+    const calibratableItems = planItems.filter((i) => Number(i.is_group) === 0 || i.group_nature === 'COMPOSITE_SET');
+    const newWos = [...existingWos];
+    let maxSeq = 0;
+    for (const w of newWos) {
+      const parts = (w.wo_code || '').split('-');
+      if (parts.length >= 3) {
+        const num = parseInt(parts[2], 10);
+        if (!Number.isNaN(num) && num > maxSeq) maxSeq = num;
+      }
+    }
+    for (const item of calibratableItems) {
+      const months = Array.isArray(item.planned_months) ? item.planned_months : [];
+      for (const m of months) {
+        const cycleKey = `${plan.plan_year}:${plan.department}:${item.asset_id}:${m}`;
+        const already = newWos.find((w) => w.cycle_key === cycleKey || (w.plan_item_id === item.id && w.planned_month === m));
+        if (!already) {
+          maxSeq += 1;
+          const dueDate = computeDueDateForMonth(plan.plan_year, m, plan.due_date_rule || 'END_OF_MONTH');
+          newWos.push({
+            id: `vcc-wo-${crypto.randomUUID()}`,
+            wo_code: `WO-${plan.plan_year}-${String(maxSeq).padStart(3, '0')}`,
+            cycle_key: cycleKey,
+            plan_year: plan.plan_year,
+            plan_revision: plan.revision || '00',
+            plan_id: planId,
+            plan_item_id: item.id,
+            planned_month: m,
+            asset_id: item.asset_id,
+            provider_name: item.provider_name || 'ทวนสอบภายใน',
+            baseline_planned_date: dueDate,
+            scheduled_date: dueDate,
+            due_date: dueDate,
+            original_due_date: dueDate,
+            required_due_date: dueDate,
+            is_carryover: 0,
+            status: 'SCHEDULED',
+            result_status: 'PENDING',
+            created_at: now,
+            created_by: user.id,
+            updated_at: now,
+            updated_by: user.id
+          });
+        }
+      }
+    }
+    writeJson(STORAGE_WO_KEY, newWos);
+  } catch {}
+
   appendLocalAudit('VCC_PLAN_APPROVED', {
     plan_id: planId,
     plan_year: plan.plan_year,

@@ -1,6 +1,7 @@
 // VCC (Verify and Calibration Center) — Phase 2: Calibration Schedule Rules, Annual Plan Matrix & Plan Approval API.
 import { getThresholds } from './approval.js';
 import { requireVccAccess, requireDccOnly } from './vccAuth.js';
+import { generateWorkOrdersForApprovedPlan } from './vccWorkOrders.js';
 
 const DCC_ONLY = { error: 'เฉพาะ DCC เท่านั้นที่ใช้งานส่วนนี้ได้' };
 const NOW = `strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`;
@@ -75,7 +76,11 @@ export const getUserDepartments = (user) => {
   if (user.primary_department) depts.push(user.primary_department);
   if (user.dept) depts.push(user.dept);
   if (user.dept_code) depts.push(user.dept_code);
-  if (Array.isArray(user.departments)) depts.push(...user.departments);
+  let parsedDepts = user.departments;
+  if (typeof parsedDepts === 'string' && parsedDepts.startsWith('[')) {
+    try { parsedDepts = JSON.parse(parsedDepts); } catch {}
+  }
+  if (Array.isArray(parsedDepts)) depts.push(...parsedDepts);
   if (Array.isArray(user.secondaryDepartments)) depts.push(...user.secondaryDepartments);
   if (Array.isArray(user.depts)) depts.push(...user.depts);
   if (Array.isArray(user.affiliated_departments)) depts.push(...user.affiliated_departments);
@@ -84,7 +89,10 @@ export const getUserDepartments = (user) => {
 
 export const isUserAuthorizedForPlanDept = (user, planDepartment) => {
   if (!user) return false;
-  if (user.isDcc || user.isQmr || (user.approval_level && user.approval_level >= 6)) return true;
+  const isDccUser = Boolean(user.isDcc || user.is_dcc);
+  const isQmrUser = Boolean(user.isQmr || user.is_qmr);
+  const level = Number(user.approval_level ?? user.approvalLevel ?? 0);
+  if (isDccUser || isQmrUser || level >= 6) return true;
   const depts = getUserDepartments(user);
   return depts.includes(String(planDepartment || '').toUpperCase());
 };
@@ -1192,7 +1200,33 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
       return c.json({ error: 'แผนนี้ถูกดำเนินการไปแล้ว กรุณารีเฟรชหน้าจอ' }, 409);
     }
 
-    return c.json({ plan: await fetchPlan(db, id) });
+    const generationResult = await generateWorkOrdersForApprovedPlan(db, id, user.id, audit);
+
+    return c.json({
+      plan: await fetchPlan(db, id),
+      work_orders_generation: generationResult
+    });
+  });
+
+  // Reconcile and auto-generate any missing work orders for an approved plan (Idempotent Retry)
+  app.post('/api/vcc/plans/:id/reconcile-work-orders', requireAuth, requireVccAccess, async (c) => {
+    const db = c.env.DB;
+    const user = c.get('user');
+    const id = c.req.param('id');
+    const plan = await fetchPlan(db, id);
+    if (!plan) return c.json({ error: 'ไม่พบแผนการสอบเทียบประจำปี' }, 404);
+    if (plan.status !== 'APPROVED') {
+      return c.json({ error: 'สร้างหรือซิงค์ใบสั่งงานได้เฉพาะแผนที่ได้รับการอนุมัติแล้วเท่านั้น' }, 409);
+    }
+    if (!isUserAuthorizedForPlanDept(user, plan.department)) {
+      return c.json({ error: 'ไม่มีสิทธิ์จัดการใบสั่งงานของแผนกนี้' }, 403);
+    }
+
+    const result = await generateWorkOrdersForApprovedPlan(db, id, user.id, audit);
+    return c.json({
+      plan: await fetchPlan(db, id),
+      work_orders_generation: result
+    });
   });
 
   // Reject / Return plan for revision (PENDING_REVIEW or PENDING_APPROVAL -> REJECTED) with mandatory reason

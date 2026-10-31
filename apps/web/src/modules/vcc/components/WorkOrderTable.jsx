@@ -36,7 +36,7 @@ const WorkOrderRowActions = ({
   return (
     <div className="relative inline-flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
       {/* Primary Row Action (ตามสถานะงาน) */}
-      {(wo.status === 'OPEN' || wo.status === 'REJECTED') && (
+      {(wo.status === 'OPEN' || wo.status === 'SCHEDULED' || wo.status === 'REJECTED') && (
         <button
           type="button"
           onClick={() => onRecordResult(wo)}
@@ -99,7 +99,7 @@ const WorkOrderRowActions = ({
         keepMounted={true}
         className="min-w-[170px] bg-white rounded-xl shadow-xl border border-slate-200 py-1 text-left animate-in fade-in zoom-in-95 duration-100"
       >
-        {(wo.status === 'OPEN' || wo.status === 'REJECTED') && (
+        {(wo.status === 'OPEN' || wo.status === 'SCHEDULED' || wo.status === 'REJECTED') && (
           <button
             type="button"
             onClick={() => {
@@ -278,6 +278,8 @@ export const WorkOrderTable = ({
 
   const getStatusBadge = (status) => {
     switch (status) {
+      case 'SCHEDULED':
+        return <span className="inline-block px-2.5 py-0.5 rounded-md bg-sky-50 text-sky-700 border border-sky-200 text-xs font-semibold">SCHEDULED</span>;
       case 'OPEN':
         return <span className="inline-block px-2.5 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-200 text-xs font-semibold">OPEN</span>;
       case 'PENDING_REVIEW':

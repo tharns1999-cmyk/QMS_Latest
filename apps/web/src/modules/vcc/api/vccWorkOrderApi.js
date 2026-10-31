@@ -146,7 +146,11 @@ export const fetchVccWorkOrders = async ({ status = 'OPEN', nc_status = '', depa
   const allPlans = getLocalPlans();
 
   return allWos
-    .filter((w) => (nc_status ? w.nc_status === nc_status : w.status === status))
+    .filter((w) => {
+      if (nc_status) return w.nc_status === nc_status;
+      if (status === 'OPEN') return w.status === 'OPEN' || w.status === 'SCHEDULED';
+      return w.status === status;
+    })
     .filter((w) => (!plan_id ? true : w.plan_id === plan_id))
     .filter((w) => (!asset_id ? true : w.asset_id === asset_id))
     .map((w) => enrichLocalWo(w, allAssets, deptMap, allPlans))
@@ -213,9 +217,13 @@ export const createVccWorkOrder = async (payload) => {
     }
     providerName = providerName || planItem.provider_name;
     dueDate = dueDate || computeDueDateForMonth(plan.plan_year, plannedMonth, plan.due_date_rule);
+    const cycleKey = plan ? `${plan.plan_year}:${plan.department}:${targetAssetId}:${plannedMonth}` : null;
 
     const dup = allWos.find(
-      (w) => w.plan_item_id === planItemId && w.asset_id === targetAssetId && Number(w.planned_month) === plannedMonth && w.status !== 'CANCELLED'
+      (w) => w.status !== 'CANCELLED' && (
+        (cycleKey && w.cycle_key === cycleKey) ||
+        (w.plan_item_id === planItemId && w.asset_id === targetAssetId && Number(w.planned_month) === plannedMonth)
+      )
     );
     if (dup) {
       throw new Error(`มีใบสั่งงาน (${dup.wo_code}) สำหรับเครื่องมือและรอบเดือนนี้อยู่แล้ว`);
@@ -245,14 +253,21 @@ export const createVccWorkOrder = async (payload) => {
   const created = {
     id: `vcc-wo-${Date.now()}`,
     wo_code: woCode,
+    cycle_key: planId && plannedMonth ? `${dueDate.slice(0, 4)}:${asset.department}:${targetAssetId}:${plannedMonth}` : null,
+    plan_year: planId ? Number(dueDate.slice(0, 4)) : null,
+    plan_revision: '00',
     plan_id: planId,
     plan_item_id: planItemId,
     planned_month: plannedMonth,
     asset_id: targetAssetId,
     provider_name: providerName,
+    baseline_planned_date: dueDate,
+    scheduled_date: dueDate,
     due_date: dueDate,
     original_due_date: dueDate,
+    required_due_date: dueDate,
     reschedule_reason: null,
+    is_carryover: 0,
     status: 'OPEN',
     result_status: 'PENDING',
     performed_at: null,
