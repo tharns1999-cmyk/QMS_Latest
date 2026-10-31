@@ -89,6 +89,8 @@ const enrichLocalWo = (wo, allAssets, deptMap, allPlans) => {
     asset_type: asset.asset_type || '-',
     department: asset.department || '',
     location: asset.location || '',
+    group_nature: asset.group_nature || 'LOGICAL_GROUP',
+    composite_details: asset.composite_details || '',
     parent_asset_code: parent?.asset_code || null,
     department_name_th: deptMap[asset.department] || asset.department,
     plan_year: plan?.plan_year || null

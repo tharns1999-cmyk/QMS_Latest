@@ -187,21 +187,40 @@ describe('VCC Phase 1 Frontend: Portal Access, Asset Tabs, Mandatory Reason, and
     });
   });
 
-  it('separates group children in detail modal into active ("ใช้งานอยู่") and retired ("ปลดออกแล้ว") sections', async () => {
+  it('enforces flat register model: hides legacy group management, blocks parent_id/is_group creation, and separates ACTIVE vs RETIRED tabs', async () => {
     useStore.setState({
       currentUser: { id: 'dc4', name: 'เจ้าหน้าที่ DCC', department: 'DC', isDcc: true }
     });
 
-    // Add a second child to GRP-SCALE ('vcc-seed-grp-scale') and retire it so the group has both ACTIVE and RETIRED children
-    const child2 = await createVccAsset({
+    // Reject creating Logical Groups or assigning parent_id in flat architecture
+    await expect(
+      createVccAsset({
+        asset_code: 'GRP-NEW',
+        name: 'กลุ่มต้องห้าม',
+        asset_type: 'เครื่องชั่ง',
+        department: 'WH',
+        is_group: true
+      })
+    ).rejects.toThrow(/ยกเลิกการสร้างกลุ่มเครื่องมือแม่/i);
+
+    await expect(
+      createVccAsset({
+        asset_code: 'SC-CHILD-ERR',
+        name: 'ผูกกลุ่มแม่ต้องห้าม',
+        asset_type: 'เครื่องชั่ง',
+        department: 'WH',
+        parent_id: 'vcc-seed-grp-scale'
+      })
+    ).rejects.toThrow(/ยกเลิกการผูกเครื่องมือ.*เข้ากับกลุ่มแม่/i);
+
+    // Create flat instrument SC-WH-002 and retire it
+    const asset2 = await createVccAsset({
       asset_code: 'SC-WH-002',
       name: '[ข้อมูลทดสอบ] เครื่องชั่งดิจิทัล จุดรับวัตถุดิบ 2 (ชำรุด)',
       asset_type: 'เครื่องชั่ง',
-      department: 'WH',
-      is_group: false,
-      parent_id: 'vcc-seed-grp-scale'
+      department: 'WH'
     });
-    await retireVccAsset(child2.id, 'โหลดเซลล์เสีย');
+    await retireVccAsset(asset2.id, 'โหลดเซลล์เสีย');
 
     render(
       <MemoryRouter>
@@ -209,32 +228,22 @@ describe('VCC Phase 1 Frontend: Portal Access, Asset Tabs, Mandatory Reason, and
       </MemoryRouter>
     );
 
-    // Open Logical Group Admin Modal (as DCC user)
-    fireEvent.click(screen.getByRole('button', { name: /จัดการกลุ่มเครื่องมือ/i }));
-
     await waitFor(() => {
-      expect(screen.getByText('GRP-SCALE')).toBeInTheDocument();
+      expect(screen.getByText('SC-WH-001')).toBeInTheDocument();
     });
 
-    // Open detail / history modal for GRP-SCALE from the logical group admin
-    const grpCard = screen.getByText('GRP-SCALE').closest('div.border');
-    fireEvent.click(within(grpCard).getByTitle('ดูประวัติกลุ่ม'));
+    // Legacy "จัดการกลุ่มเครื่องมือ" button must NOT appear even for DCC
+    expect(screen.queryByRole('button', { name: /จัดการกลุ่มเครื่องมือ/i })).not.toBeInTheDocument();
 
+    // ACTIVE tab shows SC-WH-001 and never SC-WH-002
+    expect(screen.queryByText('SC-WH-002')).not.toBeInTheDocument();
+
+    // Switch to RETIRED tab -> shows SC-WH-002 and never SC-WH-001
+    fireEvent.click(screen.getByRole('tab', { name: /ปลดออกแล้ว \(RETIRED\)/i }));
     await waitFor(() => {
-      expect(screen.getByTestId('group-children-active')).toBeInTheDocument();
-      expect(screen.getByTestId('group-children-retired')).toBeInTheDocument();
+      expect(screen.getByText('SC-WH-002')).toBeInTheDocument();
     });
-
-    const activeSection = screen.getByTestId('group-children-active');
-    const retiredSection = screen.getByTestId('group-children-retired');
-
-    // Active section must only show SC-WH-001 and never SC-WH-002
-    expect(within(activeSection).getByText('SC-WH-001')).toBeInTheDocument();
-    expect(within(activeSection).queryByText('SC-WH-002')).not.toBeInTheDocument();
-
-    // Retired section must only show SC-WH-002 and never SC-WH-001
-    expect(within(retiredSection).getByText('SC-WH-002')).toBeInTheDocument();
-    expect(within(retiredSection).queryByText('SC-WH-001')).not.toBeInTheDocument();
+    expect(screen.queryByText('SC-WH-001')).not.toBeInTheDocument();
   });
 
   it('shows error message and disables save button when Master Data departments cannot be loaded', async () => {

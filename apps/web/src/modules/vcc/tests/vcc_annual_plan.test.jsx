@@ -3,7 +3,8 @@ import { render, screen, fireEvent, within } from '@testing-library/react';
 import { describe, it, expect, beforeEach } from 'vitest';
 import useStore from '../../../store/useStore';
 import AssetRegisterPage from '../pages/AssetRegisterPage';
-import { resetVccLocalStore } from '../api/vccApi';
+import { resetVccLocalStore, writeJson } from '../api/vccApi';
+import { getLocalPlans, getLocalPlanItems } from '../api/vccPlanApi';
 
 describe('VCC Phase 2 — Annual Calibration Plan (FM-QC-46) & Approval Workflow', () => {
   beforeEach(() => {
@@ -83,10 +84,51 @@ describe('VCC Phase 2 — Annual Calibration Plan (FM-QC-46) & Approval Workflow
     expect(screen.queryByText('V001')).not.toBeInTheDocument();
   });
 
-  it('2. เครื่องมือแบบกลุ่ม (GRP-SCALE) บังคับแยกรหัสเครื่องมือลูกก่อนสร้างใบสั่งงาน และแสดงข้อความแจ้งเตือนหากไม่เลือกลูก', async () => {
+  it('2. แผนร่างปกติไม่มีกลุ่มแม่ GRP-SCALE แต่แผนที่อนุมัติในอดีต (Historical APPROVED) ยังเก็บรักษาแถวเดิมและบังคับแยกรหัสลูกก่อนออกใบงาน', async () => {
+    // Seed a historical APPROVED 2025 plan containing legacy GRP-SCALE alongside normal 2026 DRAFT plan
+    const plans = getLocalPlans();
+    plans.push({
+      id: 'vcc-plan-2025-wh-hist',
+      plan_year: 2025,
+      department: 'WH',
+      document_code: 'FM-QC-46',
+      revision: '01',
+      title: '[ข้อมูลทดสอบ] แผนการทวนสอบเครื่องมือประจำปี 2025 (ประวัติ)',
+      status: 'APPROVED',
+      due_date_rule: 'END_OF_MONTH',
+      approved_by: 'qc5',
+      approved_at: '2025-01-10T03:00:00.000Z',
+      created_at: '2025-01-01T03:00:00.000Z',
+      created_by: 'dc4'
+    });
+    writeJson('qms-vcc-local-plans-v1', plans);
+
+    const items = getLocalPlanItems();
+    items.push({
+      id: 'vcc-pi-2025-grp-scale',
+      plan_id: 'vcc-plan-2025-wh-hist',
+      asset_id: 'vcc-seed-grp-scale',
+      provider_name: 'ทวนสอบภายใน',
+      frequency_label: 'รายครึ่งปี',
+      planned_months: [4, 10],
+      due_dates: ['2025-04-30', '2025-10-31'],
+      responsible_dept: 'WH',
+      responsible_label: 'หัวหน้าคลัง',
+      remarks: '',
+      sort_order: 1
+    });
+    writeJson('qms-vcc-local-plan-items-v1', items);
+
     render(<AssetRegisterPage />);
 
     fireEvent.click(await screen.findByRole('button', { name: /แผนการทวนสอบประจำปี \(FM-QC-46\)/i }));
+    expect(await screen.findByText('ST002')).toBeInTheDocument();
+
+    // Normal 2026 DRAFT plan must NOT contain GRP-SCALE
+    expect(screen.queryByText('GRP-SCALE')).not.toBeInTheDocument();
+
+    // Switch to APPROVED tab -> historical 2025 plan preserves GRP-SCALE read-only + child validation
+    fireEvent.change(screen.getByLabelText('กรองตามสถานะแผน'), { target: { value: 'APPROVED' } });
     const grpText = await screen.findByText('GRP-SCALE');
     expect(grpText).toBeInTheDocument();
 
@@ -101,7 +143,7 @@ describe('VCC Phase 2 — Annual Calibration Plan (FM-QC-46) & Approval Workflow
     const alertBox = await screen.findByRole('alert');
     expect(alertBox).toHaveTextContent(/เครื่องมือแบบกลุ่มต้องแยกรหัสเครื่องมือรายตัวก่อนสร้างใบสั่งงาน/i);
 
-    // Now select active child asset SC-WH-001 -> must pass validation
+    // Select active child asset SC-WH-001 -> must pass validation
     const childSelect = screen.getByLabelText(/เลือกรหัสเครื่องมือลูก/i);
     fireEvent.change(childSelect, { target: { value: 'vcc-seed-sc001' } });
     fireEvent.click(validateBtn);

@@ -154,7 +154,7 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
         fetchVccWorkOrders({ nc_status: 'OPEN', department: filterDept }),
         fetchVccWorkOrderSettings(),
         fetchVccPlanSettings(),
-        fetchVccAssets({ status: 'ACTIVE', is_group: '0' }),
+        fetchVccAssets({ status: 'ACTIVE', calibratable_only: true }),
         fetchVccPlans({ status: 'APPROVED' })
       ]);
 

@@ -313,12 +313,8 @@ describe('VCC FM-QC-46 Interactive Planning Board Edge Cases & Exceptions', () =
     fireEvent.click(editBtns[0]);
     expect(onOpenAddItem).toHaveBeenCalledWith(sampleItem);
 
-    // Group check button for grouped instruments
-    const groupCheckBtn = screen.getByRole('button', { name: /ตรวจรหัสลูกก่อนออกใบงาน/i });
-    expect(groupCheckBtn).toBeInTheDocument();
-    expect(groupCheckBtn).toHaveAttribute('title', 'ตรวจรหัสลูกก่อนออกใบงาน');
-    fireEvent.click(groupCheckBtn);
-    expect(onOpenGroupWorkOrderCheck).toHaveBeenCalledWith(groupItem);
+    // In editable Draft mode, legacy "ตรวจรหัสลูกก่อนออกใบงาน" button must NOT appear on rows
+    expect(screen.queryByRole('button', { name: /ตรวจรหัสลูกก่อนออกใบงาน/i })).toBeNull();
 
     // Delete button has Thai tooltip, accessible label, and requires inline confirmation
     const deleteBtns = screen.getAllByRole('button', { name: /ลบรายการออกจากแผน/i });
@@ -347,17 +343,24 @@ describe('VCC FM-QC-46 Interactive Planning Board Edge Cases & Exceptions', () =
     fireEvent.click(reConfirmBtn);
     expect(onDeleteItem).toHaveBeenCalledWith(sampleItem);
 
-    // When canEditPlan is false, Edit and Delete buttons are hidden (read-only view)
+    // When canEditPlan is false on historical APPROVED plan, Edit/Delete are hidden and historical group check is preserved
     rerender(
       <AnnualPlanMatrixTable
-        planItems={[sampleItem]}
-        activePlan={samplePlan}
+        planItems={[sampleItem, groupItem]}
+        activePlan={{ ...samplePlan, status: 'APPROVED' }}
         workOrders={[]}
         canEditPlan={false}
+        onOpenGroupWorkOrderCheck={onOpenGroupWorkOrderCheck}
       />
     );
     expect(screen.queryByRole('button', { name: /แก้ไขข้อมูลในแผน/i })).toBeNull();
     expect(screen.queryByRole('button', { name: /ลบรายการออกจากแผน/i })).toBeNull();
-    expect(screen.getByRole('button', { name: /สเปก/i })).toBeInTheDocument();
+
+    const groupCheckBtn = screen.getByRole('button', { name: /ตรวจรหัสลูกก่อนออกใบงาน/i });
+    expect(groupCheckBtn).toBeInTheDocument();
+    expect(groupCheckBtn).toHaveAttribute('title', 'ตรวจรหัสลูกก่อนออกใบงาน');
+    fireEvent.click(groupCheckBtn);
+    expect(onOpenGroupWorkOrderCheck).toHaveBeenCalledWith(groupItem);
+    expect(screen.getAllByRole('button', { name: /สเปก/i }).length).toBeGreaterThanOrEqual(1);
   }, 15000);
 });

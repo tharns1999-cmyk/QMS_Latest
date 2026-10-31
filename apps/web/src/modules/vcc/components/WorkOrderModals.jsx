@@ -17,7 +17,8 @@ export const CreateWorkOrderModal = ({
   if (!open) return null;
 
   const selectedPlanItem = planItems.find((i) => i.id === form.plan_item_id);
-  const isGroupPlanItem = Number(selectedPlanItem?.is_group) === 1;
+  const isGroupPlanItem =
+    Number(selectedPlanItem?.is_group) === 1 && selectedPlanItem?.group_nature !== 'COMPOSITE_SET';
   const groupChildren = isGroupPlanItem
     ? individualAssets.filter((a) => a.parent_id === selectedPlanItem.asset_id)
     : [];
@@ -95,11 +96,14 @@ export const CreateWorkOrderModal = ({
                   className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium bg-white"
                 >
                   <option value="">-- เลือกรายการเครื่องมือในแผน --</option>
-                  {planItems.map((it) => (
-                    <option key={it.id} value={it.id}>
-                      {it.asset_code} — {it.asset_name} {it.is_group ? '(กลุ่มแม่ — ต้องเลือกรหัสลูก)' : ''}
-                    </option>
-                  ))}
+                  {planItems.map((it) => {
+                    const isLegacyGroup = Number(it.is_group) === 1 && it.group_nature !== 'COMPOSITE_SET';
+                    return (
+                      <option key={it.id} value={it.id}>
+                        {it.asset_code} — {it.asset_name} {isLegacyGroup ? '(กลุ่มเดิมในประวัติ — ต้องเลือกรหัสเครื่องมือจริง)' : it.group_nature === 'COMPOSITE_SET' ? '(ชุดเครื่องมือ)' : ''}
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
 
@@ -143,7 +147,7 @@ export const CreateWorkOrderModal = ({
             <>
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-                  เครื่องมือวัดรายตัว (ห้ามเลือกกลุ่มแม่) <span className="text-rose-600">*</span>
+                  เครื่องมือวัด / ชุดเครื่องมือ (ACTIVE) <span className="text-rose-600">*</span>
                 </label>
                 <select
                   required
@@ -152,10 +156,10 @@ export const CreateWorkOrderModal = ({
                   onChange={(e) => setForm({ ...form, asset_id: e.target.value })}
                   className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium bg-white"
                 >
-                  <option value="">-- เลือกเครื่องมือรายตัว (ACTIVE) --</option>
+                  <option value="">-- เลือกเครื่องมือหรือชุดเครื่องมือ (ACTIVE) --</option>
                   {individualAssets.map((a) => (
                     <option key={a.id} value={a.id}>
-                      {a.asset_code} — {a.name}
+                      {a.asset_code} — {a.name} {a.group_nature === 'COMPOSITE_SET' ? '(ชุดเครื่องมือ)' : ''}
                     </option>
                   ))}
                 </select>

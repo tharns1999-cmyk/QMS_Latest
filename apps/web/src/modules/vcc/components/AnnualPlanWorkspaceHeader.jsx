@@ -149,6 +149,7 @@ export const AnnualPlanWorkspaceHeader = ({
   onSelectPlan,
   activePlan,
   planItems = [],
+  activeAssets = [],
   canEditPlan = false,
   thresholds = {},
   onSubmitPlan,
@@ -156,7 +157,8 @@ export const AnnualPlanWorkspaceHeader = ({
   onOpenCreatePlan,
   onOpenEditPlan,
   onOpenHistory,
-  onOpenJustificationModal
+  onOpenJustificationModal,
+  onOpenSmartImport
 }) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
@@ -167,10 +169,19 @@ export const AnnualPlanWorkspaceHeader = ({
   // Support both `plans` and `availablePlans` prop names
   const effectivePlans = plans.length > 0 ? plans : availablePlans;
 
-  // Compute de-duplicated metrics for accuracy (Prevents double-counting groups and children)
+  // Compute metrics for flat calibratable units (with de-duplication only if legacy group rows exist)
   const summaryMetrics = useMemo(() => {
-    const groupItems = planItems.filter((i) => Number(i.is_group) === 1);
-    const standaloneItems = planItems.filter((i) => Number(i.is_group) === 0 && !i.parent_id);
+    const groupItems = planItems.filter(
+      (i) => Number(i.is_group) === 1 && i.group_nature !== 'COMPOSITE_SET'
+    );
+    const groupAssetIds = new Set(
+      groupItems.flatMap((g) => [g.asset_id, g.id]).filter(Boolean)
+    );
+    const standaloneItems = planItems.filter(
+      (i) =>
+        (Number(i.is_group) === 0 || i.group_nature === 'COMPOSITE_SET') &&
+        (!i.parent_id || !groupAssetIds.has(i.parent_id))
+    );
 
     let inScopeCount = 0;
     let plannedCount = 0;
@@ -233,6 +244,26 @@ export const AnnualPlanWorkspaceHeader = ({
       totalCyclesCount
     };
   }, [planItems]);
+
+  // Compare active calibratable instruments in Register vs. instruments currently in this plan
+  const unincludedRegisterSummary = useMemo(() => {
+    if (!activePlan || !Array.isArray(activeAssets) || activeAssets.length === 0) {
+      return { totalActiveInRegister: 0, unincludedAssets: [], otherDeptAssets: [], sameDeptMissingAssets: [] };
+    }
+    const calibratableRegisterAssets = activeAssets.filter(
+      (a) => a.status === 'ACTIVE' && (Number(a.is_group) === 0 || a.group_nature === 'COMPOSITE_SET')
+    );
+    const planAssetIds = new Set(planItems.map((i) => i.asset_id).filter(Boolean));
+    const unincludedAssets = calibratableRegisterAssets.filter((a) => !planAssetIds.has(a.id));
+    const otherDeptAssets = unincludedAssets.filter((a) => a.department !== activePlan.department);
+    const sameDeptMissingAssets = unincludedAssets.filter((a) => a.department === activePlan.department);
+    return {
+      totalActiveInRegister: calibratableRegisterAssets.length,
+      unincludedAssets,
+      otherDeptAssets,
+      sameDeptMissingAssets
+    };
+  }, [activePlan, activeAssets, planItems]);
 
   const runMenu = (fn) => () => {
     setMenuOpen(false);
@@ -484,6 +515,34 @@ export const AnnualPlanWorkspaceHeader = ({
               <span className="text-slate-500">เครื่องมือในขอบเขต:</span>
               <strong className="text-slate-900 font-bold font-mono text-xs">{summaryMetrics.inScopeCount}</strong>
               <span className="text-slate-400">เครื่อง</span>
+              {unincludedRegisterSummary.unincludedAssets.length > 0 && (
+                <span
+                  data-testid="register-vs-plan-scope-note"
+                  className="inline-flex items-center gap-1 text-[11px] text-slate-500 bg-slate-100/80 border border-slate-200/80 px-2 py-0.5 rounded-md ml-0.5"
+                >
+                  <span>
+                    (จากทะเบียนใช้งานปกติ {unincludedRegisterSummary.totalActiveInRegister} เครื่อง — อยู่นอกแผนนี้{' '}
+                    {unincludedRegisterSummary.unincludedAssets.length} เครื่อง:{' '}
+                    {unincludedRegisterSummary.unincludedAssets
+                      .map((a) =>
+                        a.department !== activePlan.department
+                          ? `${a.asset_code} สังกัดแผนก ${a.department}`
+                          : `${a.asset_code} ยังไม่ได้เพิ่มเข้าแผน`
+                      )
+                      .join(', ')}
+                    )
+                  </span>
+                  {canEditPlan && onOpenSmartImport && (
+                    <button
+                      type="button"
+                      onClick={onOpenSmartImport}
+                      className="text-indigo-700 hover:text-indigo-900 underline font-semibold cursor-pointer ml-1"
+                    >
+                      + เพิ่มเข้าแผนนี้
+                    </button>
+                  )}
+                </span>
+              )}
             </div>
 
             <span className="text-slate-300">·</span>
@@ -594,7 +653,7 @@ export const AnnualPlanWorkspaceHeader = ({
             </li>
             <li className="flex items-start gap-1.5">
               <CheckCircle2 size={13} className="text-indigo-600 shrink-0 mt-0.5" />
-              <span>เครื่องมือแบบกลุ่มต้องเลือกรหัสเครื่องมือรายตัวก่อนออกใบสั่งงาน</span>
+              <span>เครื่องมือ 1 หน่วยสอบเทียบ (รวมถึงชุดเครื่องมือจริง Composite Set) แสดงเป็น 1 แถวอิสระและออกใบสั่งงานได้โดยตรง</span>
             </li>
             <li className="flex items-start gap-1.5">
               <CheckCircle2 size={13} className="text-indigo-600 shrink-0 mt-0.5" />

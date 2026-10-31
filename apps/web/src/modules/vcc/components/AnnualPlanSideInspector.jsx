@@ -57,7 +57,8 @@ export const AnnualPlanSideInspector = ({
   if (!item) return null;
   if (typeof document === 'undefined') return null;
 
-  const isGroup = Number(item.is_group) === 1;
+  const isCompositeSet = item.is_composite_set || item.group_nature === 'COMPOSITE_SET';
+  const isLogicalGroup = Number(item.is_group) === 1 && !isCompositeSet;
 
   // Matching work orders for this item
   const matchingWos = workOrders.filter(
@@ -89,10 +90,15 @@ export const AnnualPlanSideInspector = ({
                 <span className="px-2.5 py-0.5 rounded-md text-xs font-semibold bg-indigo-100 text-indigo-800">
                   {item.asset_type}
                 </span>
-                {isGroup && (
+                {isCompositeSet && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-semibold bg-teal-50 text-teal-800 border border-teal-200">
+                    ชุดเครื่องมือ (Composite Set)
+                  </span>
+                )}
+                {isLogicalGroup && (
                   <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-semibold bg-purple-100 text-purple-800">
                     <FolderTree size={12} />
-                    <span>กลุ่มแม่</span>
+                    <span>กลุ่มเดิม (ประวัติ)</span>
                   </span>
                 )}
               </div>
@@ -144,13 +150,9 @@ export const AnnualPlanSideInspector = ({
                     <span>แผนก {item.responsible_dept} ({item.responsible_label || '-'})</span>
                   </span>
                 </div>
-                {item.parent_asset_code && (
-                  <div className="col-span-2">
-                    <span className="text-slate-500 block text-xs font-medium">กลุ่มเครื่องมือที่สังกัด (Logical Group)</span>
-                    <span className="font-semibold text-slate-900 text-sm font-mono flex items-center gap-1.5 pt-0.5">
-                      <FolderTree size={13} className="text-purple-600 shrink-0" />
-                      <span>{item.parent_asset_code}</span>
-                    </span>
+                {isCompositeSet && item.composite_details && (
+                  <div className="col-span-2 bg-teal-50/70 border border-teal-200 rounded-lg px-3 py-2 text-xs text-teal-900">
+                    <span className="font-bold">อุปกรณ์ในชุด:</span> {item.composite_details}
                   </div>
                 )}
               </div>
@@ -324,16 +326,15 @@ export const AnnualPlanSideInspector = ({
               </div>
             </div>
 
-            {/* Section 4: Group Check Button if isGroup */}
-            {isGroup && (
+            {/* Section 4: Historical Group Check Button ONLY for historical APPROVED logical group rows */}
+            {isLogicalGroup && !canEditPlan && plan?.status === 'APPROVED' && (
               <div className="p-4 bg-purple-50 rounded-xl border border-purple-200 space-y-2.5">
                 <div className="flex items-center gap-2 text-purple-950 font-bold text-sm">
                   <ShieldAlert size={16} className="text-purple-700" />
-                  <span>การควบคุมเครื่องมือแบบกลุ่ม (Group Control)</span>
+                  <span>ข้อมูลประวัติกลุ่มเดิม (Historical Approved Plan)</span>
                 </div>
                 <p className="text-xs sm:text-sm text-purple-900 leading-relaxed font-medium">
-                  เครื่องมือนี้เป็นกลุ่มแม่ มีเครื่องมือรายตัวใช้งานได้ {item.active_child_count || 0} ชิ้น
-                  ต้องเลือกรหัสลูกก่อนออกใบสั่งงานจริงตามกฎมาตรฐาน QMS
+                  รายการนี้มาจากแผนที่อนุมัติในอดีต ต้องเลือกรหัสเครื่องมือรายตัวก่อนออกใบสั่งงานตามกฎมาตรฐาน QMS
                 </p>
                 <button
                   type="button"

@@ -199,7 +199,7 @@ describe('VCC Category-Based Overview & Flat Instrument Planning Matrix', () => 
     expect(screen.queryByRole('button', { name: /ลบรายการออกจากแผน/i })).toBeNull();
   });
 
-  it('4. Draft Group Conversion Modal: Previews child instruments, checks for duplicates, and confirms conversion', async () => {
+  it('4. Draft Group Conversion Modal: Never auto-inherits months, detects duplicates, requires manual scheduling, and previews before confirm', async () => {
     const draftGroup = {
       id: 'PI-GRP-DRAFT',
       plan_id: 'PLAN-DRAFT',
@@ -213,14 +213,14 @@ describe('VCC Category-Based Overview & Flat Instrument Planning Matrix', () => 
     };
 
     const activeAssetsInRegister = [
-      { id: 'ASSET-CH-01', asset_code: 'V001', name: 'เวอร์เนียร์ 01', parent_id: 'ASSET-GRP-01', status: 'ACTIVE', department: 'QC' },
-      { id: 'ASSET-CH-02', asset_code: 'V002', name: 'เวอร์เนียร์ 02', parent_id: 'ASSET-GRP-01', status: 'ACTIVE', department: 'QC' }
+      { id: 'ASSET-CH-01', asset_code: 'V001', name: 'เวอร์เนียร์ 01', is_group: 0, parent_id: 'ASSET-GRP-01', status: 'ACTIVE', department: 'QC' },
+      { id: 'ASSET-CH-02', asset_code: 'V002', name: 'เวอร์เนียร์ 02', is_group: 0, parent_id: 'ASSET-GRP-01', status: 'ACTIVE', department: 'QC' }
     ];
 
-    // Child 1 is already in plan, Child 2 is not
+    // Child 1 is already in plan (scheduled month 2), Child 2 is not
     const existingPlanItems = [
       draftGroup,
-      { id: 'PI-V001-EXISTING', asset_id: 'ASSET-CH-01', asset_code: 'V001' }
+      { id: 'PI-V001-EXISTING', asset_id: 'ASSET-CH-01', asset_code: 'V001', planned_months: [2], remarks: '' }
     ];
 
     const onConfirmConvert = vi.fn();
@@ -238,25 +238,36 @@ describe('VCC Category-Based Overview & Flat Instrument Planning Matrix', () => 
       />
     );
 
-    // Modal title & group identification
-    expect(screen.getByText(/แปลงกลุ่มเครื่องมือเป็นรายการรายตัว/i)).toBeInTheDocument();
+    // Modal title & strict non-inheritance notice
+    expect(screen.getByText(/แปลงรายการกลุ่มเดิมเป็นเครื่องมือรายตัว/i)).toBeInTheDocument();
+    expect(screen.getByText(/ระบบจะไม่คัดลอกเดือนจากกลุ่มเดิมไปยังเครื่องมือรายตัวโดยอัตโนมัติ/i)).toBeInTheDocument();
     expect(screen.getByText('GRP-VERNIER')).toBeInTheDocument();
 
     // Lists both children with duplicate detection
     expect(screen.getByText('V001')).toBeInTheDocument();
     expect(screen.getByText('V002')).toBeInTheDocument();
-    expect(screen.getByText(/มีในแผนแล้ว \(จะอัปเดต\)/i)).toBeInTheDocument();
-    expect(screen.getByText(/เพิ่มเข้าแผนใหม่/i)).toBeInTheDocument();
+    expect(screen.getByText(/มีอยู่ในแผนแล้ว/i)).toBeInTheDocument();
+    expect(screen.getByText(/เพิ่มเป็นแถวใหม่ในแผน/i)).toBeInTheDocument();
 
-    // Confirm conversion
-    const confirmBtn = screen.getByRole('button', { name: /ยืนยันการแปลง/i });
-    fireEvent.click(confirmBtn);
+    // V002 was NOT in plan and did NOT inherit months -> clicking Preview immediately must block with validation alert
+    fireEvent.click(screen.getByRole('button', { name: /ดูตัวอย่างก่อนยืนยัน/i }));
+    expect(screen.getByRole('alert')).toHaveTextContent(/กรุณาเลือกเดือนทวนสอบอย่างน้อย 1 เดือน.*V002/i);
+
+    // Manually pick month 9 for V002 -> proceed to Preview -> Confirm conversion
+    fireEvent.click(screen.getByRole('button', { name: 'V002 เดือน 9' }));
+    fireEvent.click(screen.getByRole('button', { name: /ดูตัวอย่างก่อนยืนยัน/i }));
+
+    expect(screen.getByTestId('conversion-preview-summary')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /ยืนยันการแปลงรายการ/i }));
 
     expect(onConfirmConvert).toHaveBeenCalledWith(
       expect.objectContaining({
         groupItem: draftGroup,
-        childAssets: activeAssetsInRegister,
-        copyMonths: true
+        confirm_remove_empty: false,
+        items: [
+          expect.objectContaining({ asset_id: 'ASSET-CH-01', planned_months: [2] }),
+          expect.objectContaining({ asset_id: 'ASSET-CH-02', planned_months: [9] })
+        ]
       })
     );
   });

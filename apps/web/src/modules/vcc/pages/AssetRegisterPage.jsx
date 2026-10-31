@@ -13,11 +13,9 @@ import {
   Edit3,
   Archive,
   RotateCcw,
-  FolderTree,
   CheckCircle2,
   XCircle,
-  AlertTriangle,
-  Layers
+  AlertTriangle
 } from 'lucide-react';
 import useStore from '../../../store/useStore';
 import {
@@ -34,8 +32,7 @@ import {
   AssetFormModal,
   AssetStatusModal,
   AssetDetailHistoryModal,
-  AssetTypesModal,
-  LogicalGroupAdminModal
+  AssetTypesModal
 } from '../components/AssetRegisterModals';
 import AnnualPlanMatrixSection from '../components/AnnualPlanMatrixSection';
 import WorkOrderSection from '../components/WorkOrderSection';
@@ -50,14 +47,12 @@ const EMPTY_FORM = {
   model: '',
   location: '',
   department: '',
-  is_group: false,
   group_nature: 'LOGICAL_GROUP',
-  parent_id: ''
+  composite_details: ''
 };
 
 const AssetRegisterPageInner = () => {
-  const { currentUser, departments: storeDepts, masterDepartments } = useStore();
-  const isDccUser = Boolean(currentUser?.isDcc);
+  const { departments: storeDepts, masterDepartments } = useStore();
 
   const activeDepartments = useMemo(() => {
     const raw = masterDepartments?.length ? masterDepartments : storeDepts || [];
@@ -105,17 +100,12 @@ const AssetRegisterPageInner = () => {
   // Separate status tabs: ACTIVE and RETIRED are never mixed in one list.
   const [activeTab, setActiveTab] = useState('ACTIVE');
   const [assets, setAssets] = useState([]);
-  const [activeGroups, setActiveGroups] = useState([]);
   const [assetTypes, setAssetTypes] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Filters (Category filter + Search + Department)
+  // Search & Department filter (Flat Instrument Register — no category navigation)
   const [searchQuery, setSearchQuery] = useState('');
   const [filterDept, setFilterDept] = useState('');
-  const [filterType, setFilterType] = useState('');
-
-  // DCC Logical Group Admin Modal
-  const [logicalGroupsModalOpen, setLogicalGroupsModalOpen] = useState(false);
 
   // Add / Edit Modal
   const [formOpen, setFormOpen] = useState(false);
@@ -144,18 +134,16 @@ const AssetRegisterPageInner = () => {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [list, groups, types] = await Promise.all([
+      const [list, types] = await Promise.all([
         fetchVccAssets({
           status: activeTab,
           department: filterDept,
           calibratable_only: true,
           q: searchQuery
         }),
-        fetchVccAssets({ status: 'ACTIVE', logical_groups_only: true }),
         fetchVccAssetTypes()
       ]);
       setAssets(list);
-      setActiveGroups(groups);
       setAssetTypes(types);
     } catch (err) {
       toast.error(err.message || 'ไม่สามารถโหลดข้อมูลทะเบียนเครื่องมือได้');
@@ -164,21 +152,7 @@ const AssetRegisterPageInner = () => {
     }
   }, [activeTab, filterDept, searchQuery]);
 
-  // Category breakdown for filter chips
-  const categoryCounts = useMemo(() => {
-    const counts = {};
-    for (const a of assets) {
-      const t = a.asset_type || 'อื่น ๆ';
-      counts[t] = (counts[t] || 0) + 1;
-    }
-    return counts;
-  }, [assets]);
-
-  // Filtered by selected category chip / dropdown
-  const displayedAssets = useMemo(() => {
-    if (!filterType) return assets;
-    return assets.filter((a) => a.asset_type === filterType);
-  }, [assets, filterType]);
+  const displayedAssets = assets;
 
   useEffect(() => {
     if (moduleView === 'ASSETS') {
@@ -208,9 +182,8 @@ const AssetRegisterPageInner = () => {
       model: asset.model || '',
       location: asset.location || '',
       department: asset.department || '',
-      is_group: Boolean(asset.is_group),
       group_nature: asset.group_nature || 'LOGICAL_GROUP',
-      parent_id: asset.parent_id || ''
+      composite_details: asset.composite_details || ''
     });
     setFormOpen(true);
   };
@@ -228,9 +201,9 @@ const AssetRegisterPageInner = () => {
         model: form.model,
         location: form.location,
         department: form.department,
-        is_group: Boolean(form.is_group),
-        group_nature: form.group_nature || 'LOGICAL_GROUP',
-        parent_id: form.is_group ? null : (form.parent_id || null)
+        is_group: false,
+        group_nature: form.group_nature === 'COMPOSITE_SET' ? 'COMPOSITE_SET' : 'LOGICAL_GROUP',
+        composite_details: form.group_nature === 'COMPOSITE_SET' ? (form.composite_details || '') : ''
       };
       if (editingAsset) {
         await updateVccAsset(editingAsset.id, payload);
@@ -385,7 +358,7 @@ const AssetRegisterPageInner = () => {
         return {
           breadcrumb: 'ทะเบียนเครื่องมือวัด',
           title: 'ทะเบียนเครื่องมือวัด (Equipment Register)',
-          description: 'จัดการทะเบียนเครื่องมือวัดและกลุ่มเครื่องมือ ตรวจสอบรหัสเครื่องมือไม่ให้ซ้ำทั้งบริษัท และบันทึกประวัติการแก้ไขทุกขั้นตอน',
+          description: 'จัดการทะเบียนเครื่องมือวัดและชุดเครื่องมือมาตรฐาน ตรวจสอบรหัสเครื่องมือไม่ให้ซ้ำทั้งบริษัท และบันทึกประวัติการแก้ไขทุกขั้นตอน',
           Icon: Wrench
         };
     }
@@ -458,17 +431,6 @@ const AssetRegisterPageInner = () => {
             {/* Contextual Actions (for ASSETS page) */}
             {moduleView === 'ASSETS' && (
               <div className="flex flex-wrap items-center gap-2.5 shrink-0">
-                {isDccUser && (
-                  <button
-                    type="button"
-                    onClick={() => setLogicalGroupsModalOpen(true)}
-                    className="inline-flex items-center gap-2 px-4 py-2.5 h-10 rounded-xl border border-purple-200 bg-purple-50 text-purple-700 text-sm font-semibold hover:bg-purple-100 transition-colors shadow-2xs cursor-pointer"
-                  >
-                    <FolderTree size={15} />
-                    <span>จัดการกลุ่มเครื่องมือ</span>
-                  </button>
-                )}
-
                 <button
                   type="button"
                   onClick={openTypesSettings}
@@ -548,57 +510,8 @@ const AssetRegisterPageInner = () => {
               </div>
 
               <div className="text-sm font-medium text-slate-600">
-                แสดงเฉพาะสถานะ <span className="font-bold text-slate-800">{activeTab}</span> ({displayedAssets.length} จาก {assets.length} เครื่อง)
+                แสดงเฉพาะสถานะ <span className="font-bold text-slate-800">{activeTab}</span> ({displayedAssets.length} เครื่อง)
               </div>
-            </div>
-
-            {/* Category Filter Chips (Clean & Minimal) */}
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
-              <button
-                type="button"
-                onClick={() => setFilterType('')}
-                className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs transition-colors cursor-pointer ${
-                  !filterType
-                    ? 'bg-indigo-50 border-indigo-300 text-indigo-950 font-bold shadow-2xs'
-                    : 'bg-white border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-                }`}
-              >
-                <Layers size={13} className={!filterType ? 'text-indigo-600' : 'text-slate-400'} />
-                <span>ทุกประเภท</span>
-                <span
-                  className={`px-1.5 py-0.2 rounded-md text-[11px] font-mono ${
-                    !filterType ? 'bg-indigo-200/60 text-indigo-900' : 'bg-slate-100 text-slate-600'
-                  }`}
-                >
-                  {assets.length}
-                </span>
-              </button>
-
-              {assetTypes.map((type) => {
-                const isSelected = filterType === type;
-                const count = categoryCounts[type] || 0;
-                return (
-                  <button
-                    key={type}
-                    type="button"
-                    onClick={() => setFilterType(isSelected ? '' : type)}
-                    className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs transition-colors cursor-pointer ${
-                      isSelected
-                        ? 'bg-indigo-50 border-indigo-300 text-indigo-950 font-bold shadow-2xs'
-                        : 'bg-white border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-                    }`}
-                  >
-                    <span>{type}</span>
-                    <span
-                      className={`px-1.5 py-0.2 rounded-md text-[11px] font-mono ${
-                        isSelected ? 'bg-indigo-200/60 text-indigo-900' : 'bg-slate-100 text-slate-500'
-                      }`}
-                    >
-                      {count}
-                    </span>
-                  </button>
-                );
-              })}
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -608,7 +521,7 @@ const AssetRegisterPageInner = () => {
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="ค้นหารหัสเครื่องมือ, ชื่อ, Serial, รุ่น, ที่ตั้ง..."
+                  placeholder="ค้นหารหัสเครื่องมือ, ชื่อ, แผนก, Serial, รุ่น, ที่ตั้ง..."
                   className="w-full h-10 pl-10 pr-4 rounded-xl border border-slate-300 text-sm placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600"
                 />
               </div>
@@ -675,6 +588,11 @@ const AssetRegisterPageInner = () => {
                           <td className="py-3.5 px-4 align-top">
                             <div className="font-semibold text-slate-900 text-sm">{asset.name}</div>
                             {asset.model && <div className="text-xs text-slate-600 mt-0.5">รุ่น: {asset.model}</div>}
+                            {isComposite && asset.composite_details && (
+                              <div className="text-xs text-teal-800 mt-1">
+                                <span className="font-semibold">อุปกรณ์ในชุด:</span> {asset.composite_details}
+                              </div>
+                            )}
                             {asset.status === 'RETIRED' && asset.retired_reason && (
                               <div className="mt-1.5 text-xs text-rose-800 bg-rose-50 border border-rose-200 rounded-lg px-2.5 py-1">
                                 <span className="font-bold">เหตุผลที่ปลดออก:</span> {asset.retired_reason}
@@ -778,7 +696,6 @@ const AssetRegisterPageInner = () => {
         formTypeOptions={formTypeOptions}
         assetTypes={assetTypes}
         activeDepartments={activeDepartments}
-        activeGroups={activeGroups}
       />
 
       <AssetStatusModal
@@ -808,15 +725,6 @@ const AssetRegisterPageInner = () => {
         handleRemoveDraftType={handleRemoveDraftType}
         savingTypes={savingTypes}
         handleSaveTypes={handleSaveTypes}
-      />
-
-      <LogicalGroupAdminModal
-        isOpen={logicalGroupsModalOpen}
-        onClose={() => setLogicalGroupsModalOpen(false)}
-        activeDepartments={activeDepartments}
-        assetTypes={assetTypes}
-        onReload={loadData}
-        onOpenHistory={openHistoryModal}
       />
     </div>
   );

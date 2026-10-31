@@ -112,8 +112,9 @@ export const AnnualPlanMonthCell = ({
   };
 
   // Create Work Order
+  const isLogicalGroup = Number(item.is_group) === 1 && item.group_nature !== 'COMPOSITE_SET';
   const handleCreateWo = async () => {
-    if (Number(item.is_group) === 1) {
+    if (isLogicalGroup) {
       setIsOpen(false);
       if (onOpenGroupCheck) onOpenGroupCheck(item);
       return;
@@ -514,7 +515,7 @@ export const AnnualPlanMonthCell = ({
             {/* Approved Plan -> Open Work Order if not created yet */}
             {plan?.status === 'APPROVED' && isPlanned && !cycleWo && (
               <>
-                {Number(item.is_group) === 1 ? (
+                {isLogicalGroup ? (
                   <button
                     type="button"
                     onClick={handleCreateWo}

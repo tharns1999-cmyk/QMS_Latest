@@ -408,7 +408,6 @@ export const AnnualPlanMatrixTable = ({
                 const isGroup = Number(item.is_group) === 1;
                 const isCompositeSet = item.is_composite_set || item.group_nature === 'COMPOSITE_SET';
                 const isLogicalGroup = isGroup && !isCompositeSet;
-                const isChild = Boolean(item.parent_id || item.parent_asset_code);
 
                 const itemWos = (workOrders || []).filter(
                   (w) => w.plan_item_id === item.id || (w.plan_id === activePlan?.id && w.asset_id === item.asset_id)
@@ -462,6 +461,11 @@ export const AnnualPlanMatrixTable = ({
                           <div className="text-sm font-semibold text-slate-900 leading-snug">
                             {item.asset_name}
                           </div>
+                          {isCompositeSet && item.composite_details && (
+                            <div className="text-xs text-teal-800 leading-snug">
+                              อุปกรณ์ในชุด: {item.composite_details}
+                            </div>
+                          )}
                           <div className="text-xs text-slate-500 flex flex-wrap items-center gap-1.5 pt-0.5">
                             <span className="font-semibold text-slate-700">{item.frequency_label || 'รายปี'}</span>
                             <span>•</span>
@@ -476,7 +480,7 @@ export const AnnualPlanMatrixTable = ({
                             )}
                           </div>
 
-                          {isLogicalGroup && onOpenGroupWorkOrderCheck && (
+                          {isLogicalGroup && !canEditPlan && activePlan?.status === 'APPROVED' && onOpenGroupWorkOrderCheck && (
                             <div className="flex flex-wrap items-center gap-2 pt-0.5">
                               <button
                                 type="button"

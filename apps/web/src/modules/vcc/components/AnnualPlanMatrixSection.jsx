@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { AlertTriangle, Plus } from 'lucide-react';
 import { getPlanStatusLabel } from '../utils/planLabels';
-import { fetchVccAssets } from '../api/vccApi';
+import { fetchVccAssets, fetchVccAssetDetail } from '../api/vccApi';
 import {
   fetchVccPlanSettings,
   saveVccPlanSettings,
@@ -14,9 +14,10 @@ import {
   updateVccPlan,
   saveVccPlanItem,
   deleteVccPlanItem,
+  convertVccPlanGroupItem,
   validateVccPlanItemWorkOrder,
   submitVccPlan,
-  isUserAuthorizedForPlanDept,
+  isUserAuthorizedForPlanDept
 } from '../api/vccPlanApi';
 import { fetchVccWorkOrders, createVccWorkOrder } from '../api/vccWorkOrderApi';
 import {
@@ -27,11 +28,10 @@ import {
   PlanSettingsModal,
   PlanHistoryModal,
   UnplannedJustificationModal,
-  DraftGroupConversionModal,
+  DraftGroupConversionModal
 } from './AnnualPlanModals';
 import AnnualPlanWorkspaceHeader from './AnnualPlanWorkspaceHeader';
 import AnnualPlanMatrixTable from './AnnualPlanMatrixTable';
-import AnnualPlanCategoryChips from './AnnualPlanCategoryChips';
 import SmartAssetImportModal from './SmartAssetImportModal';
 import useStore from '../../../store/useStore';
 
@@ -71,14 +71,12 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
 
   useEffect(() => {
     if (queryTab) {
-      if (queryTab !== statusTab) {
-        setStatusTab(queryTab);
-      }
+      setStatusTab((prev) => (prev !== queryTab ? queryTab : prev));
     } else if (queryId) {
       fetchVccPlanDetail(queryId)
         .then((detail) => {
-          if (detail?.plan?.status && detail.plan.status !== statusTab) {
-            setStatusTab(detail.plan.status);
+          if (detail?.plan?.status) {
+            setStatusTab((prev) => (prev !== detail.plan.status ? detail.plan.status : prev));
           }
         })
         .catch(() => {});
@@ -145,7 +143,6 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [smartImportOpen, setSmartImportOpen] = useState(false);
   const [justificationModalOpen, setJustificationModalOpen] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState('');
   const [groupConversionModal, setGroupConversionModal] = useState(null);
   const [convertingGroup, setConvertingGroup] = useState(false);
   const [planSubmitModalOpen, setPlanSubmitModalOpen] = useState(false);
@@ -179,7 +176,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
       const [settingsRes, planList, assetsList] = await Promise.all([
         fetchVccPlanSettings(),
         fetchVccPlans({ status: statusTab, year: filterYear, department: filterDept }),
-        fetchVccAssets({ status: 'ACTIVE' })
+        fetchVccAssets({ status: 'ACTIVE', calibratable_only: true })
       ]);
       setProviders(settingsRes.providers || []);
       setPlanSettings(settingsRes.planSettings || {});
@@ -382,7 +379,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
 
   const handleCreateWorkOrder = async (item, month) => {
     if (!planDetail?.plan) return;
-    if (Number(item.is_group) === 1) {
+    if (Number(item.is_group) === 1 && item.group_nature !== 'COMPOSITE_SET') {
       openGroupWorkOrderCheck(item);
       return;
     }
@@ -406,6 +403,18 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
     await loadPlanWorkOrders(planDetail.plan.id);
   };
 
+  const openGroupConversion = async (groupItem) => {
+    if (!groupItem) return;
+    let groupChildren = [];
+    try {
+      const detail = await fetchVccAssetDetail(groupItem.asset_id || groupItem.id);
+      groupChildren = detail?.children || [];
+    } catch {
+      groupChildren = activeAssets.filter((a) => a.parent_id === groupItem.asset_id);
+    }
+    setGroupConversionModal({ groupItem, groupChildren });
+  };
+
   const handleSubmitPlan = () => {
     if (!planDetail?.plan) return;
     setWorkflowBannerError('');
@@ -415,36 +424,27 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
       toast.error('กรุณาเพิ่มรายการเครื่องมือในแผนอย่างน้อย 1 รายการก่อนส่งขออนุมัติ');
       return;
     }
-    const groupItems = items.filter((i) => Number(i.is_group) === 1);
-    const standaloneItems = items.filter((i) => Number(i.is_group) === 0 && !i.parent_id);
-    const unplannedWithoutJustification = [];
 
-    for (const item of standaloneItems) {
+    const legacyGroups = items.filter(
+      (i) => Number(i.is_group) === 1 && i.group_nature !== 'COMPOSITE_SET'
+    );
+    if (legacyGroups.length > 0) {
+      const codes = legacyGroups.map((g) => g.asset_code).join(', ');
+      const msg = `ไม่สามารถส่งทบทวนแผนได้ เนื่องจากยังมีรายการกลุ่มเดิม (${codes}) ค้างอยู่ในแผน กรุณาแปลงเป็นเครื่องมือรายตัวก่อนส่งทบทวน`;
+      setWorkflowBannerError(msg);
+      toast.error(msg);
+      openGroupConversion(legacyGroups[0]);
+      return;
+    }
+
+    const calibratableUnits = items.filter(
+      (i) => Number(i.is_group) === 0 || i.group_nature === 'COMPOSITE_SET'
+    );
+    const unplannedWithoutJustification = calibratableUnits.filter((item) => {
       const hasPlan = Array.isArray(item.planned_months) && item.planned_months.length > 0;
       const hasRemarks = Boolean(item.remarks && item.remarks.trim());
-      if (!hasPlan && !hasRemarks) {
-        unplannedWithoutJustification.push(item);
-      }
-    }
-
-    for (const grp of groupItems) {
-      const grpHasPlan = Array.isArray(grp.planned_months) && grp.planned_months.length > 0;
-      const grpHasRemarks = Boolean(grp.remarks && grp.remarks.trim());
-      const children = items.filter((c) => c.parent_id === grp.asset_id || c.parent_id === grp.id);
-
-      if (children.length === 0) {
-        if (!grpHasPlan && !grpHasRemarks) {
-          unplannedWithoutJustification.push(grp);
-        }
-      } else if (!grpHasPlan && !grpHasRemarks) {
-        const childCovered = children.every(
-          (c) => (Array.isArray(c.planned_months) && c.planned_months.length > 0) || Boolean(c.remarks && c.remarks.trim())
-        );
-        if (!childCovered) {
-          unplannedWithoutJustification.push(grp);
-        }
-      }
-    }
+      return !hasPlan && !hasRemarks;
+    });
 
     if (unplannedWithoutJustification.length > 0) {
       const msg = `มีเครื่องมือที่ยังไม่ได้วางแผนและยังไม่ได้ระบุเหตุผล ${unplannedWithoutJustification.length} รายการ กรุณาระบุเหตุผลก่อนส่งทบทวน`;
@@ -501,8 +501,16 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
     setPlanDetail(refreshed);
   };
 
-  const openGroupWorkOrderCheck = (item) => {
-    const childAssets = activeAssets.filter((a) => a.parent_id === item.asset_id && a.status === 'ACTIVE');
+  const openGroupWorkOrderCheck = async (item) => {
+    let childAssets = activeAssets.filter((a) => a.parent_id === item.asset_id && a.status === 'ACTIVE');
+    if (childAssets.length === 0) {
+      try {
+        const detail = await fetchVccAssetDetail(item.asset_id);
+        childAssets = (detail?.children || []).filter((a) => a.status === 'ACTIVE');
+      } catch {
+        childAssets = [];
+      }
+    }
     setGroupCheckModal({ item, childAssets });
     setSelectedChildId('');
     setGroupCheckResult(null);
@@ -549,7 +557,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
   };
 
   const activePlan = planDetail?.plan;
-  const planItems = planDetail?.items || [];
+  const planItems = useMemo(() => planDetail?.items || [], [planDetail?.items]);
   const isUserEligibleEditor = useMemo(() => {
     if (!activePlan) return false;
     if (!currentUser) return true;
@@ -592,34 +600,29 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
   const draftLogicalGroupItems = useMemo(() => {
     if (!canEditPlan) return [];
     return planItems.filter(
-      (i) => Number(i.is_group) === 1 && i.group_nature !== 'COMPOSITE_SET' && i.is_persisted
+      (i) => Number(i.is_group) === 1 && i.group_nature !== 'COMPOSITE_SET'
     );
   }, [canEditPlan, planItems]);
 
-  const handleConfirmConvertGroup = async ({ groupItem, childAssets, copyMonths }) => {
+  const handleConfirmConvertGroup = async ({ groupItem, items = [], confirm_remove_empty = false }) => {
     if (!planDetail?.plan || !groupItem) return;
     setConvertingGroup(true);
     try {
-      if (groupItem.is_persisted && !String(groupItem.id).startsWith('virtual-')) {
-        await deleteVccPlanItem(planDetail.plan.id, groupItem.id);
-      }
-      const monthsToAssign = copyMonths ? (groupItem.planned_months || []) : [];
-      for (const child of childAssets) {
-        await saveVccPlanItem(planDetail.plan.id, {
-          asset_id: child.id,
-          provider_name: groupItem.provider_name || 'ทวนสอบภายใน',
-          frequency_label: groupItem.frequency_label || 'รายปี',
-          planned_months: monthsToAssign,
-          responsible_dept: child.department || groupItem.responsible_dept,
-          responsible_label: groupItem.responsible_label || '',
-          remarks: ''
-        });
-      }
-      toast.success(`แปลงกลุ่ม ${groupItem.asset_code} เป็นเครื่องมือรายตัว ${childAssets.length} รายการแล้ว`);
+      await convertVccPlanGroupItem(planDetail.plan.id, groupItem.id, {
+        selections: items,
+        items,
+        confirm_remove_empty
+      });
+      toast.success(
+        items.length > 0
+          ? `แปลงรายการ ${groupItem.asset_code} เป็นเครื่องมือรายตัว ${items.length} รายการเรียบร้อยแล้ว`
+          : `นำรายการกลุ่มเดิม ${groupItem.asset_code} ออกจากแผนร่างแล้ว`
+      );
       setGroupConversionModal(null);
+      setWorkflowBannerError('');
       await loadPlansAndMeta(planDetail.plan.id);
     } catch (err) {
-      toast.error(err.message || 'ไม่สามารถแปลงกลุ่มเครื่องมือได้');
+      toast.error(err.message || 'ไม่สามารถแปลงรายการกลุ่มเดิมได้');
     } finally {
       setConvertingGroup(false);
     }
@@ -641,6 +644,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
         onSelectPlan={handleSelectPlan}
         activePlan={activePlan}
         planItems={planItems}
+        activeAssets={activeAssets}
         canEditPlan={canEditPlan}
         thresholds={thresholds}
         onSubmitPlan={handleSubmitPlan}
@@ -649,6 +653,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
         onOpenEditPlan={openEditPlan}
         onOpenHistory={() => setHistoryOpen(true)}
         onOpenJustificationModal={() => setJustificationModalOpen(true)}
+        onOpenSmartImport={() => setSmartImportOpen(true)}
       />
 
       {workflowBannerError && (
@@ -663,15 +668,15 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
           <div className="flex items-center gap-2">
             <AlertTriangle size={15} className="text-amber-600 shrink-0" />
             <span>
-              พบกลุ่มจัดหมวดหมู่ ({draftLogicalGroupItems.map((g) => g.asset_code).join(', ')}) ในแผนร่าง — สามารถแปลงเป็นรายการเครื่องมือรายตัว (Flat Table) เพื่อให้สามารถออกใบงานและบันทึกผลได้โดยตรง
+              พบรายการกลุ่มเดิม ({draftLogicalGroupItems.map((g) => g.asset_code).join(', ')}) ค้างอยู่ในแผนฉบับร่าง — กรุณาแปลงเป็นเครื่องมือรายตัวและกำหนดเดือนก่อนส่งทบทวนแผน
             </span>
           </div>
           <button
             type="button"
-            onClick={() => setGroupConversionModal(draftLogicalGroupItems[0])}
+            onClick={() => openGroupConversion(draftLogicalGroupItems[0])}
             className="px-3 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-semibold transition-colors cursor-pointer shadow-2xs text-xs"
           >
-            ดูตัวอย่างการแปลงรายการ (Preview)
+            แปลงเป็นเครื่องมือรายตัว
           </button>
         </div>
       )}
@@ -717,13 +722,6 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
         </div>
       ) : (
         <div className="space-y-2.5">
-          <AnnualPlanCategoryChips
-            planItems={planItems}
-            workOrders={planWorkOrders}
-            selectedCategory={selectedCategory}
-            onSelectCategory={setSelectedCategory}
-          />
-
           <AnnualPlanMatrixTable
             planItems={planItems}
             activePlan={activePlan}
@@ -735,7 +733,6 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
             filterDept={filterDept}
             setFilterDept={setFilterDept}
             activeDepartments={activeDepartments}
-            selectedCategory={selectedCategory}
             onOpenAddItem={openAddItem}
             onDeleteItem={handleDeleteItem}
             onOpenGroupWorkOrderCheck={openGroupWorkOrderCheck}
@@ -828,19 +825,26 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
       <UnplannedJustificationModal
         open={justificationModalOpen}
         onClose={() => setJustificationModalOpen(false)}
-        unplannedItems={(planDetail?.items || []).filter((i) => (i.planned_months || []).length === 0)}
+        unplannedItems={planItems.filter(
+          (i) =>
+            (Number(i.is_group) === 0 || i.group_nature === 'COMPOSITE_SET') &&
+            (i.planned_months || []).length === 0
+        )}
         onSaveJustifications={handleSaveJustifications}
       />
 
-      <DraftGroupConversionModal
-        open={Boolean(groupConversionModal)}
-        onClose={() => setGroupConversionModal(null)}
-        groupItem={groupConversionModal}
-        activeAssets={activeAssets}
-        existingPlanItems={planItems}
-        onConfirmConvert={handleConfirmConvertGroup}
-        converting={convertingGroup}
-      />
+      {Boolean(groupConversionModal) && (
+        <DraftGroupConversionModal
+          open={Boolean(groupConversionModal)}
+          onClose={() => setGroupConversionModal(null)}
+          groupItem={groupConversionModal?.groupItem || groupConversionModal}
+          groupChildren={groupConversionModal?.groupChildren || []}
+          activeAssets={activeAssets}
+          existingPlanItems={planItems}
+          onConfirmConvert={handleConfirmConvertGroup}
+          converting={convertingGroup}
+        />
+      )}
     </div>
   );
 };
