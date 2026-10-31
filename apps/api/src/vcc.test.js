@@ -129,111 +129,99 @@ describe('VCC Phase 1: Asset Register', () => {
     expect(JSON.parse(logRow.details)).toMatchObject({ asset_id: assetId, asset_code: 'ST002', department: 'VCCQ' });
   });
 
-  it('enforces 1-level group hierarchy, blocks changing is_group when children exist, and blocks retiring a group with ACTIVE children', async () => {
-    // 1. Create parent group
-    const groupRes = await call('POST', '/api/vcc/assets', 'VCC-DCC', {
-      asset_code: 'GRP-SCALE',
-      name: '[ข้อมูลทดสอบ] กลุ่มเครื่องชั่ง',
+  it('enforces flat instrument model: blocks Logical Group & parent_id creation, supports Composite Set details, hides legacy groups by default, and allows independent legacy child reactivation', async () => {
+    // 1. Creating a Logical Group via operational API is forbidden (400)
+    const blockedGroup = await call('POST', '/api/vcc/assets', 'VCC-DCC', {
+      asset_code: 'GRP-SCALE-NEW',
+      name: '[ข้อมูลทดสอบ] กลุ่มเครื่องชั่งใหม่',
       asset_type: 'เครื่องชั่ง',
-      location: 'คลังสินค้า Store',
       department: 'VCCS',
       is_group: true
     });
-    expect(groupRes.status).toBe(201);
-    const groupId = groupRes.body.asset.id;
-    expect(groupRes.body.asset.is_group).toBe(1);
+    expect(blockedGroup.status).toBe(400);
 
-    // 2. Group inside another group is forbidden (1 level only)
-    const nestedGroup = await call('POST', '/api/vcc/assets', 'VCC-DCC', {
-      asset_code: 'GRP-SUB',
-      name: 'กลุ่มย่อยซ้อน',
+    // 2. Creating an instrument with parent_id is forbidden (400)
+    const blockedChild = await call('POST', '/api/vcc/assets', 'VCC-DCC', {
+      asset_code: 'SC-CHILD-NEW',
+      name: '[ข้อมูลทดสอบ] เครื่องชั่งลูก',
       asset_type: 'เครื่องชั่ง',
       department: 'VCCS',
+      parent_id: 'some-parent-id'
+    });
+    expect(blockedChild.status).toBe(400);
+
+    // 3. Creating a Physical Composite Set (1 Calibratable Unit with composite_details) succeeds with is_group = 0
+    const compositeRes = await call('POST', '/api/vcc/assets', 'VCC-DCC', {
+      asset_code: 'SW001-SET',
+      name: '[ข้อมูลทดสอบ] ชุดตุ้มน้ำหนักมาตรฐาน',
+      asset_type: 'ตุ้มน้ำหนักมาตรฐาน',
+      model: 'Class E2',
+      location: 'ห้อง Lab QC',
+      department: 'VCCQ',
+      group_nature: 'COMPOSITE_SET',
+      composite_details: '100 mg, 200 mg, 500 mg, 1 g - 500 g รวม 12 ชิ้น'
+    });
+    expect(compositeRes.status).toBe(201);
+    expect(compositeRes.body.asset).toMatchObject({
+      asset_code: 'SW001-SET',
+      is_group: 0,
+      group_nature: 'COMPOSITE_SET',
+      parent_id: null,
+      composite_details: '100 mg, 200 mg, 500 mg, 1 g - 500 g รวม 12 ชิ้น'
+    });
+
+    // 4. Cannot convert a flat instrument into a Logical Group or assign parent_id via PUT
+    const convertBlocked = await call('PUT', `/api/vcc/assets/${compositeRes.body.asset.id}`, 'VCC-DCC', {
       is_group: true,
-      parent_id: groupId
+      group_nature: 'LOGICAL_GROUP'
     });
-    expect(nestedGroup.status).toBe(400);
+    expect(convertBlocked.status).toBe(400);
 
-    // 3. Create child asset under group
-    const childRes = await call('POST', '/api/vcc/assets', 'VCC-DCC', {
-      asset_code: 'SC-001',
-      name: '[ข้อมูลทดสอบ] เครื่องชั่งดิจิทัล 1',
-      asset_type: 'เครื่องชั่ง',
-      serial_no: '',
-      model: 'Mettler',
-      location: 'จุดรับวัตถุดิบ',
-      department: 'VCCS',
-      parent_id: groupId
+    const attachParentBlocked = await call('PUT', `/api/vcc/assets/${compositeRes.body.asset.id}`, 'VCC-DCC', {
+      parent_id: 'legacy-grp-1'
     });
-    expect(childRes.status).toBe(201);
-    const childId = childRes.body.asset.id;
-    expect(childRes.body.asset.parent_id).toBe(groupId);
+    expect(attachParentBlocked.status).toBe(400);
 
-    // 4. Child under a non-group asset is forbidden (1 level only)
-    const grandChild = await call('POST', '/api/vcc/assets', 'VCC-DCC', {
-      asset_code: 'SC-001-A',
-      name: 'ลูกซ้อนลูก',
-      asset_type: 'เครื่องชั่ง',
-      department: 'VCCS',
-      parent_id: childId
-    });
-    expect(grandChild.status).toBe(400);
+    // 5. Legacy DB Logical Group + legacy child record: excluded from default GET /api/vcc/assets, preserved for traceability, and child operates independently
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO vcc_assets (id, asset_code, name, asset_type, department, is_group, group_nature, parent_id, status, created_by, updated_by)
+         VALUES ('legacy-grp-scale', 'GRP-SCALE', '[ข้อมูลทดสอบ] กลุ่มเครื่องชั่งเดิม', 'เครื่องชั่ง', 'VCCS', 1, 'LOGICAL_GROUP', NULL, 'RETIRED', 'VCC-DCC', 'VCC-DCC')`
+      ),
+      env.DB.prepare(
+        `INSERT INTO vcc_assets (id, asset_code, name, asset_type, department, is_group, group_nature, parent_id, status, retired_reason, created_by, updated_by)
+         VALUES ('legacy-sc-001', 'SC-001', '[ข้อมูลทดสอบ] เครื่องชั่งดิจิทัล 1', 'เครื่องชั่ง', 'VCCS', 0, 'LOGICAL_GROUP', 'legacy-grp-scale', 'RETIRED', 'ทดสอบปลดระวาง', 'VCC-DCC', 'VCC-DCC')`
+      )
+    ]);
 
-    // 5. Cannot change is_group of parent while it has children
-    const changeIsGroup = await call('PUT', `/api/vcc/assets/${groupId}`, 'VCC-DCC', {
-      is_group: false
-    });
-    expect(changeIsGroup.status).toBe(409);
-
-    // 6. Cannot retire parent group while child is ACTIVE
-    const retireGroupBlocked = await call('POST', `/api/vcc/assets/${groupId}/retire`, 'VCC-DCC', {
-      reason: 'จะปลดกลุ่มแต่ลูกยังใช้งานอยู่'
-    });
-    expect(retireGroupBlocked.status).toBe(409);
-
-    // 7. Retire child requires reason, then parent group can be retired
-    expect((await call('POST', `/api/vcc/assets/${childId}/retire`, 'VCC-DCC', { reason: '   ' })).status).toBe(400);
-    const retireChild = await call('POST', `/api/vcc/assets/${childId}/retire`, 'VCC-DCC', {
-      reason: 'เครื่องชั่งชำรุด ส่งจำหน่าย'
-    });
-    expect(retireChild.status).toBe(200);
-    expect(retireChild.body.asset.status).toBe('RETIRED');
-
-    const retireGroupOk = await call('POST', `/api/vcc/assets/${groupId}/retire`, 'VCC-DCC', {
-      reason: 'ปลดกลุ่มเครื่องชั่งเดิม'
-    });
-    expect(retireGroupOk.status).toBe(200);
-    expect(retireGroupOk.body.asset.status).toBe('RETIRED');
-
-    // 8. Cannot add a new child into a RETIRED group
-    const childIntoRetired = await call('POST', '/api/vcc/assets', 'VCC-DCC', {
-      asset_code: 'SC-002',
-      name: 'เครื่องชั่งใหม่',
-      asset_type: 'เครื่องชั่ง',
-      department: 'VCCS',
-      parent_id: groupId
-    });
-    expect(childIntoRetired.status).toBe(400);
-
-    // 9. Cannot reactivate child while parent group is still RETIRED
-    const reactivateChildBlocked = await call('POST', `/api/vcc/assets/${childId}/reactivate`, 'VCC-DCC', {
-      reason: 'ซ่อมเสร็จแล้ว'
-    });
-    expect(reactivateChildBlocked.status).toBe(409);
-
-    // 10. Reactivate parent group (requires reason), then reactivate child
-    expect((await call('POST', `/api/vcc/assets/${groupId}/reactivate`, 'VCC-DCC', {})).status).toBe(400);
-    const reactivateGroup = await call('POST', `/api/vcc/assets/${groupId}/reactivate`, 'VCC-DCC', {
-      reason: 'เปิดใช้งานกลุ่มเครื่องชั่งอีกครั้ง'
-    });
-    expect(reactivateGroup.status).toBe(200);
-    expect(reactivateGroup.body.asset.status).toBe('ACTIVE');
-
-    const reactivateChildOk = await call('POST', `/api/vcc/assets/${childId}/reactivate`, 'VCC-DCC', {
-      reason: 'ซ่อมและสอบเทียบผ่านแล้ว'
+    // Legacy child can be reactivated independently even while legacy parent group is RETIRED!
+    expect((await call('POST', '/api/vcc/assets/legacy-sc-001/reactivate', 'VCC-DCC', { reason: '   ' })).status).toBe(400);
+    const reactivateChildOk = await call('POST', '/api/vcc/assets/legacy-sc-001/reactivate', 'VCC-DCC', {
+      reason: 'ซ่อมและสอบเทียบผ่านแล้ว ใช้งานเป็นเครื่องมืออิสระ'
     });
     expect(reactivateChildOk.status).toBe(200);
     expect(reactivateChildOk.body.asset.status).toBe('ACTIVE');
+
+    // Default operational list includes SC-001 & SW001-SET, and excludes Logical Groups even if ACTIVE
+    await env.DB.prepare("UPDATE vcc_assets SET status = 'ACTIVE' WHERE id = 'legacy-grp-scale'").run();
+    const listRes = await call('GET', '/api/vcc/assets?status=ACTIVE', 'VCC-DCC');
+    expect(listRes.status).toBe(200);
+    const listedCodes = listRes.body.assets.map((a) => a.asset_code);
+    expect(listedCodes).toContain('SC-001');
+    expect(listedCodes).toContain('SW001-SET');
+    expect(listedCodes).not.toContain('GRP-SCALE');
+
+    // Legacy group record still exists in DB for historical FK / audit traceability via GET /api/vcc/assets/:id
+    const detailLegacyGrp = await call('GET', '/api/vcc/assets/legacy-grp-scale', 'VCC-DCC');
+    expect(detailLegacyGrp.status).toBe(200);
+    expect(detailLegacyGrp.body.asset.asset_code).toBe('GRP-SCALE');
+
+    // Legacy child can be edited cleanly without failing legacy parent checks
+    const editChildOk = await call('PUT', '/api/vcc/assets/legacy-sc-001', 'VCC-DCC', {
+      location: 'จุดรับวัตถุดิบ อาคาร 2'
+    });
+    expect(editChildOk.status).toBe(200);
+    expect(editChildOk.body.asset.location).toBe('จุดรับวัตถุดิบ อาคาร 2');
   });
 
   it('keeps ACTIVE and RETIRED separated in list queries, edits assets, and returns full VCC_ASSET_* audit history', async () => {

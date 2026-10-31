@@ -96,57 +96,48 @@ describe('VCC Phase 2: Calibration Schedule Rules, Annual Plan Matrix & Plan App
     expect(updated.body.providers).toContain('ห้องแล็บสอบเทียบ ISO 17025');
   });
 
-  it('schedules Vernier Caliper V001 (month 2) and V002 (month 9), computes due dates, never treats plan as completion evidence, and enforces group child selection for work orders', async () => {
-    // 1. Register assets: Vernier group + V001 & V002, Scale group + SC-01, and a retired asset
-    const grpVernier = (await call('POST', '/api/vcc/assets', 'VP-DCC', {
-      asset_code: 'GRP-VERNIER-VP',
-      name: '[ข้อมูลทดสอบ] กลุ่มเวอร์เนียร์คาลิปเปอร์',
-      asset_type: 'เวอร์เนียร์คาลิปเปอร์',
-      department: 'VPQC',
-      is_group: true
-    })).body.asset;
+  it('schedules Vernier Caliper V001 (month 2) and V002 (month 9), computes due dates, blocks Logical Groups in new plans, converts legacy draft groups safely, and preserves historical approved group validation', async () => {
+    // 1. Register flat operational assets: V001 & V002, SC-VP-01, and a retired asset; seed legacy DB Logical Groups for backward-compatibility checks
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO vcc_assets (id, asset_code, name, asset_type, department, is_group, group_nature, parent_id, status, created_by, updated_by)
+         VALUES ('vp-legacy-grp-vernier', 'GRP-VERNIER-VP', '[ข้อมูลทดสอบ] กลุ่มเวอร์เนียร์เดิม', 'เวอร์เนียร์คาลิปเปอร์', 'VPQC', 1, 'LOGICAL_GROUP', NULL, 'ACTIVE', 'VP-DCC', 'VP-DCC')`
+      ),
+      env.DB.prepare(
+        `INSERT INTO vcc_assets (id, asset_code, name, asset_type, department, is_group, group_nature, parent_id, status, created_by, updated_by)
+         VALUES ('vp-legacy-grp-scale', 'GRP-SCALE-VP', '[ข้อมูลทดสอบ] กลุ่มเครื่องชั่งเดิม', 'เครื่องชั่ง', 'VPWH', 1, 'LOGICAL_GROUP', NULL, 'ACTIVE', 'VP-DCC', 'VP-DCC')`
+      )
+    ]);
+    const grpScale = { id: 'vp-legacy-grp-scale', asset_code: 'GRP-SCALE-VP' };
 
     const v001 = (await call('POST', '/api/vcc/assets', 'VP-DCC', {
       asset_code: 'V001',
       name: '[ข้อมูลทดสอบ] เวอร์เนียร์คาลิปเปอร์ V001',
       asset_type: 'เวอร์เนียร์คาลิปเปอร์',
-      department: 'VPQC',
-      is_group: false,
-      parent_id: grpVernier.id
+      department: 'VPQC'
     })).body.asset;
 
     const v002 = (await call('POST', '/api/vcc/assets', 'VP-DCC', {
       asset_code: 'V002',
       name: '[ข้อมูลทดสอบ] เวอร์เนียร์คาลิปเปอร์ V002',
       asset_type: 'เวอร์เนียร์คาลิปเปอร์',
-      department: 'VPQC',
-      is_group: false,
-      parent_id: grpVernier.id
-    })).body.asset;
-
-    const grpScale = (await call('POST', '/api/vcc/assets', 'VP-DCC', {
-      asset_code: 'GRP-SCALE-VP',
-      name: '[ข้อมูลทดสอบ] กลุ่มเครื่องชั่งฝ่ายคลังสินค้า',
-      asset_type: 'เครื่องชั่ง',
-      department: 'VPWH',
-      is_group: true
+      department: 'VPQC'
     })).body.asset;
 
     const sc01 = (await call('POST', '/api/vcc/assets', 'VP-DCC', {
       asset_code: 'SC-VP-01',
       name: '[ข้อมูลทดสอบ] เครื่องชั่งคลังสินค้า ตัวที่ 1',
       asset_type: 'เครื่องชั่ง',
-      department: 'VPWH',
-      is_group: false,
-      parent_id: grpScale.id
+      department: 'VPWH'
     })).body.asset;
+    // Link legacy parent_id in DB to simulate historical child relationship for historical approved plan test
+    await env.DB.prepare("UPDATE vcc_assets SET parent_id = 'vp-legacy-grp-scale' WHERE id = ?").bind(sc01.id).run();
 
     const retiredAsset = (await call('POST', '/api/vcc/assets', 'VP-DCC', {
       asset_code: 'OLD-VP-01',
       name: '[ข้อมูลทดสอบ] เครื่องมือปลดระวาง',
       asset_type: 'เทอร์โมมิเตอร์',
-      department: 'VPQC',
-      is_group: false
+      department: 'VPQC'
     })).body.asset;
     await call('POST', `/api/vcc/assets/${retiredAsset.id}/retire`, 'VP-DCC', { reason: 'ชำรุด' });
 
@@ -171,7 +162,7 @@ describe('VCC Phase 2: Calibration Schedule Rules, Annual Plan Matrix & Plan App
     });
     expect(dupPlan.status).toBe(409);
 
-    // 3. Reject retired asset in plan -> 400
+    // 3. Reject retired asset AND reject Logical Group in operational plan -> 400
     const addRetired = await call('POST', `/api/vcc/plans/${planId}/items`, 'VP-DCC', {
       asset_id: retiredAsset.id,
       provider_name: 'ห้องปฏิบัติการภายนอก',
@@ -180,7 +171,15 @@ describe('VCC Phase 2: Calibration Schedule Rules, Annual Plan Matrix & Plan App
     });
     expect(addRetired.status).toBe(400);
 
-    // 4. Add V001 (month 2 -> 2026-02-28) and V002 (month 9 -> 2026-09-30)
+    const addGroupBlocked = await call('POST', `/api/vcc/plans/${planId}/items`, 'VP-DCC', {
+      asset_id: grpScale.id,
+      provider_name: 'ทวนสอบภายใน',
+      planned_months: [1, 2, 3],
+      responsible_dept: 'VPWH'
+    });
+    expect(addGroupBlocked.status).toBe(400);
+
+    // 4. Add V001 (month 2 -> 2026-02-28) and V002 (month 9 -> 2026-09-30) as flat independent rows
     const itemV1 = await call('POST', `/api/vcc/plans/${planId}/items`, 'VP-DCC', {
       asset_id: v001.id,
       provider_name: 'ห้องปฏิบัติการภายนอก',
@@ -193,7 +192,6 @@ describe('VCC Phase 2: Calibration Schedule Rules, Annual Plan Matrix & Plan App
     expect(itemV1.status).toBe(201);
     expect(itemV1.body.item.planned_months).toEqual([2]);
     expect(itemV1.body.item.due_dates).toEqual(['2026-02-28']);
-    // Highlighted month in plan is NEVER proof of completion
     expect(itemV1.body.item.completion_status).toBe('PLANNED_ONLY');
     expect(itemV1.body.item.actual_months).toEqual([]);
     expect(itemV1.body.item.has_evidence).toBe(false);
@@ -210,42 +208,70 @@ describe('VCC Phase 2: Calibration Schedule Rules, Annual Plan Matrix & Plan App
     expect(itemV2.status).toBe(201);
     expect(itemV2.body.item.due_dates).toEqual(['2026-09-30']);
 
-    // 5. Add Group asset (GRP-SCALE-VP) and verify work order validation blocks group unless child asset is specified
-    const itemGrp = await call('POST', `/api/vcc/plans/${planId}/items`, 'VP-DCC', {
-      asset_id: grpScale.id,
-      provider_name: 'ทวนสอบภายใน',
-      frequency_label: 'รายเดือน',
-      planned_months: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
-      responsible_dept: 'VPWH',
-      responsible_label: 'เจ้าหน้าที่ Store',
-      remarks: 'ฝ่าย Store เป็นฝ่ายสอบเทียบ FM-ST-31'
-    });
-    expect(itemGrp.status).toBe(201);
-    expect(itemGrp.body.item.requires_child_selection).toBe(true);
-    expect(itemGrp.body.item.work_order_ready).toBe(false);
+    // 5. Legacy Draft Group Migration & Submission Gate:
+    // Seed a legacy group item in this DRAFT plan; submit MUST block until converted!
+    await env.DB.prepare(
+      `INSERT INTO vcc_annual_plan_items (id, plan_id, asset_id, provider_name, frequency_label, planned_months, due_dates, responsible_dept, remarks, sort_order, created_by, updated_by)
+       VALUES ('vp-legacy-pi-grp', ?, 'vp-legacy-grp-scale', 'ทวนสอบภายใน', 'รายเดือน', '[1,2,3]', '[]', 'VPWH', 'ข้อมูลเดิม', 10, 'VP-DCC', 'VP-DCC')`
+    ).bind(planId).run();
 
-    // Attempt work order validation on group item without child_asset_id -> 400
-    const woBlock = await call(
-      'POST',
-      `/api/vcc/plans/${planId}/items/${itemGrp.body.item.id}/validate-work-order`,
-      'VP-DCC',
-      {}
-    );
+    const submitWithLegacyGroup = await call('POST', `/api/vcc/plans/${planId}/submit`, 'VP-DCC');
+    expect(submitWithLegacyGroup.status).toBe(400);
+    expect(submitWithLegacyGroup.body.unresolved_group_items).toHaveLength(1);
+    expect(submitWithLegacyGroup.body.unresolved_group_items[0].asset_code).toBe('GRP-SCALE-VP');
+
+    // Converting without months or remarks is rejected (no silent auto-inheritance!)
+    const convertNoMonths = await call('POST', `/api/vcc/plans/${planId}/items/vp-legacy-pi-grp/convert-group`, 'VP-DCC', {
+      selections: [{ asset_id: sc01.id, planned_months: [], remarks: '' }]
+    });
+    expect(convertNoMonths.status).toBe(400);
+
+    // Converting with explicit user-chosen months ([3, 9]) succeeds atomically and removes GRP-SCALE-VP
+    const convertOk = await call('POST', `/api/vcc/plans/${planId}/items/vp-legacy-pi-grp/convert-group`, 'VP-DCC', {
+      selections: [{
+        asset_id: sc01.id,
+        planned_months: [3, 9],
+        provider_name: 'ทวนสอบภายใน',
+        frequency_label: 'ทุก 6 เดือน',
+        responsible_dept: 'VPWH',
+        remarks: 'แปลงเป็นเครื่องมือรายตัว'
+      }]
+    });
+    expect(convertOk.status).toBe(200);
+    expect(convertOk.body.items.some((i) => i.asset_code === 'GRP-SCALE-VP')).toBe(false);
+    const convertedSc01 = convertOk.body.items.find((i) => i.asset_code === 'SC-VP-01');
+    expect(convertedSc01.planned_months).toEqual([3, 9]);
+
+    // 6. Historical APPROVED plan with a legacy group item remains preserved read-only and still validates child selection for WOs
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO vcc_annual_plans (id, plan_year, department, document_code, revision, title, due_date_rule, status, prepared_by, reviewed_by, approved_by, created_by, updated_by)
+         VALUES ('vp-hist-plan-2025', 2025, 'VPWH', 'FM-QC-46', '00', '[ข้อมูลทดสอบ] แผนปี 2025 เดิม', 'END_OF_MONTH', 'APPROVED', 'VP-DCC', 'VP-REV4', 'VP-APP6', 'VP-DCC', 'VP-APP6')`
+      ),
+      env.DB.prepare(
+        `INSERT INTO vcc_annual_plan_items (id, plan_id, asset_id, provider_name, frequency_label, planned_months, due_dates, responsible_dept, remarks, sort_order, created_by, updated_by)
+         VALUES ('vp-hist-pi-grp', 'vp-hist-plan-2025', 'vp-legacy-grp-scale', 'ทวนสอบภายใน', 'รายเดือน', '[6]', '["2025-06-30"]', 'VPWH', 'ประวัติเดิม', 1, 'VP-DCC', 'VP-DCC')`
+      )
+    ]);
+
+    // Cannot run convert-group on an APPROVED historical plan (409)
+    const convertApprovedBlocked = await call('POST', '/api/vcc/plans/vp-hist-plan-2025/items/vp-hist-pi-grp/convert-group', 'VP-DCC', {
+      confirm_remove_empty: true
+    });
+    expect(convertApprovedBlocked.status).toBe(409);
+
+    const woBlock = await call('POST', '/api/vcc/plans/vp-hist-plan-2025/items/vp-hist-pi-grp/validate-work-order', 'VP-DCC', {});
     expect(woBlock.status).toBe(400);
     expect(woBlock.body.requires_child_selection).toBe(true);
 
-    // With active child_asset_id -> 200 ready
-    const woOk = await call(
-      'POST',
-      `/api/vcc/plans/${planId}/items/${itemGrp.body.item.id}/validate-work-order`,
-      'VP-DCC',
-      { child_asset_id: sc01.id }
-    );
+    const woOk = await call('POST', '/api/vcc/plans/vp-hist-plan-2025/items/vp-hist-pi-grp/validate-work-order', 'VP-DCC', {
+      child_asset_id: sc01.id
+    });
     expect(woOk.status).toBe(200);
     expect(woOk.body.ready).toBe(true);
     expect(woOk.body.target_asset.asset_code).toBe('SC-VP-01');
 
-    // 6. Changing plan due_date_rule to START_OF_MONTH recalculates item due_dates
+    // 7. Changing plan due_date_rule to START_OF_MONTH recalculates item due_dates
     const switchRule = await call('PUT', `/api/vcc/plans/${planId}`, 'VP-DCC', {
       due_date_rule: 'START_OF_MONTH'
     });

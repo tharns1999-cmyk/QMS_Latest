@@ -78,7 +78,7 @@ export const registerVccRoutes = (app, { requireAuth, audit }) => {
     const assetType = clean(c.req.query('asset_type'), 100);
     const parentId = clean(c.req.query('parent_id'), 100);
     const isGroupParam = c.req.query('is_group');
-    const calibratableOnly = c.req.query('calibratable_only') === '1' || c.req.query('calibratable_only') === 'true';
+    const includeLogicalGroups = c.req.query('include_logical_groups') === '1' || c.req.query('include_logical_groups') === 'true';
     const logicalGroupsOnly = c.req.query('logical_groups_only') === '1' || c.req.query('logical_groups_only') === 'true';
     const q = clean(c.req.query('q'), 200);
 
@@ -97,21 +97,21 @@ export const registerVccRoutes = (app, { requireAuth, audit }) => {
       clauses.push('a.parent_id = ?');
       args.push(parentId);
     }
-    if (calibratableOnly) {
-      clauses.push('(a.is_group = 0 OR a.group_nature = "COMPOSITE_SET")');
-    } else if (logicalGroupsOnly) {
-      clauses.push('(a.is_group = 1 AND (a.group_nature = "LOGICAL_GROUP" OR a.group_nature IS NULL))');
-    } else if (isGroupParam === '1' || isGroupParam === '0') {
-      clauses.push('a.is_group = ?');
-      args.push(Number(isGroupParam));
+    if (logicalGroupsOnly) {
+      clauses.push("(a.is_group = 1 AND (a.group_nature = 'LOGICAL_GROUP' OR a.group_nature IS NULL))");
+    } else if (isGroupParam === '1') {
+      clauses.push('a.is_group = 1');
+    } else if (!includeLogicalGroups) {
+      // Operational default: flat calibratable units only (single instruments + physical composite sets)
+      clauses.push("(a.is_group = 0 OR a.group_nature = 'COMPOSITE_SET')");
     }
     if (q) {
       const like = `%${q}%`;
-      clauses.push('(a.asset_code LIKE ? COLLATE NOCASE OR a.name LIKE ? COLLATE NOCASE OR a.serial_no LIKE ? COLLATE NOCASE OR a.model LIKE ? COLLATE NOCASE OR a.location LIKE ? COLLATE NOCASE)');
-      args.push(like, like, like, like, like);
+      clauses.push('(a.asset_code LIKE ? COLLATE NOCASE OR a.name LIKE ? COLLATE NOCASE OR a.serial_no LIKE ? COLLATE NOCASE OR a.model LIKE ? COLLATE NOCASE OR a.location LIKE ? COLLATE NOCASE OR a.composite_details LIKE ? COLLATE NOCASE)');
+      args.push(like, like, like, like, like, like);
     }
 
-    const orderBy = calibratableOnly ? 'a.asset_code ASC' : 'a.is_group DESC, a.asset_code ASC';
+    const orderBy = includeLogicalGroups ? 'a.is_group DESC, a.asset_code ASC' : 'a.asset_code ASC';
     const sql = `${ASSET_SELECT} WHERE ${clauses.join(' AND ')} ORDER BY ${orderBy}`;
     const { results } = await c.env.DB.prepare(sql).bind(...args).all();
     return c.json({ assets: results });
@@ -155,24 +155,27 @@ export const registerVccRoutes = (app, { requireAuth, audit }) => {
     const serialNo = cleanOpt(body.serial_no, 100);
     const model = cleanOpt(body.model, 200);
     const location = cleanOpt(body.location, 200);
-    const isGroup = body.is_group === true || body.is_group === 1 ? 1 : 0;
+    const compositeDetails = cleanOpt(body.composite_details, 1000);
+    const wantsLogicalGroup = (body.is_group === true || body.is_group === 1) && body.group_nature !== 'COMPOSITE_SET';
+    const hasParentInput = body.parent_id !== undefined && body.parent_id !== null && String(body.parent_id).trim() !== '';
+    const isGroup = 0;
     const groupNature = body.group_nature === 'COMPOSITE_SET' ? 'COMPOSITE_SET' : 'LOGICAL_GROUP';
-    const parentId = body.parent_id ? clean(body.parent_id, 100) : null;
+    const parentId = null;
 
+    if (wantsLogicalGroup) {
+      return c.json({ error: 'ยกเลิกการสร้างกลุ่มเครื่องมือแม่ (Logical Group) แล้ว กรุณาขึ้นทะเบียนเป็นเครื่องมือรายตัว หรือชุดเครื่องมือจริง (Composite Set)' }, 400);
+    }
+    if (hasParentInput) {
+      return c.json({ error: 'ยกเลิกการผูกเครื่องมือเข้ากับกลุ่มแม่ (Parent-Child) แล้ว กรุณาขึ้นทะเบียนเป็นเครื่องมืออิสระ' }, 400);
+    }
     if (!assetCode || !ASSET_CODE_RE.test(assetCode)) {
       return c.json({ error: 'รหัสเครื่องมือไม่ถูกต้อง (ใช้ A-Z, 0-9, ., _, /, - ไม่เกิน 50 ตัวอักษร)' }, 400);
     }
     if (!name) return c.json({ error: 'กรุณาระบุชื่อเครื่องมือ' }, 400);
     if (!assetType) return c.json({ error: 'กรุณาระบุประเภทเครื่องมือ' }, 400);
     if (!department) return c.json({ error: 'กรุณาระบุแผนกเจ้าของเครื่องมือ' }, 400);
-    if (serialNo === null || model === null || location === null) {
-      return c.json({ error: 'ข้อมูลหมายเลขเครื่อง รุ่น หรือที่ตั้งยาวเกินกำหนด' }, 400);
-    }
-    if (body.parent_id && !parentId) {
-      return c.json({ error: 'รหัสกลุ่มเครื่องมือแม่ไม่ถูกต้อง' }, 400);
-    }
-    if (isGroup && parentId) {
-      return c.json({ error: 'กลุ่มเครื่องมือไม่สามารถอยู่ภายใต้กลุ่มอื่นได้ (ห้ามกลุ่มซ้อนกลุ่ม)' }, 400);
+    if (serialNo === null || model === null || location === null || compositeDetails === null) {
+      return c.json({ error: 'ข้อมูลหมายเลขเครื่อง รุ่น ที่ตั้ง หรือรายละเอียดชุดเครื่องมือยาวเกินกำหนด' }, 400);
     }
 
     const types = await loadAssetTypes(db);
@@ -183,24 +186,13 @@ export const registerVccRoutes = (app, { requireAuth, audit }) => {
     const deptRow = await db.prepare("SELECT 1 FROM departments WHERE code = ? AND status = 'ACTIVE'").bind(department).first();
     if (!deptRow) return c.json({ error: 'ไม่พบแผนกที่ใช้งานอยู่ในระบบ' }, 400);
 
-    if (parentId) {
-      const parent = await db.prepare('SELECT id, is_group, parent_id, status FROM vcc_assets WHERE id = ?').bind(parentId).first();
-      if (!parent) return c.json({ error: 'ไม่พบกลุ่มเครื่องมือแม่ที่ระบุ' }, 400);
-      if (parent.is_group !== 1 || parent.parent_id !== null) {
-        return c.json({ error: 'เครื่องมือแม่ต้องเป็นกลุ่มเครื่องมือเท่านั้น (ห้ามซ้อนเกิน 1 ระดับ)' }, 400);
-      }
-      if (parent.status !== 'ACTIVE') {
-        return c.json({ error: 'ไม่สามารถเพิ่มเครื่องมือลูกเข้ากลุ่มที่ปลดออกแล้วได้' }, 400);
-      }
-    }
-
     const id = crypto.randomUUID();
     try {
       await db.batch([
         db.prepare(
-          `INSERT INTO vcc_assets (id, asset_code, name, asset_type, serial_no, model, location, department, is_group, group_nature, parent_id, status, created_by, updated_by)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', ?, ?)`
-        ).bind(id, assetCode, name, assetType, serialNo, model, location, department, isGroup, groupNature, parentId, user.id, user.id),
+          `INSERT INTO vcc_assets (id, asset_code, name, asset_type, serial_no, model, location, department, is_group, group_nature, parent_id, composite_details, status, created_by, updated_by)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', ?, ?)`
+        ).bind(id, assetCode, name, assetType, serialNo, model, location, department, isGroup, groupNature, parentId, compositeDetails, user.id, user.id),
         audit(db, user.id, 'VCC_ASSET_CREATED', {
           asset_id: id,
           asset_code: assetCode,
@@ -213,6 +205,7 @@ export const registerVccRoutes = (app, { requireAuth, audit }) => {
           is_group: isGroup,
           group_nature: groupNature,
           parent_id: parentId,
+          composite_details: compositeDetails,
           status: 'ACTIVE'
         })
       ]);
@@ -242,10 +235,21 @@ export const registerVccRoutes = (app, { requireAuth, audit }) => {
     const serialNo = body.serial_no === undefined ? before.serial_no : cleanOpt(body.serial_no, 100);
     const model = body.model === undefined ? before.model : cleanOpt(body.model, 200);
     const location = body.location === undefined ? before.location : cleanOpt(body.location, 200);
-    const isGroup = body.is_group === undefined ? before.is_group : (body.is_group === true || body.is_group === 1 ? 1 : 0);
+    const compositeDetails = body.composite_details === undefined ? (before.composite_details || '') : cleanOpt(body.composite_details, 1000);
     const groupNature = body.group_nature === undefined
       ? (before.group_nature || 'LOGICAL_GROUP')
       : (body.group_nature === 'COMPOSITE_SET' ? 'COMPOSITE_SET' : 'LOGICAL_GROUP');
+
+    const requestedIsGroup = body.is_group === undefined ? before.is_group : (body.is_group === true || body.is_group === 1 ? 1 : 0);
+    if (before.is_group === 0 && requestedIsGroup === 1 && groupNature !== 'COMPOSITE_SET') {
+      return c.json({ error: 'ไม่สามารถแปลงเครื่องมือรายตัวเป็นกลุ่มเครื่องมือแม่ (Logical Group) ได้' }, 400);
+    }
+    const isGroup = before.is_group === 1 && groupNature !== 'COMPOSITE_SET' ? requestedIsGroup : 0;
+
+    const hasNewParentInput = body.parent_id !== undefined && body.parent_id !== null && String(body.parent_id).trim() !== '' && body.parent_id !== before.parent_id;
+    if (hasNewParentInput) {
+      return c.json({ error: 'ยกเลิกการผูกเครื่องมือเข้ากับกลุ่มแม่ (Parent-Child) แล้ว' }, 400);
+    }
     const parentId = body.parent_id === undefined ? before.parent_id : (body.parent_id ? clean(body.parent_id, 100) : null);
 
     if (!assetCode || !ASSET_CODE_RE.test(assetCode)) {
@@ -254,20 +258,11 @@ export const registerVccRoutes = (app, { requireAuth, audit }) => {
     if (!name) return c.json({ error: 'กรุณาระบุชื่อเครื่องมือ' }, 400);
     if (!assetType) return c.json({ error: 'กรุณาระบุประเภทเครื่องมือ' }, 400);
     if (!department) return c.json({ error: 'กรุณาระบุแผนกเจ้าของเครื่องมือ' }, 400);
-    if (serialNo === null || model === null || location === null) {
-      return c.json({ error: 'ข้อมูลหมายเลขเครื่อง รุ่น หรือที่ตั้งยาวเกินกำหนด' }, 400);
-    }
-    if (body.parent_id && !parentId) {
-      return c.json({ error: 'รหัสกลุ่มเครื่องมือแม่ไม่ถูกต้อง' }, 400);
-    }
-    if (parentId === id) {
-      return c.json({ error: 'เครื่องมือไม่สามารถอ้างอิงตัวเองเป็นกลุ่มแม่ได้' }, 400);
-    }
-    if (isGroup && parentId) {
-      return c.json({ error: 'กลุ่มเครื่องมือไม่สามารถอยู่ภายใต้กลุ่มอื่นได้ (ห้ามกลุ่มซ้อนกลุ่ม)' }, 400);
+    if (serialNo === null || model === null || location === null || compositeDetails === null) {
+      return c.json({ error: 'ข้อมูลหมายเลขเครื่อง รุ่น ที่ตั้ง หรือรายละเอียดชุดเครื่องมือยาวเกินกำหนด' }, 400);
     }
 
-    // Cannot change is_group if this asset already has children.
+    // Cannot change is_group if this legacy group asset still has children.
     if (before.is_group !== isGroup) {
       const { n } = await db.prepare('SELECT COUNT(*) AS n FROM vcc_assets WHERE parent_id = ?').bind(id).first();
       if (n > 0) {
@@ -288,17 +283,6 @@ export const registerVccRoutes = (app, { requireAuth, audit }) => {
       if (!deptRow) return c.json({ error: 'ไม่พบแผนกที่ใช้งานอยู่ในระบบ' }, 400);
     }
 
-    if (parentId) {
-      const parent = await db.prepare('SELECT id, is_group, parent_id, status FROM vcc_assets WHERE id = ?').bind(parentId).first();
-      if (!parent) return c.json({ error: 'ไม่พบกลุ่มเครื่องมือแม่ที่ระบุ' }, 400);
-      if (parent.is_group !== 1 || parent.parent_id !== null) {
-        return c.json({ error: 'เครื่องมือแม่ต้องเป็นกลุ่มเครื่องมือเท่านั้น (ห้ามซ้อนเกิน 1 ระดับ)' }, 400);
-      }
-      if (parent.status !== 'ACTIVE') {
-        return c.json({ error: 'ไม่สามารถเพิ่มหรือย้ายเครื่องมือลูกเข้ากลุ่มที่ปลดออกแล้วได้' }, 400);
-      }
-    }
-
     const snapshot = (r) => ({
       asset_code: r.asset_code,
       name: r.name,
@@ -309,7 +293,8 @@ export const registerVccRoutes = (app, { requireAuth, audit }) => {
       department: r.department,
       is_group: r.is_group,
       group_nature: r.group_nature || 'LOGICAL_GROUP',
-      parent_id: r.parent_id
+      parent_id: r.parent_id,
+      composite_details: r.composite_details || ''
     });
     const afterSnap = {
       asset_code: assetCode,
@@ -321,7 +306,8 @@ export const registerVccRoutes = (app, { requireAuth, audit }) => {
       department,
       is_group: isGroup,
       group_nature: groupNature,
-      parent_id: parentId
+      parent_id: parentId,
+      composite_details: compositeDetails
     };
 
     try {
@@ -329,9 +315,9 @@ export const registerVccRoutes = (app, { requireAuth, audit }) => {
         db.prepare(
           `UPDATE vcc_assets
            SET asset_code = ?, name = ?, asset_type = ?, serial_no = ?, model = ?, location = ?,
-               department = ?, is_group = ?, group_nature = ?, parent_id = ?, updated_at = ${NOW}, updated_by = ?
+               department = ?, is_group = ?, group_nature = ?, parent_id = ?, composite_details = ?, updated_at = ${NOW}, updated_by = ?
            WHERE id = ?`
-        ).bind(assetCode, name, assetType, serialNo, model, location, department, isGroup, groupNature, parentId, user.id, id),
+        ).bind(assetCode, name, assetType, serialNo, model, location, department, isGroup, groupNature, parentId, compositeDetails, user.id, id),
         audit(db, user.id, 'VCC_ASSET_UPDATED', {
           asset_id: id,
           asset_code: assetCode,
@@ -399,13 +385,6 @@ export const registerVccRoutes = (app, { requireAuth, audit }) => {
     const before = await db.prepare('SELECT * FROM vcc_assets WHERE id = ?').bind(id).first();
     if (!before) return c.json({ error: 'ไม่พบเครื่องมือ' }, 404);
     if (before.status !== 'RETIRED') return c.json({ error: 'เครื่องมือนี้ไม่ได้อยู่ในสถานะปลดออก' }, 409);
-
-    if (before.parent_id) {
-      const parent = await db.prepare('SELECT status FROM vcc_assets WHERE id = ?').bind(before.parent_id).first();
-      if (parent && parent.status !== 'ACTIVE') {
-        return c.json({ error: 'ไม่สามารถนำเครื่องมือลูกกลับมาใช้งานได้ เนื่องจากกลุ่มแม่ยังถูกปลดออกอยู่ กรุณาเปิดใช้งานกลุ่มแม่ก่อน' }, 409);
-      }
-    }
 
     await db.batch([
       db.prepare(
