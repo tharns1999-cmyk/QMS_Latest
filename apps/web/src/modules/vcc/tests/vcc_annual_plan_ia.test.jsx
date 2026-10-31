@@ -103,6 +103,8 @@ describe('VCC FM-QC-46 — สถาปัตยกรรมข้อมูล�
 
     // ส่งทบทวนแล้ว แผนถูกล็อก ปุ่มเพิ่มต้องหายไป
     fireEvent.click(screen.getByRole('button', { name: 'ส่งทบทวนแผน' }));
+    const confirmBtn = await screen.findByRole('button', { name: 'ยืนยันส่งทบทวนแผน' });
+    fireEvent.click(confirmBtn);
     expect(await screen.findByRole('button', { name: 'ยืนยันการทบทวน' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /เพิ่มเครื่องมือจากทะเบียน/ })).toBeNull();
   }, 15000);

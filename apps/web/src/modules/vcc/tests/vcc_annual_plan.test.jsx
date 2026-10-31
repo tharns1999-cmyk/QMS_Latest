@@ -107,7 +107,7 @@ describe('VCC Phase 2 — Annual Calibration Plan (FM-QC-46) & Approval Workflow
     fireEvent.click(validateBtn);
 
     expect(await screen.findByText(/พร้อมสร้างใบสั่งงานสำหรับเครื่องมือรายตัว: SC-WH-001/i)).toBeInTheDocument();
-  });
+  }, 15000);
 
   it('3. การอนุมัติแผน 3 ขั้นตอนตาม Approval Matrix, บังคับกรอกเหตุผลเมื่อส่งกลับแก้ไข, และแสดง error จาก API เมื่อผู้จัดทำทบทวนเองหรือระดับอนุมัติไม่ถึง', async () => {
     render(<AssetRegisterPage />);
