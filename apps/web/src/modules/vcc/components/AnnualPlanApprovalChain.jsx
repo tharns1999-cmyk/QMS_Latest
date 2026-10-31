@@ -59,7 +59,9 @@ export const AnnualPlanApprovalChain = ({ activePlan, thresholds = {} }) => {
         name={
           activePlan.reviewed_by_name ||
           activePlan.reviewed_by ||
-          (activePlan.status === 'PENDING_REVIEW' ? 'รอการทบทวน' : '-')
+          (activePlan.assigned_reviewer_name
+            ? `รอการทบทวน (${activePlan.assigned_reviewer_name})`
+            : (activePlan.status === 'PENDING_REVIEW' ? 'รอการทบทวน' : '-'))
         }
         at={formatThaiDateTime(activePlan.reviewed_at)}
         done={Boolean(activePlan.reviewed_at)}
@@ -70,7 +72,9 @@ export const AnnualPlanApprovalChain = ({ activePlan, thresholds = {} }) => {
         name={
           activePlan.approved_by_name ||
           activePlan.approved_by ||
-          (activePlan.status === 'PENDING_APPROVAL' ? 'รอการอนุมัติ' : '-')
+          (activePlan.assigned_approver_name
+            ? `รอการอนุมัติ (${activePlan.assigned_approver_name})`
+            : (activePlan.status === 'PENDING_APPROVAL' ? 'รอการอนุมัติ' : '-'))
         }
         at={formatThaiDateTime(activePlan.approved_at)}
         done={Boolean(activePlan.approved_at)}

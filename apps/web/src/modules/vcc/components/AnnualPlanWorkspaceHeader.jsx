@@ -8,7 +8,6 @@ import {
   SlidersHorizontal,
   CheckCircle2,
   Send,
-  XCircle,
   ShieldCheck,
   Clock,
   AlertTriangle,
@@ -61,11 +60,19 @@ const getNextStepText = (plan, thresholds = {}) => {
     case 'DRAFT':
       return 'เพิ่มรายการเครื่องมือให้ครบ แล้วส่งทบทวนแผน';
     case 'REJECTED':
-      return 'แก้ไขตามเหตุผลที่ส่งกลับ แล้วส่งทบทวนใหม่';
-    case 'PENDING_REVIEW':
-      return `รอผู้ทบทวน (ระดับ L${thresholds.required_reviewer_level || 4} ขึ้นไป)`;
-    case 'PENDING_APPROVAL':
-      return `รอผู้อนุมัติ (ระดับ L${thresholds.required_approver_level || 5} ขึ้นไป)`;
+      return 'แก้ไขตามเหตุผลที่ส่งกลับ แล้วกดปุ่ม "ส่งทบทวนอีกครั้ง"';
+    case 'PENDING_REVIEW': {
+      const revName = plan.assigned_reviewer_name;
+      return revName
+        ? `รอผู้ทบทวน: ${revName} (ดำเนินการผ่านเมนู "งานที่ต้องดำเนินการ")`
+        : `รอผู้ทบทวน (ระดับ L${thresholds.required_reviewer_level || 4} ขึ้นไป · ดำเนินการผ่านเมนู "งานที่ต้องดำเนินการ")`;
+    }
+    case 'PENDING_APPROVAL': {
+      const appName = plan.assigned_approver_name;
+      return appName
+        ? `รอผู้อนุมัติ: ${appName} (ดำเนินการผ่านเมนู "งานที่ต้องดำเนินการ")`
+        : `รอผู้อนุมัติ (ระดับ L${thresholds.required_approver_level || 5} ขึ้นไป · ดำเนินการผ่านเมนู "งานที่ต้องดำเนินการ")`;
+    }
     case 'APPROVED': {
       const by = plan.approved_by_name || plan.approved_by;
       const at = formatThaiDateTime(plan.approved_at);
@@ -145,7 +152,6 @@ export const AnnualPlanWorkspaceHeader = ({
   canEditPlan = false,
   thresholds = {},
   onSubmitPlan,
-  onOpenWorkflowModal,
   onOpenSettings,
   onOpenCreatePlan,
   onOpenEditPlan,
@@ -285,6 +291,18 @@ export const AnnualPlanWorkspaceHeader = ({
                     <span className="text-slate-500 font-medium">{getDueDateRuleLabel(activePlan.due_date_rule)}</span>
                   </>
                 )}
+
+                {activePlan.status === 'PENDING_REVIEW' && activePlan.assigned_reviewer_name && (
+                  <span className="text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200/80 font-medium">
+                    ผู้ทบทวน: {activePlan.assigned_reviewer_name}
+                  </span>
+                )}
+
+                {activePlan.status === 'PENDING_APPROVAL' && activePlan.assigned_approver_name && (
+                  <span className="text-indigo-800 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200/80 font-medium">
+                    ผู้อนุมัติ: {activePlan.assigned_approver_name}
+                  </span>
+                )}
               </div>
             </div>
           ) : (
@@ -329,7 +347,7 @@ export const AnnualPlanWorkspaceHeader = ({
             ))}
           </select>
 
-          {/* Primary Action CTA */}
+          {/* Primary Action CTA (Planning Only: Submit or Resubmit) */}
           {activePlan && canEditPlan && activePlan.status === 'DRAFT' && onSubmitPlan && (
             <button
               type="button"
@@ -341,46 +359,15 @@ export const AnnualPlanWorkspaceHeader = ({
             </button>
           )}
 
-          {activePlan && activePlan.status === 'PENDING_REVIEW' && onOpenWorkflowModal && (
-            <>
-              <button
-                type="button"
-                onClick={() => onOpenWorkflowModal('REVIEW')}
-                className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-semibold text-xs shadow-2xs transition-colors cursor-pointer"
-              >
-                <CheckCircle2 size={13} />
-                <span>ยืนยันการทบทวน</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => onOpenWorkflowModal('REJECT')}
-                className="inline-flex items-center gap-1 h-8 px-2.5 rounded-lg border border-rose-300 bg-white hover:bg-rose-50 text-rose-700 font-semibold text-xs transition-colors cursor-pointer"
-              >
-                <XCircle size={13} />
-                <span>ส่งกลับแก้ไข</span>
-              </button>
-            </>
-          )}
-
-          {activePlan && activePlan.status === 'PENDING_APPROVAL' && onOpenWorkflowModal && (
-            <>
-              <button
-                type="button"
-                onClick={() => onOpenWorkflowModal('APPROVE')}
-                className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-semibold text-xs shadow-2xs transition-colors cursor-pointer"
-              >
-                <ShieldCheck size={13} />
-                <span>อนุมัติแผนประจำปี</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => onOpenWorkflowModal('REJECT')}
-                className="inline-flex items-center gap-1 h-8 px-2.5 rounded-lg border border-rose-300 bg-white hover:bg-rose-50 text-rose-700 font-semibold text-xs transition-colors cursor-pointer"
-              >
-                <XCircle size={13} />
-                <span>ส่งกลับแก้ไข</span>
-              </button>
-            </>
+          {activePlan && canEditPlan && activePlan.status === 'REJECTED' && onSubmitPlan && (
+            <button
+              type="button"
+              onClick={onSubmitPlan}
+              className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-semibold text-xs shadow-2xs transition-colors cursor-pointer"
+            >
+              <Send size={12} />
+              <span>ส่งทบทวนอีกครั้ง</span>
+            </button>
           )}
 
           {/* Secondary Action: สร้างแผนใหม่ */}
@@ -550,26 +537,42 @@ export const AnnualPlanWorkspaceHeader = ({
             </div>
           </div>
 
-          {/* ฝั่งขวา: คำแนะนำขั้นตอนถัดไป หรือ แจ้งเตือนส่งกลับแก้ไข */}
+          {/* ฝั่งขวา: คำแนะนำขั้นตอนถัดไป */}
           <div className="shrink-0 flex items-center justify-start md:justify-end">
-            {activePlan?.status === 'REJECTED' && activePlan?.rejected_reason ? (
-              <div className="inline-flex items-center gap-1.5 text-rose-800 bg-rose-50 px-2.5 py-1 rounded-lg border border-rose-200 text-xs font-medium">
-                <AlertTriangle size={13} className="text-rose-600 shrink-0" />
-                <span className="font-bold text-rose-900">ส่งกลับแก้ไข:</span>
-                <span className="truncate max-w-xs">{activePlan.rejected_reason}</span>
-                {activePlan.rejected_by && (
-                  <span className="text-rose-600 shrink-0 font-medium text-[11px]">
-                    (โดย {activePlan.rejected_by_name || activePlan.rejected_by})
-                  </span>
-                )}
-              </div>
-            ) : activePlan ? (
+            {activePlan ? (
               <div className="inline-flex items-center gap-1.5 text-slate-600 text-xs">
                 <span className="w-1.5 h-1.5 rounded-full bg-indigo-600 shrink-0" />
                 <span className="font-semibold text-slate-800">ขั้นตอนถัดไป:</span>
                 <span className="text-slate-600">{getNextStepText(activePlan, thresholds)}</span>
               </div>
             ) : null}
+          </div>
+        </div>
+      )}
+
+      {/* ─────────────────────────────────────────────────────────────
+          RETURN FOR REVISION CALLOUT: แสดงเหตุผลการส่งกลับแบบเต็ม ไม่ตัดข้อความ
+          ───────────────────────────────────────────────────────────── */}
+      {activePlan?.status === 'REJECTED' && activePlan?.rejected_reason && (
+        <div
+          role="status"
+          data-testid="plan-rejected-reason-banner"
+          className="mt-2 p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-900 text-xs space-y-1 shadow-2xs"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 font-bold text-rose-900">
+              <AlertTriangle size={14} className="text-rose-600 shrink-0" />
+              <span>ส่งกลับแก้ไข — กรุณาปรับปรุงรายการในตารางแล้วกดปุ่ม &ldquo;ส่งทบทวนอีกครั้ง&rdquo;</span>
+            </div>
+            {(activePlan.rejected_by_name || activePlan.rejected_by) && (
+              <span className="text-rose-700 font-medium text-[11px]">
+                ผู้ส่งกลับ: {activePlan.rejected_by_name || activePlan.rejected_by}
+                {activePlan.rejected_at ? ` · ${formatThaiDateTime(activePlan.rejected_at)}` : ''}
+              </span>
+            )}
+          </div>
+          <div className="pl-5 text-rose-800 font-medium whitespace-pre-wrap break-words leading-relaxed">
+            เหตุผลที่ส่งกลับ: {activePlan.rejected_reason}
           </div>
         </div>
       )}

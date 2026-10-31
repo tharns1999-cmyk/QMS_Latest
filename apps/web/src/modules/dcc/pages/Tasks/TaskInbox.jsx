@@ -873,7 +873,13 @@ const TaskInbox = () => {
     if (currentUser?.primary_department) list.push(currentUser.primary_department);
     if (currentUser?.department) list.push(currentUser.department);
     if (currentUser?.dept) list.push(currentUser.dept);
-    const sources = [currentUser?.departments, currentUser?.depts, currentUser?.affiliated_departments];
+    const sources = [
+      currentUser?.departments,
+      currentUser?.depts,
+      currentUser?.affiliated_departments,
+      currentUser?.secondaryDepartments,
+      currentUser?.secondary_departments
+    ];
     for (const src of sources) {
       if (Array.isArray(src)) {
         list.push(...src);
@@ -1185,11 +1191,15 @@ const TaskInbox = () => {
       return;
     }
 
-    // 🛡️ VCC Annual Calibration Plan workflow tasks → navigate to VCC Annual Plan page
+    // 🛡️ VCC Annual Calibration Plan workflow tasks → navigate to dedicated VCC Task Detail or Planning Workspace
     if (task.referenceType === 'VCC_PLAN' || normType.startsWith('VCC_PLAN_') || task.planId) {
       const planId = task.planId || task.referenceId;
-      const targetTab = task.statusTab || (normType.includes('APPROVE') ? 'PENDING_APPROVAL' : normType.includes('REVISE') ? 'REJECTED' : 'PENDING_REVIEW');
-      navigate(`/vcc/plans?id=${encodeURIComponent(planId)}&tab=${encodeURIComponent(targetTab)}`);
+      if (normType.includes('REVISE')) {
+        navigate(`/vcc/plans?id=${encodeURIComponent(planId)}&tab=REJECTED`);
+      } else {
+        const actionParam = normType.includes('APPROVE') ? 'APPROVE' : 'REVIEW';
+        navigate(`/vcc/tasks?id=${encodeURIComponent(planId)}&action=${encodeURIComponent(actionParam)}`);
+      }
       return;
     }
 

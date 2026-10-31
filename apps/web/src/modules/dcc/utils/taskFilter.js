@@ -163,7 +163,13 @@ export const userMatchesDepartment = (user, dept) => {
   if (user.dept) list.push(user.dept);
   if (user.primary_department) list.push(user.primary_department);
 
-  const sources = [user.departments, user.depts, user.affiliated_departments];
+  const sources = [
+    user.departments,
+    user.depts,
+    user.affiliated_departments,
+    user.secondaryDepartments,
+    user.secondary_departments
+  ];
   for (const src of sources) {
     if (Array.isArray(src)) {
       list.push(...src);
