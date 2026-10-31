@@ -76,6 +76,15 @@ const fetchWorkOrder = async (db, id) =>
   `).bind(id).first();
 
 export const generateWorkOrdersForApprovedPlan = async (db, planId, actorId, audit) => {
+  try {
+    return await _generateWorkOrdersForApprovedPlan(db, planId, actorId, audit);
+  } catch (err) {
+    console.error('generateWorkOrdersForApprovedPlan failed with error:', err);
+    throw err;
+  }
+};
+
+const _generateWorkOrdersForApprovedPlan = async (db, planId, actorId, audit) => {
   const plan = await db
     .prepare('SELECT id, plan_year, department, revision, document_code, status, due_date_rule FROM vcc_annual_plans WHERE id = ?')
     .bind(planId)
@@ -111,7 +120,20 @@ export const generateWorkOrdersForApprovedPlan = async (db, planId, actorId, aud
     (i) => Number(i.is_group) === 0 || i.group_nature === 'COMPOSITE_SET'
   );
 
+  // Retrieve existing cycle records for this plan if already created
+  const { results: existingCycles } = await db
+    .prepare('SELECT id, plan_item_id, cycle_seq, planned_month FROM vcc_plan_cycles WHERE plan_id = ?')
+    .bind(planId)
+    .all();
+
+  const existingCyclesMap = new Map();
+  for (const c of (existingCycles || [])) {
+    existingCyclesMap.set(`${c.plan_item_id}:${c.cycle_seq}`, c);
+  }
+
   const targetCycles = [];
+  const cycleBatchInserts = [];
+
   for (const item of calibratableItems) {
     let months = [];
     try {
@@ -120,10 +142,43 @@ export const generateWorkOrdersForApprovedPlan = async (db, planId, actorId, aud
       months = [];
     }
     const cleanMonths = months.filter((m) => Number.isInteger(m) && m >= 1 && m <= 12).sort((a, b) => a - b);
+
+    // Track count per month for this item to build unique cycle keys
+    const monthCounts = new Map();
+    for (const m of cleanMonths) {
+      monthCounts.set(m, (monthCounts.get(m) || 0) + 1);
+    }
+    const monthSeen = new Map();
+
+    let seq = 0;
     for (const month of cleanMonths) {
-      const cycleKey = `${planYear}:${planDept}:${item.asset_id}:${month}`;
+      seq += 1;
+      const seen = (monthSeen.get(month) || 0) + 1;
+      monthSeen.set(month, seen);
+
+      const existingCycle = existingCyclesMap.get(`${item.id}:${seq}`);
+      const cycleId = existingCycle ? existingCycle.id : crypto.randomUUID();
       const dueDate = computeDueDateForMonth(planYear, month, dueDateRule);
+
+      // Stable legacy-compatible cycle key:
+      // If multiple cycles occur in the same month, suffix with occurrence index
+      const cycleKey = (monthCounts.get(month) > 1 && seen > 1)
+        ? `${planYear}:${planDept}:${item.asset_id}:${month}:${seen}`
+        : `${planYear}:${planDept}:${item.asset_id}:${month}`;
+
+      if (!existingCycle) {
+        cycleBatchInserts.push(
+          db.prepare(`
+            INSERT OR IGNORE INTO vcc_plan_cycles (
+              id, plan_id, plan_item_id, asset_id, cycle_seq, planned_month, baseline_planned_date, cycle_status, created_by
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, 'SCHEDULED', ?)
+          `).bind(cycleId, planId, item.id, item.asset_id, seq, month, dueDate, actorId)
+        );
+      }
+
       targetCycles.push({
+        cycleId,
+        cycleSeq: seq,
         item,
         month,
         cycleKey,
@@ -135,37 +190,37 @@ export const generateWorkOrdersForApprovedPlan = async (db, planId, actorId, aud
   if (targetCycles.length === 0) {
     return {
       total_cycles: 0,
+      matched_count: 0,
+      unmatched_count: 0,
+      ambiguous_count: 0,
       generated_count: 0,
       reconciled_count: 0,
       skipped_count: 0,
+      matched: [],
+      unmatched: [],
+      ambiguous: [],
       generated: [],
       reconciled: [],
       skipped: []
     };
   }
 
+  // Find all active work orders that could belong to this plan, year, or instruments
   const { results: existingWos } = await db
     .prepare(`
-      SELECT id, wo_code, cycle_key, plan_id, plan_item_id, asset_id, planned_month, due_date, status
+      SELECT id, wo_code, cycle_id, cycle_key, plan_id, plan_item_id, asset_id, planned_month, due_date, original_due_date, status, result_status
       FROM vcc_work_orders
       WHERE status != 'CANCELLED'
-        AND (plan_id = ? OR plan_year = ?)
+        AND (plan_id = ? OR plan_year = ? OR asset_id IN (${calibratableItems.map(() => '?').join(',')}))
     `)
-    .bind(planId, planYear)
+    .bind(planId, planYear, ...calibratableItems.map((i) => i.asset_id))
     .all();
 
+  const byCycleId = new Map();
   const byCycleKey = new Map();
-  const byPlanItemAndMonth = new Map();
-  const byAssetAndMonth = new Map();
-
   for (const wo of (existingWos || [])) {
+    if (wo.cycle_id) byCycleId.set(wo.cycle_id, wo);
     if (wo.cycle_key) byCycleKey.set(wo.cycle_key, wo);
-    if (wo.plan_item_id && wo.planned_month) {
-      byPlanItemAndMonth.set(`${wo.plan_item_id}:${wo.planned_month}`, wo);
-    }
-    if (wo.asset_id && wo.planned_month) {
-      byAssetAndMonth.set(`${wo.asset_id}:${wo.planned_month}`, wo);
-    }
   }
 
   const { results: yearWos } = await db
@@ -187,57 +242,117 @@ export const generateWorkOrdersForApprovedPlan = async (db, planId, actorId, aud
   const generated = [];
   const reconciled = [];
   const skipped = [];
-  const batchStatements = [];
+  const matched = [];
+  const unmatched = [];
+  const ambiguous = [];
+  const batchStatements = [...cycleBatchInserts];
+  const boundWoIds = new Set();
 
   for (const cycle of targetCycles) {
-    const { item, month, cycleKey, dueDate } = cycle;
+    const { cycleId, item, month, cycleKey, dueDate } = cycle;
 
-    let existing = byCycleKey.get(cycleKey);
-    if (!existing) {
-      existing = byPlanItemAndMonth.get(`${item.id}:${month}`);
-    }
-    if (!existing) {
-      existing = byAssetAndMonth.get(`${item.asset_id}:${month}`);
-    }
+    // Check direct match first
+    const directWo = byCycleId.get(cycleId) || byCycleKey.get(cycleKey);
+    let candidateWos = [];
 
-    if (existing) {
-      if (!existing.cycle_key || existing.plan_id !== planId || !existing.plan_item_id) {
-        batchStatements.push(
-          db.prepare(`
-            UPDATE vcc_work_orders
-            SET cycle_key = ?,
-                plan_id = ?,
-                plan_item_id = ?,
-                plan_year = ?,
-                plan_revision = ?,
-                baseline_planned_date = COALESCE(baseline_planned_date, original_due_date, due_date),
-                scheduled_date = COALESCE(scheduled_date, due_date),
-                required_due_date = COALESCE(required_due_date, due_date),
-                updated_at = ${NOW},
-                updated_by = ?
-            WHERE id = ?
-          `).bind(cycleKey, planId, item.id, planYear, planRevision, actorId, existing.id)
-        );
-        reconciled.push({ wo_id: existing.id, wo_code: existing.wo_code, cycle_key: cycleKey });
-      } else {
-        skipped.push({ wo_id: existing.id, wo_code: existing.wo_code, cycle_key: cycleKey });
-      }
+    if (directWo && !boundWoIds.has(directWo.id)) {
+      candidateWos = [directWo];
     } else {
+      // Find candidate work orders matching this item, asset and month/year
+      candidateWos = (existingWos || []).filter((w) => {
+        if (boundWoIds.has(w.id)) return false;
+        if (w.cycle_id && w.cycle_id === cycleId) return true;
+        if (w.cycle_key && w.cycle_key === cycleKey) return true;
+        if (w.plan_item_id && w.plan_item_id === item.id && w.planned_month === month) return true;
+        if (w.asset_id === item.asset_id) {
+          const woMonth = w.planned_month || (w.due_date ? parseInt(w.due_date.slice(5, 7), 10) : null);
+          const woYear = w.plan_year || (w.due_date ? parseInt(w.due_date.slice(0, 4), 10) : null);
+          return woMonth === month && woYear === planYear;
+        }
+        return false;
+      });
+    }
+
+    if (candidateWos.length === 1) {
+      // Exact Match
+      const matchedWo = candidateWos[0];
+      boundWoIds.add(matchedWo.id);
+      matched.push({ wo_id: matchedWo.id, wo_code: matchedWo.wo_code, cycle_id: cycleId, cycle_key: cycleKey });
+
+      if (matchedWo.status === 'CLOSED') {
+        // Evidence Protection: NEVER overwrite closure evidence on CLOSED work orders
+        if (!matchedWo.cycle_id || !matchedWo.plan_item_id || matchedWo.plan_id !== planId) {
+          batchStatements.push(
+            db.prepare(`
+              UPDATE vcc_work_orders
+              SET cycle_id = COALESCE(cycle_id, ?),
+                  cycle_key = COALESCE(cycle_key, ?),
+                  plan_id = COALESCE(plan_id, ?),
+                  plan_item_id = COALESCE(plan_item_id, ?),
+                  plan_year = COALESCE(plan_year, ?)
+              WHERE id = ?
+            `).bind(cycleId, cycleKey, planId, item.id, planYear, matchedWo.id)
+          );
+          reconciled.push({ wo_id: matchedWo.id, wo_code: matchedWo.wo_code, cycle_id: cycleId });
+        } else {
+          skipped.push({ wo_id: matchedWo.id, wo_code: matchedWo.wo_code, cycle_id: cycleId });
+        }
+      } else {
+        // Non-closed work order: bind cycle_id, cycle_key, plan references and baseline dates
+        if (matchedWo.cycle_id !== cycleId || matchedWo.plan_id !== planId || !matchedWo.plan_item_id) {
+          batchStatements.push(
+            db.prepare(`
+              UPDATE vcc_work_orders
+              SET cycle_id = ?,
+                  cycle_key = ?,
+                  plan_id = ?,
+                  plan_item_id = ?,
+                  plan_year = ?,
+                  plan_revision = ?,
+                  baseline_planned_date = COALESCE(baseline_planned_date, original_due_date, due_date),
+                  scheduled_date = COALESCE(scheduled_date, due_date),
+                  required_due_date = COALESCE(required_due_date, due_date),
+                  updated_at = ${NOW},
+                  updated_by = ?
+              WHERE id = ?
+            `).bind(cycleId, cycleKey, planId, item.id, planYear, planRevision, actorId, matchedWo.id)
+          );
+          reconciled.push({ wo_id: matchedWo.id, wo_code: matchedWo.wo_code, cycle_id: cycleId });
+        } else {
+          skipped.push({ wo_id: matchedWo.id, wo_code: matchedWo.wo_code, cycle_id: cycleId });
+        }
+      }
+    } else if (candidateWos.length > 1) {
+      // Ambiguous: Multiple candidate work orders exist for this cycle
+      // Per QMS & Brownfield rules: NEVER auto-bind or overwrite ambiguous candidates!
+      ambiguous.push({
+        cycle_id: cycleId,
+        asset_id: item.asset_id,
+        asset_code: item.asset_code,
+        planned_month: month,
+        candidates: candidateWos.map((w) => ({ id: w.id, wo_code: w.wo_code, status: w.status, due_date: w.due_date })),
+        reason: 'พบใบสั่งงานเดิมที่อาจตรงกับรอบนี้มากกว่า 1 รายการ ต้องให้ผู้ดูแลระบบตรวจสอบยืนยันก่อนจับคู่'
+      });
+    } else {
+      // Unmatched: No existing work order for this planned cycle -> Generate new
+      unmatched.push({ cycle_id: cycleId, asset_id: item.asset_id, planned_month: month });
       maxSeq += 1;
       const woCode = `WO-${planYear}-${String(maxSeq).padStart(3, '0')}`;
       const woId = crypto.randomUUID();
+      boundWoIds.add(woId);
 
       batchStatements.push(
         db.prepare(`
           INSERT INTO vcc_work_orders (
-            id, wo_code, cycle_key, plan_year, plan_revision, plan_id, plan_item_id,
+            id, wo_code, cycle_id, cycle_key, plan_year, plan_revision, plan_id, plan_item_id,
             planned_month, asset_id, provider_name, baseline_planned_date, scheduled_date,
             due_date, original_due_date, required_due_date, is_carryover, status, result_status,
             created_by, updated_by
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'SCHEDULED', 'PENDING', ?, ?)
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'SCHEDULED', 'PENDING', ?, ?)
         `).bind(
           woId,
           woCode,
+          cycleId,
           cycleKey,
           planYear,
           planRevision,
@@ -259,6 +374,7 @@ export const generateWorkOrdersForApprovedPlan = async (db, planId, actorId, aud
       generated.push({
         id: woId,
         wo_code: woCode,
+        cycle_id: cycleId,
         cycle_key: cycleKey,
         asset_id: item.asset_id,
         asset_code: item.asset_code,
@@ -267,6 +383,7 @@ export const generateWorkOrdersForApprovedPlan = async (db, planId, actorId, aud
         status: 'SCHEDULED'
       });
 
+      byCycleId.set(cycleId, { id: woId, wo_code: woCode });
       byCycleKey.set(cycleKey, { id: woId, wo_code: woCode });
     }
   }
@@ -293,6 +410,9 @@ export const generateWorkOrdersForApprovedPlan = async (db, planId, actorId, aud
           generated_count: generated.length,
           reconciled_count: reconciled.length,
           skipped_count: skipped.length,
+          matched_count: matched.length,
+          unmatched_count: unmatched.length,
+          ambiguous_count: ambiguous.length,
           total_planned_cycles: targetCycles.length
         })
       );
@@ -303,9 +423,15 @@ export const generateWorkOrdersForApprovedPlan = async (db, planId, actorId, aud
 
   return {
     total_cycles: targetCycles.length,
+    matched_count: matched.length,
+    unmatched_count: unmatched.length,
+    ambiguous_count: ambiguous.length,
     generated_count: generated.length,
     reconciled_count: reconciled.length,
     skipped_count: skipped.length,
+    matched,
+    unmatched,
+    ambiguous,
     generated,
     reconciled,
     skipped
@@ -421,6 +547,11 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
     if (cycleKey) {
       where.push('w.cycle_key = ?');
       params.push(cycleKey);
+    }
+    const cycleIdQuery = c.req.query('cycle_id');
+    if (cycleIdQuery) {
+      where.push('w.cycle_id = ?');
+      params.push(cycleIdQuery);
     }
     if (assetId) {
       where.push('w.asset_id = ?');
@@ -549,14 +680,18 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
       dueDate = dueDate || computeDueDateForMonth(plan.plan_year, plannedMonth, plan.due_date_rule);
       const cycleKey = plan ? `${plan.plan_year}:${plan.department}:${targetAssetId}:${plannedMonth}` : null;
 
+      const cycleRow = await db.prepare('SELECT id FROM vcc_plan_cycles WHERE plan_item_id = ? AND planned_month = ?').bind(planItemId, plannedMonth).first();
+      const cycleId = cycleRow ? cycleRow.id : null;
+
       const duplicate = await db.prepare(`
-        SELECT id, wo_code, status, provider_name, due_date FROM vcc_work_orders
+        SELECT id, wo_code, status, cycle_id, cycle_key, provider_name, due_date FROM vcc_work_orders
         WHERE status != 'CANCELLED'
           AND (
-            (cycle_key IS NOT NULL AND cycle_key = ?)
+            (cycle_id IS NOT NULL AND cycle_id = ?)
+            OR (cycle_key IS NOT NULL AND cycle_key = ?)
             OR (plan_item_id = ? AND asset_id = ? AND planned_month = ?)
           )
-      `).bind(cycleKey || '', planItemId, targetAssetId, plannedMonth).first();
+      `).bind(cycleId || '', cycleKey || '', planItemId, targetAssetId, plannedMonth).first();
       if (duplicate) {
         if (duplicate.status === 'SCHEDULED') {
           const targetStatus = body.status && String(body.status).toUpperCase() === 'SCHEDULED' ? 'SCHEDULED' : 'OPEN';
@@ -566,16 +701,19 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
             db.prepare(`
               UPDATE vcc_work_orders
               SET status = ?,
+                  cycle_id = COALESCE(cycle_id, ?),
+                  cycle_key = COALESCE(cycle_key, ?),
                   provider_name = ?,
                   due_date = ?,
                   updated_at = ${NOW},
                   updated_by = ?
               WHERE id = ?
-            `).bind(targetStatus, nextProvider, nextDueDate, user.id, duplicate.id),
+            `).bind(targetStatus, cycleId, cycleKey, nextProvider, nextDueDate, user.id, duplicate.id),
             audit(db, user.id, 'VCC_WO_CREATED', {
               wo_id: duplicate.id,
               wo_code: duplicate.wo_code,
-              cycle_key: cycleKey,
+              cycle_id: duplicate.cycle_id || cycleId,
+              cycle_key: duplicate.cycle_key || cycleKey,
               plan_id: planId,
               plan_item_id: planItemId,
               planned_month: plannedMonth,
@@ -620,6 +758,11 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
     const planYearNum = planId ? Number(yearPrefix) : null;
     const planRev = '00';
     const computedCycleKey = (planId && plannedMonth) ? `${yearPrefix}:${asset.department}:${targetAssetId}:${plannedMonth}` : null;
+    let computedCycleId = null;
+    if (planItemId && plannedMonth) {
+      const cRow = await db.prepare('SELECT id FROM vcc_plan_cycles WHERE plan_item_id = ? AND planned_month = ?').bind(planItemId, plannedMonth).first();
+      computedCycleId = cRow ? cRow.id : null;
+    }
     const initialStatus = String(body.status || 'OPEN').toUpperCase();
     const finalStatus = initialStatus === 'SCHEDULED' ? 'SCHEDULED' : 'OPEN';
 
@@ -627,6 +770,7 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
     const auditDetails = {
       wo_id: id,
       wo_code: woCode,
+      cycle_id: computedCycleId,
       cycle_key: computedCycleKey,
       plan_id: planId,
       plan_item_id: planItemId,
@@ -641,12 +785,13 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
     await db.batch([
       db.prepare(`
         INSERT INTO vcc_work_orders (
-          id, wo_code, cycle_key, plan_year, plan_revision, plan_id, plan_item_id, planned_month, asset_id, provider_name,
+          id, wo_code, cycle_id, cycle_key, plan_year, plan_revision, plan_id, plan_item_id, planned_month, asset_id, provider_name,
           baseline_planned_date, scheduled_date, due_date, original_due_date, required_due_date, is_carryover, status, result_status, created_by, updated_by
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 'PENDING', ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 'PENDING', ?, ?)
       `).bind(
         id,
         woCode,
+        computedCycleId,
         computedCycleKey,
         planYearNum,
         planRev,

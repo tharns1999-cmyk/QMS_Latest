@@ -1220,13 +1220,15 @@ export const approveVccPlan = async (planId, comment = '') => {
       const months = Array.isArray(item.planned_months) ? item.planned_months : [];
       for (const m of months) {
         const cycleKey = `${plan.plan_year}:${plan.department}:${item.asset_id}:${m}`;
-        const already = newWos.find((w) => w.cycle_key === cycleKey || (w.plan_item_id === item.id && w.planned_month === m));
+        const cycleId = `cyc-${item.id}-${m}`;
+        const already = newWos.find((w) => w.cycle_id === cycleId || w.cycle_key === cycleKey || (w.plan_item_id === item.id && w.planned_month === m));
         if (!already) {
           maxSeq += 1;
           const dueDate = computeDueDateForMonth(plan.plan_year, m, plan.due_date_rule || 'END_OF_MONTH');
           newWos.push({
             id: `vcc-wo-${crypto.randomUUID()}`,
             wo_code: `WO-${plan.plan_year}-${String(maxSeq).padStart(3, '0')}`,
+            cycle_id: cycleId,
             cycle_key: cycleKey,
             plan_year: plan.plan_year,
             plan_revision: plan.revision || '00',

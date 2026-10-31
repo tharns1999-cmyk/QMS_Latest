@@ -46,7 +46,7 @@ const parsePlannedMonths = (raw) => {
   if (!Array.isArray(raw)) return null;
   const nums = raw.map((m) => Number(m));
   if (nums.some((m) => !Number.isInteger(m) || m < 1 || m > 12)) return null;
-  return [...new Set(nums)].sort((a, b) => a - b);
+  return nums.sort((a, b) => a - b);
 };
 
 const loadProviders = async (db) => {
