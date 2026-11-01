@@ -1,6 +1,7 @@
 // VCC (Verify and Calibration Center) — Phase 2: Calibration Schedule Rules, Annual Plan Matrix & Plan Approval API.
 import { getThresholds } from './approval.js';
 import { requireVccAccess, requireDccOnly } from './vccAuth.js';
+import { generateWorkOrdersForApprovedPlan } from './vccWorkOrders.js';
 
 const DCC_ONLY = { error: 'เฉพาะ DCC เท่านั้นที่ใช้งานส่วนนี้ได้' };
 const NOW = `strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`;
@@ -45,7 +46,7 @@ const parsePlannedMonths = (raw) => {
   if (!Array.isArray(raw)) return null;
   const nums = raw.map((m) => Number(m));
   if (nums.some((m) => !Number.isInteger(m) || m < 1 || m > 12)) return null;
-  return [...new Set(nums)].sort((a, b) => a - b);
+  return nums.sort((a, b) => a - b);
 };
 
 const loadProviders = async (db) => {
@@ -75,7 +76,11 @@ export const getUserDepartments = (user) => {
   if (user.primary_department) depts.push(user.primary_department);
   if (user.dept) depts.push(user.dept);
   if (user.dept_code) depts.push(user.dept_code);
-  if (Array.isArray(user.departments)) depts.push(...user.departments);
+  let parsedDepts = user.departments;
+  if (typeof parsedDepts === 'string' && parsedDepts.startsWith('[')) {
+    try { parsedDepts = JSON.parse(parsedDepts); } catch {}
+  }
+  if (Array.isArray(parsedDepts)) depts.push(...parsedDepts);
   if (Array.isArray(user.secondaryDepartments)) depts.push(...user.secondaryDepartments);
   if (Array.isArray(user.depts)) depts.push(...user.depts);
   if (Array.isArray(user.affiliated_departments)) depts.push(...user.affiliated_departments);
@@ -84,7 +89,10 @@ export const getUserDepartments = (user) => {
 
 export const isUserAuthorizedForPlanDept = (user, planDepartment) => {
   if (!user) return false;
-  if (user.isDcc || user.isQmr || (user.approval_level && user.approval_level >= 6)) return true;
+  const isDccUser = Boolean(user.isDcc || user.is_dcc);
+  const isQmrUser = Boolean(user.isQmr || user.is_qmr);
+  const level = Number(user.approval_level ?? user.approvalLevel ?? 0);
+  if (isDccUser || isQmrUser || level >= 6) return true;
   const depts = getUserDepartments(user);
   return depts.includes(String(planDepartment || '').toUpperCase());
 };
@@ -1192,7 +1200,110 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
       return c.json({ error: 'แผนนี้ถูกดำเนินการไปแล้ว กรุณารีเฟรชหน้าจอ' }, 409);
     }
 
-    return c.json({ plan: await fetchPlan(db, id) });
+    const generationResult = await generateWorkOrdersForApprovedPlan(db, id, user.id, audit);
+
+    return c.json({
+      plan: await fetchPlan(db, id),
+      work_orders_generation: generationResult
+    });
+  });
+
+  // Reconcile and auto-generate any missing work orders for an approved plan (Idempotent Retry)
+  app.post('/api/vcc/plans/:id/reconcile-work-orders', requireAuth, requireVccAccess, async (c) => {
+    const db = c.env.DB;
+    const user = c.get('user');
+    const id = c.req.param('id');
+    const plan = await fetchPlan(db, id);
+    if (!plan) return c.json({ error: 'ไม่พบแผนการสอบเทียบประจำปี' }, 404);
+    if (plan.status !== 'APPROVED') {
+      return c.json({ error: 'สร้างหรือซิงค์ใบสั่งงานได้เฉพาะแผนที่ได้รับการอนุมัติแล้วเท่านั้น' }, 409);
+    }
+    if (!isUserAuthorizedForPlanDept(user, plan.department)) {
+      return c.json({ error: 'ไม่มีสิทธิ์จัดการใบสั่งงานของแผนกนี้' }, 403);
+    }
+
+    const result = await generateWorkOrdersForApprovedPlan(db, id, user.id, audit);
+    return c.json({
+      plan: await fetchPlan(db, id),
+      work_orders_generation: result
+    });
+  });
+
+  // Explicit resolution for ambiguous work order candidates during reconciliation
+  app.post('/api/vcc/plans/:id/reconcile-work-orders/resolve-ambiguous', requireAuth, requireVccAccess, async (c) => {
+    const db = c.env.DB;
+    const user = c.get('user');
+    const planId = c.req.param('id');
+    const body = await c.req.json().catch(() => ({}));
+
+    const cycleId = clean(body.cycle_id, 100);
+    const chosenWoId = clean(body.chosen_work_order_id, 100);
+    const reason = clean(body.reason, 500);
+
+    if (!cycleId || !chosenWoId) {
+      return c.json({ error: 'กรุณาระบุ cycle_id และ chosen_work_order_id' }, 400);
+    }
+    if (!reason) {
+      return c.json({ error: 'กรุณาระบุเหตุผลในการตัดสินใจจับคู่ใบสั่งงาน' }, 400);
+    }
+
+    const plan = await fetchPlan(db, planId);
+    if (!plan) return c.json({ error: 'ไม่พบแผนการสอบเทียบประจำปี' }, 404);
+    if (plan.status !== 'APPROVED') {
+      return c.json({ error: 'จัดการใบสั่งงานได้เฉพาะแผนที่ได้รับการอนุมัติแล้วเท่านั้น' }, 409);
+    }
+    if (!isUserAuthorizedForPlanDept(user, plan.department)) {
+      return c.json({ error: 'ไม่มีสิทธิ์จัดการใบสั่งงานของแผนกนี้' }, 403);
+    }
+
+    const cycle = await db.prepare('SELECT * FROM vcc_plan_cycles WHERE id = ? AND plan_id = ?').bind(cycleId, planId).first();
+    if (!cycle) return c.json({ error: 'ไม่พบรอบสอบเทียบที่ระบุในแผนนี้' }, 404);
+
+    const wo = await db.prepare('SELECT * FROM vcc_work_orders WHERE id = ?').bind(chosenWoId).first();
+    if (!wo) return c.json({ error: 'ไม่พบใบสั่งงานที่เลือก' }, 404);
+
+    if (wo.asset_id !== cycle.asset_id) {
+      return c.json({ error: 'ใบสั่งงานที่เลือกไม่ตรงกับเครื่องมือของรอบสอบเทียบนี้' }, 400);
+    }
+
+    if (wo.cycle_id && wo.cycle_id !== cycleId && wo.status !== 'CANCELLED') {
+      return c.json({ error: `ใบสั่งงานนี้ถูกจับคู่กับรอบสอบเทียบ ${wo.cycle_id} อยู่แล้ว` }, 409);
+    }
+
+    await db.batch([
+      db.prepare(`
+        UPDATE vcc_work_orders
+        SET cycle_id = ?,
+            plan_id = ?,
+            plan_item_id = ?,
+            plan_year = ?,
+            updated_at = ${NOW},
+            updated_by = ?
+        WHERE id = ?
+      `).bind(cycleId, planId, cycle.plan_item_id, plan.plan_year, user.id, chosenWoId),
+      audit(db, user.id, 'VCC_RECON_AMBIGUOUS_RESOLVED', {
+        plan_id: planId,
+        cycle_id: cycleId,
+        chosen_work_order_id: chosenWoId,
+        wo_code: wo.wo_code,
+        asset_id: cycle.asset_id,
+        reason
+      })
+    ]);
+
+    const reconResult = await generateWorkOrdersForApprovedPlan(db, planId, user.id, audit);
+
+    return c.json({
+      success: true,
+      resolved: {
+        cycle_id: cycleId,
+        work_order_id: chosenWoId,
+        wo_code: wo.wo_code,
+        reason
+      },
+      plan: await fetchPlan(db, planId),
+      work_orders_generation: reconResult
+    });
   });
 
   // Reject / Return plan for revision (PENDING_REVIEW or PENDING_APPROVAL -> REJECTED) with mandatory reason

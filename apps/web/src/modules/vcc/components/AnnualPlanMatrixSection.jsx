@@ -17,7 +17,7 @@ import {
   convertVccPlanGroupItem,
   validateVccPlanItemWorkOrder,
   submitVccPlan,
-  isUserAuthorizedForPlanDept
+  isUserAuthorizedForPlanDept,
 } from '../api/vccPlanApi';
 import { fetchVccWorkOrders, createVccWorkOrder } from '../api/vccWorkOrderApi';
 import {
@@ -28,7 +28,7 @@ import {
   PlanSettingsModal,
   PlanHistoryModal,
   UnplannedJustificationModal,
-  DraftGroupConversionModal
+  DraftGroupConversionModal,
 } from './AnnualPlanModals';
 import AnnualPlanWorkspaceHeader from './AnnualPlanWorkspaceHeader';
 import AnnualPlanMatrixTable from './AnnualPlanMatrixTable';
