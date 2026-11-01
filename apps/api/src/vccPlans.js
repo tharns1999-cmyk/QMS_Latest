@@ -139,17 +139,24 @@ export const getCyclesForPlan = async (db, plan) => {
     const { results: persistedCycles } = await db.prepare(`
       SELECT c.id, c.plan_id, c.plan_item_id, c.asset_id, c.cycle_seq, c.planned_month,
              c.baseline_planned_date, c.cycle_status, c.initial_cycle_id, c.plan_revision,
+             w.required_due_date, w.scheduled_date, w.due_date,
              a.asset_code, a.name AS asset_name, a.model, a.serial_no,
              i.provider_name, i.responsible_dept, i.frequency_label
       FROM vcc_plan_cycles c
       JOIN vcc_assets a ON a.id = c.asset_id
       JOIN vcc_annual_plan_items i ON i.id = c.plan_item_id
+      LEFT JOIN vcc_work_orders w ON w.cycle_id = c.id AND w.status != 'CANCELLED'
       WHERE c.plan_id = ?
       ORDER BY a.asset_code ASC, c.cycle_seq ASC
     `).bind(plan.id).all();
 
     if (persistedCycles && persistedCycles.length > 0) {
-      return persistedCycles;
+      return persistedCycles.map((c) => ({
+        ...c,
+        initial_cycle_id: c.initial_cycle_id || c.id,
+        required_due_date: c.required_due_date || c.baseline_planned_date,
+        scheduled_date: c.scheduled_date || c.baseline_planned_date
+      }));
     }
   }
 
@@ -165,16 +172,19 @@ export const getCyclesForPlan = async (db, plan) => {
 
   // Find existing cross-revision cycles for this year & department to preserve cycle identity
   const { results: existingCrossCycles } = await db.prepare(`
-    SELECT c.id, c.asset_id, c.cycle_seq, c.initial_cycle_id, c.baseline_planned_date
+    SELECT c.id, c.asset_id, c.cycle_seq, c.initial_cycle_id, c.baseline_planned_date, c.planned_month
     FROM vcc_plan_cycles c
     JOIN vcc_annual_plans p ON p.id = c.plan_id
     WHERE p.plan_year = ? AND p.department = ?
     ORDER BY p.revision ASC, c.created_at ASC
   `).bind(plan.plan_year, plan.department).all();
 
-  const crossMap = new Map();
+  const crossCyclesByAsset = new Map();
   for (const cc of (existingCrossCycles || [])) {
-    crossMap.set(`${cc.asset_id}:${cc.cycle_seq}`, cc);
+    if (!crossCyclesByAsset.has(cc.asset_id)) {
+      crossCyclesByAsset.set(cc.asset_id, []);
+    }
+    crossCyclesByAsset.get(cc.asset_id).push(cc);
   }
 
   const cycles = [];
@@ -186,12 +196,33 @@ export const getCyclesForPlan = async (db, plan) => {
       months = [];
     }
     const cleanMonths = months.filter((m) => Number.isInteger(m) && m >= 1 && m <= 12).sort((a, b) => a - b);
+
+    let initialCycleIds = [];
+    try {
+      initialCycleIds = typeof item.initial_cycle_ids === 'string' ? JSON.parse(item.initial_cycle_ids) : (item.initial_cycle_ids || []);
+    } catch {
+      initialCycleIds = [];
+    }
+
+    const assetPriorCycles = crossCyclesByAsset.get(item.asset_id) || [];
     let seq = 0;
     for (const m of cleanMonths) {
       seq += 1;
-      const cross = crossMap.get(`${item.asset_id}:${seq}`);
-      const cycleId = cross ? cross.id : `${plan.plan_year}:${plan.department}:${item.asset_id}:${m}:${seq}`;
-      const initialCycleId = cross ? (cross.initial_cycle_id || cross.id) : cycleId;
+      let initialCycleId = initialCycleIds[seq - 1] || null;
+      let cycleId = initialCycleId;
+
+      if (!initialCycleId) {
+        // Find if an unmatched prior cycle had this month
+        const matchPrior = assetPriorCycles.find((ac) => ac.planned_month === m);
+        if (matchPrior) {
+          initialCycleId = matchPrior.initial_cycle_id || matchPrior.id;
+          cycleId = initialCycleId;
+        } else {
+          cycleId = `${plan.plan_year}:${plan.department}:${item.asset_id}:${m}:${seq}`;
+          initialCycleId = cycleId;
+        }
+      }
+
       const dueDate = computeDueDateForMonth(plan.plan_year, m, plan.due_date_rule);
       cycles.push({
         id: cycleId,
@@ -201,6 +232,8 @@ export const getCyclesForPlan = async (db, plan) => {
         cycle_seq: seq,
         planned_month: m,
         baseline_planned_date: dueDate,
+        required_due_date: dueDate,
+        scheduled_date: dueDate,
         cycle_status: 'PLANNED',
         initial_cycle_id: initialCycleId,
         plan_revision: plan.revision,
@@ -708,13 +741,40 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
       remarks
     };
 
+    let initialCycleIds = [];
+    if (Array.isArray(body.initial_cycle_ids)) {
+      initialCycleIds = body.initial_cycle_ids;
+    } else if (Array.isArray(body.cycles)) {
+      initialCycleIds = body.cycles.map((c) => c.initial_cycle_id || c.cycle_id || null);
+    } else if (existingItem && existingItem.initial_cycle_ids) {
+      try {
+        const prevIds = JSON.parse(existingItem.initial_cycle_ids || '[]');
+        let prevMonths = [];
+        try { prevMonths = JSON.parse(existingItem.planned_months || '[]'); } catch { prevMonths = []; }
+        const alignedIds = [];
+        const usedIndices = new Set();
+        for (const m of plannedMonths) {
+          const idx = prevMonths.findIndex((pm, pidx) => pm === m && !usedIndices.has(pidx));
+          if (idx !== -1) {
+            usedIndices.add(idx);
+            alignedIds.push(prevIds[idx] || null);
+          } else {
+            alignedIds.push(null);
+          }
+        }
+        initialCycleIds = alignedIds;
+      } catch {
+        initialCycleIds = [];
+      }
+    }
+
     if (existingItem) {
       await db.batch([
         db.prepare(`
           UPDATE vcc_annual_plan_items
           SET provider_name = ?, frequency_label = ?, planned_months = ?, due_dates = ?,
               responsible_dept = ?, responsible_label = ?, remarks = ?, sort_order = ?,
-              updated_at = ${NOW}, updated_by = ?
+              initial_cycle_ids = ?, updated_at = ${NOW}, updated_by = ?
           WHERE id = ?
         `).bind(
           providerName,
@@ -725,6 +785,7 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
           responsibleLabel,
           remarks,
           sortOrder,
+          JSON.stringify(initialCycleIds),
           user.id,
           itemId
         ),
@@ -736,8 +797,8 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
         db.prepare(`
           INSERT INTO vcc_annual_plan_items (
             id, plan_id, asset_id, provider_name, frequency_label, planned_months, due_dates,
-            responsible_dept, responsible_label, remarks, sort_order, created_by, updated_by
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            responsible_dept, responsible_label, remarks, sort_order, initial_cycle_ids, created_by, updated_by
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).bind(
           itemId,
           planId,
@@ -750,6 +811,7 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
           responsibleLabel,
           remarks,
           sortOrder,
+          JSON.stringify(initialCycleIds),
           user.id,
           user.id
         ),
@@ -1281,6 +1343,14 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
     const batchRes = await db.batch([
       db.prepare(`
         UPDATE vcc_annual_plans
+        SET effective_status = 'SUPERSEDED',
+            is_current = 0,
+            superseded_at = ${NOW},
+            superseded_by = ?
+        WHERE plan_year = ? AND department = ? AND id != ? AND effective_status = 'CURRENT'
+      `).bind(user.id, plan.plan_year, plan.department, id),
+      db.prepare(`
+        UPDATE vcc_annual_plans
         SET status = 'APPROVED',
             effective_status = 'CURRENT',
             is_current = 1,
@@ -1303,7 +1373,7 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
         after: { status: 'APPROVED' }
       })
     ]);
-    if (batchRes?.[0]?.meta?.changes === 0) {
+    if (batchRes?.[1]?.meta?.changes === 0) {
       return c.json({ error: 'แผนนี้ถูกดำเนินการไปแล้ว กรุณารีเฟรชหน้าจอ' }, 409);
     }
 
@@ -1480,7 +1550,7 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
         after: { status: 'REJECTED' }
       })
     ]);
-    if (batchRes?.[0]?.meta?.changes === 0) {
+    if (batchRes?.[1]?.meta?.changes === 0) {
       return c.json({ error: 'แผนนี้ถูกดำเนินการไปแล้ว กรุณารีเฟรชหน้าจอ' }, 409);
     }
 
@@ -1711,17 +1781,29 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
       sourceCycles = derived;
     }
 
+    const cyclesByItem = new Map();
+    for (const sc of sourceCycles) {
+      if (!cyclesByItem.has(sc.plan_item_id)) {
+        cyclesByItem.set(sc.plan_item_id, []);
+      }
+      cyclesByItem.get(sc.plan_item_id).push(sc.initial_cycle_id || sc.id);
+    }
+
     const itemMap = new Map(); // oldItemId -> newItemId
     const itemInserts = [];
     for (const item of (sourceItems || [])) {
       const newItemId = crypto.randomUUID();
       itemMap.set(item.id, newItemId);
+      let initialCycleIds = cyclesByItem.get(item.id) || [];
+      if (initialCycleIds.length === 0 && item.initial_cycle_ids) {
+        try { initialCycleIds = JSON.parse(item.initial_cycle_ids); } catch { initialCycleIds = []; }
+      }
       itemInserts.push(
         db.prepare(`
           INSERT INTO vcc_annual_plan_items (
             id, plan_id, asset_id, provider_name, frequency_label, planned_months, due_dates,
-            responsible_dept, responsible_label, remarks, sort_order, created_by, updated_by
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            responsible_dept, responsible_label, remarks, sort_order, initial_cycle_ids, created_by, updated_by
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).bind(
           newItemId,
           newPlanId,
@@ -1734,6 +1816,7 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
           item.responsible_label,
           item.remarks,
           item.sort_order,
+          JSON.stringify(initialCycleIds),
           user.id,
           user.id
         )
@@ -1883,68 +1966,94 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
 
     const baseList = await getCyclesForPlan(db, basePlan);
 
-    const baseCycleById = new Map();
-    const baseCycleByInitialId = new Map();
-    const baseCycleByAssetSeq = new Map();
-
+    // Group cycles by asset_id
+    const baseCyclesByAsset = new Map();
     for (const bc of baseList) {
-      baseCycleById.set(bc.id, bc);
-      if (bc.initial_cycle_id) {
-        baseCycleByInitialId.set(bc.initial_cycle_id, bc);
+      if (!baseCyclesByAsset.has(bc.asset_id)) {
+        baseCyclesByAsset.set(bc.asset_id, []);
       }
-      baseCycleByAssetSeq.set(`${bc.asset_id}:${bc.cycle_seq}`, bc);
+      baseCyclesByAsset.get(bc.asset_id).push(bc);
     }
 
-    const matchedBaseIds = new Set();
+    const targetCyclesByAsset = new Map();
+    for (const tc of targetList) {
+      if (!targetCyclesByAsset.has(tc.asset_id)) {
+        targetCyclesByAsset.set(tc.asset_id, []);
+      }
+      targetCyclesByAsset.get(tc.asset_id).push(tc);
+    }
+
+    const allAssetIds = new Set([
+      ...baseCyclesByAsset.keys(),
+      ...targetCyclesByAsset.keys()
+    ]);
+
     const added = [];
+    const removed = [];
     const modified = [];
     const unchanged = [];
+    const conflicts = [];
 
-    for (const tc of targetList) {
-      let matchedBase = null;
-      if (tc.initial_cycle_id && baseCycleByInitialId.has(tc.initial_cycle_id)) {
-        matchedBase = baseCycleByInitialId.get(tc.initial_cycle_id);
-      } else if (tc.initial_cycle_id && baseCycleById.has(tc.initial_cycle_id)) {
-        matchedBase = baseCycleById.get(tc.initial_cycle_id);
-      } else if (baseCycleByAssetSeq.has(`${tc.asset_id}:${tc.cycle_seq}`)) {
-        matchedBase = baseCycleByAssetSeq.get(`${tc.asset_id}:${tc.cycle_seq}`);
-      }
+    for (const assetId of allAssetIds) {
+      const baseAssetList = [...(baseCyclesByAsset.get(assetId) || [])];
+      const targetAssetList = [...(targetCyclesByAsset.get(assetId) || [])];
 
-      if (matchedBase) {
-        matchedBaseIds.add(matchedBase.id);
-        const isMonthChanged = matchedBase.planned_month !== tc.planned_month;
-        const isDateChanged = matchedBase.baseline_planned_date !== tc.baseline_planned_date;
-        const isProviderChanged = matchedBase.provider_name !== tc.provider_name;
+      const unmatchedBase = new Set(baseAssetList);
+      const unmatchedTarget = new Set(targetAssetList);
 
-        if (isMonthChanged || isDateChanged || isProviderChanged) {
+      const pairCycles = (tc, bc) => {
+        unmatchedTarget.delete(tc);
+        unmatchedBase.delete(bc);
+
+        const initialCycleId = bc.initial_cycle_id || bc.id;
+        tc.initial_cycle_id = initialCycleId;
+
+        const isMonthChanged = bc.planned_month !== tc.planned_month;
+        const isDateChanged = bc.baseline_planned_date !== tc.baseline_planned_date;
+        const isReqDueDateChanged = bc.required_due_date !== tc.required_due_date;
+        const isScheduledDateChanged = bc.scheduled_date !== tc.scheduled_date;
+        const isProviderChanged = bc.provider_name !== tc.provider_name;
+
+        const isModified = isMonthChanged || isDateChanged || isReqDueDateChanged || isScheduledDateChanged || isProviderChanged;
+
+        if (isModified) {
           modified.push({
             cycle_id: tc.id,
-            initial_cycle_id: tc.initial_cycle_id || matchedBase.initial_cycle_id || matchedBase.id,
+            initial_cycle_id: initialCycleId,
             asset_id: tc.asset_id,
             asset_code: tc.asset_code,
             asset_name: tc.asset_name,
             cycle_seq: tc.cycle_seq,
             diff_type: 'MODIFIED',
+            is_compliance_impact: Boolean(isReqDueDateChanged),
             before: {
-              planned_month: matchedBase.planned_month,
-              due_date: matchedBase.baseline_planned_date,
-              provider_name: matchedBase.provider_name
+              planned_month: bc.planned_month,
+              due_date: bc.baseline_planned_date,
+              baseline_planned_date: bc.baseline_planned_date,
+              required_due_date: bc.required_due_date,
+              scheduled_date: bc.scheduled_date,
+              provider_name: bc.provider_name
             },
             after: {
               planned_month: tc.planned_month,
               due_date: tc.baseline_planned_date,
+              baseline_planned_date: tc.baseline_planned_date,
+              required_due_date: tc.required_due_date,
+              scheduled_date: tc.scheduled_date,
               provider_name: tc.provider_name
             },
             changes: {
-              planned_month: isMonthChanged ? { before: matchedBase.planned_month, after: tc.planned_month } : null,
-              due_date: isDateChanged ? { before: matchedBase.baseline_planned_date, after: tc.baseline_planned_date } : null,
-              provider_name: isProviderChanged ? { before: matchedBase.provider_name, after: tc.provider_name } : null
+              planned_month: isMonthChanged ? { before: bc.planned_month, after: tc.planned_month } : null,
+              baseline_planned_date: isDateChanged ? { before: bc.baseline_planned_date, after: tc.baseline_planned_date } : null,
+              required_due_date: isReqDueDateChanged ? { before: bc.required_due_date, after: tc.required_due_date } : null,
+              scheduled_date: isScheduledDateChanged ? { before: bc.scheduled_date, after: tc.scheduled_date } : null,
+              provider_name: isProviderChanged ? { before: bc.provider_name, after: tc.provider_name } : null
             }
           });
         } else {
           unchanged.push({
             cycle_id: tc.id,
-            initial_cycle_id: tc.initial_cycle_id || matchedBase.initial_cycle_id || matchedBase.id,
+            initial_cycle_id: initialCycleId,
             asset_id: tc.asset_id,
             asset_code: tc.asset_code,
             asset_name: tc.asset_name,
@@ -1952,10 +2061,75 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
             diff_type: 'UNCHANGED',
             planned_month: tc.planned_month,
             due_date: tc.baseline_planned_date,
+            baseline_planned_date: tc.baseline_planned_date,
+            required_due_date: tc.required_due_date,
+            scheduled_date: tc.scheduled_date,
             provider_name: tc.provider_name
           });
         }
-      } else {
+      };
+
+      // Step 1: Match by explicit Primary Identity (initial_cycle_id)
+      for (const tc of Array.from(unmatchedTarget)) {
+        if (!tc.initial_cycle_id) continue;
+        const matchedBc = Array.from(unmatchedBase).find(
+          (bc) => (bc.initial_cycle_id && bc.initial_cycle_id === tc.initial_cycle_id) || bc.id === tc.initial_cycle_id
+        );
+        if (matchedBc) {
+          pairCycles(tc, matchedBc);
+        }
+      }
+
+      // Step 2: Match by exact Month & Due Date & Provider (Exact Identity Match)
+      for (const tc of Array.from(unmatchedTarget)) {
+        const matchedBc = Array.from(unmatchedBase).find(
+          (bc) => bc.planned_month === tc.planned_month && bc.provider_name === tc.provider_name
+        );
+        if (matchedBc) {
+          pairCycles(tc, matchedBc);
+        }
+      }
+
+      // Step 3: Match by exact Month (Provider changed)
+      for (const tc of Array.from(unmatchedTarget)) {
+        const matchedBc = Array.from(unmatchedBase).find(
+          (bc) => bc.planned_month === tc.planned_month
+        );
+        if (matchedBc) {
+          pairCycles(tc, matchedBc);
+        }
+      }
+
+      // Step 4: Handle Remaining Unmatched Cycles
+      if (unmatchedBase.size === 1 && unmatchedTarget.size === 1) {
+        // Exactly one cycle rescheduled on this asset - unambiguous
+        const remainingTc = Array.from(unmatchedTarget)[0];
+        const remainingBc = Array.from(unmatchedBase)[0];
+        pairCycles(remainingTc, remainingBc);
+      } else if (unmatchedBase.size > 1 && unmatchedTarget.size > 1) {
+        // Ambiguity / Conflict detected
+        const assetCode = targetAssetList[0]?.asset_code || baseAssetList[0]?.asset_code;
+        const assetName = targetAssetList[0]?.asset_name || baseAssetList[0]?.asset_name;
+        conflicts.push({
+          asset_id: assetId,
+          asset_code: assetCode,
+          asset_name: assetName,
+          message: `พบความคลุมเครือในการจับคู่รอบการสอบเทียบของเครื่องมือ ${assetCode} เนื่องจากมีการเปลี่ยนหลายรอบพร้อมกันโดยไม่ระบุ initial_cycle_id`,
+          base_unmatched_count: unmatchedBase.size,
+          target_unmatched_count: unmatchedTarget.size
+        });
+
+        // To maintain cardinality invariants without losing cycles, pair in sequence
+        const baseArr = Array.from(unmatchedBase);
+        const targetArr = Array.from(unmatchedTarget);
+        const pairCount = Math.min(baseArr.length, targetArr.length);
+        for (let i = 0; i < pairCount; i++) {
+          pairCycles(targetArr[i], baseArr[i]);
+        }
+      }
+
+      // Any remaining in unmatchedTarget are ADDED
+      for (const tc of unmatchedTarget) {
         added.push({
           cycle_id: tc.id,
           initial_cycle_id: tc.initial_cycle_id || tc.id,
@@ -1966,14 +2140,15 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
           diff_type: 'ADDED',
           planned_month: tc.planned_month,
           due_date: tc.baseline_planned_date,
+          baseline_planned_date: tc.baseline_planned_date,
+          required_due_date: tc.required_due_date,
+          scheduled_date: tc.scheduled_date,
           provider_name: tc.provider_name
         });
       }
-    }
 
-    const removed = [];
-    for (const bc of baseList) {
-      if (!matchedBaseIds.has(bc.id)) {
+      // Any remaining in unmatchedBase are REMOVED
+      for (const bc of unmatchedBase) {
         removed.push({
           cycle_id: bc.id,
           initial_cycle_id: bc.initial_cycle_id || bc.id,
@@ -1984,10 +2159,17 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
           diff_type: 'REMOVED',
           planned_month: bc.planned_month,
           due_date: bc.baseline_planned_date,
+          baseline_planned_date: bc.baseline_planned_date,
+          required_due_date: bc.required_due_date,
+          scheduled_date: bc.scheduled_date,
           provider_name: bc.provider_name
         });
       }
     }
+
+    const invariantsSatisfied =
+      baseList.length === (removed.length + modified.length + unchanged.length) &&
+      targetList.length === (added.length + modified.length + unchanged.length);
 
     const summary = {
       total_base_cycles: baseList.length,
@@ -1996,7 +2178,9 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
       removed_count: removed.length,
       modified_count: modified.length,
       unchanged_count: unchanged.length,
-      has_changes: added.length > 0 || removed.length > 0 || modified.length > 0
+      has_changes: added.length > 0 || removed.length > 0 || modified.length > 0,
+      has_conflicts: conflicts.length > 0,
+      invariants_satisfied: invariantsSatisfied
     };
 
     return c.json({
@@ -2023,7 +2207,8 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
       added,
       removed,
       modified,
-      unchanged
+      unchanged,
+      conflicts
     });
   });
 };

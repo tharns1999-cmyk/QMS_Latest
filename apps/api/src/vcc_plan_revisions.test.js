@@ -435,4 +435,260 @@ describe('VCC Phase 3.1: Plan Revision Foundation & Diff Engine Tests', () => {
     expect(fromDraftRes.status).toBe(409);
     expect(fromDraftRes.body.error).toContain('APPROVED');
   });
+
+  it('15. Diff Engine Invariants: Base = Removed + Modified + Unchanged & Target = Added + Modified + Unchanged', async () => {
+    const { planId: rev00Id, asset1Id, asset2Id } = await setupApprovedRev00Plan(2026);
+
+    // Create Rev.01
+    const createRevRes = await call('POST', `/api/vcc/plans/${rev00Id}/revisions`, 'REV-QC-STAFF', {
+      revision_reason: 'ทดสอบ Invariants ทางคณิตศาสตร์ของ Diff Engine'
+    });
+    const rev01Id = createRevRes.body.plan.id;
+
+    // Asset 1: Base had [3, 9]. Change to [3, 6, 9] (Insert 6 between 3 and 9)
+    await call('POST', `/api/vcc/plans/${rev01Id}/items`, 'REV-QC-STAFF', {
+      asset_id: asset1Id,
+      provider_name: 'ห้องปฏิบัติการภายนอก',
+      frequency_label: '3 ครั้ง/ปี',
+      planned_months: [3, 6, 9],
+      responsible_dept: 'QC'
+    });
+
+    // Asset 2: Base had [6]. Change to [7] (Reschedule 6 to 7)
+    await call('POST', `/api/vcc/plans/${rev01Id}/items`, 'REV-QC-STAFF', {
+      asset_id: asset2Id,
+      provider_name: 'ทวนสอบภายใน',
+      frequency_label: 'รายปี',
+      planned_months: [7],
+      responsible_dept: 'QC'
+    });
+
+    // Add Asset 3: Brand new instrument in Rev.01
+    const a3Res = await call('POST', '/api/vcc/assets', 'REV-QC-STAFF', {
+      asset_code: 'QC-REV-03',
+      name: 'ไมโครมิเตอร์วัดนอก',
+      asset_type: 'เทอร์โมมิเตอร์',
+      department: 'QC',
+      status: 'ACTIVE'
+    });
+    const asset3Id = a3Res.body.asset.id;
+    await call('POST', `/api/vcc/plans/${rev01Id}/items`, 'REV-QC-STAFF', {
+      asset_id: asset3Id,
+      provider_name: 'ทวนสอบภายใน',
+      frequency_label: '2 ครั้ง/ปี',
+      planned_months: [2, 8],
+      responsible_dept: 'QC'
+    });
+
+    const diffRes = await call('GET', `/api/vcc/plans/${rev01Id}/diff`, 'REV-QC-STAFF');
+    expect(diffRes.status).toBe(200);
+    const { summary, added, removed, modified, unchanged } = diffRes.body;
+
+    // Invariant 1: Base = Removed + Modified + Unchanged
+    expect(summary.total_base_cycles).toBe(summary.removed_count + summary.modified_count + summary.unchanged_count);
+    expect(summary.total_base_cycles).toBe(3); // Asset 1 (2) + Asset 2 (1)
+
+    // Invariant 2: Target = Added + Modified + Unchanged
+    expect(summary.total_target_cycles).toBe(summary.added_count + summary.modified_count + summary.unchanged_count);
+    expect(summary.total_target_cycles).toBe(6); // Asset 1 (3) + Asset 2 (1) + Asset 3 (2)
+
+    expect(summary.invariants_satisfied).toBe(true);
+
+    // Verify disjoint sets: Every cycle appears in exactly one category
+    const addedIds = new Set(added.map((c) => c.cycle_id));
+    const removedIds = new Set(removed.map((c) => c.cycle_id));
+    const modifiedIds = new Set(modified.map((c) => c.cycle_id));
+    const unchangedIds = new Set(unchanged.map((c) => c.cycle_id));
+
+    for (const id of addedIds) {
+      expect(removedIds.has(id)).toBe(false);
+      expect(modifiedIds.has(id)).toBe(false);
+      expect(unchangedIds.has(id)).toBe(false);
+    }
+    for (const id of modifiedIds) {
+      expect(unchangedIds.has(id)).toBe(false);
+    }
+  });
+
+  it('16. Stable Cycle Identity: Handles Inserting, Cutting, and Multiple Cycles in Same Month', async () => {
+    // A. Create instrument with 2 cycles in the same month: Month 6 and Month 6
+    const assetRes = await call('POST', '/api/vcc/assets', 'REV-QC-STAFF', {
+      asset_code: 'QC-MULTI-M6',
+      name: 'เครื่องมือวัดรอบคู่เดือน 6',
+      asset_type: 'เทอร์โมมิเตอร์',
+      department: 'QC',
+      status: 'ACTIVE'
+    });
+    const assetId = assetRes.body.asset.id;
+
+    const planRes = await call('POST', '/api/vcc/plans', 'REV-QC-STAFF', {
+      plan_year: 2026,
+      department: 'QC',
+      revision: '00',
+      title: 'แผนทดสอบรอบคู่ 2026',
+      assigned_reviewer_id: 'REV-QC-SUP',
+      assigned_approver_id: 'REV-QA-MGR'
+    });
+    const planRev00Id = planRes.body.plan.id;
+
+    await call('POST', `/api/vcc/plans/${planRev00Id}/items`, 'REV-QC-STAFF', {
+      asset_id: assetId,
+      provider_name: 'ทวนสอบภายใน',
+      frequency_label: '2 ครั้ง/ปี (เดือนเดียวกัน)',
+      planned_months: [6, 6],
+      responsible_dept: 'QC'
+    });
+
+    await call('POST', `/api/vcc/plans/${planRev00Id}/submit`, 'REV-QC-STAFF');
+    await call('POST', `/api/vcc/plans/${planRev00Id}/review`, 'REV-QC-SUP', { comment: 'ผ่าน' });
+    await call('POST', `/api/vcc/plans/${planRev00Id}/approve`, 'REV-QA-MGR', { comment: 'อนุมัติ' });
+
+    // Inspect Base Cycles
+    const baseWos = await call('GET', `/api/vcc/work-orders?plan_id=${planRev00Id}`, 'REV-QC-STAFF');
+    expect(baseWos.body.workOrders).toHaveLength(2);
+    const [c1, c2] = baseWos.body.workOrders;
+    expect(c1.cycle_id).not.toBe(c2.cycle_id);
+
+    // B. Create Rev.01: Keep both Month 6 cycles, and add a 3rd cycle in Month 6 -> [6, 6, 6]
+    const rev01Res = await call('POST', `/api/vcc/plans/${planRev00Id}/revisions`, 'REV-QC-STAFF', {
+      revision_reason: 'เพิ่มรอบที่ 3 ในเดือน 6'
+    });
+    const rev01Id = rev01Res.body.plan.id;
+
+    await call('POST', `/api/vcc/plans/${rev01Id}/items`, 'REV-QC-STAFF', {
+      asset_id: assetId,
+      provider_name: 'ทวนสอบภายใน',
+      frequency_label: '3 ครั้ง/ปี',
+      planned_months: [6, 6, 6],
+      responsible_dept: 'QC'
+    });
+
+    const diffRes1 = await call('GET', `/api/vcc/plans/${rev01Id}/diff`, 'REV-QC-STAFF');
+    expect(diffRes1.status).toBe(200);
+    expect(diffRes1.body.summary.unchanged_count).toBe(2);
+    expect(diffRes1.body.summary.added_count).toBe(1);
+    expect(diffRes1.body.summary.removed_count).toBe(0);
+    expect(diffRes1.body.summary.modified_count).toBe(0);
+    expect(diffRes1.body.summary.invariants_satisfied).toBe(true);
+
+    // C. Cut middle cycle: In Rev.01, change to [6] (Cut one cycle)
+    await call('POST', `/api/vcc/plans/${rev01Id}/items`, 'REV-QC-STAFF', {
+      asset_id: assetId,
+      provider_name: 'ทวนสอบภายใน',
+      frequency_label: '1 ครั้ง/ปี',
+      planned_months: [6],
+      responsible_dept: 'QC'
+    });
+
+    const diffRes2 = await call('GET', `/api/vcc/plans/${rev01Id}/diff`, 'REV-QC-STAFF');
+    expect(diffRes2.status).toBe(200);
+    expect(diffRes2.body.summary.unchanged_count).toBe(1);
+    expect(diffRes2.body.summary.removed_count).toBe(1);
+    expect(diffRes2.body.summary.added_count).toBe(0);
+    expect(diffRes2.body.summary.modified_count).toBe(0);
+    expect(diffRes2.body.summary.invariants_satisfied).toBe(true);
+  });
+
+  it('17. Multi-Generation Lineage: Rev.00 -> Rev.01 -> Rev.02 preserves immutable cycle identity', async () => {
+    const { planId: rev00Id, asset1Id } = await setupApprovedRev00Plan(2026);
+
+    // Rev.00 -> Rev.01
+    const rev01Res = await call('POST', `/api/vcc/plans/${rev00Id}/revisions`, 'REV-QC-STAFF', {
+      revision_reason: 'Rev 01 ปรับเดือนสอบเทียบ'
+    });
+    const rev01Id = rev01Res.body.plan.id;
+
+    // Reschedule Asset 1: Month 3 to Month 4
+    await call('POST', `/api/vcc/plans/${rev01Id}/items`, 'REV-QC-STAFF', {
+      asset_id: asset1Id,
+      provider_name: 'ห้องปฏิบัติการภายนอก',
+      frequency_label: '2 ครั้ง/ปี',
+      planned_months: [4, 9],
+      responsible_dept: 'QC'
+    });
+
+    // Submit -> Review -> Approve Rev.01
+    await call('POST', `/api/vcc/plans/${rev01Id}/submit`, 'REV-QC-STAFF');
+    await call('POST', `/api/vcc/plans/${rev01Id}/review`, 'REV-QC-SUP', { comment: 'ผ่าน' });
+    await call('POST', `/api/vcc/plans/${rev01Id}/approve`, 'REV-QA-MGR', { comment: 'อนุมัติ Rev 01' });
+
+    // Rev.01 -> Rev.02
+    const rev02Res = await call('POST', `/api/vcc/plans/${rev01Id}/revisions`, 'REV-QC-STAFF', {
+      revision_reason: 'Rev 02 เลื่อนอีกครั้งจากเดือน 4 ไปเดือน 5'
+    });
+    expect(rev02Res.status).toBe(201);
+    const rev02Id = rev02Res.body.plan.id;
+
+    // Reschedule Asset 1: Month 4 to Month 5
+    await call('POST', `/api/vcc/plans/${rev02Id}/items`, 'REV-QC-STAFF', {
+      asset_id: asset1Id,
+      provider_name: 'ห้องปฏิบัติการภายนอก',
+      frequency_label: '2 ครั้ง/ปี',
+      planned_months: [5, 9],
+      responsible_dept: 'QC'
+    });
+
+    // Diff Rev.02 against Rev.01
+    const diffRes = await call('GET', `/api/vcc/plans/${rev02Id}/diff`, 'REV-QC-STAFF');
+    expect(diffRes.status).toBe(200);
+    expect(diffRes.body.base_plan.revision).toBe('01');
+    expect(diffRes.body.target_plan.revision).toBe('02');
+    expect(diffRes.body.summary.modified_count).toBe(1);
+    expect(diffRes.body.modified[0].before.planned_month).toBe(4);
+    expect(diffRes.body.modified[0].after.planned_month).toBe(5);
+    expect(diffRes.body.summary.unchanged_count).toBe(2); // Month 9 and Asset 2 Month 6
+    expect(diffRes.body.summary.invariants_satisfied).toBe(true);
+  });
+
+  it('18. Historical Protection Triggers: SQLite triggers prevent UPDATE on approved plans and items', async () => {
+    const { planId: rev00Id, item1Id } = await setupApprovedRev00Plan(2026);
+
+    // 1. Trigger blocks modifying plan items belonging to an APPROVED plan
+    await expect(
+      env.DB.prepare("UPDATE vcc_annual_plan_items SET provider_name = 'Hack Lab' WHERE id = ?").bind(item1Id).run()
+    ).rejects.toThrow(/Cannot modify items of an APPROVED annual plan/);
+
+    // 2. Trigger blocks modifying core identity (plan_year, department, revision, due_date_rule) of APPROVED plan
+    await expect(
+      env.DB.prepare('UPDATE vcc_annual_plans SET plan_year = 2030 WHERE id = ?').bind(rev00Id).run()
+    ).rejects.toThrow(/Cannot alter core identity or schedule rules of an APPROVED annual plan/);
+
+    // 3. Updating effective_status to SUPERSEDED and is_current to 0 is ALLOWED
+    const updateEffective = await env.DB.prepare(
+      "UPDATE vcc_annual_plans SET effective_status = 'SUPERSEDED', is_current = 0 WHERE id = ?"
+    ).bind(rev00Id).run();
+    expect(updateEffective.success).toBe(true);
+
+    // 4. Verify uniqueness of CURRENT revision: Restore rev00Id to CURRENT, then attempting to insert a 2nd CURRENT plan for same year/dept fails
+    await env.DB.prepare("UPDATE vcc_annual_plans SET effective_status = 'CURRENT', is_current = 1 WHERE id = ?").bind(rev00Id).run();
+
+    const secondCurrentAttempt = env.DB.prepare(`
+      INSERT INTO vcc_annual_plans (
+        id, plan_year, department, document_code, revision, title, status, effective_status, is_current
+      ) VALUES ('dup-current-plan', 2026, 'QC', 'FM-QC-46', '99', 'Duplicate Current Plan', 'APPROVED', 'CURRENT', 1)
+    `).run();
+    await expect(secondCurrentAttempt).rejects.toThrow();
+  });
+
+  it('19. Due Date Semantics: Distinguishes planned month, baseline date, required due date and flags compliance impact', async () => {
+    const { planId: rev00Id } = await setupApprovedRev00Plan(2026);
+
+    // Create Rev.01
+    const createRevRes = await call('POST', `/api/vcc/plans/${rev00Id}/revisions`, 'REV-QC-STAFF', {
+      revision_reason: 'ทดสอบ Due Date Semantics'
+    });
+    const rev01Id = createRevRes.body.plan.id;
+
+    const diffRes = await call('GET', `/api/vcc/plans/${rev01Id}/diff`, 'REV-QC-STAFF');
+    expect(diffRes.status).toBe(200);
+
+    // Verify all unchanged cycles have baseline_planned_date, required_due_date, and scheduled_date
+    for (const cycle of diffRes.body.unchanged) {
+      expect(cycle.baseline_planned_date).toBeDefined();
+      expect(cycle.required_due_date).toBeDefined();
+      expect(cycle.scheduled_date).toBeDefined();
+      expect(cycle.planned_month).toBeGreaterThanOrEqual(1);
+      expect(cycle.planned_month).toBeLessThanOrEqual(12);
+    }
+  });
 });
