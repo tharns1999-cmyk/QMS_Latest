@@ -99,6 +99,7 @@ export const isUserAuthorizedForPlanDept = (user, planDepartment) => {
 
 const PLAN_SELECT = `
   SELECT p.*,
+    p_parent.revision AS parent_revision,
     d.name_th AS department_name_th,
     u_prep.name AS prepared_by_name,
     u_prep.position AS prepared_by_position,
@@ -114,6 +115,7 @@ const PLAN_SELECT = `
     (SELECT COUNT(*) FROM vcc_annual_plan_items i WHERE i.plan_id = p.id) AS item_count,
     (SELECT COUNT(*) FROM vcc_annual_plan_items i JOIN vcc_assets a ON a.id = i.asset_id WHERE i.plan_id = p.id AND a.is_group = 1) AS group_item_count
   FROM vcc_annual_plans p
+  LEFT JOIN vcc_annual_plans p_parent ON p_parent.id = p.parent_plan_id
   LEFT JOIN departments d ON d.code = p.department
   LEFT JOIN users u_prep ON u_prep.id = p.prepared_by
   LEFT JOIN users u_rev ON u_rev.id = p.reviewed_by
@@ -122,6 +124,99 @@ const PLAN_SELECT = `
   LEFT JOIN users u_ass_rev ON u_ass_rev.id = p.assigned_reviewer_id
   LEFT JOIN users u_ass_app ON u_ass_app.id = p.assigned_approver_id
 `;
+
+export const getNextRevision = (curRev) => {
+  const curNum = parseInt(curRev, 10);
+  const nextNum = Number.isInteger(curNum) && curNum >= 0 ? curNum + 1 : 1;
+  return String(nextNum).padStart(2, '0');
+};
+
+export const getCyclesForPlan = async (db, plan) => {
+  if (!plan) return [];
+
+  // For non-draft plans that already have persisted cycles in vcc_plan_cycles, use them directly
+  if (plan.status !== 'DRAFT' && plan.status !== 'REJECTED') {
+    const { results: persistedCycles } = await db.prepare(`
+      SELECT c.id, c.plan_id, c.plan_item_id, c.asset_id, c.cycle_seq, c.planned_month,
+             c.baseline_planned_date, c.cycle_status, c.initial_cycle_id, c.plan_revision,
+             a.asset_code, a.name AS asset_name, a.model, a.serial_no,
+             i.provider_name, i.responsible_dept, i.frequency_label
+      FROM vcc_plan_cycles c
+      JOIN vcc_assets a ON a.id = c.asset_id
+      JOIN vcc_annual_plan_items i ON i.id = c.plan_item_id
+      WHERE c.plan_id = ?
+      ORDER BY a.asset_code ASC, c.cycle_seq ASC
+    `).bind(plan.id).all();
+
+    if (persistedCycles && persistedCycles.length > 0) {
+      return persistedCycles;
+    }
+  }
+
+  // Registry & plan items driven (combines persisted items with accurate cross-revision cycle identity)
+  const { results: items } = await db.prepare(`
+    SELECT i.*,
+           a.asset_code, a.name AS asset_name, a.model, a.serial_no
+    FROM vcc_annual_plan_items i
+    JOIN vcc_assets a ON a.id = i.asset_id
+    WHERE i.plan_id = ?
+    ORDER BY i.sort_order ASC, a.asset_code ASC
+  `).bind(plan.id).all();
+
+  // Find existing cross-revision cycles for this year & department to preserve cycle identity
+  const { results: existingCrossCycles } = await db.prepare(`
+    SELECT c.id, c.asset_id, c.cycle_seq, c.initial_cycle_id, c.baseline_planned_date
+    FROM vcc_plan_cycles c
+    JOIN vcc_annual_plans p ON p.id = c.plan_id
+    WHERE p.plan_year = ? AND p.department = ?
+    ORDER BY p.revision ASC, c.created_at ASC
+  `).bind(plan.plan_year, plan.department).all();
+
+  const crossMap = new Map();
+  for (const cc of (existingCrossCycles || [])) {
+    crossMap.set(`${cc.asset_id}:${cc.cycle_seq}`, cc);
+  }
+
+  const cycles = [];
+  for (const item of (items || [])) {
+    let months = [];
+    try {
+      months = typeof item.planned_months === 'string' ? JSON.parse(item.planned_months) : (item.planned_months || []);
+    } catch {
+      months = [];
+    }
+    const cleanMonths = months.filter((m) => Number.isInteger(m) && m >= 1 && m <= 12).sort((a, b) => a - b);
+    let seq = 0;
+    for (const m of cleanMonths) {
+      seq += 1;
+      const cross = crossMap.get(`${item.asset_id}:${seq}`);
+      const cycleId = cross ? cross.id : `${plan.plan_year}:${plan.department}:${item.asset_id}:${m}:${seq}`;
+      const initialCycleId = cross ? (cross.initial_cycle_id || cross.id) : cycleId;
+      const dueDate = computeDueDateForMonth(plan.plan_year, m, plan.due_date_rule);
+      cycles.push({
+        id: cycleId,
+        plan_id: plan.id,
+        plan_item_id: item.id,
+        asset_id: item.asset_id,
+        cycle_seq: seq,
+        planned_month: m,
+        baseline_planned_date: dueDate,
+        cycle_status: 'PLANNED',
+        initial_cycle_id: initialCycleId,
+        plan_revision: plan.revision,
+        asset_code: item.asset_code,
+        asset_name: item.asset_name,
+        model: item.model,
+        serial_no: item.serial_no,
+        provider_name: item.provider_name,
+        responsible_dept: item.responsible_dept,
+        frequency_label: item.frequency_label
+      });
+    }
+  }
+
+  return cycles;
+};
 
 const fetchPlan = (db, id) =>
   db.prepare(`${PLAN_SELECT} WHERE p.id = ?`).bind(id).first();
@@ -457,8 +552,8 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
       await db.batch([
         db.prepare(`
           INSERT INTO vcc_annual_plans (
-            id, plan_year, department, document_code, revision, title, status, due_date_rule, created_by, updated_by
-          ) VALUES (?, ?, ?, ?, ?, ?, 'DRAFT', ?, ?, ?)
+            id, plan_year, department, document_code, revision, title, status, effective_status, is_current, due_date_rule, created_by, updated_by
+          ) VALUES (?, ?, ?, ?, ?, ?, 'DRAFT', 'PENDING', 0, ?, ?, ?)
         `).bind(id, planYear, department, documentCode, revision, title, dueDateRule, user.id, user.id),
         audit(db, user.id, 'VCC_PLAN_CREATED', details)
       ]);
@@ -478,6 +573,9 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
     const id = c.req.param('id');
     const existing = await fetchPlan(db, id);
     if (!existing) return c.json({ error: 'ไม่พบแผนการสอบเทียบประจำปี' }, 404);
+    if (!isUserAuthorizedForPlanDept(user, existing.department)) {
+      return c.json({ error: 'เฉพาะผู้ใช้งานที่สังกัดแผนกของแผน หรือ DCC/QMR เท่านั้นที่สามารถแก้ไขข้อมูลแผนได้' }, 403);
+    }
     if (existing.status !== 'DRAFT' && existing.status !== 'REJECTED') {
       return c.json({ error: 'แก้ไขข้อมูลแผนได้เฉพาะสถานะร่าง (DRAFT) หรือส่งกลับแก้ไข (REJECTED) เท่านั้น' }, 409);
     }
@@ -547,6 +645,9 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
     const planId = c.req.param('id');
     const plan = await fetchPlan(db, planId);
     if (!plan) return c.json({ error: 'ไม่พบแผนการสอบเทียบประจำปี' }, 404);
+    if (!isUserAuthorizedForPlanDept(user, plan.department)) {
+      return c.json({ error: 'เฉพาะผู้ใช้งานที่สังกัดแผนกของแผน หรือ DCC/QMR เท่านั้นที่สามารถแก้ไขรายการในแผนได้' }, 403);
+    }
     if (plan.status !== 'DRAFT' && plan.status !== 'REJECTED') {
       return c.json({ error: 'เพิ่มหรือแก้ไขรายการในแผนได้เฉพาะสถานะร่าง (DRAFT) หรือส่งกลับแก้ไข (REJECTED) เท่านั้น' }, 409);
     }
@@ -670,6 +771,9 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
 
     const plan = await fetchPlan(db, planId);
     if (!plan) return c.json({ error: 'ไม่พบแผนการสอบเทียบประจำปี' }, 404);
+    if (!isUserAuthorizedForPlanDept(user, plan.department)) {
+      return c.json({ error: 'เฉพาะผู้ใช้งานที่สังกัดแผนกของแผน หรือ DCC/QMR เท่านั้นที่สามารถลบรายการในแผนได้' }, 403);
+    }
     if (plan.status !== 'DRAFT' && plan.status !== 'REJECTED') {
       return c.json({ error: 'ลบรายการในแผนได้เฉพาะสถานะร่าง (DRAFT) หรือส่งกลับแก้ไข (REJECTED) เท่านั้น' }, 409);
     }
@@ -683,6 +787,7 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
     if (!existingItem) return c.json({ error: 'ไม่พบรายการเครื่องมือในแผนนี้' }, 404);
 
     await db.batch([
+      db.prepare('DELETE FROM vcc_plan_cycles WHERE plan_item_id = ? AND plan_id = ?').bind(itemId, planId),
       db.prepare('DELETE FROM vcc_annual_plan_items WHERE id = ? AND plan_id = ?').bind(itemId, planId),
       db.prepare(`UPDATE vcc_annual_plans SET updated_at = ${NOW}, updated_by = ? WHERE id = ?`).bind(user.id, planId),
       audit(db, user.id, 'VCC_PLAN_ITEM_REMOVED', {
@@ -1177,6 +1282,8 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
       db.prepare(`
         UPDATE vcc_annual_plans
         SET status = 'APPROVED',
+            effective_status = 'CURRENT',
+            is_current = 1,
             approved_by = ?,
             approved_at = ${NOW},
             approval_comment = ?,
@@ -1488,6 +1595,436 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
     }
 
     return c.json({ tasks });
+  });
+
+  // Phase 3.1: Plan Revision Foundation
+  // Create a new revision (e.g. Rev.01) from an APPROVED plan (Rev.00)
+  app.post('/api/vcc/plans/:id/revisions', requireAuth, requireVccAccess, async (c) => {
+    const db = c.env.DB;
+    const user = c.get('user');
+    const sourcePlanId = c.req.param('id');
+    const body = await c.req.json().catch(() => ({}));
+
+    const sourcePlan = await fetchPlan(db, sourcePlanId);
+    if (!sourcePlan) return c.json({ error: 'ไม่พบแผนการสอบเทียบประจำปี' }, 404);
+
+    if (!isUserAuthorizedForPlanDept(user, sourcePlan.department)) {
+      return c.json({ error: 'ไม่มีสิทธิ์จัดการแผนของแผนกนี้' }, 403);
+    }
+
+    if (sourcePlan.status !== 'APPROVED') {
+      return c.json({ error: 'สร้าง Revision ใหม่ได้เฉพาะจากแผนที่ได้รับอนุมัติแล้ว (APPROVED) เท่านั้น' }, 409);
+    }
+
+    if (Number(sourcePlan.is_current) !== 1 || sourcePlan.effective_status === 'SUPERSEDED') {
+      return c.json({ error: 'สร้าง Revision ใหม่ได้จากแผนฉบับที่มีผลใช้งาน (CURRENT) เท่านั้น' }, 409);
+    }
+
+    const revisionReason = clean(body.revision_reason, 1000);
+    if (!revisionReason) {
+      return c.json({ error: 'กรุณาระบุเหตุผลการขอปรับปรุงแผน (Revision Reason)' }, 400);
+    }
+
+    // Check for in-flight active draft revision for the same year and department
+    const inFlight = await db.prepare(`
+      SELECT id, revision, status
+      FROM vcc_annual_plans
+      WHERE plan_year = ? AND department = ? AND status IN ('DRAFT', 'PENDING_REVIEW', 'PENDING_APPROVAL')
+    `).bind(sourcePlan.plan_year, sourcePlan.department).first();
+
+    if (inFlight) {
+      return c.json({
+        error: `มีแผนประจำปี ${sourcePlan.plan_year} แผนก ${sourcePlan.department} (Rev.${inFlight.revision}) อยู่ในสถานะ ${inFlight.status} แล้ว กรุณาดำเนินการแผนฉบับนั้นให้เสร็จสิ้นก่อนสร้าง Revision ใหม่`,
+        in_flight_plan_id: inFlight.id
+      }, 409);
+    }
+
+    const nextRevision = getNextRevision(sourcePlan.revision);
+
+    // Verify nextRevision doesn't clash with an existing plan
+    const existingRev = await db.prepare(`
+      SELECT id FROM vcc_annual_plans
+      WHERE plan_year = ? AND department = ? AND revision = ?
+    `).bind(sourcePlan.plan_year, sourcePlan.department, nextRevision).first();
+
+    if (existingRev) {
+      return c.json({ error: `Revision ${nextRevision} มีอยู่ในระบบแล้ว` }, 409);
+    }
+
+    const title = clean(body.title, 300) || sourcePlan.title;
+    const newPlanId = crypto.randomUUID();
+
+    // Fetch source plan items
+    const { results: sourceItems } = await db.prepare(`
+      SELECT * FROM vcc_annual_plan_items
+      WHERE plan_id = ?
+      ORDER BY sort_order ASC, id ASC
+    `).bind(sourcePlanId).all();
+
+    // Fetch source plan cycles
+    const { results: rawSourceCycles } = await db.prepare(`
+      SELECT * FROM vcc_plan_cycles
+      WHERE plan_id = ?
+      ORDER BY cycle_seq ASC, id ASC
+    `).bind(sourcePlanId).all();
+
+    let sourceCycles = rawSourceCycles || [];
+
+    // If source plan didn't have cycles in vcc_plan_cycles (legacy), derive and backfill them
+    if (sourceCycles.length === 0 && sourceItems && sourceItems.length > 0) {
+      const derived = [];
+      const backfillStmts = [];
+      for (const item of sourceItems) {
+        let months = [];
+        try { months = JSON.parse(item.planned_months || '[]'); } catch { months = []; }
+        let seq = 0;
+        for (const m of months) {
+          seq += 1;
+          const cId = `${sourcePlan.plan_year}:${sourcePlan.department}:${item.asset_id}:${m}`;
+          const dueDate = computeDueDateForMonth(sourcePlan.plan_year, m, sourcePlan.due_date_rule);
+          const cRow = {
+            id: cId,
+            plan_id: sourcePlan.id,
+            plan_item_id: item.id,
+            asset_id: item.asset_id,
+            cycle_seq: seq,
+            planned_month: m,
+            baseline_planned_date: dueDate,
+            cycle_status: 'SCHEDULED',
+            initial_cycle_id: cId,
+            plan_revision: sourcePlan.revision
+          };
+          derived.push(cRow);
+          backfillStmts.push(
+            db.prepare(`
+              INSERT OR IGNORE INTO vcc_plan_cycles (
+                id, plan_id, plan_item_id, asset_id, cycle_seq, planned_month,
+                baseline_planned_date, cycle_status, initial_cycle_id, plan_revision, created_by
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, 'SCHEDULED', ?, ?, ?)
+            `).bind(cId, sourcePlan.id, item.id, item.asset_id, seq, m, dueDate, cId, sourcePlan.revision, user.id)
+          );
+        }
+      }
+      if (backfillStmts.length > 0) {
+        await db.batch(backfillStmts);
+      }
+      sourceCycles = derived;
+    }
+
+    const itemMap = new Map(); // oldItemId -> newItemId
+    const itemInserts = [];
+    for (const item of (sourceItems || [])) {
+      const newItemId = crypto.randomUUID();
+      itemMap.set(item.id, newItemId);
+      itemInserts.push(
+        db.prepare(`
+          INSERT INTO vcc_annual_plan_items (
+            id, plan_id, asset_id, provider_name, frequency_label, planned_months, due_dates,
+            responsible_dept, responsible_label, remarks, sort_order, created_by, updated_by
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(
+          newItemId,
+          newPlanId,
+          item.asset_id,
+          item.provider_name,
+          item.frequency_label,
+          item.planned_months,
+          item.due_dates,
+          item.responsible_dept,
+          item.responsible_label,
+          item.remarks,
+          item.sort_order,
+          user.id,
+          user.id
+        )
+      );
+    }
+
+    const planInsert = db.prepare(`
+      INSERT INTO vcc_annual_plans (
+        id, plan_year, department, document_code, revision, title, status,
+        effective_status, is_current, due_date_rule, prepared_by, parent_plan_id,
+        revision_reason, created_by, updated_by
+      ) VALUES (?, ?, ?, ?, ?, ?, 'DRAFT', 'PENDING', 0, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      newPlanId,
+      sourcePlan.plan_year,
+      sourcePlan.department,
+      sourcePlan.document_code,
+      nextRevision,
+      title,
+      sourcePlan.due_date_rule,
+      user.id,
+      sourcePlan.id,
+      revisionReason,
+      user.id,
+      user.id
+    );
+
+    const auditEntry = audit(db, user.id, 'VCC_PLAN_REVISION_CREATED', {
+      plan_id: newPlanId,
+      plan_year: sourcePlan.plan_year,
+      department: sourcePlan.department,
+      revision: nextRevision,
+      parent_plan_id: sourcePlan.id,
+      parent_revision: sourcePlan.revision,
+      revision_reason: revisionReason,
+      items_cloned: itemInserts.length
+    });
+
+    try {
+      await db.batch([
+        planInsert,
+        ...itemInserts,
+        auditEntry
+      ]);
+    } catch (err) {
+      if (isUnique(err)) {
+        return c.json({ error: `Revision ${nextRevision} ของแผนประจำปี ${sourcePlan.plan_year} มีอยู่ในระบบแล้ว` }, 409);
+      }
+      throw err;
+    }
+
+    return c.json({
+      plan: await fetchPlan(db, newPlanId),
+      parent_plan: sourcePlan,
+      cloned_items_count: itemInserts.length
+    }, 201);
+  });
+
+  // Get revision history for a plan (all revisions for plan_year & department)
+  app.get('/api/vcc/plans/:id/revisions', requireAuth, requireVccAccess, async (c) => {
+    const db = c.env.DB;
+    const id = c.req.param('id');
+    const plan = await fetchPlan(db, id);
+    if (!plan) return c.json({ error: 'ไม่พบแผนการสอบเทียบประจำปี' }, 404);
+
+    const { results } = await db.prepare(`
+      SELECT p.*,
+        p_parent.revision AS parent_revision,
+        d.name_th AS department_name_th,
+        u_prep.name AS prepared_by_name,
+        u_app.name AS approved_by_name,
+        (SELECT COUNT(*) FROM vcc_annual_plan_items i WHERE i.plan_id = p.id) AS item_count,
+        (SELECT COUNT(*) FROM vcc_plan_cycles c WHERE c.plan_id = p.id) AS cycle_count
+      FROM vcc_annual_plans p
+      LEFT JOIN vcc_annual_plans p_parent ON p_parent.id = p.parent_plan_id
+      LEFT JOIN departments d ON d.code = p.department
+      LEFT JOIN users u_prep ON u_prep.id = p.prepared_by
+      LEFT JOIN users u_app ON u_app.id = p.approved_by
+      WHERE p.plan_year = ? AND p.department = ?
+      ORDER BY p.revision ASC
+    `).bind(plan.plan_year, plan.department).all();
+
+    return c.json({
+      plan_year: plan.plan_year,
+      department: plan.department,
+      current_plan_id: plan.id,
+      revisions: results || []
+    });
+  });
+
+  // Phase 3.1: Revision Snapshot & Diff Engine
+  // Pure comparison between target plan revision and base plan revision (zero mutation of work orders)
+  app.get('/api/vcc/plans/:id/diff', requireAuth, requireVccAccess, async (c) => {
+    const db = c.env.DB;
+    const id = c.req.param('id');
+    const targetPlan = await fetchPlan(db, id);
+    if (!targetPlan) return c.json({ error: 'ไม่พบแผนการสอบเทียบประจำปี' }, 404);
+
+    const compareToId = c.req.query('compare_to') || targetPlan.parent_plan_id;
+    let basePlan = null;
+    if (compareToId) {
+      basePlan = await fetchPlan(db, compareToId);
+    }
+
+    const targetList = await getCyclesForPlan(db, targetPlan);
+
+    if (!basePlan) {
+      // No base plan: all cycles are baseline initial
+      return c.json({
+        target_plan: {
+          id: targetPlan.id,
+          plan_year: targetPlan.plan_year,
+          department: targetPlan.department,
+          revision: targetPlan.revision,
+          status: targetPlan.status,
+          effective_status: targetPlan.effective_status,
+          revision_reason: targetPlan.revision_reason,
+          title: targetPlan.title
+        },
+        base_plan: null,
+        summary: {
+          total_base_cycles: 0,
+          total_target_cycles: targetList.length,
+          added_count: targetList.length,
+          removed_count: 0,
+          modified_count: 0,
+          unchanged_count: 0,
+          has_changes: false
+        },
+        added: targetList.map((tc) => ({
+          cycle_id: tc.id,
+          initial_cycle_id: tc.initial_cycle_id || tc.id,
+          asset_id: tc.asset_id,
+          asset_code: tc.asset_code,
+          asset_name: tc.asset_name,
+          cycle_seq: tc.cycle_seq,
+          diff_type: 'ADDED',
+          planned_month: tc.planned_month,
+          due_date: tc.baseline_planned_date,
+          provider_name: tc.provider_name
+        })),
+        removed: [],
+        modified: [],
+        unchanged: []
+      });
+    }
+
+    const baseList = await getCyclesForPlan(db, basePlan);
+
+    const baseCycleById = new Map();
+    const baseCycleByInitialId = new Map();
+    const baseCycleByAssetSeq = new Map();
+
+    for (const bc of baseList) {
+      baseCycleById.set(bc.id, bc);
+      if (bc.initial_cycle_id) {
+        baseCycleByInitialId.set(bc.initial_cycle_id, bc);
+      }
+      baseCycleByAssetSeq.set(`${bc.asset_id}:${bc.cycle_seq}`, bc);
+    }
+
+    const matchedBaseIds = new Set();
+    const added = [];
+    const modified = [];
+    const unchanged = [];
+
+    for (const tc of targetList) {
+      let matchedBase = null;
+      if (tc.initial_cycle_id && baseCycleByInitialId.has(tc.initial_cycle_id)) {
+        matchedBase = baseCycleByInitialId.get(tc.initial_cycle_id);
+      } else if (tc.initial_cycle_id && baseCycleById.has(tc.initial_cycle_id)) {
+        matchedBase = baseCycleById.get(tc.initial_cycle_id);
+      } else if (baseCycleByAssetSeq.has(`${tc.asset_id}:${tc.cycle_seq}`)) {
+        matchedBase = baseCycleByAssetSeq.get(`${tc.asset_id}:${tc.cycle_seq}`);
+      }
+
+      if (matchedBase) {
+        matchedBaseIds.add(matchedBase.id);
+        const isMonthChanged = matchedBase.planned_month !== tc.planned_month;
+        const isDateChanged = matchedBase.baseline_planned_date !== tc.baseline_planned_date;
+        const isProviderChanged = matchedBase.provider_name !== tc.provider_name;
+
+        if (isMonthChanged || isDateChanged || isProviderChanged) {
+          modified.push({
+            cycle_id: tc.id,
+            initial_cycle_id: tc.initial_cycle_id || matchedBase.initial_cycle_id || matchedBase.id,
+            asset_id: tc.asset_id,
+            asset_code: tc.asset_code,
+            asset_name: tc.asset_name,
+            cycle_seq: tc.cycle_seq,
+            diff_type: 'MODIFIED',
+            before: {
+              planned_month: matchedBase.planned_month,
+              due_date: matchedBase.baseline_planned_date,
+              provider_name: matchedBase.provider_name
+            },
+            after: {
+              planned_month: tc.planned_month,
+              due_date: tc.baseline_planned_date,
+              provider_name: tc.provider_name
+            },
+            changes: {
+              planned_month: isMonthChanged ? { before: matchedBase.planned_month, after: tc.planned_month } : null,
+              due_date: isDateChanged ? { before: matchedBase.baseline_planned_date, after: tc.baseline_planned_date } : null,
+              provider_name: isProviderChanged ? { before: matchedBase.provider_name, after: tc.provider_name } : null
+            }
+          });
+        } else {
+          unchanged.push({
+            cycle_id: tc.id,
+            initial_cycle_id: tc.initial_cycle_id || matchedBase.initial_cycle_id || matchedBase.id,
+            asset_id: tc.asset_id,
+            asset_code: tc.asset_code,
+            asset_name: tc.asset_name,
+            cycle_seq: tc.cycle_seq,
+            diff_type: 'UNCHANGED',
+            planned_month: tc.planned_month,
+            due_date: tc.baseline_planned_date,
+            provider_name: tc.provider_name
+          });
+        }
+      } else {
+        added.push({
+          cycle_id: tc.id,
+          initial_cycle_id: tc.initial_cycle_id || tc.id,
+          asset_id: tc.asset_id,
+          asset_code: tc.asset_code,
+          asset_name: tc.asset_name,
+          cycle_seq: tc.cycle_seq,
+          diff_type: 'ADDED',
+          planned_month: tc.planned_month,
+          due_date: tc.baseline_planned_date,
+          provider_name: tc.provider_name
+        });
+      }
+    }
+
+    const removed = [];
+    for (const bc of baseList) {
+      if (!matchedBaseIds.has(bc.id)) {
+        removed.push({
+          cycle_id: bc.id,
+          initial_cycle_id: bc.initial_cycle_id || bc.id,
+          asset_id: bc.asset_id,
+          asset_code: bc.asset_code,
+          asset_name: bc.asset_name,
+          cycle_seq: bc.cycle_seq,
+          diff_type: 'REMOVED',
+          planned_month: bc.planned_month,
+          due_date: bc.baseline_planned_date,
+          provider_name: bc.provider_name
+        });
+      }
+    }
+
+    const summary = {
+      total_base_cycles: baseList.length,
+      total_target_cycles: targetList.length,
+      added_count: added.length,
+      removed_count: removed.length,
+      modified_count: modified.length,
+      unchanged_count: unchanged.length,
+      has_changes: added.length > 0 || removed.length > 0 || modified.length > 0
+    };
+
+    return c.json({
+      target_plan: {
+        id: targetPlan.id,
+        plan_year: targetPlan.plan_year,
+        department: targetPlan.department,
+        revision: targetPlan.revision,
+        status: targetPlan.status,
+        effective_status: targetPlan.effective_status,
+        revision_reason: targetPlan.revision_reason,
+        title: targetPlan.title
+      },
+      base_plan: {
+        id: basePlan.id,
+        plan_year: basePlan.plan_year,
+        department: basePlan.department,
+        revision: basePlan.revision,
+        status: basePlan.status,
+        effective_status: basePlan.effective_status,
+        title: basePlan.title
+      },
+      summary,
+      added,
+      removed,
+      modified,
+      unchanged
+    });
   });
 };
 
