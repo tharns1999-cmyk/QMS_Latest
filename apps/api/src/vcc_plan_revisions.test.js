@@ -761,7 +761,7 @@ describe('VCC Phase 3.1: Plan Revision Foundation & Diff Engine Tests', () => {
   });
 
   it('21. Integrity Test 2: Trigger strictly rejects modifying metadata, revision_reason, parent_plan_id, or evidence after approval', async () => {
-    const { planId: rev00Id } = await setupApprovedRev00Plan(2026);
+    const { planId: rev00Id, item1Id } = await setupApprovedRev00Plan(2026);
 
     // 1. Cannot alter revision_reason
     await expect(
@@ -784,7 +784,6 @@ describe('VCC Phase 3.1: Plan Revision Foundation & Diff Engine Tests', () => {
     ).rejects.toThrow(/Cannot alter status, core identity, or historical evidence/);
 
     // 5. Cannot modify or delete plan items of an approved plan (SQLite triggers)
-    const { item1Id } = await setupApprovedRev00Plan(2026);
     await expect(
       env.DB.prepare("UPDATE vcc_annual_plan_items SET provider_name = 'Illegal Mod' WHERE id = ?").bind(item1Id).run()
     ).rejects.toThrow(/Cannot modify items of an APPROVED annual plan/);
