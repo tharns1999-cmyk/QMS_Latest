@@ -9,6 +9,19 @@ describe('VCC Phase 3.3: Calibration Monitoring & Compliance Dashboard Tests', (
   const tokens = {};
   const PASSWORD = 'dash-test-pass-123456';
 
+  const cleanupTestData = async (db) => {
+    if (!db) return;
+    try {
+      await db.prepare("DELETE FROM vcc_work_order_certificates WHERE work_order_id LIKE 'WO-M3-%'").run();
+      await db.prepare("UPDATE vcc_work_orders SET status = 'CANCELLED', certificate_no = NULL WHERE id LIKE 'WO-M3-%'").run();
+      await db.prepare("DELETE FROM vcc_work_orders WHERE id LIKE 'WO-M3-%'").run();
+      await db.prepare("DELETE FROM vcc_assets WHERE id LIKE 'AST-M3-%'").run();
+      await db.prepare("DELETE FROM users WHERE id LIKE '%-M3'").run();
+    } catch (err) {
+      console.error('cleanupTestData error:', err);
+    }
+  };
+
   const call = async (method, path, who, body) => {
     const res = await app.request(
       path,
@@ -34,6 +47,7 @@ describe('VCC Phase 3.3: Calibration Monitoring & Compliance Dashboard Tests', (
   beforeAll(async () => {
     proxy = await getPlatformProxy({ persist: { path: '.wrangler/test/v3' } });
     env = { ...proxy.env, JWT_SECRET: 'test-secret' };
+    await cleanupTestData(env.DB);
     const hash = await hashPassword(PASSWORD);
 
     // Seed departments and users
@@ -80,15 +94,8 @@ describe('VCC Phase 3.3: Calibration Monitoring & Compliance Dashboard Tests', (
   });
 
   afterAll(async () => {
-    // Cleanup test data
-    try {
-      await env.DB.prepare("DELETE FROM vcc_work_order_certificates WHERE work_order_id LIKE 'WO-M3-%'").run();
-      await env.DB.prepare("DELETE FROM vcc_work_orders WHERE id LIKE 'WO-M3-%'").run();
-      await env.DB.prepare("DELETE FROM vcc_assets WHERE id LIKE 'AST-M3-%'").run();
-      await env.DB.prepare("DELETE FROM users WHERE id LIKE '%-M3'").run();
-    } catch {
-      // ignore
-    }
+    // Cleanup test data safely (bypassing CLOSED work orders deletion trigger)
+    await cleanupTestData(env.DB);
     await proxy?.dispose();
   });
 
