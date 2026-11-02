@@ -24,7 +24,7 @@
 7. สร้างโครงสร้างตาราง: `cd apps/api && pnpm run db:migrate:production` (คำสั่งเดียว สร้างครบ 0001–0021)
 
 ทดสอบก่อนเปิดจริง
-8. `pnpm run deploy:production` แล้ว build เว็บด้วย `VITE_API_URL=<ที่อยู่ API บริษัท> pnpm run build` ตามด้วย `npx wrangler deploy` (ล็อกอินบริษัท)
+8. `pnpm run deploy:production` แล้ว build เว็บด้วย `VITE_API_URL=<ที่อยู่ API บริษัท> pnpm run build:production` (บังคับใช้ `build:production` เสมอ เพื่อตรวจสอบว่ามี HTTPS API URL ป้องกันไม่ให้ระบบเผลอทำงานในโหมดข้อมูลจำลอง) ตามด้วย `npx wrangler deploy` (ล็อกอินบริษัท)
 9. สร้างผู้ใช้ DCC คนแรกด้วย `scripts/create-user.js` และลอง login, อัปโหลด PDF, ผ่านขั้น 2FA
 
 ย้ายข้อมูล (ช่วงสั้น ประกาศเวลาให้ผู้ใช้หยุดบันทึก)

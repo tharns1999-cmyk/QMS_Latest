@@ -37,6 +37,9 @@ describe('VCC Multi-Department Access & Approval Workflow (RBAC & SoD)', () => {
       env.DB.prepare("INSERT OR IGNORE INTO departments (code, name_th, status) VALUES ('QC', 'ฝ่ายควบคุมคุณภาพ', 'ACTIVE')"),
       env.DB.prepare("INSERT OR IGNORE INTO departments (code, name_th, status) VALUES ('QA', 'ฝ่ายประกันคุณภาพ', 'ACTIVE')"),
       env.DB.prepare("INSERT OR IGNORE INTO departments (code, name_th, status) VALUES ('PD', 'ฝ่ายผลิต', 'ACTIVE')"),
+      env.DB.prepare("INSERT OR IGNORE INTO departments (code, name_th, status) VALUES ('MGT', 'ฝ่ายบริหาร', 'ACTIVE')"),
+      env.DB.prepare("INSERT OR IGNORE INTO departments (code, name_th, status) VALUES ('LB', 'ฝ่ายห้องปฏิบัติการ', 'ACTIVE')"),
+      env.DB.prepare("INSERT OR IGNORE INTO departments (code, name_th, status) VALUES ('WH', 'ฝ่ายคลังสินค้า', 'ACTIVE')"),
 
       // Test users:
       // DCC-USER: DC Head (L4, is_dcc = 1)
@@ -58,7 +61,10 @@ describe('VCC Multi-Department Access & Approval Workflow (RBAC & SoD)', () => {
         ['PD-QC-L5-REV',  'PD', ['PD', 'QC'], 5, 0, 'GENERAL_USER'],
         ['PD-ONLY-L5',   'PD', ['PD'], 5, 0, 'GENERAL_USER'],
         ['QC-HOD-L5',    'QC', ['QC'], 5, 0, 'GENERAL_USER'],
-        ['QA-L4-STAFF',  'QA', ['QA'], 4, 0, 'GENERAL_USER']
+        ['QA-L4-STAFF',  'QA', ['QA'], 4, 0, 'GENERAL_USER'],
+        ['MGT-STAFF',    'MGT', ['MGT'], 2, 0, 'GENERAL_USER'],
+        ['LB-STAFF',     'LB', ['LB'], 2, 0, 'GENERAL_USER'],
+        ['WH-USER',      'WH', ['WH'], 2, 0, 'GENERAL_USER']
       ].map(([id, dept, depts, level, dcc, role]) =>
         env.DB.prepare(
           `INSERT OR REPLACE INTO users (id, name, email, password_hash, role, approval_level, primary_department, departments, is_dcc, status)
@@ -67,7 +73,7 @@ describe('VCC Multi-Department Access & Approval Workflow (RBAC & SoD)', () => {
       )
     ]);
 
-    for (const id of ['DCC-USER', 'QC-STAFF', 'QC-LEAD', 'QA-MGR', 'PD-USER', 'QC-L4-CREATOR', 'PD-QC-L5-REV', 'PD-ONLY-L5', 'QC-HOD-L5', 'QA-L4-STAFF']) {
+    for (const id of ['DCC-USER', 'QC-STAFF', 'QC-LEAD', 'QA-MGR', 'PD-USER', 'QC-L4-CREATOR', 'PD-QC-L5-REV', 'PD-ONLY-L5', 'QC-HOD-L5', 'QA-L4-STAFF', 'MGT-STAFF', 'LB-STAFF', 'WH-USER']) {
       const res = await app.request(
         '/api/auth/login',
         {
@@ -90,15 +96,18 @@ describe('VCC Multi-Department Access & Approval Workflow (RBAC & SoD)', () => {
     await proxy?.dispose();
   });
 
-  it('1. Blocks unauthorized department (PD) from accessing VCC endpoints with HTTP 403', async () => {
+  it('1. Blocks unauthorized department (PD, WH) from accessing VCC endpoints with HTTP 403', async () => {
     expect((await call('GET', '/api/vcc/assets', 'PD-USER')).status).toBe(403);
     expect((await call('GET', '/api/vcc/plans', 'PD-USER')).status).toBe(403);
     expect((await call('GET', '/api/vcc/work-orders', 'PD-USER')).status).toBe(403);
     expect((await call('GET', '/api/vcc/dashboard', 'PD-USER')).status).toBe(403);
     expect((await call('GET', '/api/vcc/audit-log', 'PD-USER')).status).toBe(403);
+
+    // WH also blocked
+    expect((await call('GET', '/api/vcc/assets', 'WH-USER')).status).toBe(403);
   });
 
-  it('2. Grants Read access to DCC, QC, and QA users across VCC resources', async () => {
+  it('2. Grants Read access to DCC, QC, QA, MGT, and LB users across VCC resources', async () => {
     // QC Staff can read assets, plans, work orders, dashboard
     expect((await call('GET', '/api/vcc/assets', 'QC-STAFF')).status).toBe(200);
     expect((await call('GET', '/api/vcc/plans', 'QC-STAFF')).status).toBe(200);
@@ -112,6 +121,11 @@ describe('VCC Multi-Department Access & Approval Workflow (RBAC & SoD)', () => {
 
     // DCC can read
     expect((await call('GET', '/api/vcc/assets', 'DCC-USER')).status).toBe(200);
+
+    // MGT and LB can read
+    expect((await call('GET', '/api/vcc/assets', 'MGT-STAFF')).status).toBe(200);
+    expect((await call('GET', '/api/vcc/assets', 'LB-STAFF')).status).toBe(200);
+    expect((await call('GET', '/api/vcc/dashboard', 'LB-STAFF')).status).toBe(200);
   });
 
   it('3. Restricts master data and settings updates to DCC only (QC/QA get 403)', async () => {
@@ -341,7 +355,7 @@ describe('VCC Multi-Department Access & Approval Workflow (RBAC & SoD)', () => {
     // PD-ONLY-L5 attempts to review -> BLOCKED with 403 Forbidden!
     const pdOnlyReview = await call('POST', `/api/vcc/plans/${planId}/review`, 'PD-ONLY-L5', { comment: 'พยายามทบทวนข้ามแผนก' });
     expect(pdOnlyReview.status).toBe(403);
-    expect(pdOnlyReview.body.error).toMatch(/เฉพาะผู้ใช้งานแผนก DCC, QC และ QA เท่านั้น/);
+    expect(pdOnlyReview.body.error).toMatch(/เฉพาะผู้ใช้งานแผนก DCC, QC, QA, MGT และ LB เท่านั้น/);
 
     // QA-L4-STAFF (has VCC access, but belongs only to QA, not QC, and level < 6) attempts to review QC plan -> BLOCKED with 403!
     const qaCrossReview = await call('POST', `/api/vcc/plans/${planId}/review`, 'QA-L4-STAFF', { comment: 'พยายามทบทวนข้ามแผนก' });

@@ -55,12 +55,19 @@ const triggerBlobDownload = (textOrBlob, filename, mimeType = 'text/csv;charset=
 };
 
 export default function VccComplianceReportTab() {
-  const [year, setYear] = useState(2026);
+  const currentYear = useMemo(() => new Date().getFullYear(), []);
+  const [year, setYear] = useState(currentYear);
   const [department, setDepartment] = useState('');
   const [verdict, setVerdict] = useState('');
   const [status, setStatus] = useState('');
   const [resultStatus, setResultStatus] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+
+  const availableYears = useMemo(() => {
+    const list = [currentYear - 2, currentYear - 1, currentYear, currentYear + 1, currentYear + 2];
+    if (!list.includes(year)) list.push(year);
+    return Array.from(new Set(list)).sort((a, b) => a - b);
+  }, [currentYear, year]);
 
   const [reportData, setReportData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -307,8 +314,9 @@ export default function VccComplianceReportTab() {
             aria-label="เลือกปีรายงาน Compliance"
             className="h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-900 cursor-pointer shadow-2xs"
           >
-            <option value={2026}>2026</option>
-            <option value={2027}>2027</option>
+            {availableYears.map((y) => (
+              <option key={y} value={y}>{y}</option>
+            ))}
           </select>
         </div>
 
@@ -321,8 +329,11 @@ export default function VccComplianceReportTab() {
             className="h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-900 cursor-pointer shadow-2xs"
           >
             <option value="">ทุกแผนก</option>
+            <option value="DC">DC</option>
             <option value="QC">QC</option>
             <option value="QA">QA</option>
+            <option value="MGT">MGT</option>
+            <option value="LB">LB</option>
             <option value="PD">PD</option>
             <option value="WH">WH</option>
             <option value="ENG">ENG</option>

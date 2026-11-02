@@ -244,7 +244,7 @@ export const isVccAuthorized = (user) => {
   const userLevel = Number(user.approval_level ?? user.approvalLevel ?? 1);
   if (user.isDcc || user.isQmr || userLevel >= 6) return true;
   const depts = getUserDepartments(user);
-  return depts.some((d) => ['DC', 'QC', 'QA'].some((allowed) => isSameDepartment(d, allowed)));
+  return depts.some((d) => ['DC', 'QC', 'QA', 'MGT', 'LB'].some((allowed) => isSameDepartment(d, allowed)));
 };
 
 export const generateLocalVccTasks = (user) => {
@@ -1076,7 +1076,7 @@ export const submitVccPlan = async (planId, maybeAssignees = {}, maybeApproverId
   }
   const user = assertLocalVccAccess();
   if (!isVccAuthorized(user)) {
-    throw new Error('เฉพาะผู้ใช้งานแผนก DCC, QC และ QA เท่านั้นที่สามารถเข้าใช้งานส่วนนี้ได้');
+    throw new Error('เฉพาะผู้ใช้งานแผนก DCC, QC, QA, MGT และ LB เท่านั้นที่สามารถเข้าใช้งานส่วนนี้ได้');
   }
   const allPlans = getLocalPlans();
   const idx = allPlans.findIndex((p) => p.id === planId);
@@ -1207,7 +1207,7 @@ export const reviewVccPlan = async (planId, comment = '') => {
   const user = useStore.getState().currentUser;
   if (!user) throw new Error('กรุณาเข้าสู่ระบบ');
   if (!isVccAuthorized(user)) {
-    throw new Error('เฉพาะผู้ใช้งานแผนก DCC, QC และ QA เท่านั้นที่สามารถเข้าใช้งานส่วนนี้ได้');
+    throw new Error('เฉพาะผู้ใช้งานแผนก DCC, QC, QA, MGT และ LB เท่านั้นที่สามารถเข้าใช้งานส่วนนี้ได้');
   }
   const allPlans = getLocalPlans();
   const idx = allPlans.findIndex((p) => p.id === planId);
@@ -1271,7 +1271,7 @@ export const approveVccPlan = async (planId, comment = '') => {
   const user = useStore.getState().currentUser;
   if (!user) throw new Error('กรุณาเข้าสู่ระบบ');
   if (!isVccAuthorized(user)) {
-    throw new Error('เฉพาะผู้ใช้งานแผนก DCC, QC และ QA เท่านั้นที่สามารถเข้าใช้งานส่วนนี้ได้');
+    throw new Error('เฉพาะผู้ใช้งานแผนก DCC, QC, QA, MGT และ LB เท่านั้นที่สามารถเข้าใช้งานส่วนนี้ได้');
   }
   const allPlans = getLocalPlans();
   const idx = allPlans.findIndex((p) => p.id === planId);
@@ -1393,7 +1393,7 @@ export const rejectVccPlan = async (planId, reason = '') => {
   const user = useStore.getState().currentUser;
   if (!user) throw new Error('กรุณาเข้าสู่ระบบ');
   if (!isVccAuthorized(user)) {
-    throw new Error('เฉพาะผู้ใช้งานแผนก DCC, QC และ QA เท่านั้นที่สามารถเข้าใช้งานส่วนนี้ได้');
+    throw new Error('เฉพาะผู้ใช้งานแผนก DCC, QC, QA, MGT และ LB เท่านั้นที่สามารถเข้าใช้งานส่วนนี้ได้');
   }
   const trimmedReason = String(reason || '').trim();
   if (!trimmedReason) throw new Error('กรุณาระบุเหตุผลในการส่งกลับแก้ไข');

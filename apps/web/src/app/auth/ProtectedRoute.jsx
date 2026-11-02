@@ -54,7 +54,7 @@ export const ProtectedRoute = ({
     currentUser?.isDcc ||
     currentUser?.isQmr ||
     Number(currentUser?.approval_level || currentUser?.level || 0) >= 6 ||
-    userDepts.some((d) => ['DC', 'QC', 'QA'].includes(d))
+    userDepts.some((d) => ['DC', 'QC', 'QA', 'MGT', 'LB'].includes(d))
   );
 
   let isAllowed = true;
@@ -73,7 +73,7 @@ export const ProtectedRoute = ({
   } else if (requireVcc) {
     if (!isVccUser) {
       isAllowed = false;
-      fallbackMessage = deniedToastMessage || 'เฉพาะผู้ใช้งานแผนก DCC, QC และ QA เท่านั้นที่สามารถเข้าใช้งาน VCC ได้';
+      fallbackMessage = deniedToastMessage || 'เฉพาะผู้ใช้งานแผนก DCC, QC, QA, MGT และ LB เท่านั้นที่สามารถเข้าใช้งาน VCC ได้';
     }
   } else if (Array.isArray(allowedDepartments) && allowedDepartments.length > 0) {
     const isDeptAllowed = currentUser?.isDcc || currentUser?.isQmr ||

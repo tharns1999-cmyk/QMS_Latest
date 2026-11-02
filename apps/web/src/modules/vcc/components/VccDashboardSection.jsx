@@ -70,12 +70,19 @@ const triggerCsvDownload = (csvText, filename) => {
  */
 export default function VccDashboardSection({ onNavigateToWorkOrders }) {
   const [mainTab, setMainTab] = useState('OVERVIEW');
-  const [year, setYear] = useState(2026);
+  const currentYear = useMemo(() => new Date().getFullYear(), []);
+  const [year, setYear] = useState(currentYear);
   const [dashboard, setDashboard] = useState(null);
   const [alertTab, setAlertTab] = useState('OVERDUE');
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
   const [exportMsg, setExportMsg] = useState('');
+
+  const availableYears = useMemo(() => {
+    const list = [currentYear - 2, currentYear - 1, currentYear, currentYear + 1, currentYear + 2];
+    if (!list.includes(year)) list.push(year);
+    return Array.from(new Set(list)).sort((a, b) => a - b);
+  }, [currentYear, year]);
 
   // Settings Modal State
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -252,8 +259,11 @@ export default function VccDashboardSection({ onNavigateToWorkOrders }) {
                   onChange={(e) => setYear(Number(e.target.value))}
                   className="h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-sm font-semibold text-slate-900 focus:outline-hidden focus:border-slate-400 cursor-pointer shadow-2xs"
                 >
-                  <option value={2026}>2026 (พ.ศ. 2569)</option>
-                  <option value={2027}>2027 (พ.ศ. 2570)</option>
+                  {availableYears.map((y) => (
+                    <option key={y} value={y}>
+                      {y} (พ.ศ. {y + 543})
+                    </option>
+                  ))}
                 </select>
               </div>
 

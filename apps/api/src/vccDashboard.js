@@ -136,7 +136,8 @@ export const registerVccDashboardRoutes = (app, { requireAuth, audit }) => {
   app.get('/api/vcc/dashboard', requireAuth, requireVccAccess, async (c) => {
     const db = c.env.DB;
     const user = c.get('user');
-    const year = Number(c.req.query('year') || 2026);
+    const currentYear = new Date().getFullYear();
+    const year = Number(c.req.query('year') || currentYear);
     const refDateQuery = c.req.query('reference_date');
     const refDate = refDateQuery && /^\d{4}-\d{2}-\d{2}$/.test(refDateQuery)
       ? refDateQuery
@@ -728,7 +729,8 @@ export const registerVccDashboardRoutes = (app, { requireAuth, audit }) => {
   app.get('/api/vcc/compliance-report', requireAuth, requireVccAccess, async (c) => {
     const db = c.env.DB;
     const user = c.get('user');
-    const year = c.req.query('year') ? Number(c.req.query('year')) : 2026;
+    const currentYear = new Date().getFullYear();
+    const year = c.req.query('year') ? Number(c.req.query('year')) : currentYear;
     const filterDept = c.req.query('department') ? String(c.req.query('department')).trim().toUpperCase() : null;
     const filterStatus = c.req.query('status') ? String(c.req.query('status')).trim().toUpperCase() : null;
     const filterResult = c.req.query('result_status') ? String(c.req.query('result_status')).trim().toUpperCase() : null;
@@ -891,7 +893,8 @@ export const registerVccDashboardRoutes = (app, { requireAuth, audit }) => {
   app.get('/api/vcc/export/compliance-report', requireAuth, requireVccAccess, async (c) => {
     const db = c.env.DB;
     const user = c.get('user');
-    const year = c.req.query('year') ? Number(c.req.query('year')) : 2026;
+    const currentYear = new Date().getFullYear();
+    const year = c.req.query('year') ? Number(c.req.query('year')) : currentYear;
     const filterDept = c.req.query('department') ? String(c.req.query('department')).trim().toUpperCase() : null;
     const filterStatus = c.req.query('status') ? String(c.req.query('status')).trim().toUpperCase() : null;
     const filterResult = c.req.query('result_status') ? String(c.req.query('result_status')).trim().toUpperCase() : null;
@@ -1063,7 +1066,8 @@ export const registerVccDashboardRoutes = (app, { requireAuth, audit }) => {
   app.get('/api/vcc/export/annual-plan', requireAuth, requireVccAccess, async (c) => {
     const db = c.env.DB;
     const user = c.get('user');
-    const year = Number(c.req.query('year') || 2026);
+    const currentYear = new Date().getFullYear();
+    const year = Number(c.req.query('year') || currentYear);
     const department = c.req.query('department') ? String(c.req.query('department')).trim().toUpperCase() : null;
     const revision = c.req.query('revision') ? String(c.req.query('revision')).trim() : null;
     const effectiveStatus = c.req.query('effective_status') ? String(c.req.query('effective_status')).trim().toUpperCase() : null;

@@ -80,11 +80,12 @@ describe('VCC Multi-Department Access & Workflow Enablement (Frontend)', () => {
   });
 
   describe('2. Protected Route Guards for VCC', () => {
-    it('allows QC and QA users to access VCC protected routes', () => {
+    it('allows QC, QA, MGT, and LB users to access VCC protected routes', () => {
+      // QC User
       useStore.setState({
         currentUser: { id: 'qc4', name: 'หัวหน้า QC', department: 'QC', depts: ['QC'], approval_level: 4, isDcc: false }
       });
-      render(
+      const { unmount } = render(
         <MemoryRouter initialEntries={['/vcc/plans']}>
           <Routes>
             <Route
@@ -100,6 +101,28 @@ describe('VCC Multi-Department Access & Workflow Enablement (Frontend)', () => {
         </MemoryRouter>
       );
       expect(screen.getByTestId('vcc-plans-view')).toBeInTheDocument();
+      unmount();
+
+      // LB User
+      useStore.setState({
+        currentUser: { id: 'lb2', name: 'เจ้าหน้าที่ Lab', department: 'LB', depts: ['LB'], approval_level: 2, isDcc: false }
+      });
+      render(
+        <MemoryRouter initialEntries={['/vcc/plans']}>
+          <Routes>
+            <Route
+              path="/vcc/plans"
+              element={
+                <ProtectedRoute requireVcc redirectPath="/portal">
+                  <div data-testid="vcc-plans-view-lb">หน้าแผนการทวนสอบประจำปี</div>
+                </ProtectedRoute>
+              }
+            />
+            <Route path="/portal" element={<div>หน้าหลักพอร์ทัล</div>} />
+          </Routes>
+        </MemoryRouter>
+      );
+      expect(screen.getByTestId('vcc-plans-view-lb')).toBeInTheDocument();
     });
 
     it('denies access to unauthorized department (PD) and redirects to portal', () => {
@@ -112,7 +135,7 @@ describe('VCC Multi-Department Access & Workflow Enablement (Frontend)', () => {
             <Route
               path="/vcc/plans"
               element={
-                <ProtectedRoute requireVcc redirectPath="/portal" deniedToastMessage="เฉพาะผู้ใช้งานแผนก DCC, QC และ QA เท่านั้นที่สามารถเข้าใช้งาน VCC ได้">
+                <ProtectedRoute requireVcc redirectPath="/portal" deniedToastMessage="เฉพาะผู้ใช้งานแผนก DCC, QC, QA, MGT และ LB เท่านั้นที่สามารถเข้าใช้งาน VCC ได้">
                   <div data-testid="vcc-plans-view">หน้าแผนการทวนสอบประจำปี</div>
                 </ProtectedRoute>
               }

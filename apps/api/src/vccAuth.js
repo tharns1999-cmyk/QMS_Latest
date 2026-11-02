@@ -1,5 +1,5 @@
 // Authorization helpers for VCC (Verify and Calibration Center)
-export const VCC_ALLOWED_DEPTS = ['DC', 'QC', 'QA'];
+export const VCC_ALLOWED_DEPTS = ['DC', 'QC', 'QA', 'MGT', 'LB'];
 
 /**
  * Checks whether the user is authorized to access the VCC module (DCC, QC, QA, or QMR).
@@ -23,7 +23,7 @@ export const isVccAuthorized = (user) => {
   return userDepts.some((d) => VCC_ALLOWED_DEPTS.includes(d));
 };
 
-export const VCC_FORBIDDEN = { error: 'เฉพาะผู้ใช้งานแผนก DCC, QC และ QA เท่านั้นที่สามารถเข้าใช้งานส่วนนี้ได้' };
+export const VCC_FORBIDDEN = { error: 'เฉพาะผู้ใช้งานแผนก DCC, QC, QA, MGT และ LB เท่านั้นที่สามารถเข้าใช้งานส่วนนี้ได้' };
 export const DCC_ONLY = { error: 'เฉพาะ DCC เท่านั้นที่สามารถตั้งค่าหรือจัดการข้อมูลส่วนนี้ได้' };
 
 /**
