@@ -76,25 +76,23 @@ export async function validateVccMigrationPreflight(db) {
     const colList = cols.results || cols || [];
     const colNames = new Set(colList.map((c) => c.name));
     const hasEffectiveStatus = colNames.has('effective_status');
+    const hasIsCurrent = colNames.has('is_current');
     stepsCompleted.push('COLUMNS_INSPECTED');
 
     // Step 4: Overall Counts
-    assertReadOnly(`
+    const currentCountSql = hasIsCurrent
+      ? "SUM(CASE WHEN is_current = 1 THEN 1 ELSE 0 END) as current_count"
+      : (hasEffectiveStatus ? "SUM(CASE WHEN effective_status = 'CURRENT' THEN 1 ELSE 0 END) as current_count" : "0 as current_count");
+
+    const countSql = `
       SELECT 
         COUNT(*) as total,
         SUM(CASE WHEN status = 'APPROVED' THEN 1 ELSE 0 END) as approved_count,
-        SUM(CASE WHEN is_current = 1 THEN 1 ELSE 0 END) as current_count
+        ${currentCountSql}
       FROM vcc_annual_plans
-    `);
-    const countStats = await db
-      .prepare(`
-        SELECT 
-          COUNT(*) as total,
-          SUM(CASE WHEN status = 'APPROVED' THEN 1 ELSE 0 END) as approved_count,
-          SUM(CASE WHEN is_current = 1 THEN 1 ELSE 0 END) as current_count
-        FROM vcc_annual_plans
-      `)
-      .first();
+    `;
+    assertReadOnly(countSql);
+    const countStats = await db.prepare(countSql).first();
 
     const totalPlans = countStats?.total || 0;
     const approvedPlans = countStats?.approved_count || 0;
@@ -102,36 +100,50 @@ export async function validateVccMigrationPreflight(db) {
     stepsCompleted.push('STATISTICS_GATHERED');
 
     // Step 5: Duplicate CURRENT Plans Check
-    const duplicateQuery = hasEffectiveStatus
-      ? `
+    let duplicateQuery = null;
+    if (hasEffectiveStatus && hasIsCurrent) {
+      duplicateQuery = `
         SELECT plan_year, department, COUNT(*) as cnt, GROUP_CONCAT(id) as ids, GROUP_CONCAT(revision) as revs
         FROM vcc_annual_plans
         WHERE is_current = 1 OR effective_status = 'CURRENT'
         GROUP BY plan_year, department
         HAVING cnt > 1
-      `
-      : `
+      `;
+    } else if (hasEffectiveStatus) {
+      duplicateQuery = `
+        SELECT plan_year, department, COUNT(*) as cnt, GROUP_CONCAT(id) as ids, GROUP_CONCAT(revision) as revs
+        FROM vcc_annual_plans
+        WHERE effective_status = 'CURRENT'
+        GROUP BY plan_year, department
+        HAVING cnt > 1
+      `;
+    } else if (hasIsCurrent) {
+      duplicateQuery = `
         SELECT plan_year, department, COUNT(*) as cnt, GROUP_CONCAT(id) as ids, GROUP_CONCAT(revision) as revs
         FROM vcc_annual_plans
         WHERE is_current = 1
         GROUP BY plan_year, department
         HAVING cnt > 1
       `;
-    assertReadOnly(duplicateQuery);
-    const duplicateRows = await db.prepare(duplicateQuery).all();
-    const dupList = duplicateRows.results || duplicateRows || [];
+    }
 
-    for (const dup of dupList) {
-      violations.push({
-        type: PREFLIGHT_VIOLATION_TYPES.DUPLICATE_CURRENT_PLANS,
-        severity: 'CRITICAL',
-        planYear: dup.plan_year,
-        department: dup.department,
-        collidingIds: dup.ids ? dup.ids.split(',') : [],
-        revisions: dup.revs ? dup.revs.split(',') : [],
-        issue: `พบแผนงานสถานะใช้งานจริง (CURRENT / is_current=1) ซ้ำซ้อนจำนวน ${dup.cnt} ฉบับ ในปี ${dup.plan_year} แผนก ${dup.department}`,
-        remediationGuide: 'ต้องให้ DCC / ผู้ดูแลระบบตรวจสอบประวัติการอนุมัติเพื่อยืนยันฉบับที่มีผลใช้งานจริงเพียงฉบับเดียว ก่อนดำเนินการรัน Migration'
-      });
+    if (duplicateQuery) {
+      assertReadOnly(duplicateQuery);
+      const duplicateRows = await db.prepare(duplicateQuery).all();
+      const dupList = duplicateRows.results || duplicateRows || [];
+
+      for (const dup of dupList) {
+        violations.push({
+          type: PREFLIGHT_VIOLATION_TYPES.DUPLICATE_CURRENT_PLANS,
+          severity: 'CRITICAL',
+          planYear: dup.plan_year,
+          department: dup.department,
+          collidingIds: dup.ids ? dup.ids.split(',') : [],
+          revisions: dup.revs ? dup.revs.split(',') : [],
+          issue: `พบแผนงานสถานะใช้งานจริง (CURRENT / is_current=1) ซ้ำซ้อนจำนวน ${dup.cnt} ฉบับ ในปี ${dup.plan_year} แผนก ${dup.department}`,
+          remediationGuide: 'ต้องให้ DCC / ผู้ดูแลระบบตรวจสอบประวัติการอนุมัติเพื่อยืนยันฉบับที่มีผลใช้งานจริงเพียงฉบับเดียว ก่อนดำเนินการรัน Migration'
+        });
+      }
     }
     stepsCompleted.push('DUPLICATE_CHECK_COMPLETED');
 
@@ -186,33 +198,39 @@ export async function validateVccMigrationPreflight(db) {
     stepsCompleted.push('TIMESTAMP_CHECK_COMPLETED');
 
     // Step 8: Superseded Incomplete Evidence Check
-    const supersededQuery = hasEffectiveStatus
-      ? `
+    let supersededQuery = null;
+    if (hasEffectiveStatus) {
+      supersededQuery = `
         SELECT id, plan_year, department, revision, title, status, effective_status, approved_at, approved_by
         FROM vcc_annual_plans
         WHERE effective_status = 'SUPERSEDED' AND (approved_by IS NULL OR approved_at IS NULL OR status != 'APPROVED')
-      `
-      : `
+      `;
+    } else if (hasIsCurrent) {
+      supersededQuery = `
         SELECT id, plan_year, department, revision, title, status, approved_at, approved_by
         FROM vcc_annual_plans
         WHERE is_current = 0 AND status = 'APPROVED' AND (approved_by IS NULL OR approved_at IS NULL)
       `;
-    assertReadOnly(supersededQuery);
-    const supersededRows = await db.prepare(supersededQuery).all();
-    const supersededList = supersededRows.results || supersededRows || [];
+    }
 
-    for (const p of supersededList) {
-      violations.push({
-        type: PREFLIGHT_VIOLATION_TYPES.SUPERSEDED_INCOMPLETE_EVIDENCE,
-        severity: 'WARNING',
-        planId: p.id,
-        planYear: p.plan_year,
-        department: p.department,
-        revision: p.revision,
-        title: p.title,
-        issue: `แผนงานประวัติเดิม ${p.id} (ปี ${p.plan_year} แผนก ${p.department} Rev.${p.revision}) มีสถานะประวัติเก่าแต่หลักฐานการอนุมัติไม่สมบูรณ์`,
-        remediationGuide: 'ตรวจสอบประวัติเอกสารเดิมในคลังเอกสาร DCC เพื่อยืนยันความสมบูรณ์ของหลักฐานคุณภาพ'
-      });
+    if (supersededQuery) {
+      assertReadOnly(supersededQuery);
+      const supersededRows = await db.prepare(supersededQuery).all();
+      const supersededList = supersededRows.results || supersededRows || [];
+
+      for (const p of supersededList) {
+        violations.push({
+          type: PREFLIGHT_VIOLATION_TYPES.SUPERSEDED_INCOMPLETE_EVIDENCE,
+          severity: 'WARNING',
+          planId: p.id,
+          planYear: p.plan_year,
+          department: p.department,
+          revision: p.revision,
+          title: p.title,
+          issue: `แผนงานประวัติเดิม ${p.id} (ปี ${p.plan_year} แผนก ${p.department} Rev.${p.revision}) มีสถานะประวัติเก่าแต่หลักฐานการอนุมัติไม่สมบูรณ์`,
+          remediationGuide: 'ตรวจสอบประวัติเอกสารเดิมในคลังเอกสาร DCC เพื่อยืนยันความสมบูรณ์ของหลักฐานคุณภาพ'
+        });
+      }
     }
     stepsCompleted.push('SUPERSEDED_CHECK_COMPLETED');
 
