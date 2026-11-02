@@ -1747,6 +1747,12 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
     if (reconciliation.error) {
       return c.json({ error: reconciliation.error }, 409);
     }
+    if (plan.parent_plan_id && reconciliation.ambiguous && reconciliation.ambiguous.length > 0) {
+      return c.json({
+        error: 'พบความไม่ชัดเจนในการจับคู่ใบสั่งงานกับรอบการสอบเทียบ (Ambiguous Cycle Identity) กรุณาตรวจสอบหรือคลี่คลายข้อขัดแย้งก่อนอนุมัติ',
+        ambiguous: reconciliation.ambiguous
+      }, 409);
+    }
 
     const allStatements = [
       db.prepare(`

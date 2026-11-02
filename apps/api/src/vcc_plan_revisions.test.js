@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import app from './index.js';
 import { hashPassword } from './password.js';
+import { getBangkokDateString } from './vccWorkOrders.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1443,5 +1444,328 @@ describe('VCC Phase 3.1: Plan Revision Foundation & Diff Engine Tests', () => {
     // 3. Unauthorized department cannot export
     const unauthExport = await call('GET', '/api/vcc/export/annual-plan?year=2026&department=QC', 'REV-PD-STAFF');
     expect(unauthExport.status).toBe(403);
+  });
+
+  it('34. Integration Test (Point 2): Stable Cycle Identity & Reconciliation comprehensive scenarios', async () => {
+    // Setup Rev.00 with asset having 3 cycles: Month 2, Month 6, Month 10
+    const aRes = await call('POST', '/api/vcc/assets', 'REV-QC-STAFF', {
+      asset_code: 'QC-ID-TEST-01',
+      name: 'เครื่องวัดค่าความหนืด',
+      asset_type: 'เครื่องชั่ง',
+      department: 'QC',
+      status: 'ACTIVE'
+    });
+    const assetId = aRes.body.asset.id;
+
+    const planRes = await call('POST', '/api/vcc/plans', 'REV-QC-STAFF', {
+      plan_year: 2026,
+      department: 'QC',
+      revision: '00',
+      title: 'แผนทดสอบรอบเสถียร 2026',
+      assigned_reviewer_id: 'REV-QC-SUP',
+      assigned_approver_id: 'REV-QA-MGR'
+    });
+    const rev00Id = planRes.body.plan.id;
+
+    const itemRes = await call('POST', `/api/vcc/plans/${rev00Id}/items`, 'REV-QC-STAFF', {
+      asset_id: assetId,
+      provider_name: 'ทวนสอบภายใน',
+      frequency_label: '3 ครั้ง/ปี',
+      planned_months: [2, 6, 10],
+      responsible_dept: 'QC'
+    });
+    const itemId = itemRes.body.item.id;
+
+    // Submit -> Review -> Approve Rev.00
+    await call('POST', `/api/vcc/plans/${rev00Id}/submit`, 'REV-QC-STAFF');
+    await call('POST', `/api/vcc/plans/${rev00Id}/review`, 'REV-QC-SUP', { comment: 'ทบทวน' });
+    const approveRes = await call('POST', `/api/vcc/plans/${rev00Id}/approve`, 'REV-QA-MGR', { comment: 'อนุมัติ' });
+    expect(approveRes.status).toBe(200);
+
+    // Retrieve initial cycles
+    const { results: initialCycles } = await env.DB.prepare(
+      'SELECT id, cycle_seq, planned_month, initial_cycle_id FROM vcc_plan_cycles WHERE plan_id = ? ORDER BY cycle_seq ASC'
+    ).bind(rev00Id).all();
+    expect(initialCycles.length).toBe(3);
+    const [c1, c2, c3] = initialCycles;
+
+    // Retrieve generated work orders
+    const { results: initialWos } = await env.DB.prepare(
+      'SELECT id, wo_code, cycle_id, planned_month, status FROM vcc_work_orders WHERE plan_id = ? ORDER BY planned_month ASC'
+    ).bind(rev00Id).all();
+    expect(initialWos.length).toBe(3);
+    const woMonth6 = initialWos.find((w) => w.planned_month === 6);
+    expect(woMonth6).toBeDefined();
+
+    // 1. Close middle cycle work order (Month 6)
+    const todayBangkok = getBangkokDateString(new Date());
+    const submitResultRes = await call('POST', `/api/vcc/work-orders/${woMonth6.id}/submit-result`, 'REV-QC-STAFF', {
+      performed_at: todayBangkok,
+      result_status: 'PASS',
+      certificate_no: 'CERT-M6-001',
+      acceptance_criteria: '±0.5% ความแม่นยำ'
+    });
+    expect(submitResultRes.status).toBe(200);
+
+    const approveWoRes = await call('POST', `/api/vcc/work-orders/${woMonth6.id}/approve`, 'REV-QC-SUP', {
+      comment: 'ตรวจรับและอนุมัติปิดใบสั่งงาน'
+    });
+    expect(approveWoRes.status).toBe(200);
+
+    const closedWo = await env.DB.prepare('SELECT status FROM vcc_work_orders WHERE id = ?').bind(woMonth6.id).first();
+    expect(closedWo.status).toBe('CLOSED');
+
+    // 2. Reschedule Month 2 work order with explicit user reason
+    const woMonth2 = initialWos.find((w) => w.planned_month === 2);
+    const rescheduleRes = await call('POST', `/api/vcc/work-orders/${woMonth2.id}/reschedule`, 'REV-QC-STAFF', {
+      new_due_date: '2026-02-20',
+      reason: 'ขอเลื่อนการทวนสอบให้ตรงกับรอบบำรุงรักษา'
+    });
+    expect(rescheduleRes.status).toBe(200);
+
+    // 3. Create Rev.01: Delete middle cycle (Month 6) and shift Month 10 to Month 9
+    const rev01Res = await call('POST', `/api/vcc/plans/${rev00Id}/revisions`, 'REV-QC-STAFF', {
+      revision_reason: 'ปรับปรุงแผน ตัดรอบเดือน 6 และเลื่อนรอบเดือน 10 เป็นเดือน 9'
+    });
+    expect(rev01Res.status).toBe(201);
+    const rev01Id = rev01Res.body.plan.id;
+
+    const { results: rev01Items } = await env.DB.prepare('SELECT id FROM vcc_annual_plan_items WHERE plan_id = ?').bind(rev01Id).all();
+    const rev01ItemId = rev01Items[0].id;
+
+    // Update item: planned_months [2, 9], keeping cycle 1 (c1) and shifting cycle 3 (c3)
+    await call('POST', `/api/vcc/plans/${rev01Id}/items`, 'REV-QC-STAFF', {
+      item_id: rev01ItemId,
+      asset_id: assetId,
+      provider_name: 'ทวนสอบภายใน',
+      frequency_label: '2 ครั้ง/ปี',
+      planned_months: [2, 9],
+      initial_cycle_ids: [c1.initial_cycle_id || c1.id, c3.initial_cycle_id || c3.id],
+      responsible_dept: 'QC'
+    });
+
+    // Submit -> Review -> Approve Rev.01
+    await call('POST', `/api/vcc/plans/${rev01Id}/submit`, 'REV-QC-STAFF');
+    await call('POST', `/api/vcc/plans/${rev01Id}/review`, 'REV-QC-SUP', { comment: 'ทบทวน' });
+    const approveRev01Res = await call('POST', `/api/vcc/plans/${rev01Id}/approve`, 'REV-QA-MGR', { comment: 'อนุมัติ Rev.01' });
+    expect(approveRev01Res.status).toBe(200);
+
+    // VERIFY:
+    // A. Month 6 CLOSED work order is strictly preserved (NOT cancelled, NOT modified)
+    const checkClosedWo = await env.DB.prepare('SELECT status, certificate_no FROM vcc_work_orders WHERE id = ?').bind(woMonth6.id).first();
+    expect(checkClosedWo.status).toBe('CLOSED');
+    expect(checkClosedWo.certificate_no).toBe('CERT-M6-001');
+
+    // B. Month 2 rescheduled date is preserved and NOT overwritten
+    const checkMonth2Wo = await env.DB.prepare('SELECT due_date, scheduled_date, reschedule_reason FROM vcc_work_orders WHERE id = ?').bind(woMonth2.id).first();
+    expect(checkMonth2Wo.due_date).toBe('2026-02-20');
+    expect(checkMonth2Wo.scheduled_date).toBe('2026-02-20');
+    expect(checkMonth2Wo.reschedule_reason).toContain('รอบบำรุงรักษา');
+
+    // C. Month 10 work order shifted to Month 9 with immutable cycle identity preserved
+    const checkMonth9Wo = await env.DB.prepare('SELECT id, planned_month, due_date, cycle_id FROM vcc_work_orders WHERE cycle_id = ?').bind(c3.initial_cycle_id || c3.id).first();
+    expect(checkMonth9Wo).toBeDefined();
+    expect(checkMonth9Wo.planned_month).toBe(9);
+    expect(checkMonth9Wo.due_date).toBe('2026-09-30');
+
+    // 4. Create Rev.02: Add new cycle in Month 9 (now two cycles in Month 9)
+    const rev02Res = await call('POST', `/api/vcc/plans/${rev01Id}/revisions`, 'REV-QC-STAFF', {
+      revision_reason: 'เพิ่มรอบสอบเทียบซ้ำในเดือน 9'
+    });
+    expect(rev02Res.status).toBe(201);
+    const rev02Id = rev02Res.body.plan.id;
+
+    const { results: rev02Items } = await env.DB.prepare('SELECT id FROM vcc_annual_plan_items WHERE plan_id = ?').bind(rev02Id).all();
+    await call('POST', `/api/vcc/plans/${rev02Id}/items`, 'REV-QC-STAFF', {
+      item_id: rev02Items[0].id,
+      asset_id: assetId,
+      provider_name: 'ทวนสอบภายใน',
+      frequency_label: '3 ครั้ง/ปี',
+      planned_months: [2, 9, 9],
+      initial_cycle_ids: [c1.initial_cycle_id || c1.id, c3.initial_cycle_id || c3.id, null],
+      responsible_dept: 'QC'
+    });
+
+    await call('POST', `/api/vcc/plans/${rev02Id}/submit`, 'REV-QC-STAFF');
+    await call('POST', `/api/vcc/plans/${rev02Id}/review`, 'REV-QC-SUP', { comment: 'ทบทวน' });
+    const approveRev02Res = await call('POST', `/api/vcc/plans/${rev02Id}/approve`, 'REV-QA-MGR', { comment: 'อนุมัติ Rev.02' });
+    expect(approveRev02Res.status).toBe(200);
+
+    // Verify exactly 2 work orders in Month 9 with distinct cycle IDs and unique cycle_key
+    const { results: month9Wos } = await env.DB.prepare(
+      "SELECT id, cycle_id, cycle_key FROM vcc_work_orders WHERE asset_id = ? AND planned_month = 9 AND status != 'CANCELLED'"
+    ).bind(assetId).all();
+    expect(month9Wos.length).toBe(2);
+    expect(month9Wos[0].cycle_id).not.toBe(month9Wos[1].cycle_id);
+
+    // 5. Reconcile Idempotency: Reconciling again causes 0 duplicates
+    const { batchStatements: _bs, ...reconcileAgain } = await (await import('./vccWorkOrders.js')).buildWorkOrderReconciliationStatements(env.DB, rev02Id, 'REV-QA-MGR');
+    expect(reconcileAgain.unmatched.length).toBe(0);
+  });
+
+  it('35. Integration Test (Point 3): Local Date & Bangkok Timezone (+07:00) validation', async () => {
+    // 1. Timezone timestamp conversion verification at 00:30, 06:00, and 23:30 Thailand time
+    // Thailand 00:30 Nov 2, 2026 is UTC 17:30 Nov 1, 2026
+    const t0030 = new Date('2026-11-01T17:30:00Z');
+    expect(getBangkokDateString(t0030)).toBe('2026-11-02');
+
+    // Thailand 06:00 Nov 2, 2026 is UTC 23:00 Nov 1, 2026
+    const t0600 = new Date('2026-11-01T23:00:00Z');
+    expect(getBangkokDateString(t0600)).toBe('2026-11-02');
+
+    // Thailand 23:30 Nov 2, 2026 is UTC 16:30 Nov 2, 2026
+    const t2330 = new Date('2026-11-02T16:30:00Z');
+    expect(getBangkokDateString(t2330)).toBe('2026-11-02');
+
+    // 2. Work Order submit-result date validation in Backend
+    const { planId } = await setupApprovedRev00Plan(2026);
+    const wo = await env.DB.prepare('SELECT id FROM vcc_work_orders WHERE plan_id = ? LIMIT 1').bind(planId).first();
+
+    // A. Valid local date (today in Bangkok) passes
+    const todayBangkok = getBangkokDateString(new Date());
+    const validRes = await call('POST', `/api/vcc/work-orders/${wo.id}/submit-result`, 'REV-QC-STAFF', {
+      performed_at: todayBangkok,
+      result_status: 'PASS',
+      certificate_no: 'CERT-VALID-01',
+      acceptance_criteria: '±0.5'
+    });
+    expect(validRes.status).toBe(200);
+
+    // Reset status to OPEN for subsequent checks
+    await env.DB.prepare("UPDATE vcc_work_orders SET status = 'OPEN' WHERE id = ?").bind(wo.id).run();
+
+    // B. Invalid calendar dates rejected
+    const leapRes = await call('POST', `/api/vcc/work-orders/${wo.id}/submit-result`, 'REV-QC-STAFF', {
+      performed_at: '2026-02-29', // 2026 is not a leap year
+      result_status: 'PASS',
+      certificate_no: 'CERT-01',
+      acceptance_criteria: '±0.5'
+    });
+    expect(leapRes.status).toBe(400);
+    expect(leapRes.body.error).toContain('ไม่ถูกต้องตามปฏิทิน');
+
+    const apr31Res = await call('POST', `/api/vcc/work-orders/${wo.id}/submit-result`, 'REV-QC-STAFF', {
+      performed_at: '2026-04-31', // April has 30 days
+      result_status: 'PASS',
+      certificate_no: 'CERT-01',
+      acceptance_criteria: '±0.5'
+    });
+    expect(apr31Res.status).toBe(400);
+    expect(apr31Res.body.error).toContain('ไม่ถูกต้องตามปฏิทิน');
+
+    // C. Future date rejected
+    const futureDate = new Date(Date.now() + 86400000 * 2);
+    const futureStr = getBangkokDateString(futureDate);
+    const futureRes = await call('POST', `/api/vcc/work-orders/${wo.id}/submit-result`, 'REV-QC-STAFF', {
+      performed_at: futureStr,
+      result_status: 'PASS',
+      certificate_no: 'CERT-01',
+      acceptance_criteria: '±0.5'
+    });
+    expect(futureRes.status).toBe(400);
+    expect(futureRes.body.error).toContain('อนาคต');
+  });
+
+  it('36. Integration Test (Point 4): Atomic Approval, Concurrency, and Separation of Duties', async () => {
+    const { planId: rev00Id } = await setupApprovedRev00Plan(2026);
+
+    // Create Rev.01 draft
+    const rev01Res = await call('POST', `/api/vcc/plans/${rev00Id}/revisions`, 'REV-QC-STAFF', {
+      revision_reason: 'ทดสอบ Atomic Approval และ SoD'
+    });
+    const rev01Id = rev01Res.body.plan.id;
+
+    // 1. Separation of Duties: Preparer cannot review or approve own plan
+    await call('POST', `/api/vcc/plans/${rev01Id}/submit`, 'REV-QC-STAFF');
+
+    const selfReview = await call('POST', `/api/vcc/plans/${rev01Id}/review`, 'REV-QC-STAFF', { comment: 'ทบทวนตนเอง' });
+    expect(selfReview.status).toBe(403);
+    expect(selfReview.body.error).toContain('ผู้จัดทำ');
+
+    await call('POST', `/api/vcc/plans/${rev01Id}/review`, 'REV-QC-SUP', { comment: 'ทบทวนผ่าน' });
+
+    const selfApprove = await call('POST', `/api/vcc/plans/${rev01Id}/approve`, 'REV-QC-STAFF', { comment: 'อนุมัติตนเอง' });
+    expect(selfApprove.status).toBe(403);
+    expect(selfApprove.body.error).toContain('ผู้จัดทำ');
+
+    // Reviewer cannot approve own reviewed plan
+    const reviewerApprove = await call('POST', `/api/vcc/plans/${rev01Id}/approve`, 'REV-QC-SUP', { comment: 'อนุมัติที่ตนเองทบทวน' });
+    expect(reviewerApprove.status).toBe(403);
+    expect(reviewerApprove.body.error).toContain('ผู้ทบทวน');
+
+    // 2. Separation of Duties on Work Orders: Performer cannot approve own work order
+    const wo = await env.DB.prepare('SELECT id FROM vcc_work_orders WHERE plan_id = ? LIMIT 1').bind(rev00Id).first();
+    await env.DB.prepare("UPDATE vcc_work_orders SET status = 'PENDING_REVIEW', performed_by = 'REV-QC-SUP' WHERE id = ?").bind(wo.id).run();
+
+    const performerApprove = await call('POST', `/api/vcc/work-orders/${wo.id}/approve`, 'REV-QC-SUP', { comment: 'อนุมัติงานตนเอง' });
+    expect(performerApprove.status).toBe(403);
+    expect(performerApprove.body.error).toContain('ผู้บันทึกผล');
+
+    // 3. Concurrency: Simultaneous Approve and Reject on PENDING_APPROVAL
+    // Reset Rev.01 to PENDING_APPROVAL
+    const [resApprove, resReject] = await Promise.all([
+      call('POST', `/api/vcc/plans/${rev01Id}/approve`, 'REV-QA-MGR', { comment: 'อนุมัติพร้อมกัน' }),
+      call('POST', `/api/vcc/plans/${rev01Id}/reject`, 'REV-QC-SUP', { comment: 'ไม่อนุมัติพร้อมกัน' })
+    ]);
+
+    // Exactly one operation must succeed, while the other fails with conflict or forbidden
+    const statuses = [resApprove.status, resReject.status];
+    expect(statuses).toContain(200);
+    const non200Status = statuses.find((s) => s !== 200);
+    expect([400, 403, 409]).toContain(non200Status);
+
+    // Verify plan status in database is consistent (no partial corruption)
+    const finalPlan = await env.DB.prepare('SELECT status, effective_status FROM vcc_annual_plans WHERE id = ?').bind(rev01Id).first();
+    expect(['APPROVED', 'REJECTED']).toContain(finalPlan.status);
+
+    // Exactly one CURRENT plan remains for 2026 QC
+    const { results: currentPlans } = await env.DB.prepare(
+      "SELECT id, revision FROM vcc_annual_plans WHERE plan_year = 2026 AND department = 'QC' AND effective_status = 'CURRENT'"
+    ).all();
+    expect(currentPlans.length).toBe(1);
+
+    // 4. Cross-Department Access Strictly Blocked on All Mutations
+    const pdSubmit = await call('POST', `/api/vcc/plans/${rev01Id}/submit`, 'REV-PD-STAFF');
+    expect(pdSubmit.status).toBe(403);
+
+    const pdReview = await call('POST', `/api/vcc/plans/${rev01Id}/review`, 'REV-PD-STAFF', { comment: 'ข้ามแผนก' });
+    expect(pdReview.status).toBe(403);
+
+    const pdApprove = await call('POST', `/api/vcc/plans/${rev01Id}/approve`, 'REV-PD-STAFF', { comment: 'ข้ามแผนก' });
+    expect(pdApprove.status).toBe(403);
+
+    const pdWoReschedule = await call('POST', `/api/vcc/work-orders/${wo.id}/reschedule`, 'REV-PD-STAFF', {
+      new_due_date: '2026-05-15',
+      reason: 'ข้ามแผนก'
+    });
+    expect(pdWoReschedule.status).toBe(403);
+  });
+
+  it('37. Integration Test (Point 1): Historical Integrity & Migration 0035 Proof', async () => {
+    // 1. Insert a simulated unapproved plan with illegal CURRENT status (legacy corrupted record)
+    const badPlanId = crypto.randomUUID();
+    await env.DB.prepare(`
+      INSERT INTO vcc_annual_plans (
+        id, plan_year, department, revision, title, status, effective_status, is_current,
+        created_at, updated_at
+      ) VALUES (?, 2029, 'QA', '00', 'แผนร่างจำลองตกค้าง', 'DRAFT', 'CURRENT', 1, 'now', 'now')
+    `).bind(badPlanId).run();
+
+    // 2. Execute Migration 0035 query
+    await env.DB.prepare(`
+      UPDATE vcc_annual_plans
+      SET effective_status = 'PENDING',
+          is_current = 0
+      WHERE (status != 'APPROVED' OR approved_at IS NULL OR approved_by IS NULL)
+        AND effective_status IN ('CURRENT', 'SUPERSEDED')
+    `).run();
+
+    // 3. Verify: Unapproved plan is safely reset to PENDING and is_current = 0
+    const fixedPlan = await env.DB.prepare('SELECT status, effective_status, is_current FROM vcc_annual_plans WHERE id = ?').bind(badPlanId).first();
+    expect(fixedPlan.effective_status).toBe('PENDING');
+    expect(fixedPlan.is_current).toBe(0);
+
+    // Clean up
+    await env.DB.prepare('DELETE FROM vcc_annual_plans WHERE id = ?').bind(badPlanId).run();
   });
 });

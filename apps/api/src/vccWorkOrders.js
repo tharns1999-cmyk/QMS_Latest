@@ -23,6 +23,15 @@ export const VALID_CANCELLATION_CATEGORIES = new Set(['PLAN_REVISION', 'MISTAKE_
 const VALID_RESULT_STATUSES = new Set(['PASS', 'FAIL', 'INCONCLUSIVE']);
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
+export const getBangkokDateString = (date = new Date()) => {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Bangkok',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(date);
+};
+
 const readWorkOrderSettings = async (db) => {
   const row = await db
     .prepare('SELECT value FROM settings WHERE key = ?')
@@ -294,8 +303,9 @@ export const buildWorkOrderReconciliationStatements = async (db, planId, actorId
 
   // Controlled cancellation for cycles removed in this revision
   for (const c of (existingCycles || [])) {
-    if (!activeCycleIdsInNewRevision.has(c.id)) {
-      const existingWo = byCycleId.get(c.id);
+    const cycleIdentity = c.initial_cycle_id || c.id;
+    if (!activeCycleIdsInNewRevision.has(cycleIdentity)) {
+      const existingWo = byCycleId.get(cycleIdentity) || byCycleId.get(c.id);
       // Historical Evidence Protection: NEVER cancel or modify CLOSED work orders
       if (existingWo && existingWo.status === 'CLOSED') {
         continue;
@@ -367,20 +377,20 @@ export const buildWorkOrderReconciliationStatements = async (db, planId, actorId
       continue;
     }
 
-    // Direct match: Match by cycle_id or cycle_key
-    const directWo = byCycleId.get(cycleId) || byCycleKey.get(cycleKey);
+    // Direct match: Match strictly by immutable cycle_id
     let candidateWos = [];
+    const directWo = byCycleId.get(cycleId);
 
     if (directWo && !boundWoIds.has(directWo.id)) {
       candidateWos = [directWo];
     } else {
       // Find candidate work orders matching this item, asset and month/year
+      // ONLY allow unassigned work orders (w.cycle_id IS NULL) to prevent identity hijacking
       candidateWos = (existingWos || []).filter((w) => {
         if (boundWoIds.has(w.id)) return false;
-        // If work order already has a different cycle_id, do not hijack it
-        if (w.cycle_id && w.cycle_id !== cycleId) return false;
-        if (w.cycle_id && w.cycle_id === cycleId) return true;
-        if (w.cycle_key && w.cycle_key === cycleKey) return true;
+        if (w.cycle_id) {
+          return w.cycle_id === cycleId;
+        }
         if (w.plan_item_id && w.plan_item_id === item.id && w.planned_month === month) return true;
         if (w.asset_id === item.asset_id) {
           const woMonth = w.planned_month || (w.due_date ? parseInt(w.due_date.slice(5, 7), 10) : null);
@@ -1022,8 +1032,14 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
     const newDueDate = String(body.new_due_date || '').trim();
     const reason = String(body.reason || '').trim();
     if (!DATE_RE.test(newDueDate)) return c.json({ error: 'กรุณาระบุวันครบกำหนดใหม่ในรูปแบบ YYYY-MM-DD' }, 400);
-    const d = new Date(`${newDueDate}T00:00:00Z`);
-    if (isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== newDueDate) {
+    const [dYear, dMonth, dDay] = newDueDate.split('-').map(Number);
+    const checkD = new Date(Date.UTC(dYear, dMonth - 1, dDay));
+    if (
+      isNaN(checkD.getTime()) ||
+      checkD.getUTCFullYear() !== dYear ||
+      checkD.getUTCMonth() + 1 !== dMonth ||
+      checkD.getUTCDate() !== dDay
+    ) {
       return c.json({ error: 'วันครบกำหนดใหม่ไม่ถูกต้องตามปฏิทิน' }, 400);
     }
     if (!reason) return c.json({ error: 'กรุณาระบุเหตุผลในการขอเลื่อนวันครบกำหนด' }, 400);
@@ -1071,12 +1087,18 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
     const resultRemarks = String(body.result_remarks || '').trim();
 
     if (!DATE_RE.test(performedAt)) return c.json({ error: 'กรุณาระบุวันที่ทวนสอบจริง (YYYY-MM-DD)' }, 400);
-    const perfDate = new Date(`${performedAt}T00:00:00Z`);
-    if (isNaN(perfDate.getTime()) || perfDate.toISOString().slice(0, 10) !== performedAt) {
+    const [pYear, pMonth, pDay] = performedAt.split('-').map(Number);
+    const checkDate = new Date(Date.UTC(pYear, pMonth - 1, pDay));
+    if (
+      isNaN(checkDate.getTime()) ||
+      checkDate.getUTCFullYear() !== pYear ||
+      checkDate.getUTCMonth() + 1 !== pMonth ||
+      checkDate.getUTCDate() !== pDay
+    ) {
       return c.json({ error: 'วันที่ทวนสอบจริงไม่ถูกต้องตามปฏิทิน' }, 400);
     }
-    const tomorrowStr = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
-    if (performedAt > tomorrowStr) {
+    const todayBangkok = getBangkokDateString(new Date());
+    if (performedAt > todayBangkok) {
       return c.json({ error: 'วันที่ทวนสอบจริงต้องไม่เป็นวันที่ในอนาคต' }, 400);
     }
     if (!VALID_RESULT_STATUSES.has(resultStatus)) {

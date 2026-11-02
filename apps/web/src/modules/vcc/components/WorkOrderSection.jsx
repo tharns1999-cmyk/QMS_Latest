@@ -58,6 +58,23 @@ const WO_TABS = [
   }
 ];
 
+// Local Bangkok timezone date helpers (UTC+7 safe)
+const getBangkokDate = (d = new Date()) => {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Bangkok',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(d);
+};
+
+const getDefaultAdHocDueDate = (d = new Date()) => {
+  const bangkokDateStr = getBangkokDate(d);
+  const [y, m] = bangkokDateStr.split('-').map(Number);
+  const lastDay = new Date(y, m, 0).getDate();
+  return `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+};
+
 const WorkOrderSection = ({ activeDepartments = [] }) => {
   const [activeTab, setActiveTab] = useState('OPEN');
   const [filterDept, setFilterDept] = useState('');
@@ -103,7 +120,7 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
     child_asset_id: '',
     asset_id: '',
     provider_name: '',
-    due_date: '2026-06-30'
+    due_date: getDefaultAdHocDueDate()
   });
   const [createError, setCreateError] = useState('');
   const [savingCreate, setSavingCreate] = useState(false);
@@ -111,7 +128,7 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
   // Record Result Modal
   const [resultWo, setResultWo] = useState(null);
   const [resultForm, setResultForm] = useState({
-    performed_at: new Date().toISOString().slice(0, 10),
+    performed_at: getBangkokDate(),
     result_status: 'PASS',
     certificate_no: '',
     acceptance_criteria: '',
@@ -237,7 +254,7 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
       child_asset_id: '',
       asset_id: individualAssets[0]?.id || '',
       provider_name: providers[0] || 'ห้องปฏิบัติการภายนอก',
-      due_date: '2026-06-30'
+      due_date: getDefaultAdHocDueDate()
     });
     setCreateOpen(true);
   };
@@ -276,7 +293,7 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
     setResultWo(wo);
     setResultError('');
     setResultForm({
-      performed_at: wo.performed_at || new Date().toISOString().slice(0, 10),
+      performed_at: wo.performed_at || getBangkokDate(),
       result_status: wo.result_status === 'PENDING' ? 'PASS' : wo.result_status,
       certificate_no: wo.certificate_no || '',
       acceptance_criteria: wo.acceptance_criteria || woSettings.default_acceptance_criteria?.[0] || '',
