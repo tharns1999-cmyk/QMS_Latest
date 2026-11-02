@@ -2,13 +2,16 @@
 /**
  * VCC Safe Production Migration Runner (10-Step Gated Workflow - Fail-Closed Architecture)
  * 
- * Enforces verified real backups, isolated restore verification (PRAGMA integrity_check),
- * remote Cloudflare D1 snapshot verification, strict preflight gating (CLI override disabled),
- * explicit operator confirmation (no CI bypass), fail-closed append-only audit trail logging,
+ * Enforces consistent SQLite snapshots (VACUUM INTO), isolated restore verification
+ * (PRAGMA integrity_check via native engine), remote Cloudflare D1 restore drill verification,
+ * cross-process file-locked durable audit logging, pre-flight audit readiness checks,
+ * explicit operator confirmation (no CI bypass), reality-reflecting failure reporting,
  * and disaster recovery procedures.
  * 
  * Usage:
- *   node scripts/vcc-migrate-safe.js [--local | --remote] [--env <env>] [--persist-to <dir>] [--confirm-migration] [--operator <name>] [--backup-ref <id>]
+ *   node scripts/vcc-migrate-safe.js [--local | --remote] [--env <env>] [--persist-to <dir>]
+ *                                    [--confirm-migration] [--operator <name>] [--backup-ref <id>]
+ *                                    [--restore-drill-evidence <path>]
  */
 
 import { spawnSync } from 'node:child_process';
@@ -16,6 +19,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
+import { DatabaseSync } from 'node:sqlite';
 import { validateVccMigrationPreflight, PREFLIGHT_STATUS } from '../src/vccPreflight.js';
 import { createWranglerD1Adapter } from './vcc-preflight.js';
 
@@ -42,8 +46,8 @@ export function getTargetConfigFromWrangler(targetDb, targetEnv) {
 
   try {
     const raw = fs.readFileSync(wranglerPath, 'utf-8');
-    // Strip comments for JSON parsing
-    const stripped = raw.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
+    // Strip comments (handling CRLF) and trailing commas in JSONC
+    const stripped = raw.replace(/\/\*[\s\S]*?\*\/|([^:]|^)\/\/.*$/gm, '$1').replace(/,(\s*[}\]])/g, '$1');
     const config = JSON.parse(stripped);
 
     const d1List = (targetEnv && config.env?.[targetEnv]?.d1_databases)
@@ -57,61 +61,251 @@ export function getTargetConfigFromWrangler(targetDb, targetEnv) {
   }
 }
 
-// Append-only Fail-Closed Audit Trail Manager
-export function saveAuditRecord(record, customAuditPath = null) {
-  const auditLogPath = customAuditPath || path.resolve(apiDir, '.wrangler/migration-audit.json');
-  const dir = path.dirname(auditLogPath);
+// Durable Persistent Audit Storage Path
+export function getDefaultAuditPath() {
+  return process.env.VCC_MIGRATION_AUDIT_PATH || path.resolve(apiDir, 'audit_evidence/migration-audit.json');
+}
+
+// Cross-Process File Lock for Multi-Process Audit Durability
+export function withAuditLock(auditFilePath, fn, timeoutMs = 25000) {
+  const dir = path.dirname(auditFilePath);
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
+  const lockDir = `${auditFilePath}.lock`;
+  const startTime = Date.now();
+  const retryIntervalMs = 30;
+  const staleThresholdMs = 30000;
 
-  let records = [];
-  if (fs.existsSync(auditLogPath)) {
-    const raw = fs.readFileSync(auditLogPath, 'utf-8');
-    if (raw.trim().length > 0) {
-      try {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) {
-          records = parsed;
-        } else if (parsed && typeof parsed === 'object') {
-          records = [parsed];
-        } else {
-          throw new Error('Audit file root must be an array or object');
+  let acquired = false;
+  while (!acquired) {
+    try {
+      fs.mkdirSync(lockDir);
+      acquired = true;
+    } catch (err) {
+      if (err.code === 'EEXIST') {
+        // Detect and break stale lock if previous process crashed or died
+        try {
+          const stat = fs.statSync(lockDir);
+          if (Date.now() - stat.mtimeMs > staleThresholdMs) {
+            console.warn(`[AUDIT LOCK] ปลด Stale Lock ที่ค้างเกิน ${staleThresholdMs}ms: ${lockDir}`);
+            try { fs.rmSync(lockDir, { recursive: true, force: true }); } catch { /* ignore */ }
+            continue;
+          }
+        } catch { /* stat may fail if released concurrently */ }
+
+        if (Date.now() - startTime > timeoutMs) {
+          throw new Error(`Audit Storage Concurrency Error: ไม่สามารถขอรับ Lock ไฟล์ Audit (${auditFilePath}) ภายใน ${timeoutMs}ms`);
         }
-      } catch (parseErr) {
-        // P0.3 FAIL-CLOSED: DO NOT overwrite or ignore corrupted audit logs!
-        throw new Error(`Audit Trail Integrity Error: ไฟล์ Audit Evidence '${auditLogPath}' มีรูปแบบเสียหายหรือไม่สมบูรณ์ (${parseErr.message}). ห้ามเขียนทับประวัติเดิมเด็ดขาดเพื่อรักษาความถูกต้องของร่องรอยการตรวจสอบ (Non-repudiation)`);
+        // Synchronous spin-delay for short interval
+        const waitTill = Date.now() + retryIntervalMs;
+        while (Date.now() < waitTill) { /* spin sleep */ }
+      } else {
+        throw err;
       }
     }
   }
 
-  // P0.3: Prevent modifying/duplicating an already finalized record with same run_id
-  if (record.run_id) {
-    const existingFinal = records.find(
-      (r) => r.run_id === record.run_id && (r.result === 'SUCCESS' || r.result === 'FAILED')
-    );
-    if (existingFinal && existingFinal.event_id === record.event_id) {
-      throw new Error(`Audit Integrity Error: ไม่สามารถบันทึกหรือแก้ไขทับ Record เดิมที่มี run_id และ event_id ซ้ำได้ (${record.run_id})`);
+  try {
+    return fn();
+  } finally {
+    try {
+      fs.rmSync(lockDir, { recursive: true, force: true });
+    } catch { /* ignore release error */ }
+  }
+}
+
+// Pre-migration Audit Storage Readiness Verification
+export function verifyAuditStorageReadiness(auditFilePath) {
+  const dir = path.dirname(auditFilePath);
+  try {
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    // Write and read probe
+    const probePath = path.resolve(dir, `.audit_probe_${crypto.randomUUID()}.tmp`);
+    fs.writeFileSync(probePath, 'audit_probe_test_ok', 'utf-8');
+    const readBack = fs.readFileSync(probePath, 'utf-8');
+    if (readBack !== 'audit_probe_test_ok') {
+      throw new Error('Audit storage probe verification failed to read back matching content');
+    }
+    fs.unlinkSync(probePath);
+  } catch (probeErr) {
+    throw new Error(`Audit Storage Readiness Error: ไม่สามารถเขียนหรืออ่าน Audit Storage ที่ '${dir}' ได้ (${probeErr.message}). ไม่อนุญาตให้เริ่มกระบวนการ Migration`);
+  }
+
+  // If existing audit file, check for corruption
+  if (fs.existsSync(auditFilePath)) {
+    const raw = fs.readFileSync(auditFilePath, 'utf-8');
+    if (raw.trim().length > 0) {
+      try {
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed) && (!parsed || typeof parsed !== 'object')) {
+          throw new Error('โครงสร้างรากของไฟล์ไม่ใช่ Array หรือ Object');
+        }
+      } catch (parseErr) {
+        throw new Error(`Audit Storage Readiness Error: ไฟล์ Audit Evidence เดิม '${auditFilePath}' มีรูปแบบเสียหาย (${parseErr.message}). ห้ามเริ่ม Migration จนกว่าจะแก้ไขหรือกู้คืนไฟล์หลักฐานเดิม`);
+      }
     }
   }
 
-  // Immutable event identity
-  record.event_id = record.event_id || crypto.randomUUID();
-  record.recorded_at = new Date().toISOString();
+  return { ready: true, path: auditFilePath };
+}
 
-  // Always append to list
-  records.push(record);
+// Append-only Fail-Closed Audit Trail Manager with Cross-Process Lock
+export function saveAuditRecord(record, customAuditPath = null) {
+  const auditLogPath = customAuditPath || getDefaultAuditPath();
 
-  // Atomic write to prevent partial/corrupt writes
-  const tempPath = path.resolve(dir, `.audit_tmp_${crypto.randomUUID()}`);
-  fs.writeFileSync(tempPath, JSON.stringify(records, null, 2), 'utf-8');
-  fs.renameSync(tempPath, auditLogPath);
+  return withAuditLock(auditLogPath, () => {
+    const dir = path.dirname(auditLogPath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
 
-  // Multi-write concurrency resilient JSONL stream
-  const jsonlPath = auditLogPath.replace(/\.json$/, '.jsonl');
-  fs.appendFileSync(jsonlPath, JSON.stringify(record) + '\n', { flag: 'a' });
+    let records = [];
+    if (fs.existsSync(auditLogPath)) {
+      const raw = fs.readFileSync(auditLogPath, 'utf-8');
+      if (raw.trim().length > 0) {
+        try {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) {
+            records = parsed;
+          } else if (parsed && typeof parsed === 'object') {
+            records = [parsed];
+          } else {
+            throw new Error('Audit file root must be an array or object');
+          }
+        } catch (parseErr) {
+          // P0.3 FAIL-CLOSED: DO NOT overwrite or ignore corrupted audit logs!
+          throw new Error(`Audit Trail Integrity Error: ไฟล์ Audit Evidence '${auditLogPath}' มีรูปแบบเสียหายหรือไม่สมบูรณ์ (${parseErr.message}). ห้ามเขียนทับประวัติเดิมเด็ดขาดเพื่อรักษาความถูกต้องของร่องรอยการตรวจสอบ (Non-repudiation)`);
+        }
+      }
+    }
 
-  return records;
+    // P0.3: Prevent modifying/duplicating an already finalized record with same run_id
+    if (record.run_id) {
+      const finalizedStatuses = ['SUCCESS', 'FAILED', 'FAILED_POST_APPLY_UNVERIFIED'];
+      const existingFinal = records.find(
+        (r) => r.run_id === record.run_id && finalizedStatuses.includes(r.result)
+      );
+      if (existingFinal && existingFinal.event_id === record.event_id) {
+        throw new Error(`Audit Integrity Error: ไม่สามารถบันทึกหรือแก้ไขทับ Record เดิมที่มี run_id และ event_id ซ้ำได้ (${record.run_id})`);
+      }
+    }
+
+    // Immutable event identity
+    record.event_id = record.event_id || crypto.randomUUID();
+    record.recorded_at = new Date().toISOString();
+
+    // Always append to list
+    records.push(record);
+
+    // Atomic write to prevent partial/corrupt writes
+    const tempPath = path.resolve(dir, `.audit_tmp_${crypto.randomUUID()}`);
+    fs.writeFileSync(tempPath, JSON.stringify(records, null, 2), 'utf-8');
+    fs.renameSync(tempPath, auditLogPath);
+
+    // Multi-write concurrency resilient JSONL stream
+    const jsonlPath = auditLogPath.replace(/\.json$/, '.jsonl');
+    fs.appendFileSync(jsonlPath, JSON.stringify(record) + '\n', { flag: 'a' });
+
+    return records;
+  });
+}
+
+// Consistent SQLite Snapshot using SQLite Online Backup / VACUUM INTO
+export function createConsistentSqliteBackup(sourceSqlitePath, destinationBackupPath) {
+  if (!fs.existsSync(sourceSqlitePath)) {
+    throw new Error(`ไม่พบไฟล์ SQLite ต้นทาง: ${sourceSqlitePath}`);
+  }
+  const destDir = path.dirname(destinationBackupPath);
+  if (!fs.existsSync(destDir)) {
+    fs.mkdirSync(destDir, { recursive: true });
+  }
+  if (fs.existsSync(destinationBackupPath)) {
+    fs.unlinkSync(destinationBackupPath);
+  }
+
+  let db = null;
+  try {
+    db = new DatabaseSync(sourceSqlitePath);
+    const safeDest = destinationBackupPath.replace(/'/g, "''");
+    db.exec(`VACUUM INTO '${safeDest}';`);
+  } catch (err) {
+    throw new Error(`การจัดทำ Consistent SQLite Backup ผ่าน VACUUM INTO ล้มเหลว: ${err.message}`);
+  } finally {
+    if (db) {
+      try { db.close(); } catch { /* ignore */ }
+    }
+  }
+
+  if (!fs.existsSync(destinationBackupPath) || fs.statSync(destinationBackupPath).size === 0) {
+    throw new Error(`ไฟล์ Consistent Backup ว่างเปล่าหรือไม่ถูกสร้าง: ${destinationBackupPath}`);
+  }
+}
+
+// Deep SQLite Restore Verification using Native SQLite Engine
+export function verifySqliteBackupIntegrity(backupFilePath, isolatedDir = null) {
+  if (!fs.existsSync(backupFilePath)) {
+    throw new Error(`ไม่พบไฟล์ Backup: ${backupFilePath}`);
+  }
+  const stat = fs.statSync(backupFilePath);
+  if (stat.size === 0) {
+    throw new Error('ไฟล์สำรองข้อมูล (Backup) มีขนาดเป็น 0 ไบต์');
+  }
+
+  // 1. Verify Header (16 bytes)
+  const fd = fs.openSync(backupFilePath, 'r');
+  const header = Buffer.alloc(16);
+  fs.readSync(fd, header, 0, 16, 0);
+  fs.closeSync(fd);
+  if (header.toString('utf-8', 0, 15) !== 'SQLite format 3') {
+    throw new Error('โครงสร้างไฟล์ Restored Database ไม่ตรงตามมาตรฐาน SQLite Header');
+  }
+
+  // 2. Isolated restore copy
+  const workDir = isolatedDir || path.resolve(path.dirname(backupFilePath), `restore_sandbox_${crypto.randomUUID()}`);
+  if (!fs.existsSync(workDir)) {
+    fs.mkdirSync(workDir, { recursive: true });
+  }
+  const restoredFile = path.resolve(workDir, 'restored.sqlite');
+  fs.copyFileSync(backupFilePath, restoredFile);
+
+  // 3. Open directly with real SQLite engine on restoredFile
+  let testDb = null;
+  try {
+    testDb = new DatabaseSync(restoredFile, { readOnly: true });
+
+    // Execute PRAGMA integrity_check
+    const rows = testDb.prepare('PRAGMA integrity_check;').all();
+    if (!rows || rows.length === 0) {
+      throw new Error('คำสั่ง PRAGMA integrity_check ไม่ส่งคืนผลลัพธ์');
+    }
+    const firstVal = Object.values(rows[0])[0];
+    if (firstVal !== 'ok') {
+      const errorDetails = rows.map((r) => Object.values(r)[0]).join('; ');
+      throw new Error(`PRAGMA integrity_check ล้มเหลว (${errorDetails}): ฐานข้อมูลสำรองเกิดความเสียหาย`);
+    }
+
+    // Verify accessibility of tables on restored database
+    const tableRows = testDb.prepare("SELECT count(*) as count FROM sqlite_master WHERE type='table';").all();
+    const tableCount = tableRows[0]?.count ?? 0;
+
+    return {
+      integrity: 'ok',
+      tableCount,
+      restoredPath: restoredFile
+    };
+  } catch (err) {
+    throw new Error(`PRAGMA integrity_check ล้มเหลว: ${err.message}`);
+  } finally {
+    if (testDb) {
+      try { testDb.close(); } catch { /* ignore */ }
+    }
+    if (!isolatedDir && fs.existsSync(workDir)) {
+      try { fs.rmSync(workDir, { recursive: true, force: true }); } catch { /* ignore */ }
+    }
+  }
 }
 
 // Helper to find the active SQLite database file for local D1
@@ -150,6 +344,13 @@ export async function runSafeMigrationWorkflow(cliArgs = process.argv.slice(2), 
     process.exit(1);
   }
 
+  // P0.1: Reject deprecated --remote-restore-verified flag on CLI
+  if (rawArgs.includes('--remote-restore-verified')) {
+    console.error('🛑 [SECURITY VIOLATION] ไม่อนุญาตให้ใช้แฟล็ก --remote-restore-verified ยืนยันการกู้คืนโดยลำพัง');
+    console.error('ต้องแนบหลักฐานการซักซ้อมกู้คืนจริงผ่านแฟล็ก --restore-drill-evidence <path-to-json>');
+    process.exit(1);
+  }
+
   const isRemote = rawArgs.includes('--remote');
   const persistIndex = rawArgs.indexOf('--persist-to');
   let persistDir = persistIndex !== -1 ? rawArgs[persistIndex + 1] : null;
@@ -162,6 +363,9 @@ export async function runSafeMigrationWorkflow(cliArgs = process.argv.slice(2), 
   const targetDb = dbIndex !== -1 ? rawArgs[dbIndex + 1] : 'DB';
   const backupRefIndex = rawArgs.indexOf('--backup-ref');
   const backupRef = backupRefIndex !== -1 ? rawArgs[backupRefIndex + 1] : null;
+  const restoreEvidenceIndex = rawArgs.indexOf('--restore-drill-evidence');
+  const restoreEvidencePath = restoreEvidenceIndex !== -1 ? rawArgs[restoreEvidenceIndex + 1] : null;
+
   const operatorIndex = rawArgs.indexOf('--operator');
   const operatorClaim = operatorIndex !== -1 ? rawArgs[operatorIndex + 1] : null;
   const systemUser = process.env.OPERATOR_USER || process.env.USER || process.env.USERNAME || 'system_operator';
@@ -174,7 +378,7 @@ export async function runSafeMigrationWorkflow(cliArgs = process.argv.slice(2), 
   const sim = options.simulateFailure || {};
 
   const runId = options.runId || crypto.randomUUID();
-  const auditPath = options.auditPath || path.resolve(apiDir, '.wrangler/migration-audit.json');
+  const auditPath = options.auditPath || getDefaultAuditPath();
 
   const auditRecord = {
     run_id: runId,
@@ -201,13 +405,21 @@ export async function runSafeMigrationWorkflow(cliArgs = process.argv.slice(2), 
     started_at: new Date().toISOString(),
     finished_at: null,
     result: 'PENDING',
+    database_mutated: false,
+    rollback_status: 'NOT_APPLICABLE',
     failure_evidence: null,
     steps: {}
   };
 
   const recordAuditAndHalt = (stepName, errorMessage, exitCode = 1, details = {}) => {
     auditRecord.finished_at = new Date().toISOString();
-    auditRecord.result = 'FAILED';
+    auditRecord.result = details.result || 'FAILED';
+    if (details.database_mutated !== undefined) {
+      auditRecord.database_mutated = details.database_mutated;
+    }
+    if (details.rollback_status !== undefined) {
+      auditRecord.rollback_status = details.rollback_status;
+    }
     auditRecord.failure_evidence = {
       step: stepName,
       error: errorMessage,
@@ -238,6 +450,20 @@ export async function runSafeMigrationWorkflow(cliArgs = process.argv.slice(2), 
   console.log(`🆔 Run ID: ${runId}`);
   console.log(`👤 Operator: ${operatorName} (System: ${systemUser})`);
   console.log('================================================================');
+
+  // Step 0: Audit Storage Readiness Check (P1 Fail-Closed)
+  console.log('\n[ขั้นตอนที่ 0/10] ตรวจสอบความพร้อมของแหล่งจัดเก็บหลักฐาน Audit Evidence (Fail-Closed)...');
+  try {
+    verifyAuditStorageReadiness(auditPath);
+    console.log(`  Audit Storage พร้อมใช้งาน: ${auditPath}`);
+    auditRecord.steps.audit_storage_readiness = { success: true, path: auditPath };
+  } catch (auditReadyErr) {
+    console.error(`❌ [FATAL] แหล่งจัดเก็บ Audit Evidence ไม่พร้อมใช้งาน: ${auditReadyErr.message}`);
+    if (!options.isTestRunner) process.exit(1);
+    const err = new Error(`[MIGRATION GATE HALTED at audit_storage_readiness]: ${auditReadyErr.message}`);
+    err.exitCode = 1;
+    throw err;
+  }
 
   // Step 1: Target & Environment Identification & Validation
   console.log('\n[ขั้นตอนที่ 1/10] ระบุและตรวจสอบความถูกต้องของ Environment และ Database Target:');
@@ -285,7 +511,7 @@ export async function runSafeMigrationWorkflow(cliArgs = process.argv.slice(2), 
     return recordAuditAndHalt('connection_check', `การเชื่อมต่อฐานข้อมูลล้มเหลว: ${connErr.message}`, 1);
   }
 
-  // Step 3: Real Backup & Restore Verification (P0.1 & P0.2)
+  // Step 3: Real Backup & Restore Verification (P0.1, P0.2 & P1 Consistent Snapshot)
   console.log('\n[ขั้นตอนที่ 3/10] ตรวจสอบ Backup จริงและทดสอบ Restore ในสภาพแวดล้อมแยก (PRAGMA integrity_check)...');
   const backupDir = path.resolve(apiDir, '.wrangler/backup');
   if (!fs.existsSync(backupDir)) {
@@ -297,141 +523,127 @@ export async function runSafeMigrationWorkflow(cliArgs = process.argv.slice(2), 
   }
 
   if (!isRemote) {
-    // Local SQLite Safe Backup: includes .sqlite, -wal, -shm
-    const sourceSqlite = findLocalSqliteDbPath(persistDir);
-    if (!sourceSqlite && !options.mockDb) {
+    // Local SQLite Consistent Backup
+    const sourceSqlite = options.sourceSqlite || findLocalSqliteDbPath(persistDir);
+    if (!sourceSqlite && !options.mockDb && !options.backupFile) {
       return recordAuditAndHalt('backup_verification', 'ไม่พบไฟล์ SQLite ของฐานข้อมูล Local สำหรับจัดทำ Backup จริง', 1);
     }
 
-    const backupFile = path.resolve(backupDir, `backup_${targetDb}_${runId}.sqlite`);
-    if (sourceSqlite) {
-      fs.copyFileSync(sourceSqlite, backupFile);
-      // Copy WAL and SHM if present
-      if (fs.existsSync(`${sourceSqlite}-wal`)) fs.copyFileSync(`${sourceSqlite}-wal`, `${backupFile}-wal`);
-      if (fs.existsSync(`${sourceSqlite}-shm`)) fs.copyFileSync(`${sourceSqlite}-shm`, `${backupFile}-shm`);
-      if (fs.existsSync(`${sourceSqlite}-journal`)) fs.copyFileSync(`${sourceSqlite}-journal`, `${backupFile}-journal`);
+    const backupFile = options.backupFile || path.resolve(backupDir, `backup_${targetDb}_${runId}.sqlite`);
+    
+    if (options.backupFile) {
+      // Direct backup file provided (e.g. prepared test DB or negative test)
+    } else if (sourceSqlite) {
+      try {
+        console.log(`  ดำเนินการจัดทำ Consistent SQLite Backup ผ่าน VACUUM INTO (${sourceSqlite} -> ${backupFile})...`);
+        createConsistentSqliteBackup(sourceSqlite, backupFile);
+      } catch (bkpErr) {
+        return recordAuditAndHalt('backup_verification', `สร้าง Consistent Backup ล้มเหลว: ${bkpErr.message}`, 1);
+      }
     } else {
-      // Mock SQLite file with valid header for testing
-      const buf = Buffer.alloc(4096);
-      buf.write('SQLite format 3\0');
-      fs.writeFileSync(backupFile, buf);
+      // Mock DB for tests where DB is in memory
+      const testDb = new DatabaseSync(backupFile);
+      testDb.exec('CREATE TABLE test_init (id INT);');
+      testDb.close();
     }
 
-    // Verify backup file exists and has size > 0
-    if (!fs.existsSync(backupFile) || fs.statSync(backupFile).size === 0) {
-      return recordAuditAndHalt('backup_verification', 'ไฟล์สำรองข้อมูล (Backup) ว่างเปล่าหรือสร้างไม่สำเร็จ', 1);
-    }
-
-    // If simulating corrupted backup payload (valid header but corrupt body)
-    if (sim.corruptBackupPayload) {
-      const corruptBuf = Buffer.alloc(4096, 0xff);
-      corruptBuf.write('SQLite format 3\0');
-      fs.writeFileSync(backupFile, corruptBuf);
-    }
-
-    // P0.2 Restore Verification: PRAGMA integrity_check in Isolated Sandbox
+    // P0.2 Restore Verification: PRAGMA integrity_check on the restored backup
     console.log('  ดำเนินการทดสอบ Restore ฐานข้อมูลในสภาพแวดล้อมแยกและตรวจ PRAGMA integrity_check...');
     if (sim.restoreFail) {
       return recordAuditAndHalt('restore_verification', 'การทดสอบ Restore ในสภาพแวดล้อมทดสอบล้มเหลว (Simulated Restore Failure)', 1);
     }
 
-    const isolatedRestoreDir = path.resolve(backupDir, `restore_sandbox_${runId}`);
-    const isolatedD1Dir = path.resolve(isolatedRestoreDir, 'v3/d1/miniflare-D1DatabaseObject');
-    fs.mkdirSync(isolatedD1Dir, { recursive: true });
-
     try {
-      const restoredTargetFile = path.resolve(isolatedD1Dir, 'restored.sqlite');
-      fs.copyFileSync(backupFile, restoredTargetFile);
-      if (fs.existsSync(`${backupFile}-wal`)) fs.copyFileSync(`${backupFile}-wal`, `${restoredTargetFile}-wal`);
-      if (fs.existsSync(`${backupFile}-shm`)) fs.copyFileSync(`${backupFile}-shm`, `${restoredTargetFile}-shm`);
-
-      // Verify file starts with SQLite header
-      const fd = fs.openSync(restoredTargetFile, 'r');
-      const header = Buffer.alloc(16);
-      fs.readSync(fd, header, 0, 16, 0);
-      fs.closeSync(fd);
-
-      if (header.toString('utf-8', 0, 15) !== 'SQLite format 3') {
-        throw new Error('โครงสร้างไฟล์ Restored Database ไม่ตรงตามมาตรฐาน SQLite Header');
-      }
-
-      // Execute PRAGMA integrity_check on the restored sandbox
-      if (sim.corruptBackupPayload) {
-        throw new Error('PRAGMA integrity_check ล้มเหลว: database disk image is malformed (ตรวจพบข้อมูล SQLite ภายในเสียหาย)');
-      }
-
-      if (!options.mockDb) {
-        const wranglerBin = getWranglerBinPath();
-        const checkProc = spawnSync(process.execPath, [
-          wranglerBin, 'd1', 'execute', targetDb,
-          '--local', '--persist-to', isolatedRestoreDir,
-          '--json', '--command', 'PRAGMA integrity_check;'
-        ], { cwd: apiDir, encoding: 'utf-8' });
-
-        if (checkProc.status !== 0) {
-          throw new Error(`คำสั่งตรวจสอบความสมบูรณ์บน Restore Sandbox ล้มเหลว: ${checkProc.stderr || checkProc.stdout}`);
-        }
-
-        let parsedCheck;
-        try {
-          parsedCheck = JSON.parse(checkProc.stdout);
-        } catch {
-          throw new Error(`ผลลัพธ์จาก Wrangler บน Restore Sandbox ไม่ถูกต้อง: ${checkProc.stdout}`);
-        }
-
-        const checkRows = parsedCheck[0]?.results || [];
-        const firstRow = checkRows[0] || {};
-        const integrityValue = firstRow.integrity_check || Object.values(firstRow)[0];
-        if (integrityValue !== 'ok') {
-          throw new Error(`PRAGMA integrity_check ล้มเหลว (${JSON.stringify(checkRows)}) ฐานข้อมูลสำรองเกิดความเสียหาย`);
-        }
-      }
-
-      console.log('  Restore Verification สำเร็จ: PRAGMA integrity_check ผ่านเกณฑ์ (ok) ฐานข้อมูลกู้คืนได้จริง 100%');
+      const restoreResult = verifySqliteBackupIntegrity(backupFile);
+      console.log(`  Restore Verification สำเร็จ: PRAGMA integrity_check ผ่านเกณฑ์ (ok) โครงสร้างตาราง: ${restoreResult.tableCount} ตาราง`);
       auditRecord.backup_reference = {
         backup_id: runId,
         backup_path: backupFile,
         integrity_check: 'ok',
+        table_count: restoreResult.tableCount,
         restore_tested: true,
         restore_verified_at: new Date().toISOString()
       };
       auditRecord.steps.backup_verification = { success: true, backupFile, integrity: 'ok' };
     } catch (restoreErr) {
       return recordAuditAndHalt('restore_verification', `การทดสอบ Restore ล้มเหลว: ${restoreErr.message}`, 1);
-    } finally {
-      if (fs.existsSync(isolatedRestoreDir)) {
-        try { fs.rmSync(isolatedRestoreDir, { recursive: true, force: true }); } catch { /* ignore */ }
-      }
     }
   } else {
-    // P0.1 Remote Database Backup & Restore Verification
+    // P0.1 Remote Cloudflare D1 Restore Drill Verification
     if (!backupRef) {
       return recordAuditAndHalt('backup_verification', 'การรันบน Remote Cloud ต้องระบุหลักฐาน Backup Reference (--backup-ref <id>) ที่ตรวจสอบได้', 1);
     }
 
     console.log(`  ตรวจสอบ Backup/Recovery Point กับ Cloudflare D1 (${backupRef})...`);
 
-    // Verify recovery point exists on target Cloudflare D1
     if (sim.remoteSnapshotNotFound) {
       return recordAuditAndHalt('backup_verification', `ไม่พบ Recovery Point '${backupRef}' บนฐานข้อมูล Remote D1 (Time-Travel Snapshot Not Found)`, 1);
     }
 
-    // P0.1: Must NOT set restore_tested = true without real restore evidence
-    const hasVerifiedRemoteRestore = options.remoteRestoreVerified === true || rawArgs.includes('--remote-restore-verified');
-    if (!hasVerifiedRemoteRestore) {
+    // P0.1: Check restore drill evidence from a trusted source
+    let verifiedDrill = null;
+    if (options.verifiedRestoreDrill) {
+      verifiedDrill = options.verifiedRestoreDrill;
+    } else if (restoreEvidencePath && fs.existsSync(restoreEvidencePath)) {
+      try {
+        const rawEvidence = fs.readFileSync(restoreEvidencePath, 'utf-8');
+        verifiedDrill = JSON.parse(rawEvidence);
+      } catch (err) {
+        return recordAuditAndHalt('restore_verification', `ไฟล์ Restore Drill Evidence เสียหายหรือไม่สามารถอ่านได้: ${err.message}`, 1);
+      }
+    }
+
+    const expectedDbConfig = getTargetConfigFromWrangler(targetDb, targetEnv);
+    const expectedDbId = expectedDbConfig?.database_id || targetDb;
+    const expectedEnv = targetEnv || 'production';
+
+    const isValidDrill = verifiedDrill &&
+      (verifiedDrill.database_id === expectedDbId || verifiedDrill.database_id === targetDb) &&
+      verifiedDrill.environment === expectedEnv &&
+      verifiedDrill.recovery_point === backupRef &&
+      verifiedDrill.drill_status === 'SUCCESS' &&
+      verifiedDrill.integrity_check === 'ok' &&
+      verifiedDrill.tested_at &&
+      (Date.now() - new Date(verifiedDrill.tested_at).getTime() < 86400000 * 7);
+
+    if (!isValidDrill) {
+      const reason = !verifiedDrill
+        ? 'ไม่พบหลักฐานการซักซ้อมกู้คืนจริง (--restore-drill-evidence <path>)'
+        : `หลักฐาน Restore Drill ไม่ตรงกับเป้าหมาย (DB: ${verifiedDrill.database_id} vs ${expectedDbId}, Env: ${verifiedDrill.environment} vs ${expectedEnv}, Point: ${verifiedDrill.recovery_point} vs ${backupRef}, Status: ${verifiedDrill.drill_status})`;
+
+      console.error('\n🛑 [SECURITY VIOLATION - RESTORE DRILL UNVERIFIED]');
+      console.error(`ข้อจำกัดด้านความปลอดภัย: ${reason}`);
+      console.error('เนื่องจาก Cloudflare D1 ยังไม่มีระบบ Native Automated Restore Verification ในคำสั่งเดียวสำหรับ Production');
+      console.error('ตามหลักการ Fail-Closed ระบบไม่อนุญาตให้ดำเนินการ Migration จนกว่าจะมีการซักซ้อมกู้คืนในสภาพแวดล้อมทดสอบแยกและแนบหลักฐานที่เชื่อถือได้จริง (--restore-drill-evidence <path>)');
+      console.error('ห้ามสร้างหลักฐานจำลองหรือรายงานว่า Verified โดยเด็ดขาด\n');
+
       return recordAuditAndHalt(
         'restore_verification',
-        `ไม่พบหลักฐานการทดสอบ Restore บนฐานข้อมูล Remote D1 จริง (ห้ามตั้ง restore_tested = true โดยไม่มีการทดสอบกู้คืนจริง). ไม่อนุญาตให้ดำเนินการ Production Migration`,
-        1
+        `Restore Drill Verification ล้มเหลว: ${reason}. ไม่อนุญาตให้ดำเนินการ Production Migration โดยไม่มีหลักฐานการกู้คืนจริง`,
+        1,
+        {
+          targetDb,
+          expectedDbId,
+          expectedEnv,
+          backupRef,
+          hasEvidenceFile: !!restoreEvidencePath
+        }
       );
     }
 
-    console.log(`  ยืนยันหลักฐาน Cloud Backup Snapshot และการทดสอบกู้คืน: ${backupRef}`);
+    console.log(`  ยืนยันหลักฐาน Cloud Backup Snapshot และการซักซ้อมกู้คืนสำเร็จ: ${backupRef} (Tested at: ${verifiedDrill.tested_at})`);
     auditRecord.backup_reference = {
       backup_id: backupRef,
       type: 'REMOTE_PITR_SNAPSHOT',
       restore_tested: true,
-      restore_verified_at: new Date().toISOString()
+      restore_verified_at: verifiedDrill.tested_at,
+      drill_evidence: {
+        database_id: verifiedDrill.database_id,
+        environment: verifiedDrill.environment,
+        recovery_point: verifiedDrill.recovery_point,
+        tested_at: verifiedDrill.tested_at,
+        integrity_check: verifiedDrill.integrity_check
+      }
     };
     auditRecord.steps.backup_verification = { success: true, backupRef, restore_tested: true };
   }
@@ -563,9 +775,22 @@ export async function runSafeMigrationWorkflow(cliArgs = process.argv.slice(2), 
     console.log('  โครงสร้างดัชนี, ระบบ Trigger และความสมบูรณ์ของข้อมูลถูกต้องครบถ้วน 100%');
     auditRecord.steps.post_verification = { success: true };
   } catch (verifyErr) {
+    auditRecord.finished_at = new Date().toISOString();
+    auditRecord.result = 'FAILED_POST_APPLY_UNVERIFIED';
+    auditRecord.database_mutated = true;
+    auditRecord.rollback_status = 'NOT_PERFORMED';
+    auditRecord.failure_evidence = {
+      step: 'post_migration_verification',
+      error: verifyErr.message,
+      database_state: 'MUTATED_UNCERTAIN',
+      recovery_action_required: 'MANUAL_DISASTER_RECOVERY_REQUIRED'
+    };
+
     console.error('\n================================================================');
     console.error('🚨 [DISASTER RECOVERY PROCEDURE - POST-MIGRATION FAILURE]');
     console.error(`ข้อผิดพลาด: ${verifyErr.message}`);
+    console.error('สถานะฐานข้อมูล: อาจถูกเปลี่ยนแปลงไปแล้วจาก Migration (database_mutated = true)');
+    console.error('สถานะการ Rollback: ยังไม่ได้ทำการกู้คืน (rollback_status = NOT_PERFORMED)');
     console.error('ขั้นตอนการกู้คืนระบบ (Recovery Procedure):');
     console.error(`1. ระงับการเข้าถึงระบบ VCC (Set Maintenance Mode)`);
     console.error(`2. กู้คืนฐานข้อมูลจากจุดสำรองข้อมูลที่ผ่านการทดสอบ Restore:`);
@@ -574,18 +799,28 @@ export async function runSafeMigrationWorkflow(cliArgs = process.argv.slice(2), 
     console.error(`4. แจ้งเตือนฝ่ายบริหารระบบคุณภาพ (QMR) และ DBA เพื่อตรวจสอบหาสาเหตุ`);
     console.error('================================================================\n');
 
-    return recordAuditAndHalt(
-      'post_migration_verification',
-      `การตรวจสอบความถูกต้องหลัง Migration ล้มเหลว: ${verifyErr.message}`,
-      1,
-      { recovery_procedure_triggered: true }
-    );
+    try {
+      saveAuditRecord(auditRecord, auditPath);
+    } catch (saveErr) {
+      console.error(`❌ [FATAL] บันทึก Audit Evidence ไม่สำเร็จ: ${saveErr.message}`);
+    }
+
+    if (!options.isTestRunner) {
+      process.exit(1);
+    } else {
+      const err = new Error(`[MIGRATION GATE HALTED at post_migration_verification]: ${verifyErr.message}`);
+      err.exitCode = 1;
+      err.auditRecord = auditRecord;
+      throw err;
+    }
   }
 
   // Step 10: Record Audit Evidence (Append-only)
   console.log('\n[ขั้นตอนที่ 10/10] บันทึกหลักฐาน Audit Trail ของการ Migration...');
   auditRecord.finished_at = new Date().toISOString();
   auditRecord.result = 'SUCCESS';
+  auditRecord.database_mutated = false;
+  auditRecord.rollback_status = 'NOT_APPLICABLE';
 
   try {
     saveAuditRecord(auditRecord, auditPath);
