@@ -1,5 +1,5 @@
 {
-  // Static hosting of the built web app on Cloudflare. Build with VITE_API_URL set, then: npx wrangler deploy
+  // Static hosting of the built web app on Cloudflare. Build with `VITE_API_URL=<https api url> pnpm run build:production` (fails if unset, otherwise the app ships on demo data), then: npx wrangler deploy
   "name": "qms-web",
   "compatibility_date": "2026-10-01",
   "assets": { "directory": "./dist", "not_found_handling": "single-page-application" }

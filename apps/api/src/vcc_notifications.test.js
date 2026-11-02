@@ -367,7 +367,7 @@ describe('VCC Phase 3.4: Automated Notification & Escalation Engine Tests', () =
 
     // 2. Task Inbox integration via GET /api/vcc/tasks
     // Insert an active L3 Critical notification in N4QC
-    const notifL3 = await env.DB.prepare("SELECT * FROM vcc_notifications WHERE notification_type = 'OVERDUE_L3_CRITICAL'").first();
+    const notifL3 = await env.DB.prepare("SELECT * FROM vcc_notifications WHERE notification_type = 'OVERDUE_L3_CRITICAL' AND status != 'RESOLVED'").first();
     expect(notifL3).toBeDefined();
 
     // Performer in N4QC sees Level 1 alerts, but does NOT see L3 Critical Escalation task
@@ -416,6 +416,138 @@ describe('VCC Phase 3.4: Automated Notification & Escalation Engine Tests', () =
     `).first();
     expect(auditRow).toBeDefined();
     expect(auditRow.actor_id).toBe('DCC-N4');
+  });
+
+  const insertAsset = (id, code, status = 'ACTIVE', holdStartedAt = null) =>
+    env.DB.prepare(`
+      INSERT INTO vcc_assets (id, asset_code, name, department, status, is_group, location, asset_type, hold_started_at)
+      VALUES (?, ?, ?, 'N4QC', ?, 0, 'Lab R', 'MEASURING_TOOL', ?)
+    `).bind(id, code, `Remediation ${code}`, status, holdStartedAt).run();
+
+  const pendingOf = (assetId, like) =>
+    env.DB.prepare("SELECT * FROM vcc_notifications WHERE asset_id = ? AND notification_type LIKE ? AND status != 'RESOLVED'")
+      .bind(assetId, like).all().then((r) => r.results);
+
+  it('9. P1-1 Certificate renewal: next expiry cycle re-alerts, old episode kept, no duplicates within an episode', async () => {
+    await insertAsset('AST-N4-CERT2', 'CERT-N4-002');
+    await env.DB.prepare(`
+      INSERT INTO vcc_work_orders (
+        id, wo_code, asset_id, plan_year, cycle_id, status, provider_name, original_due_date, due_date,
+        result_status, nc_status, certificate_no, certificate_valid_until, performed_at
+      ) VALUES ('WO-N4-CERT2', 'WO-N4-CT2', 'AST-N4-CERT2', 2026, 'CYC-N4-CT2', 'CLOSED', 'แล็บ', '2026-01-01', '2026-01-01',
+        'PASS', 'RELEASED', 'CERT-R-1', '2026-12-01', '2026-01-02')
+    `).run();
+
+    // 30 days left -> the 30-day tier (smallest matching threshold), not the 60-day tier
+    await runVccNotificationSweep(env.DB, { nowDate: '2026-11-01' });
+    const first = await pendingOf('AST-N4-CERT2', 'CERT_EXPIRING_%');
+    expect(first.map((n) => n.notification_type)).toEqual(['CERT_EXPIRING_30']);
+
+    // Certificate renewed for a year -> alert resolved
+    await env.DB.prepare("UPDATE vcc_work_orders SET certificate_valid_until = '2027-12-01' WHERE id = 'WO-N4-CERT2'").run();
+    await runVccNotificationSweep(env.DB, { nowDate: '2026-11-02' });
+    const resolved = await env.DB.prepare('SELECT * FROM vcc_notifications WHERE id = ?').bind(first[0].id).first();
+    expect(resolved.status).toBe('RESOLVED');
+    expect(resolved.resolved_reason).toBe('CERTIFICATE_RENEWED');
+
+    // A year later the renewed certificate nears expiry -> NEW alert, even under concurrent sweeps
+    await Promise.all([1, 2, 3, 4].map(() => runVccNotificationSweep(env.DB, { nowDate: '2027-11-10' })));
+    const reopened = await pendingOf('AST-N4-CERT2', 'CERT_EXPIRING_%');
+    expect(reopened.length).toBe(1);
+    expect(reopened[0].notification_type).toBe('CERT_EXPIRING_30');
+    expect(reopened[0].id).not.toBe(first[0].id);
+
+    // History of the old episode is preserved
+    const all = await env.DB.prepare("SELECT status FROM vcc_notifications WHERE asset_id = 'AST-N4-CERT2'").all();
+    expect(all.results.filter((n) => n.status === 'RESOLVED').length).toBe(1);
+  });
+
+  it('10. P1-1 ON_HOLD/NC second episode: re-hold after release alerts again and keeps the first episode', async () => {
+    await insertAsset('AST-N4-NC2', 'NC-N4-002', 'ON_HOLD', '2026-10-01');
+    await env.DB.prepare(`
+      INSERT INTO vcc_work_orders (id, wo_code, asset_id, plan_year, cycle_id, status, provider_name, original_due_date, due_date,
+        result_status, nc_status, performed_at)
+      VALUES ('WO-N4-NC2A', 'WO-N4-N2A', 'AST-N4-NC2', 2026, 'CYC-N4-N2A', 'PENDING_REVIEW', 'แล็บ', '2026-10-01', '2026-10-01',
+        'FAIL', 'OPEN', '2026-10-01')
+    `).run();
+    await runVccNotificationSweep(env.DB, { nowDate: '2026-10-05' });
+    const ep1 = await pendingOf('AST-N4-NC2', 'NC_ON_HOLD_%');
+    expect(ep1.length).toBe(1);
+
+    // Hold released
+    await env.DB.prepare("UPDATE vcc_work_orders SET nc_status = 'RELEASED' WHERE id = 'WO-N4-NC2A'").run();
+    await env.DB.prepare("UPDATE vcc_assets SET status = 'ACTIVE', hold_started_at = NULL WHERE id = 'AST-N4-NC2'").run();
+    await runVccNotificationSweep(env.DB, { nowDate: '2026-10-06' });
+    expect((await pendingOf('AST-N4-NC2', 'NC_ON_HOLD_%')).length).toBe(0);
+
+    // Held again (new FAIL) -> a fresh alert
+    await env.DB.prepare(`
+      INSERT INTO vcc_work_orders (id, wo_code, asset_id, plan_year, cycle_id, status, provider_name, original_due_date, due_date,
+        result_status, nc_status, performed_at)
+      VALUES ('WO-N4-NC2B', 'WO-N4-N2B', 'AST-N4-NC2', 2026, 'CYC-N4-N2B', 'PENDING_REVIEW', 'แล็บ', '2026-10-20', '2026-10-20',
+        'FAIL', 'OPEN', '2026-10-20')
+    `).run();
+    await env.DB.prepare("UPDATE vcc_assets SET status = 'ON_HOLD', hold_started_at = '2026-10-20' WHERE id = 'AST-N4-NC2'").run();
+    await runVccNotificationSweep(env.DB, { nowDate: '2026-10-21' });
+    const ep2 = await pendingOf('AST-N4-NC2', 'NC_ON_HOLD_%');
+    expect(ep2.length).toBe(1);
+    expect(ep2[0].id).not.toBe(ep1[0].id);
+    const old = await env.DB.prepare('SELECT status FROM vcc_notifications WHERE id = ?').bind(ep1[0].id).first();
+    expect(old.status).toBe('RESOLVED');
+  });
+
+  it('11. P1-2 ON_HOLD duration counts from hold_started_at, not from work-order edits or today', async () => {
+    await insertAsset('AST-N4-NC3', 'NC-N4-003', 'ON_HOLD', '2026-10-01');
+    // A FAIL work order that was edited recently must not restart the clock
+    await env.DB.prepare(`
+      INSERT INTO vcc_work_orders (id, wo_code, asset_id, plan_year, cycle_id, status, provider_name, original_due_date, due_date,
+        result_status, nc_status, performed_at, updated_at)
+      VALUES ('WO-N4-NC3A', 'WO-N4-N3A', 'AST-N4-NC3', 2026, 'CYC-N4-N3A', 'PENDING_REVIEW', 'แล็บ', '2026-10-15', '2026-10-15',
+        'FAIL', 'OPEN', NULL, '2026-10-19T08:00:00Z')
+    `).run();
+    // Manually held asset without any FAIL work order must still escalate
+    await insertAsset('AST-N4-NC4', 'NC-N4-004', 'ON_HOLD', '2026-10-01');
+
+    await runVccNotificationSweep(env.DB, { nowDate: '2026-10-20' });
+    for (const assetId of ['AST-N4-NC3', 'AST-N4-NC4']) {
+      const n = await pendingOf(assetId, 'NC_ON_HOLD_%');
+      expect(n.length).toBe(1);
+      expect(n[0].notification_type).toBe('NC_ON_HOLD_ESCALATED');
+      expect(n[0].days_offset).toBe(19);
+    }
+  });
+
+  it('12. P2-4 Acknowledge enforces department and escalation level at the backend', async () => {
+    await insertAsset('AST-N4-ACK2', 'ACK-N4-002');
+    await env.DB.prepare(`
+      INSERT INTO vcc_notifications (id, dedup_key, notification_type, reference_type, reference_id, asset_id, department,
+        target_role, escalation_level, severity, title, message, status)
+      VALUES ('NTF-N4-L3', 'N4:ACK2:L3', 'OVERDUE_L3_CRITICAL', 'VCC_ASSET', 'AST-N4-ACK2', 'AST-N4-ACK2', 'N4QC',
+        'QMR_L6', 3, 'CRITICAL', 't', 'm', 'PENDING')
+    `).run();
+
+    // Other department -> 403; same department but too low a level for an L3 alert -> 403
+    expect((await call('POST', '/api/vcc/notifications/NTF-N4-L3/acknowledge', 'QA-L5-N4', { note: 'x' })).status).toBe(403);
+    expect((await call('POST', '/api/vcc/notifications/NTF-N4-L3/acknowledge', 'QC-L4-N4', { note: 'x' })).status).toBe(403);
+    const untouched = await env.DB.prepare("SELECT status FROM vcc_notifications WHERE id = 'NTF-N4-L3'").first();
+    expect(untouched.status).toBe('PENDING');
+
+    // Same department with sufficient level -> allowed
+    expect((await call('POST', '/api/vcc/notifications/NTF-N4-L3/acknowledge', 'QC-L5-N4', { note: 'รับทราบ' })).status).toBe(200);
+  });
+
+  it('13. P2-5 Duplicate acknowledgement cannot extend the grace period; resolved alerts cannot be acknowledged', async () => {
+    const before = await env.DB.prepare("SELECT acknowledged_at, acknowledged_by FROM vcc_notifications WHERE id = 'NTF-N4-L3'").first();
+    expect(before.acknowledged_by).toBe('QC-L5-N4');
+
+    const again = await call('POST', '/api/vcc/notifications/NTF-N4-L3/acknowledge', 'DCC-N4', { note: 'ซ้ำ' });
+    expect(again.status).toBe(409);
+    const after = await env.DB.prepare("SELECT acknowledged_at, acknowledged_by FROM vcc_notifications WHERE id = 'NTF-N4-L3'").first();
+    expect(after.acknowledged_at).toBe(before.acknowledged_at);
+    expect(after.acknowledged_by).toBe('QC-L5-N4');
+
+    await env.DB.prepare("UPDATE vcc_notifications SET status = 'RESOLVED' WHERE id = 'NTF-N4-L3'").run();
+    expect((await call('POST', '/api/vcc/notifications/NTF-N4-L3/acknowledge', 'QC-L5-N4', {})).status).toBe(400);
   });
 
   it('8. Scheduled Cron Integration: runs fail-safe without breaking existing tasks', async () => {

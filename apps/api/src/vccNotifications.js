@@ -34,6 +34,29 @@ const csvCell = (val) => {
   return `"${str.replace(/"/g, '""')}"`;
 };
 
+// A RESOLVED row whose condition has come back belongs to a finished episode: park it under a
+// unique key (history kept) so the live key starts a new episode. Concurrent sweeps stay safe
+// because the live key is still UNIQUE and inserts use ON CONFLICT.
+const archiveResolved = (db, dedupKey) =>
+  db.prepare("UPDATE vcc_notifications SET dedup_key = dedup_key || '#' || id WHERE dedup_key = ? AND status = 'RESOLVED'")
+    .bind(dedupKey).run();
+
+// Stored timestamps are UTC ISO; compare calendar days in Bangkok like `today`.
+const toBangkokDay = (v) => (String(v).includes('T') ? getBangkokDate(String(v)) : String(v).slice(0, 10));
+
+const hasGlobalAccess = (user) => Boolean(user.isDcc || user.isQmr || Number(user.approval_level || 0) >= 6);
+
+// shortcut: minimum approval level per escalation tier is fixed here (was inline), move to
+// approval_matrix settings when DCC defines tiers.
+const MIN_LEVEL_BY_TIER = { 1: 0, 2: 4, 3: 5 };
+
+// Single rule for who may see or acknowledge a notification: department + tier level.
+const canActOnNotification = (user, n) => {
+  if (hasGlobalAccess(user)) return true;
+  if (!getUserDepartments(user).includes(n.department)) return false;
+  return Number(user.approval_level || 0) >= (MIN_LEVEL_BY_TIER[n.escalation_level] ?? 0);
+};
+
 export const loadNotificationSettings = async (db) => {
   const row = await db
     .prepare("SELECT value FROM settings WHERE key = 'vcc_notification_settings'")
@@ -63,7 +86,7 @@ export const runVccNotificationSweep = async (db, options = {}) => {
   const l3EscalationDays = Number(settings.overdue_escalation_days_l3 || 14);
   const onHoldEscalationDays = Number(settings.on_hold_escalation_days || 14);
   const graceDays = Number(settings.acknowledgement_grace_days || 3);
-  const certExpiringDays = [...(settings.cert_expiring_days || [60, 30])].sort((a, b) => b - a);
+  const certExpiringDays = [...(settings.cert_expiring_days || [60, 30])].sort((a, b) => a - b);
 
   // ─────────────────────────────────────────────────────────────────────────────
   // 1. WORK ORDERS: Due Soon & Overdue Lifecycle (with Overdue Invariance)
@@ -116,6 +139,7 @@ export const runVccNotificationSweep = async (db, options = {}) => {
       `).bind(wo.id).run();
 
       const dedupKey = `WO:${wo.id}:${notifType}`;
+      await archiveResolved(db, dedupKey);
       const existing = await db.prepare("SELECT * FROM vcc_notifications WHERE dedup_key = ?").bind(dedupKey).first();
 
       if (existing) {
@@ -127,7 +151,7 @@ export const runVccNotificationSweep = async (db, options = {}) => {
             // Critical L3 retains urgent visibility and is active
             nextStatus = 'ACKNOWLEDGED'; // keep acknowledgement record, but offset keeps advancing
           } else {
-            const daysSinceAck = existing.acknowledged_at ? diffDays(today, existing.acknowledged_at) : 999;
+            const daysSinceAck = existing.acknowledged_at ? diffDays(today, toBangkokDay(existing.acknowledged_at)) : 999;
             if (daysSinceAck > graceDays) {
               nextStatus = 'PENDING'; // grace period expired -> re-alert
             }
@@ -187,11 +211,13 @@ export const runVccNotificationSweep = async (db, options = {}) => {
         const message = `เครื่องมือ ${wo.asset_code} (${wo.asset_name}) ใบสั่งงาน ${wo.wo_code} มีกำหนดทวนสอบในวันที่ ${requiredDueDate} (เหลือเวลาอีก ${diff} วัน)`;
         const dedupKey = `WO:${wo.id}:${notifType}`;
 
+        await archiveResolved(db, dedupKey);
+
         const existing = await db.prepare("SELECT * FROM vcc_notifications WHERE dedup_key = ?").bind(dedupKey).first();
         if (existing) {
           let nextStatus = existing.status;
           if (existing.status === 'ACKNOWLEDGED') {
-            const daysSinceAck = existing.acknowledged_at ? diffDays(today, existing.acknowledged_at) : 999;
+            const daysSinceAck = existing.acknowledged_at ? diffDays(today, toBangkokDay(existing.acknowledged_at)) : 999;
             if (daysSinceAck > graceDays && matchedThreshold <= 7) {
               nextStatus = 'PENDING';
             }
@@ -279,12 +305,13 @@ export const runVccNotificationSweep = async (db, options = {}) => {
 
     if (notifType) {
       const dedupKey = `CERT:${row.asset_id}:${notifType}`;
+      await archiveResolved(db, dedupKey);
       const existing = await db.prepare("SELECT * FROM vcc_notifications WHERE dedup_key = ?").bind(dedupKey).first();
 
       if (existing) {
         let nextStatus = existing.status;
         if (existing.status === 'ACKNOWLEDGED' && notifType !== 'CERT_EXPIRED') {
-          const daysSinceAck = existing.acknowledged_at ? diffDays(today, existing.acknowledged_at) : 999;
+          const daysSinceAck = existing.acknowledged_at ? diffDays(today, toBangkokDay(existing.acknowledged_at)) : 999;
           if (daysSinceAck > graceDays && certDiff <= 15) {
             nextStatus = 'PENDING';
           }
@@ -326,7 +353,7 @@ export const runVccNotificationSweep = async (db, options = {}) => {
       }
     } else {
       // If certificate is renewed (> 60 days remaining), auto-resolve old cert alerts
-      if (certDiff > 60) {
+      if (certDiff > Math.max(...certExpiringDays)) {
         const res = await db.prepare(`
           UPDATE vcc_notifications
           SET status = 'RESOLVED', resolved_at = ${NOW}, resolved_reason = 'CERTIFICATE_RENEWED', updated_at = ${NOW}
@@ -342,7 +369,7 @@ export const runVccNotificationSweep = async (db, options = {}) => {
   // 3. ON_HOLD & NC: Independent Lifecycle
   // ─────────────────────────────────────────────────────────────────────────────
   const { results: onHoldItems } = await db.prepare(`
-    SELECT a.id AS asset_id, a.asset_code, a.name AS asset_name, a.department, a.status AS asset_status,
+    SELECT a.id AS asset_id, a.asset_code, a.name AS asset_name, a.department, a.status AS asset_status, a.hold_started_at,
            wo.id AS wo_id, wo.wo_code, wo.nc_status, wo.performed_at, wo.updated_at
     FROM vcc_assets a
     LEFT JOIN vcc_work_orders wo ON wo.asset_id = a.id AND wo.result_status = 'FAIL' AND wo.nc_status != 'RELEASED'
@@ -350,7 +377,7 @@ export const runVccNotificationSweep = async (db, options = {}) => {
   `).all();
 
   for (const item of (onHoldItems || [])) {
-    const startDate = String(item.performed_at || item.updated_at || today).slice(0, 10);
+    const startDate = toBangkokDay(item.hold_started_at || item.performed_at || item.updated_at || today);
     const daysOnHold = Math.max(0, diffDays(today, startDate));
 
     let notifType = 'NC_ON_HOLD_ACTION';
@@ -369,12 +396,13 @@ export const runVccNotificationSweep = async (db, options = {}) => {
     }
 
     const dedupKey = `NC:${item.asset_id}:${notifType}`;
+    await archiveResolved(db, dedupKey);
     const existing = await db.prepare("SELECT * FROM vcc_notifications WHERE dedup_key = ?").bind(dedupKey).first();
 
     if (existing) {
       let nextStatus = existing.status;
       if (existing.status === 'ACKNOWLEDGED' && notifType === 'NC_ON_HOLD_ESCALATED') {
-        const daysSinceAck = existing.acknowledged_at ? diffDays(today, existing.acknowledged_at) : 999;
+        const daysSinceAck = existing.acknowledged_at ? diffDays(today, toBangkokDay(existing.acknowledged_at)) : 999;
         if (daysSinceAck > graceDays) {
           nextStatus = 'PENDING';
         }
@@ -415,36 +443,33 @@ export const runVccNotificationSweep = async (db, options = {}) => {
     }
   }
 
-  // Auto-resolve ON_HOLD notifications for assets that are no longer ON_HOLD and have no open NC
-  const { results: activeAssets } = await db.prepare(`
-    SELECT id FROM vcc_assets WHERE status = 'ACTIVE'
-  `).all();
-  for (const a of (activeAssets || [])) {
-    const res = await db.prepare(`
-      UPDATE vcc_notifications
-      SET status = 'RESOLVED', resolved_at = ${NOW}, resolved_reason = 'HOLD_RELEASED', updated_at = ${NOW}
-      WHERE reference_type = 'VCC_ASSET' AND reference_id = ?
-        AND notification_type LIKE 'NC_ON_HOLD_%' AND status != 'RESOLVED'
-    `).bind(a.id).run();
-    summary.resolved += (res.meta?.changes || 0);
-  }
+  // Auto-resolve ON_HOLD notifications only for assets that are ACTIVE and have no open NC
+  const releasedRes = await db.prepare(`
+    UPDATE vcc_notifications
+    SET status = 'RESOLVED', resolved_at = ${NOW}, resolved_reason = 'HOLD_RELEASED', updated_at = ${NOW}
+    WHERE reference_type = 'VCC_ASSET' AND notification_type LIKE 'NC_ON_HOLD_%' AND status != 'RESOLVED'
+      AND reference_id IN (
+        SELECT a.id FROM vcc_assets a
+        WHERE a.status = 'ACTIVE'
+          AND NOT EXISTS (
+            SELECT 1 FROM vcc_work_orders w
+            WHERE w.asset_id = a.id AND w.result_status = 'FAIL' AND w.nc_status = 'OPEN'
+          )
+      )
+  `).run();
+  summary.resolved += (releasedRes.meta?.changes || 0);
 
   // ─────────────────────────────────────────────────────────────────────────────
   // 4. AUTO-RESOLVE: Work Order CLOSED/CANCELLED only resolves WO notifications
   // Rule: "Work Order CLOSED ต้องไม่ปิด NC หรือ Certificate Alerts ที่ยังมีความเสี่ยง"
   // ─────────────────────────────────────────────────────────────────────────────
-  const { results: closedWos } = await db.prepare(`
-    SELECT id FROM vcc_work_orders WHERE status IN ('CLOSED', 'CANCELLED')
-  `).all();
-
-  for (const c of (closedWos || [])) {
-    const res = await db.prepare(`
-      UPDATE vcc_notifications
-      SET status = 'RESOLVED', resolved_at = ${NOW}, resolved_reason = 'WORK_ORDER_COMPLETED', updated_at = ${NOW}
-      WHERE reference_type = 'VCC_WORK_ORDER' AND reference_id = ? AND status != 'RESOLVED'
-    `).bind(c.id).run();
-    summary.resolved += (res.meta?.changes || 0);
-  }
+  const closedRes = await db.prepare(`
+    UPDATE vcc_notifications
+    SET status = 'RESOLVED', resolved_at = ${NOW}, resolved_reason = 'WORK_ORDER_COMPLETED', updated_at = ${NOW}
+    WHERE reference_type = 'VCC_WORK_ORDER' AND status != 'RESOLVED'
+      AND reference_id IN (SELECT id FROM vcc_work_orders WHERE status IN ('CLOSED', 'CANCELLED'))
+  `).run();
+  summary.resolved += (closedRes.meta?.changes || 0);
 
   return summary;
 };
@@ -454,10 +479,6 @@ export const runVccNotificationSweep = async (db, options = {}) => {
  */
 export const fetchNotificationTasks = async (db, user) => {
   if (!user) return [];
-  const hasGlobalAccess = Boolean(user.isDcc || user.isQmr || Number(user.approval_level || 0) >= 6);
-  const userDepts = getUserDepartments(user);
-  const userLevel = Number(user.approval_level || 0);
-
   const { results: notifs } = await db.prepare(`
     SELECT n.*, a.asset_code, a.name AS asset_name, wo.wo_code
     FROM vcc_notifications n
@@ -470,27 +491,7 @@ export const fetchNotificationTasks = async (db, user) => {
   const tasks = [];
 
   for (const n of (notifs || [])) {
-    // 1. Department RBAC check
-    if (!hasGlobalAccess && !userDepts.includes(n.department)) {
-      continue;
-    }
-
-    // 2. Escalation & Approval Matrix Level check
-    let isEligible = false;
-    if (hasGlobalAccess) {
-      isEligible = true;
-    } else if (n.escalation_level === 1) {
-      // Performer / Lead L4
-      isEligible = true;
-    } else if (n.escalation_level === 2) {
-      // Supervisor / Manager L4+ / L5+
-      isEligible = userLevel >= 4;
-    } else if (n.escalation_level === 3) {
-      // Executive / QMR / L6
-      isEligible = userLevel >= 5 || Boolean(user.isDcc);
-    }
-
-    if (!isEligible) continue;
+    if (!canActOnNotification(user, n)) continue;
 
     const docCode = n.wo_code || n.asset_code;
     const isOverdue = n.notification_type.startsWith('OVERDUE');
@@ -629,20 +630,22 @@ export const registerVccNotificationRoutes = (app, { requireAuth, audit }) => {
       return c.json({ error: 'ไม่พบรายการแจ้งเตือนที่ระบุ' }, 404);
     }
 
-    // RBAC: user must belong to notification's department or be DCC/QMR
-    const hasGlobalAccess = Boolean(user.isDcc || user.isQmr || Number(user.approval_level || 0) >= 6);
-    const userDepts = getUserDepartments(user);
-    if (!hasGlobalAccess && !userDepts.includes(notif.department)) {
-      return c.json({ error: `คุณไม่มีสิทธิ์รับทราบการแจ้งเตือนของแผนก ${notif.department}` }, 403);
+    // RBAC: same department/tier rule that decides who the alert is routed to
+    if (!canActOnNotification(user, notif)) {
+      return c.json({ error: `คุณไม่มีสิทธิ์รับทราบการแจ้งเตือนนี้ (แผนก ${notif.department} ระดับยกระดับ L${notif.escalation_level})` }, 403);
     }
 
     if (notif.status === 'RESOLVED') {
       return c.json({ error: 'รายการแจ้งเตือนนี้เสร็จสิ้นหรือถูกยกเลิกแล้ว ไม่สามารถรับทราบซ้ำได้' }, 400);
     }
+    // A second acknowledgement would restart the grace period and delay the next alert
+    if (notif.status === 'ACKNOWLEDGED') {
+      return c.json({ error: 'รายการแจ้งเตือนนี้ถูกรับทราบแล้ว' }, 409);
+    }
 
     // Rule: "Acknowledgement ห้ามเปลี่ยนสถานะ Work Order, Asset, NC หรือ Approval"
     // We update ONLY vcc_notifications
-    await db.batch([
+    const [ackResult] = await db.batch([
       db.prepare(`
         UPDATE vcc_notifications
         SET status = 'ACKNOWLEDGED',
@@ -650,7 +653,7 @@ export const registerVccNotificationRoutes = (app, { requireAuth, audit }) => {
             acknowledged_by = ?,
             acknowledgement_note = ?,
             updated_at = ${NOW}
-        WHERE id = ?
+        WHERE id = ? AND status = 'PENDING'
       `).bind(user.id, note, id),
       audit(db, user.id, 'VCC_NOTIFICATION_ACKNOWLEDGED', {
         notification_id: id,
@@ -662,6 +665,10 @@ export const registerVccNotificationRoutes = (app, { requireAuth, audit }) => {
         note
       })
     ]);
+    // Lost a race (swept/acknowledged between the read above and the write)
+    if (!ackResult.meta?.changes) {
+      return c.json({ error: 'สถานะการแจ้งเตือนเปลี่ยนไปแล้ว กรุณารีเฟรชแล้วลองอีกครั้ง' }, 409);
+    }
 
     const updated = await db.prepare(`
       SELECT n.*, a.asset_code, a.name AS asset_name, u.name AS acknowledged_by_name
