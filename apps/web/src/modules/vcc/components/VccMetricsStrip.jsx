@@ -4,16 +4,26 @@ import React from 'react';
  * VccMetricsStrip
  * Executive KPI summary strip with clear priority hierarchy and status-aware accents.
  */
-export default function VccMetricsStrip({ eq = {}, wo = {}, reviewSlaDays = 3 }) {
+export default function VccMetricsStrip({ eq = {}, wo = {}, certKpi = {}, reviewSlaDays = 3 }) {
   const onHoldCount = eq.on_hold_assets ?? 0;
   const overdueCount = wo.overdue_count ?? 0;
   const pendingCount = wo.pending_review_count ?? 0;
   const completedCount = wo.completed_count ?? 0;
   const onTimeRate = wo.on_time_rate ?? 0;
+  const rescheduledOverdueCount = wo.rescheduled_overdue_count ?? 0;
+
+  const due0To7 = wo.due_0_7_days ?? 0;
+  const due8To15 = wo.due_8_15_days ?? 0;
+  const due16To30 = wo.due_16_30_days ?? 0;
+  const totalDueSoon = wo.total_due_soon_30_days ?? (wo.due_in_30_days ?? 0);
+
+  const certExpired = certKpi.cert_expired_count ?? 0;
+  const certExpiringSoon = certKpi.total_expiring_soon ?? (certKpi.cert_expiring_0_30_days ?? 0);
+  const certValid = certKpi.cert_valid_count ?? 0;
 
   return (
     <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-hidden">
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 divide-y md:divide-y-0 md:divide-x divide-slate-100">
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-7 divide-y md:divide-y-0 md:divide-x divide-slate-100">
         {/* 1. เครื่องมือปกติพร้อมใช้ */}
         <div className="p-4 sm:p-5 flex flex-col justify-between hover:bg-slate-50/50 transition-colors">
           <div className="flex items-center justify-between">
@@ -71,7 +81,7 @@ export default function VccMetricsStrip({ eq = {}, wo = {}, reviewSlaDays = 3 })
           </div>
         </div>
 
-        {/* 3. เลยกำหนด (OVERDUE) — Operational Urgency */}
+        {/* 3. เลยกำหนด (OVERDUE) — Strict Invariance from Required Due Date */}
         <div
           className={`p-4 sm:p-5 flex flex-col justify-between transition-colors ${
             overdueCount > 0 ? 'bg-amber-50/40' : 'hover:bg-slate-50/50'
@@ -105,29 +115,94 @@ export default function VccMetricsStrip({ eq = {}, wo = {}, reviewSlaDays = 3 })
               overdueCount > 0 ? 'text-amber-700' : 'text-slate-400'
             }`}
           >
-            {overdueCount > 0 ? `ใกล้ครบ 7 วัน: ${wo.due_in_7_days ?? 0} งาน` : 'ไม่มีงานค้างเลยกำหนด'}
+            {rescheduledOverdueCount > 0
+              ? `เลื่อนนัดแต่เลยเกณฑ์เดิม: ${rescheduledOverdueCount} งาน`
+              : overdueCount > 0
+              ? `คำนวณจาก Required Due Date`
+              : 'ไม่มีงานค้างเลยกำหนด'}
           </div>
         </div>
 
-        {/* 4. ครบกำหนดใน 30 วัน */}
+        {/* 4. ครบกำหนดใน 30 วัน — Non-overlapping Bucket Breakdown */}
         <div className="p-4 sm:p-5 flex flex-col justify-between hover:bg-slate-50/50 transition-colors">
-          <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-            ครบใน 30 วัน
-          </span>
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+              ครบใน 30 วัน
+            </span>
+            {totalDueSoon > 0 && <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />}
+          </div>
           <div
             className={`mt-2 text-2xl sm:text-3xl font-mono tracking-tight ${
-              (wo.due_in_30_days ?? 0) > 0 ? 'font-bold text-slate-800' : 'font-medium text-slate-300'
+              totalDueSoon > 0 ? 'font-bold text-slate-800' : 'font-medium text-slate-300'
             }`}
             data-testid="kpi-due-30-count"
           >
-            {wo.due_in_30_days ?? 0}
+            {totalDueSoon}
           </div>
-          <div className="mt-2 text-xs text-slate-400 font-medium truncate">
-            จากทั้งหมด {wo.total_work_orders ?? 0} ใบงาน
+          <div className="mt-2 text-xs text-slate-400 font-medium truncate" title={`0-7วัน: ${due0To7} | 8-15วัน: ${due8To15} | 16-30วัน: ${due16To30}`}>
+            0-7วัน: {due0To7} · 8-15วัน: {due8To15} · 16-30วัน: {due16To30}
           </div>
         </div>
 
-        {/* 5. รอตรวจรับ (Pending Review) */}
+        {/* 5. สถานะใบรับรอง (Certificate Expiry Monitoring) */}
+        <div
+          className={`p-4 sm:p-5 flex flex-col justify-between transition-colors ${
+            certExpired > 0 ? 'bg-rose-50/30' : certExpiringSoon > 0 ? 'bg-amber-50/30' : 'hover:bg-slate-50/50'
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span
+              className={`text-[11px] font-semibold uppercase tracking-wider ${
+                certExpired > 0 ? 'text-rose-700' : certExpiringSoon > 0 ? 'text-amber-700' : 'text-slate-500'
+              }`}
+            >
+              อายุใบรับรอง
+            </span>
+            {certExpired > 0 ? (
+              <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+            ) : certExpiringSoon > 0 ? (
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+            ) : (
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+            )}
+          </div>
+          <div
+            className={`mt-2 text-2xl sm:text-3xl font-mono tracking-tight ${
+              certExpired > 0
+                ? 'font-bold text-rose-600'
+                : certExpiringSoon > 0
+                ? 'font-bold text-amber-600'
+                : 'font-bold text-slate-800'
+            }`}
+            data-testid="kpi-cert-status"
+          >
+            {certExpired > 0 ? (
+              <span>
+                {certExpired}{' '}
+                <span className="text-xs font-normal text-rose-500 font-sans">หมดอายุ</span>
+              </span>
+            ) : certExpiringSoon > 0 ? (
+              <span>
+                {certExpiringSoon}{' '}
+                <span className="text-xs font-normal text-amber-600 font-sans">ใกล้หมด</span>
+              </span>
+            ) : (
+              <span>
+                {certValid}{' '}
+                <span className="text-xs font-normal text-emerald-600 font-sans">ใช้งานได้</span>
+              </span>
+            )}
+          </div>
+          <div className="mt-2 text-xs text-slate-400 font-medium truncate">
+            {certExpired > 0
+              ? `หมดอายุแล้ว ${certExpired} ใบรับรอง`
+              : certExpiringSoon > 0
+              ? `ใกล้หมดใน 60 วัน: ${certExpiringSoon}`
+              : `ใบรับรองสมบูรณ์`}
+          </div>
+        </div>
+
+        {/* 6. รอตรวจรับ (Pending Review) */}
         <div className="p-4 sm:p-5 flex flex-col justify-between hover:bg-slate-50/50 transition-colors">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
@@ -148,7 +223,7 @@ export default function VccMetricsStrip({ eq = {}, wo = {}, reviewSlaDays = 3 })
           </div>
         </div>
 
-        {/* 6. ปิดงานแล้ว / ทันกำหนด (Success Metric) */}
+        {/* 7. ปิดงานแล้ว / ทันกำหนด (Success Metric) */}
         <div className="p-4 sm:p-5 flex flex-col justify-between hover:bg-slate-50/50 transition-colors">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">

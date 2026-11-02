@@ -1,4 +1,5 @@
 import { apiGet, apiPut, apiBlob, isApiMode } from '../../../api/client';
+import * as XLSX from 'xlsx';
 import {
   readJson,
   writeJson,
@@ -410,4 +411,339 @@ export const exportVccWorkOrdersCsv = async () => {
   }
   appendLocalAudit('VCC_EXPORT_WORK_ORDERS', { count: wos.length });
   return `\uFEFF${lines.join('\r\n')}`;
+};
+
+export const fetchVccOnHoldTracker = async ({ department, reference_date } = {}) => {
+  if (isApiMode) {
+    const params = new URLSearchParams();
+    if (department) params.set('department', department);
+    if (reference_date) params.set('reference_date', reference_date);
+    return apiGet(`/api/vcc/on-hold-tracker?${params.toString()}`);
+  }
+  const user = assertLocalVccAccess();
+  const refDate = reference_date || new Date().toISOString().slice(0, 10);
+  const allAssets = getLocalAssets();
+  const allWos = getLocalWos();
+  const userLevel = Number(user?.approval_level ?? user?.approvalLevel ?? 0);
+
+  const assetMap = new Map(allAssets.map((a) => [a.id, a]));
+  const items = [];
+
+  for (const a of allAssets) {
+    if (department && a.department !== department) continue;
+    const wo = allWos.find((w) => w.asset_id === a.id && (w.nc_status === 'OPEN' || w.result_status === 'FAIL'));
+    if (a.status === 'ON_HOLD' || wo?.nc_status === 'OPEN') {
+      const daysOnHold = wo?.performed_at ? Math.max(0, -diffDays(wo.performed_at, refDate)) : 0;
+      const canRelease = userLevel >= 5 || Boolean(user?.is_dcc);
+      items.push({
+        asset_id: a.id,
+        asset_code: a.asset_code,
+        asset_name: a.name,
+        asset_type: a.asset_type,
+        department: a.department,
+        location: a.location,
+        asset_status: a.status,
+        wo_id: wo?.id || null,
+        wo_code: wo?.wo_code || null,
+        wo_status: wo?.status || null,
+        result_status: wo?.result_status || null,
+        result_remarks: wo?.result_remarks || null,
+        acceptance_criteria: wo?.acceptance_criteria || null,
+        nc_status: wo?.nc_status || (a.status === 'ON_HOLD' ? 'OPEN' : 'RELEASED'),
+        performed_at: wo?.performed_at || null,
+        performed_by_name: wo?.performed_by_name || wo?.performed_by || '-',
+        reviewed_by_name: wo?.reviewed_by_name || '-',
+        impact_assessment: wo?.nc_impact_assessment || null,
+        days_on_hold: daysOnHold,
+        can_release_hold: canRelease,
+        recommendation: canRelease
+          ? 'ผู้มีอำนาจระดับ L5+ สามารถประเมินผลกระทบและกดปลดระงับการใช้งานได้'
+          : 'รอผู้มีอำนาจระดับ L5+ ของแผนกประเมินผลกระทบและอนุมัติปลดระงับ'
+      });
+    }
+  }
+
+  return {
+    reference_date: refDate,
+    total_items: items.length,
+    open_nc_count: items.filter((i) => i.nc_status === 'OPEN').length,
+    items
+  };
+};
+
+export const fetchVccComplianceReport = async ({
+  year = 2026,
+  department,
+  status,
+  result_status,
+  verdict,
+  asset_code,
+  reference_date
+} = {}) => {
+  if (isApiMode) {
+    const params = new URLSearchParams({ year: String(year) });
+    if (department) params.set('department', department);
+    if (status) params.set('status', status);
+    if (result_status) params.set('result_status', result_status);
+    if (verdict) params.set('verdict', verdict);
+    if (asset_code) params.set('asset_code', asset_code);
+    if (reference_date) params.set('reference_date', reference_date);
+    return apiGet(`/api/vcc/compliance-report?${params.toString()}`);
+  }
+  assertLocalVccAccess();
+  const refDate = reference_date || new Date().toISOString().slice(0, 10);
+  const allAssets = getLocalAssets();
+  const allWos = getLocalWos();
+  const assetMap = new Map(allAssets.map((a) => [a.id, a]));
+
+  const records = [];
+  let compliantCount = 0;
+  let compliantAmendedCount = 0;
+  let nonCompliantOverdueCount = 0;
+  let nonCompliantHoldCount = 0;
+  let inProgressCount = 0;
+  let cancelledCount = 0;
+
+  for (const w of allWos) {
+    const asset = assetMap.get(w.asset_id) || {};
+    const woYear = Number(String(w.due_date || '').slice(0, 4)) || w.plan_year;
+    if (year && woYear !== Number(year)) continue;
+    if (department && asset.department !== department) continue;
+    if (status && w.status !== status) continue;
+    if (result_status && w.result_status !== result_status) continue;
+    if (
+      asset_code &&
+      !String(asset.asset_code || '').toLowerCase().includes(asset_code.toLowerCase()) &&
+      !String(asset.name || '').toLowerCase().includes(asset_code.toLowerCase())
+    ) {
+      continue;
+    }
+
+    const requiredDueDate = w.required_due_date || w.original_due_date || w.due_date;
+    const currentDueDate = w.due_date;
+    const isRescheduled = String(currentDueDate) !== String(requiredDueDate);
+    const daysUntilRequired = diffDays(requiredDueDate, refDate);
+
+    let calculatedVerdict = 'IN_PROGRESS';
+    if (w.status === 'CANCELLED') {
+      calculatedVerdict = 'CANCELLED';
+      cancelledCount += 1;
+    } else if (w.nc_status === 'OPEN' || asset.status === 'ON_HOLD') {
+      calculatedVerdict = 'NON_COMPLIANT_HOLD';
+      nonCompliantHoldCount += 1;
+    } else if (w.status === 'CLOSED' && w.result_status === 'PASS') {
+      if (w.is_amended === 1 || w.is_amended === true) {
+        calculatedVerdict = 'COMPLIANT_AMENDED';
+        compliantAmendedCount += 1;
+      } else {
+        calculatedVerdict = 'COMPLIANT';
+        compliantCount += 1;
+      }
+    } else if (daysUntilRequired !== null && daysUntilRequired < 0) {
+      calculatedVerdict = 'NON_COMPLIANT_OVERDUE';
+      nonCompliantOverdueCount += 1;
+    } else if (w.status === 'CLOSED' && w.result_status === 'FAIL') {
+      calculatedVerdict = 'NON_COMPLIANT_HOLD';
+      nonCompliantHoldCount += 1;
+    } else {
+      calculatedVerdict = 'IN_PROGRESS';
+      inProgressCount += 1;
+    }
+
+    if (verdict && calculatedVerdict !== verdict) continue;
+
+    records.push({
+      wo_id: w.id,
+      wo_code: w.wo_code,
+      asset_id: w.asset_id,
+      asset_code: asset.asset_code || '-',
+      asset_name: asset.name || '-',
+      asset_type: asset.asset_type || '-',
+      department: asset.department || '-',
+      location: asset.location || '-',
+      asset_status: asset.status || 'ACTIVE',
+      plan_year: w.plan_year,
+      provider_name: w.provider_name || 'ทวนสอบภายใน',
+      calibration_method: w.calibration_method || '-',
+      traceability_ref: w.traceability_ref || '-',
+      required_due_date: requiredDueDate,
+      scheduled_date: currentDueDate,
+      is_rescheduled: isRescheduled,
+      days_until_required: daysUntilRequired,
+      performed_at: w.performed_at,
+      performed_by_name: w.performed_by_name || w.performed_by || '-',
+      reviewed_by_name: w.reviewed_by_name || w.reviewed_by || '-',
+      result_status: w.result_status,
+      acceptance_criteria: w.acceptance_criteria,
+      result_remarks: w.result_remarks,
+      certificate_no: w.certificate_no,
+      certificate_valid_until: w.certificate_valid_until,
+      has_certificate_file: Boolean(w.certificate_file_name),
+      cert_file_name: w.certificate_file_name || null,
+      cert_sha256_hash: w.certificate_sha256 || null,
+      is_amended: Boolean(w.is_amended),
+      nc_status: w.nc_status,
+      verdict: calculatedVerdict,
+      compliance_verdict: calculatedVerdict
+    });
+  }
+
+  const totalAudited = records.length;
+  const compliantTotal = compliantCount + compliantAmendedCount;
+  const complianceRate = totalAudited > 0 ? Math.round((compliantTotal / totalAudited) * 100) : 100;
+
+  return {
+    year: Number(year),
+    reference_date: refDate,
+    department: department || null,
+    summary: {
+      total_records: totalAudited,
+      compliant_count: compliantCount,
+      compliant_amended_count: compliantAmendedCount,
+      non_compliant_overdue_count: nonCompliantOverdueCount,
+      non_compliant_hold_count: nonCompliantHoldCount,
+      in_progress_count: inProgressCount,
+      cancelled_count: cancelledCount,
+      compliance_rate: complianceRate
+    },
+    records
+  };
+};
+
+export const exportVccComplianceReportCsv = async ({ year = 2026, department, reference_date } = {}) => {
+  if (isApiMode) {
+    const params = new URLSearchParams({ year: String(year) });
+    if (department) params.set('department', department);
+    if (reference_date) params.set('reference_date', reference_date);
+    const blob = await apiBlob(`/api/vcc/export/compliance-report?${params.toString()}`);
+    return blob.text();
+  }
+  const report = await fetchVccComplianceReport({ year, department, reference_date });
+  const header = [
+    'เลขที่ใบสั่งงาน',
+    'รหัสเครื่องมือ',
+    'ชื่อเครื่องมือวัด',
+    'ประเภทเครื่องมือ',
+    'แผนก',
+    'สถานที่ติดตั้ง',
+    'หน่วยงานสอบเทียบ/ทวนสอบ',
+    'วิธีการสอบเทียบ',
+    'มาตรฐานอ้างอิง (Traceability)',
+    'วันครบกำหนดตามเกณฑ์ (Required Due Date)',
+    'วันครบกำหนดปัจจุบัน (Scheduled Date)',
+    'มีการเลื่อนกำหนด',
+    'วันที่ปฏิบัติงานจริง',
+    'ผลการตรวจ',
+    'เลขที่ใบรับรอง',
+    'วันหมดอายุใบรับรอง',
+    'ไฟล์ใบรับรองแนบ',
+    'SHA-256 Hash',
+    'ผู้บันทึกผล',
+    'ผู้ตรวจรับ/ปิดงาน',
+    'สถานะใบสั่งงาน',
+    'สถานะระงับใช้ (NC)',
+    'มีการแก้ไขผล (Amendment)',
+    'ผลการประเมินการปฏิบัติตามมาตรฐาน (Verdict)'
+  ];
+
+  const lines = [header.map(csvCell).join(',')];
+  for (const r of report.records) {
+    lines.push(
+      [
+        r.wo_code,
+        r.asset_code,
+        r.asset_name,
+        r.asset_type,
+        r.department,
+        r.location,
+        r.provider_name,
+        r.calibration_method || '-',
+        r.traceability_ref || '-',
+        r.required_due_date,
+        r.scheduled_date,
+        r.is_rescheduled ? 'YES' : 'NO',
+        r.performed_at || '-',
+        r.result_status,
+        r.certificate_no || '-',
+        r.certificate_valid_until || '-',
+        r.has_certificate_file ? 'YES' : 'NO',
+        r.cert_sha256_hash || '-',
+        r.performed_by_name || '-',
+        r.reviewed_by_name || '-',
+        r.status || 'CLOSED',
+        r.nc_status || '-',
+        r.is_amended ? 'YES' : 'NO',
+        r.verdict
+      ]
+        .map(csvCell)
+        .join(',')
+    );
+  }
+
+  appendLocalAudit('VCC_EXPORT_COMPLIANCE_REPORT', { year, department, record_count: report.records.length });
+  return `\uFEFF${lines.join('\r\n')}`;
+};
+
+export const exportVccComplianceReportExcel = (records = [], { year = 2026, department } = {}) => {
+  const header = [
+    'เลขที่ใบสั่งงาน',
+    'รหัสเครื่องมือ',
+    'ชื่อเครื่องมือวัด',
+    'ประเภทเครื่องมือ',
+    'แผนก',
+    'สถานที่ติดตั้ง',
+    'หน่วยงานสอบเทียบ/ทวนสอบ',
+    'วิธีการสอบเทียบ',
+    'มาตรฐานอ้างอิง (Traceability)',
+    'วันครบกำหนดตามเกณฑ์ (Required Due Date)',
+    'วันครบกำหนดปัจจุบัน (Scheduled Date)',
+    'มีการเลื่อนกำหนด',
+    'วันที่ปฏิบัติงานจริง',
+    'ผลการตรวจ',
+    'เลขที่ใบรับรอง',
+    'วันหมดอายุใบรับรอง',
+    'ไฟล์ใบรับรองแนบ',
+    'SHA-256 Hash',
+    'ผู้บันทึกผล',
+    'ผู้ตรวจรับ/ปิดงาน',
+    'สถานะใบสั่งงาน',
+    'สถานะระงับใช้ (NC)',
+    'มีการแก้ไขผล (Amendment)',
+    'ผลการประเมิน (Verdict)'
+  ];
+
+  const rows = records.map((r) => [
+    r.wo_code,
+    r.asset_code,
+    r.asset_name,
+    r.asset_type,
+    r.department,
+    r.location,
+    r.provider_name || 'ทวนสอบภายใน',
+    r.calibration_method || '-',
+    r.traceability_ref || '-',
+    r.required_due_date,
+    r.scheduled_date,
+    r.is_rescheduled ? 'YES' : 'NO',
+    r.performed_at || '-',
+    r.result_status,
+    r.certificate_no || '-',
+    r.certificate_valid_until || '-',
+    r.has_certificate_file || r.cert_file_name ? 'YES' : 'NO',
+    r.cert_sha256_hash || '-',
+    r.performed_by_name || '-',
+    r.reviewed_by_name || '-',
+    r.status || 'CLOSED',
+    r.nc_status || '-',
+    r.is_amended ? 'YES' : 'NO',
+    r.verdict || r.compliance_verdict
+  ]);
+
+  const worksheet = XLSX.utils.aoa_to_sheet([header, ...rows]);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Compliance Report');
+
+  const deptSuffix = department ? `_${department}` : '';
+  const fileName = `VCC_Compliance_Report_${year}${deptSuffix}.xlsx`;
+  XLSX.writeFile(workbook, fileName);
 };
