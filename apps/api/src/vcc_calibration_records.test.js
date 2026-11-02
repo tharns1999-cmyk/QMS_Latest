@@ -424,4 +424,60 @@ describe('VCC Phase 3.2: Calibration Execution, Digital Certificates & Controlle
     expect(detailRes.body.amendments.length).toBe(1);
     expect(detailRes.body.amendments[0].snapshot.wo_code).toBe('WO-2026-01-AMEND01');
   });
+
+  it('generates VCC_CALIBRATION_REVIEW tasks in GET /api/vcc/tasks when result is submitted, enforcing Segregation of Duties', async () => {
+    // 1. Create asset and work order
+    const assetRes = await call('POST', '/api/vcc/assets', 'M1-REV4', {
+      asset_code: 'CAL-M1-TASK',
+      name: '[ข้อมูลทดสอบ] เครื่องมือวัดสำหรับทดสอบ Task Inbox',
+      asset_type: 'Temperature Controller',
+      department: 'M1QC'
+    });
+    const assetId = assetRes.body.asset.id;
+    const woId = 'WO-M1-TASK-01';
+
+    await env.DB.prepare(`
+      INSERT INTO vcc_work_orders (
+        id, wo_code, asset_id, provider_name, planned_month, baseline_planned_date,
+        scheduled_date, due_date, original_due_date, required_due_date, status, result_status,
+        created_by, updated_by
+      ) VALUES (?, ?, ?, 'ทวนสอบภายใน', 2, '2026-02-15', '2026-02-15', '2026-02-15', '2026-02-15', '2026-02-15', 'OPEN', 'PENDING', 'M1-PERF', 'M1-PERF')
+    `).bind(woId, 'WO-2026-TASK-01', assetId).run();
+
+    // 2. Submit result by M1-PERF -> PENDING_REVIEW
+    const submitRes = await call('POST', `/api/vcc/work-orders/${woId}/submit-result`, 'M1-PERF', {
+      performed_at: '2026-02-12',
+      result_status: 'PASS',
+      certificate_no: 'CERT-TASK-01',
+      acceptance_criteria: '± 0.5 °C',
+      result_remarks: 'ผลการสอบเทียบเป็นไปตามเกณฑ์ยอมรับ'
+    });
+    expect(submitRes.status).toBe(200);
+
+    // 3. Performer (M1-PERF) queries tasks -> must NOT see review task (SoD)
+    const perfTasksRes = await call('GET', '/api/vcc/tasks', 'M1-PERF');
+    expect(perfTasksRes.status).toBe(200);
+    const perfWoTask = (perfTasksRes.body.tasks || []).find((t) => t.woId === woId);
+    expect(perfWoTask).toBeUndefined();
+
+    // 4. Reviewer L4 (M1-REV4) queries tasks -> MUST see review task
+    const revTasksRes = await call('GET', '/api/vcc/tasks', 'M1-REV4');
+    expect(revTasksRes.status).toBe(200);
+    const revWoTask = (revTasksRes.body.tasks || []).find((t) => t.woId === woId);
+    expect(revWoTask).toBeDefined();
+    expect(revWoTask.taskType).toBe('VCC_CALIBRATION_REVIEW');
+    expect(revWoTask.docCode).toBe('WO-2026-TASK-01');
+
+    // 5. Reviewer approves work order -> moves to CLOSED
+    const approveRes = await call('POST', `/api/vcc/work-orders/${woId}/approve`, 'M1-REV4', {
+      comment: 'ตรวจรับผลสอบเทียบเรียบร้อย ครบถ้วนตามมาตรฐาน'
+    });
+    expect(approveRes.status).toBe(200);
+    expect(approveRes.body.workOrder.status).toBe('CLOSED');
+
+    // 6. Reviewer queries tasks again -> task must be cleared
+    const postApproveTasks = await call('GET', '/api/vcc/tasks', 'M1-REV4');
+    const clearedWoTask = (postApproveTasks.body.tasks || []).find((t) => t.woId === woId);
+    expect(clearedWoTask).toBeUndefined();
+  });
 });

@@ -10,7 +10,7 @@ import {
   getLocalAudit,
   appendLocalAudit
 } from './vccApi';
-import { computeDueDateForMonth, getLocalPlans, getLocalPlanItems } from './vccPlanApi';
+import { computeDueDateForMonth, getLocalPlans, getLocalPlanItems, syncVccTasks } from './vccPlanApi';
 
 const STORAGE_WO_KEY = 'qms-vcc-local-work-orders-v1';
 const STORAGE_WO_SETTINGS_KEY = 'qms-vcc-local-wo-settings-v1';
@@ -340,6 +340,7 @@ export const rescheduleVccWorkOrder = async (id, { new_due_date, reason }) => {
 export const submitVccWorkOrderResult = async (id, payload) => {
   if (isApiMode) {
     const { workOrder } = await apiPost(`/api/vcc/work-orders/${encodeURIComponent(id)}/submit-result`, payload);
+    await syncVccTasks().catch(() => {});
     return workOrder;
   }
   const user = assertLocalVccAccess();
@@ -400,12 +401,14 @@ export const submitVccWorkOrderResult = async (id, payload) => {
     acceptance_criteria: acceptanceCriteria,
     nc_status: nextNcStatus
   });
+  await syncVccTasks(user).catch(() => {});
   return enrichLocalWo(updated, getLocalAssets(), getDepartmentMap(), getLocalPlans());
 };
 
 export const approveVccWorkOrder = async (id, comment = '') => {
   if (isApiMode) {
     const { workOrder } = await apiPost(`/api/vcc/work-orders/${encodeURIComponent(id)}/approve`, { comment });
+    await syncVccTasks().catch(() => {});
     return workOrder;
   }
   const user = assertLocalVccAccess();
@@ -447,12 +450,14 @@ export const approveVccWorkOrder = async (id, comment = '') => {
     wo_code: existing.wo_code,
     comment: updated.review_comment
   });
+  await syncVccTasks(user).catch(() => {});
   return enrichLocalWo(updated, getLocalAssets(), getDepartmentMap(), getLocalPlans());
 };
 
 export const rejectVccWorkOrder = async (id, reason = '') => {
   if (isApiMode) {
     const { workOrder } = await apiPost(`/api/vcc/work-orders/${encodeURIComponent(id)}/reject`, { reason });
+    await syncVccTasks().catch(() => {});
     return workOrder;
   }
   const user = assertLocalVccAccess();
@@ -485,6 +490,7 @@ export const rejectVccWorkOrder = async (id, reason = '') => {
   next[idx] = updated;
   setLocalWos(next);
   appendLocalAudit('VCC_WO_REJECTED', { wo_id: id, wo_code: existing.wo_code, reason: trimmedReason });
+  await syncVccTasks(user).catch(() => {});
   return enrichLocalWo(updated, getLocalAssets(), getDepartmentMap(), getLocalPlans());
 };
 
