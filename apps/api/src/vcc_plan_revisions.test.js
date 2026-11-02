@@ -105,6 +105,7 @@ describe('VCC Phase 3.1: Plan Revision Foundation & Diff Engine Tests', () => {
   const cleanDb = async () => {
     await env.DB.batch([
       ...dropHistoricalTriggers.map((s) => env.DB.prepare(s)),
+      env.DB.prepare('DELETE FROM vcc_work_order_amendment_requests'),
       env.DB.prepare('DELETE FROM vcc_work_order_amendments'),
       env.DB.prepare('DELETE FROM vcc_work_order_certificates'),
       env.DB.prepare('DELETE FROM vcc_work_orders'),

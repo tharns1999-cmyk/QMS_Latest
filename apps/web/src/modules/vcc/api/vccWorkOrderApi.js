@@ -598,9 +598,9 @@ export const fetchVccWorkOrderCertificates = async (id) => {
   return [];
 };
 
-export const amendVccWorkOrder = async (id, payload) => {
+export const requestVccWorkOrderAmendment = async (id, payload) => {
   if (isApiMode) {
-    const res = await apiPost(`/api/vcc/work-orders/${encodeURIComponent(id)}/amend`, payload);
+    const res = await apiPost(`/api/vcc/work-orders/${encodeURIComponent(id)}/amendment-requests`, payload);
     return res;
   }
   const user = assertLocalVccAccess();
@@ -611,15 +611,44 @@ export const amendVccWorkOrder = async (id, payload) => {
   if (existing.status !== 'CLOSED') {
     throw new Error('การแก้ไข (Amendment) ทำได้เฉพาะใบสั่งงานที่ปิดงาน (CLOSED) สำเร็จแล้วเท่านั้น');
   }
+  const reason = String(payload.amendment_reason || payload.reason || '').trim();
+  if (!reason) {
+    throw new Error('กรุณาระบุเหตุผลและความจำเป็นในการแก้ไขผลใบสั่งงานที่ปิดไปแล้ว (Amendment Reason)');
+  }
+  const reqId = `AMEND-REQ-${Date.now()}`;
+  const newReq = {
+    id: reqId,
+    work_order_id: id,
+    requested_by: user.id,
+    requested_by_name: user.name,
+    requested_at: new Date().toISOString(),
+    amendment_reason: reason,
+    proposed_changes: payload,
+    status: 'PENDING'
+  };
+  return { request: newReq, message: 'บันทึกคำขอแก้ไข (Amendment Request) เรียบร้อยแล้ว รอการอนุมัติ' };
+};
+
+export const approveVccWorkOrderAmendment = async (id, requestId, payload = {}) => {
+  if (isApiMode) {
+    const url = requestId
+      ? `/api/vcc/work-orders/${encodeURIComponent(id)}/amendment-requests/${encodeURIComponent(requestId)}/approve`
+      : `/api/vcc/work-orders/${encodeURIComponent(id)}/approve-amendment`;
+    const res = await apiPost(url, payload);
+    return res;
+  }
+  const user = assertLocalVccAccess();
+  const allWos = getLocalWos();
+  const idx = allWos.findIndex((w) => w.id === id);
+  if (idx === -1) throw new Error('ไม่พบใบสั่งงานทวนสอบ/สอบเทียบ');
+  const existing = allWos[idx];
   if (user.id === existing.performed_by) {
     throw new Error('การคัดแยกหน้าที่ (Segregation of Duties): ผู้บันทึกผลการสอบเทียบไม่สามารถอนุมัติการแก้ไข (Amendment) ของตนเองได้ แม้จะมีสิทธิ์ระดับ L5+ ขึ้นไป (ต้องให้ผู้อนุมัติอื่นเป็นผู้ดำเนินการ)');
   }
-  const requesterId = payload.requested_by || payload.requested_by_id || null;
-  if (requesterId && (user.id === requesterId || user.username === requesterId)) {
+  if (payload.requested_by && (user.id === payload.requested_by || user.username === payload.requested_by)) {
     throw new Error('การคัดแยกหน้าที่ (Segregation of Duties): ผู้ร้องขอแก้ไขผลไม่สามารถอนุมัติการแก้ไข (Amendment) ของตนเองได้ (ต้องให้ผู้อนุมัติแยกคนเป็นผู้ดำเนินการ)');
   }
   const now = new Date().toISOString();
-  // FAIL -> PASS Amendment must NEVER auto-release NC or remove ON_HOLD
   const nextNcStatus = payload.result_status === 'FAIL' ? 'OPEN' : existing.nc_status;
   const updated = {
     ...existing,
@@ -637,6 +666,32 @@ export const amendVccWorkOrder = async (id, payload) => {
   next[idx] = updated;
   setLocalWos(next);
   return { workOrder: enrichLocalWo(updated, getLocalAssets(), getDepartmentMap(), getLocalPlans()), amendment_seq: 1 };
+};
+
+export const rejectVccWorkOrderAmendment = async (id, requestId, payload = {}) => {
+  if (isApiMode) {
+    const url = requestId
+      ? `/api/vcc/work-orders/${encodeURIComponent(id)}/amendment-requests/${encodeURIComponent(requestId)}/reject`
+      : `/api/vcc/work-orders/${encodeURIComponent(id)}/reject-amendment`;
+    return await apiPost(url, payload);
+  }
+  return { message: 'ปฏิเสธคำขอแก้ไขเรียบร้อยแล้ว', status: 'REJECTED' };
+};
+
+export const fetchVccWorkOrderAmendmentRequests = async (id) => {
+  if (isApiMode) {
+    const { requests } = await apiGet(`/api/vcc/work-orders/${encodeURIComponent(id)}/amendment-requests`);
+    return requests || [];
+  }
+  return [];
+};
+
+export const amendVccWorkOrder = async (id, payload) => {
+  if (isApiMode) {
+    const res = await apiPost(`/api/vcc/work-orders/${encodeURIComponent(id)}/amend`, payload);
+    return res;
+  }
+  return await requestVccWorkOrderAmendment(id, payload);
 };
 
 export const fetchVccWorkOrderAmendments = async (id) => {
