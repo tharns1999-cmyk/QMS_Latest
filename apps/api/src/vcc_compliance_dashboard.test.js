@@ -384,4 +384,74 @@ describe('VCC Phase 3.3: Calibration Monitoring & Compliance Dashboard Tests', (
     expect(assetCountAfter).toBe(assetCountBefore);
     expect(woCountAfter).toBe(woCountBefore);
   });
+
+  it('9. Dashboard RBAC: non-DCC user is strictly isolated to authorized department with negative checks', async () => {
+    // Insert QA-specific asset and work order
+    await env.DB.prepare(`
+      INSERT INTO vcc_assets (id, asset_code, name, department, status, is_group, location, asset_type)
+      VALUES ('AST-M3-QA01', 'QA-M3-001', 'QA Standard Block', 'QA', 'ACTIVE', 0, 'QA Lab', 'STANDARD_GAUGE')
+    `).run();
+
+    await env.DB.prepare(`
+      INSERT INTO vcc_work_orders (
+        id, wo_code, asset_id, plan_year, cycle_id, status, provider_name, original_due_date, due_date,
+        result_status
+      ) VALUES (
+        'WO-M3-QA01', 'WO-M3-QA1', 'AST-M3-QA01', 2026, 'CYC-M3-QA1', 'SCHEDULED', 'ห้องปฏิบัติการทวนสอบภายใน', '2026-05-01', '2026-05-01',
+        'PENDING'
+      )
+    `).run();
+
+    // 1. QA-L4-M3 (department QA only) calls dashboard
+    const qaRes = await call('GET', '/api/vcc/dashboard', 'QA-L4-M3');
+    expect(qaRes.status).toBe(200);
+
+    // Negative check: alerts must NEVER contain any QC item for QA user
+    expect(qaRes.body.alerts.length).toBeGreaterThan(0);
+    for (const a of qaRes.body.alerts) {
+      expect(a.department).toBe('QA');
+    }
+
+    // Negative check: department_breakdown must only contain QA, never QC
+    const deptCodes = qaRes.body.department_breakdown.map((d) => d.department);
+    expect(deptCodes).toContain('QA');
+    expect(deptCodes).not.toContain('QC');
+
+    // Negative check: QA user querying QC explicitly receives 403 Forbidden
+    const forbiddenRes = await call('GET', '/api/vcc/dashboard?department=QC', 'QA-L4-M3');
+    expect(forbiddenRes.status).toBe(403);
+    expect(forbiddenRes.body.error).toContain('แผนก QC');
+
+    // 2. DCC user calls dashboard: sees consolidated cross-department data
+    const dccRes = await call('GET', '/api/vcc/dashboard', 'DCC-M3');
+    expect(dccRes.status).toBe(200);
+    const dccDeptCodes = dccRes.body.department_breakdown.map((d) => d.department);
+    expect(dccDeptCodes).toContain('QC');
+    expect(dccDeptCodes).toContain('QA');
+
+    // DCC can filter department without error
+    const dccQcRes = await call('GET', '/api/vcc/dashboard?department=QC', 'DCC-M3');
+    expect(dccQcRes.status).toBe(200);
+  });
+
+  it('10. Compliance Report Summary: accurately calculated post-filters and reports N/A when zero records match', async () => {
+    // 1. Filter by verdict=COMPLIANT_AMENDED (matches WO-M3-P01)
+    const amendedRes = await call('GET', '/api/vcc/compliance-report?year=2026&verdict=COMPLIANT_AMENDED', 'DCC-M3');
+    expect(amendedRes.status).toBe(200);
+    expect(amendedRes.body.records.length).toBeGreaterThanOrEqual(1);
+    expect(amendedRes.body.summary.total_records).toBe(amendedRes.body.records.length);
+    expect(amendedRes.body.summary.compliant_amended_count).toBe(amendedRes.body.records.length);
+    expect(amendedRes.body.summary.non_compliant_overdue_count).toBe(0);
+    expect(amendedRes.body.summary.non_compliant_hold_count).toBe(0);
+    expect(amendedRes.body.summary.compliance_rate).toBe(100);
+
+    // 2. Filter with criteria that yields 0 records (e.g. year=2099)
+    const zeroRes = await call('GET', '/api/vcc/compliance-report?year=2099', 'DCC-M3');
+    expect(zeroRes.status).toBe(200);
+    expect(zeroRes.body.records.length).toBe(0);
+    expect(zeroRes.body.summary.total_records).toBe(0);
+    expect(zeroRes.body.summary.compliant_count).toBe(0);
+    expect(zeroRes.body.summary.compliance_rate).toBeNull();
+    expect(zeroRes.body.summary.compliance_rate_label).toBe('N/A');
+  });
 });

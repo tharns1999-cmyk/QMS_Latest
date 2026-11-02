@@ -1,5 +1,5 @@
 import { requireVccAccess, requireDccOnly } from './vccAuth.js';
-import { isUserAuthorizedForPlanDept } from './vccPlans.js';
+import { isUserAuthorizedForPlanDept, getUserDepartments } from './vccPlans.js';
 
 const NOW = "strftime('%Y-%m-%dT%H:%M:%SZ', 'now')";
 const DCC_ONLY = { error: 'เฉพาะเจ้าหน้าที่ DCC เท่านั้นที่ได้รับอนุญาตให้ใช้งานส่วนนี้' };
@@ -106,16 +106,37 @@ export const registerVccDashboardRoutes = (app, { requireAuth, audit }) => {
 
   app.get('/api/vcc/dashboard', requireAuth, requireVccAccess, async (c) => {
     const db = c.env.DB;
+    const user = c.get('user');
     const year = Number(c.req.query('year') || 2026);
     const refDateQuery = c.req.query('reference_date');
     const refDate = refDateQuery && /^\d{4}-\d{2}-\d{2}$/.test(refDateQuery)
       ? refDateQuery
       : new Date().toISOString().slice(0, 10);
 
+    const isDccUser = Boolean(user.isDcc || user.is_dcc);
+    const isQmrUser = Boolean(user.isQmr || user.is_qmr);
+    const userLevel = Number(user.approval_level ?? user.approvalLevel ?? 0);
+    const hasGlobalAccess = isDccUser || isQmrUser || userLevel >= 6;
+    const userDepts = getUserDepartments(user);
+
+    const queryDept = c.req.query('department') ? String(c.req.query('department')).trim().toUpperCase() : null;
+    if (queryDept && !isUserAuthorizedForPlanDept(user, queryDept)) {
+      return c.json({ error: `ไม่มีสิทธิ์เข้าถึงข้อมูลแผนก ${queryDept}` }, 403);
+    }
+
+    const isDeptAllowed = (d) => {
+      const deptUpper = String(d || '').trim().toUpperCase();
+      if (queryDept) return deptUpper === queryDept;
+      if (hasGlobalAccess) return true;
+      return userDepts.includes(deptUpper);
+    };
+
     const notificationSettings = await loadNotificationSettings(db);
 
-    const { results: assetRows } = await db.prepare('SELECT id, asset_code, name, department, is_group, group_nature, status, location, asset_type FROM vcc_assets').all();
-    const { results: woRows } = await db
+    const { results: rawAssetRows } = await db.prepare('SELECT id, asset_code, name, department, is_group, group_nature, status, location, asset_type FROM vcc_assets').all();
+    const assetRows = rawAssetRows.filter((a) => isDeptAllowed(a.department));
+
+    const { results: rawWoRows } = await db
       .prepare(
         `SELECT w.*, a.asset_code, a.name AS asset_name, a.department, a.status AS asset_status,
                 a.location, a.asset_type, pi.frequency_label
@@ -125,6 +146,7 @@ export const registerVccDashboardRoutes = (app, { requireAuth, audit }) => {
          ORDER BY w.due_date ASC, w.wo_code ASC`
       )
       .all();
+    const woRows = rawWoRows.filter((w) => isDeptAllowed(w.department));
 
     const onHoldAssetIds = new Set(woRows.filter((w) => w.nc_status === 'OPEN').map((w) => w.asset_id));
     for (const a of assetRows) {
@@ -458,10 +480,11 @@ export const registerVccDashboardRoutes = (app, { requireAuth, audit }) => {
     };
 
     // Monthly Plan vs Act for selected year (only CURRENT APPROVED plans count toward official Plan)
-    const { results: approvedPlans } = await db
+    const { results: rawApprovedPlans } = await db
       .prepare("SELECT id, plan_year, department, revision, status FROM vcc_annual_plans WHERE plan_year = ? AND status = 'APPROVED' AND (effective_status = 'CURRENT' OR (effective_status IS NULL AND is_current = 1))")
       .bind(year)
       .all();
+    const approvedPlans = rawApprovedPlans.filter((p) => isDeptAllowed(p.department));
 
     const monthlyComparison = Array.from({ length: 12 }, (_, idx) => ({
       month: idx + 1,
@@ -710,13 +733,6 @@ export const registerVccDashboardRoutes = (app, { requireAuth, audit }) => {
       ORDER BY w.due_date ASC, w.wo_code ASC
     `).all();
 
-    let compliantCount = 0;
-    let compliantAmendedCount = 0;
-    let nonCompliantOverdueCount = 0;
-    let nonCompliantHoldCount = 0;
-    let inProgressCount = 0;
-    let cancelledCount = 0;
-
     const records = [];
 
     for (const w of results) {
@@ -738,27 +754,16 @@ export const registerVccDashboardRoutes = (app, { requireAuth, audit }) => {
       let verdict = 'IN_PROGRESS';
       if (w.status === 'CANCELLED') {
         verdict = 'CANCELLED';
-        cancelledCount += 1;
       } else if (w.nc_status === 'OPEN' || w.asset_status === 'ON_HOLD') {
         verdict = 'NON_COMPLIANT_HOLD';
-        nonCompliantHoldCount += 1;
       } else if (w.status === 'CLOSED' && w.result_status === 'PASS') {
-        if (w.is_amended === 1) {
-          verdict = 'COMPLIANT_AMENDED';
-          compliantAmendedCount += 1;
-        } else {
-          verdict = 'COMPLIANT';
-          compliantCount += 1;
-        }
+        verdict = w.is_amended === 1 ? 'COMPLIANT_AMENDED' : 'COMPLIANT';
       } else if (daysUntilRequired !== null && daysUntilRequired < 0) {
         verdict = 'NON_COMPLIANT_OVERDUE';
-        nonCompliantOverdueCount += 1;
       } else if (w.status === 'CLOSED' && w.result_status === 'FAIL') {
         verdict = 'NON_COMPLIANT_HOLD';
-        nonCompliantHoldCount += 1;
       } else {
         verdict = 'IN_PROGRESS';
-        inProgressCount += 1;
       }
 
       if (filterVerdict && verdict !== filterVerdict) continue;
@@ -814,9 +819,26 @@ export const registerVccDashboardRoutes = (app, { requireAuth, audit }) => {
       });
     }
 
+    let compliantCount = 0;
+    let compliantAmendedCount = 0;
+    let nonCompliantOverdueCount = 0;
+    let nonCompliantHoldCount = 0;
+    let inProgressCount = 0;
+    let cancelledCount = 0;
+
+    for (const r of records) {
+      if (r.verdict === 'COMPLIANT') compliantCount += 1;
+      else if (r.verdict === 'COMPLIANT_AMENDED') compliantAmendedCount += 1;
+      else if (r.verdict === 'NON_COMPLIANT_OVERDUE') nonCompliantOverdueCount += 1;
+      else if (r.verdict === 'NON_COMPLIANT_HOLD') nonCompliantHoldCount += 1;
+      else if (r.verdict === 'CANCELLED') cancelledCount += 1;
+      else inProgressCount += 1;
+    }
+
     const totalAudited = records.length;
     const compliantTotal = compliantCount + compliantAmendedCount;
-    const complianceRate = totalAudited > 0 ? Math.round((compliantTotal / totalAudited) * 100) : 100;
+    const complianceRate = totalAudited > 0 ? Math.round((compliantTotal / totalAudited) * 100) : null;
+    const complianceRateLabel = totalAudited > 0 ? `${complianceRate}%` : 'N/A';
 
     return c.json({
       reference_date: refDate,
@@ -829,7 +851,8 @@ export const registerVccDashboardRoutes = (app, { requireAuth, audit }) => {
         non_compliant_hold_count: nonCompliantHoldCount,
         in_progress_count: inProgressCount,
         cancelled_count: cancelledCount,
-        compliance_rate: complianceRate
+        compliance_rate: complianceRate,
+        compliance_rate_label: complianceRateLabel
       },
       records
     });
@@ -841,6 +864,10 @@ export const registerVccDashboardRoutes = (app, { requireAuth, audit }) => {
     const user = c.get('user');
     const year = c.req.query('year') ? Number(c.req.query('year')) : 2026;
     const filterDept = c.req.query('department') ? String(c.req.query('department')).trim().toUpperCase() : null;
+    const filterStatus = c.req.query('status') ? String(c.req.query('status')).trim().toUpperCase() : null;
+    const filterResult = c.req.query('result_status') ? String(c.req.query('result_status')).trim().toUpperCase() : null;
+    const filterVerdict = c.req.query('verdict') ? String(c.req.query('verdict')).trim().toUpperCase() : null;
+    const filterAsset = c.req.query('asset_code') ? String(c.req.query('asset_code')).trim() : null;
     const refDate = c.req.query('reference_date') || new Date().toISOString().slice(0, 10);
 
     if (filterDept && !isUserAuthorizedForPlanDept(user, filterDept)) {
@@ -899,6 +926,10 @@ export const registerVccDashboardRoutes = (app, { requireAuth, audit }) => {
       if (filterDept && w.department !== filterDept) continue;
       if (!isUserAuthorizedForPlanDept(user, w.department)) continue;
 
+      if (filterStatus && w.status !== filterStatus) continue;
+      if (filterResult && w.result_status !== filterResult) continue;
+      if (filterAsset && !w.asset_code.toLowerCase().includes(filterAsset.toLowerCase()) && !w.asset_name.toLowerCase().includes(filterAsset.toLowerCase())) continue;
+
       const requiredDueDate = w.required_due_date || w.original_due_date || w.due_date;
       const currentDueDate = w.due_date;
       const isRescheduled = String(currentDueDate) !== String(requiredDueDate);
@@ -910,6 +941,8 @@ export const registerVccDashboardRoutes = (app, { requireAuth, audit }) => {
       else if (w.status === 'CLOSED' && w.result_status === 'PASS') verdict = w.is_amended === 1 ? 'COMPLIANT_AMENDED' : 'COMPLIANT';
       else if (daysUntilRequired !== null && daysUntilRequired < 0) verdict = 'NON_COMPLIANT_OVERDUE';
       else if (w.status === 'CLOSED' && w.result_status === 'FAIL') verdict = 'NON_COMPLIANT_HOLD';
+
+      if (filterVerdict && verdict !== filterVerdict) continue;
 
       lines.push(
         [

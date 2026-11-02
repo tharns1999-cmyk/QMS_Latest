@@ -103,7 +103,11 @@ export default function VccComplianceReportTab() {
     try {
       const csvText = await exportVccComplianceReportCsv({
         year,
-        department: department || undefined
+        department: department || undefined,
+        status: status || undefined,
+        result_status: resultStatus || undefined,
+        verdict: verdict || undefined,
+        asset_code: searchTerm || undefined
       });
       triggerBlobDownload(csvText, `VCC_Compliance_Report_${year}${department ? `_${department}` : ''}.csv`);
       setExportMsg(`ส่งออกรายงาน Compliance Report (${year}) เป็นไฟล์ CSV สำเร็จ`);
@@ -157,7 +161,11 @@ export default function VccComplianceReportTab() {
 
   const records = reportData?.records || [];
   const summary = reportData?.summary || {};
-  const complianceRate = summary.compliance_rate ?? 100;
+  const hasRecords = Boolean(summary.total_records && summary.total_records > 0);
+  const complianceRate = summary.compliance_rate;
+  const complianceRateDisplay = hasRecords && complianceRate !== null && complianceRate !== undefined
+    ? `${complianceRate}%`
+    : 'N/A';
 
   return (
     <div className="space-y-6 text-slate-800" data-testid="vcc-compliance-report-tab">
@@ -271,13 +279,21 @@ export default function VccComplianceReportTab() {
           </span>
           <div
             className={`text-2xl font-bold font-mono mt-1 ${
-              complianceRate >= 95 ? 'text-emerald-600' : complianceRate >= 80 ? 'text-amber-600' : 'text-rose-600'
+              !hasRecords || complianceRate === null || complianceRate === undefined
+                ? 'text-slate-400'
+                : complianceRate >= 95
+                ? 'text-emerald-600'
+                : complianceRate >= 80
+                ? 'text-amber-600'
+                : 'text-rose-600'
             }`}
             data-testid="summary-compliance-rate"
           >
-            {complianceRate}%
+            {complianceRateDisplay}
           </div>
-          <span className="text-[11px] text-slate-400 mt-1 block">เกณฑ์มาตรฐาน QMS: 95%</span>
+          <span className="text-[11px] text-slate-400 mt-1 block">
+            {hasRecords ? 'เกณฑ์มาตรฐาน QMS: 95%' : 'ไม่มีข้อมูลการตรวจประเมิน'}
+          </span>
         </div>
       </div>
 

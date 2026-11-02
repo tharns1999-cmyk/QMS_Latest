@@ -308,10 +308,12 @@ describe('VCC Phase 3.3: Calibration Monitoring & Compliance Dashboard UI Tests'
       const exportCsvBtn = screen.getByTestId('export-compliance-csv-btn');
       fireEvent.click(exportCsvBtn);
       await waitFor(() => {
-        expect(dashboardApi.exportVccComplianceReportCsv).toHaveBeenCalledWith({
-          year: 2026,
-          department: undefined
-        });
+        expect(dashboardApi.exportVccComplianceReportCsv).toHaveBeenCalledWith(
+          expect.objectContaining({
+            year: 2026,
+            department: undefined
+          })
+        );
       });
 
       // Test Excel Export Button
@@ -323,6 +325,30 @@ describe('VCC Phase 3.3: Calibration Monitoring & Compliance Dashboard UI Tests'
       const viewRecordBtn = screen.getByTestId('view-record-btn-WO-C1');
       fireEvent.click(viewRecordBtn);
       expect(screen.getByText(/DIGITAL RECORD: WO-C1/)).toBeInTheDocument();
+    });
+
+    it('displays N/A and empty state when 0 records match the filter', async () => {
+      dashboardApi.fetchVccComplianceReport.mockResolvedValue({
+        year: 2026,
+        summary: {
+          total_records: 0,
+          compliant_count: 0,
+          compliant_amended_count: 0,
+          non_compliant_overdue_count: 0,
+          non_compliant_hold_count: 0,
+          compliance_rate: null,
+          compliance_rate_label: 'N/A'
+        },
+        records: []
+      });
+
+      render(<VccComplianceReportTab />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('summary-compliance-rate')).toHaveTextContent('N/A');
+        expect(screen.getByTestId('compliance-empty-state')).toBeInTheDocument();
+        expect(screen.getByText('ไม่พบรายการที่ตรงกับเงื่อนไขการค้นหา')).toBeInTheDocument();
+      });
     });
   });
 });

@@ -102,18 +102,43 @@ export const fetchVccDashboard = async ({ year = 2026, reference_date } = {}) =>
     if (reference_date) params.set('reference_date', reference_date);
     return apiGet(`/api/vcc/dashboard?${params.toString()}`);
   }
-  assertLocalVccAccess();
+  const user = assertLocalVccAccess();
   const refDate = reference_date && /^\d{4}-\d{2}-\d{2}$/.test(reference_date)
     ? reference_date
     : new Date().toISOString().slice(0, 10);
 
-  const notificationSettings = getLocalNotificationSettings();
-  const allAssets = getLocalAssets();
-  const allWos = getLocalWos();
-  const allPlans = getLocalPlans();
-  const allPlanItems = getLocalPlanItems();
+  const isDccUser = Boolean(user.isDcc || user.is_dcc);
+  const isQmrUser = Boolean(user.isQmr || user.is_qmr);
+  const userLevel = Number(user.approval_level ?? user.approvalLevel ?? 0);
+  const hasGlobalAccess = isDccUser || isQmrUser || userLevel >= 6;
+  const userDepts = [
+    user.department,
+    user.primary_department,
+    ...(Array.isArray(user.depts) ? user.depts : []),
+    ...(Array.isArray(user.departments) ? user.departments : []),
+    ...(Array.isArray(user.secondaryDepartments) ? user.secondaryDepartments : [])
+  ]
+    .filter(Boolean)
+    .map((d) => String(d).toUpperCase());
 
+  const isDeptAllowed = (d) => {
+    const deptUpper = String(d || '').trim().toUpperCase();
+    if (hasGlobalAccess) return true;
+    return userDepts.includes(deptUpper);
+  };
+
+  const notificationSettings = getLocalNotificationSettings();
+  const rawAssets = getLocalAssets();
+  const allAssets = rawAssets.filter((a) => isDeptAllowed(a.department));
   const assetMap = new Map(allAssets.map((a) => [a.id, a]));
+
+  const rawWos = getLocalWos();
+  const allWos = rawWos.filter((w) => {
+    const a = rawAssets.find((ast) => ast.id === w.asset_id);
+    return isDeptAllowed(a?.department || w.department);
+  });
+  const allPlans = getLocalPlans().filter((p) => isDeptAllowed(p.department));
+  const allPlanItems = getLocalPlanItems();
   const planItemMap = new Map(allPlanItems.map((i) => [i.id, i]));
 
   const onHoldAssetIds = new Set(allWos.filter((w) => w.nc_status === 'OPEN').map((w) => w.asset_id));
@@ -426,7 +451,6 @@ export const fetchVccOnHoldTracker = async ({ department, reference_date } = {})
   const allWos = getLocalWos();
   const userLevel = Number(user?.approval_level ?? user?.approvalLevel ?? 0);
 
-  const assetMap = new Map(allAssets.map((a) => [a.id, a]));
   const items = [];
 
   for (const a of allAssets) {
@@ -497,12 +521,6 @@ export const fetchVccComplianceReport = async ({
   const assetMap = new Map(allAssets.map((a) => [a.id, a]));
 
   const records = [];
-  let compliantCount = 0;
-  let compliantAmendedCount = 0;
-  let nonCompliantOverdueCount = 0;
-  let nonCompliantHoldCount = 0;
-  let inProgressCount = 0;
-  let cancelledCount = 0;
 
   for (const w of allWos) {
     const asset = assetMap.get(w.asset_id) || {};
@@ -527,27 +545,20 @@ export const fetchVccComplianceReport = async ({
     let calculatedVerdict = 'IN_PROGRESS';
     if (w.status === 'CANCELLED') {
       calculatedVerdict = 'CANCELLED';
-      cancelledCount += 1;
     } else if (w.nc_status === 'OPEN' || asset.status === 'ON_HOLD') {
       calculatedVerdict = 'NON_COMPLIANT_HOLD';
-      nonCompliantHoldCount += 1;
     } else if (w.status === 'CLOSED' && w.result_status === 'PASS') {
       if (w.is_amended === 1 || w.is_amended === true) {
         calculatedVerdict = 'COMPLIANT_AMENDED';
-        compliantAmendedCount += 1;
       } else {
         calculatedVerdict = 'COMPLIANT';
-        compliantCount += 1;
       }
     } else if (daysUntilRequired !== null && daysUntilRequired < 0) {
       calculatedVerdict = 'NON_COMPLIANT_OVERDUE';
-      nonCompliantOverdueCount += 1;
     } else if (w.status === 'CLOSED' && w.result_status === 'FAIL') {
       calculatedVerdict = 'NON_COMPLIANT_HOLD';
-      nonCompliantHoldCount += 1;
     } else {
       calculatedVerdict = 'IN_PROGRESS';
-      inProgressCount += 1;
     }
 
     if (verdict && calculatedVerdict !== verdict) continue;
@@ -588,9 +599,26 @@ export const fetchVccComplianceReport = async ({
     });
   }
 
+  let compliantCount = 0;
+  let compliantAmendedCount = 0;
+  let nonCompliantOverdueCount = 0;
+  let nonCompliantHoldCount = 0;
+  let inProgressCount = 0;
+  let cancelledCount = 0;
+
+  for (const r of records) {
+    if (r.verdict === 'COMPLIANT') compliantCount += 1;
+    else if (r.verdict === 'COMPLIANT_AMENDED') compliantAmendedCount += 1;
+    else if (r.verdict === 'NON_COMPLIANT_OVERDUE') nonCompliantOverdueCount += 1;
+    else if (r.verdict === 'NON_COMPLIANT_HOLD') nonCompliantHoldCount += 1;
+    else if (r.verdict === 'CANCELLED') cancelledCount += 1;
+    else inProgressCount += 1;
+  }
+
   const totalAudited = records.length;
   const compliantTotal = compliantCount + compliantAmendedCount;
-  const complianceRate = totalAudited > 0 ? Math.round((compliantTotal / totalAudited) * 100) : 100;
+  const complianceRate = totalAudited > 0 ? Math.round((compliantTotal / totalAudited) * 100) : null;
+  const complianceRateLabel = totalAudited > 0 ? `${complianceRate}%` : 'N/A';
 
   return {
     year: Number(year),
@@ -604,21 +632,42 @@ export const fetchVccComplianceReport = async ({
       non_compliant_hold_count: nonCompliantHoldCount,
       in_progress_count: inProgressCount,
       cancelled_count: cancelledCount,
-      compliance_rate: complianceRate
+      compliance_rate: complianceRate,
+      compliance_rate_label: complianceRateLabel
     },
     records
   };
 };
 
-export const exportVccComplianceReportCsv = async ({ year = 2026, department, reference_date } = {}) => {
+export const exportVccComplianceReportCsv = async ({
+  year = 2026,
+  department,
+  status,
+  result_status,
+  verdict,
+  asset_code,
+  reference_date
+} = {}) => {
   if (isApiMode) {
     const params = new URLSearchParams({ year: String(year) });
     if (department) params.set('department', department);
+    if (status) params.set('status', status);
+    if (result_status) params.set('result_status', result_status);
+    if (verdict) params.set('verdict', verdict);
+    if (asset_code) params.set('asset_code', asset_code);
     if (reference_date) params.set('reference_date', reference_date);
     const blob = await apiBlob(`/api/vcc/export/compliance-report?${params.toString()}`);
     return blob.text();
   }
-  const report = await fetchVccComplianceReport({ year, department, reference_date });
+  const report = await fetchVccComplianceReport({
+    year,
+    department,
+    status,
+    result_status,
+    verdict,
+    asset_code,
+    reference_date
+  });
   const header = [
     'เลขที่ใบสั่งงาน',
     'รหัสเครื่องมือ',
