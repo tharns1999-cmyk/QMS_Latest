@@ -243,4 +243,28 @@ describe('VCC Phase 3.2 — Calibration Records & Execution UI Tests', () => {
 
     printSpy.mockRestore();
   });
+
+  it('AmendmentModal_DisplaysSoDAndUploadErrors: แสดงข้อความแจ้งเตือนเมื่อเกิดข้อผิดพลาด Segregation of Duties หรือ R2 Upload Error', () => {
+    const errorMsg = 'การคัดแยกหน้าที่ (Segregation of Duties): ผู้บันทึกผลการสอบเทียบไม่สามารถอนุมัติการแก้ไข (Amendment) ของตนเองได้ แม้จะมีสิทธิ์ระดับ L5+ ขึ้นไป (ต้องให้ผู้อนุมัติอื่นเป็นผู้ดำเนินการ)';
+    render(
+      <AmendmentModal
+        workOrder={{ ...sampleWorkOrder, status: 'CLOSED' }}
+        onClose={vi.fn()}
+        form={{
+          result_status: 'PASS',
+          certificate_no: 'CERT-001',
+          acceptance_criteria: 'Error <= 0.1°C',
+          amendment_reason: 'พยายามแก้ไขโดยไม่มีสิทธิ์ SoD'
+        }}
+        setForm={vi.fn()}
+        error={errorMsg}
+        saving={false}
+        onSubmit={vi.fn((e) => e.preventDefault())}
+      />
+    );
+
+    const alertBanner = screen.getByRole('alert');
+    expect(alertBanner).toBeInTheDocument();
+    expect(alertBanner).toHaveTextContent(/การคัดแยกหน้าที่ \(Segregation of Duties\)/i);
+  });
 });

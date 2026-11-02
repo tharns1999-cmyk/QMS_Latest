@@ -1625,7 +1625,11 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
     const fileHash = await computeSha256(file);
     const key = `vcc/certificates/${existing.id}/${crypto.randomUUID()}.pdf`;
 
-    if (c.env.FILES) {
+    if (!c.env.FILES) {
+      return c.json({ error: 'ระบบจัดเก็บไฟล์ R2 ยังไม่ได้เชื่อมต่อหรือไม่พร้อมใช้งาน' }, 503);
+    }
+
+    try {
       await c.env.FILES.put(key, file, {
         httpMetadata: {
           contentType: 'application/pdf',
@@ -1637,6 +1641,8 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
           uploaded_by: user.id
         }
       });
+    } catch (uploadErr) {
+      return c.json({ error: `การอัปโหลดไฟล์ใบรับรองไปยังระบบจัดเก็บ R2 ล้มเหลว: ${uploadErr?.message || 'Upload failed'}` }, 500);
     }
 
     // Next version in immutable history
@@ -1792,15 +1798,20 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
     const thresholds = await getThresholds(db, settings.approval_doc_type);
     const userLevel = Number(user.approval_level ?? 0);
 
+    // Segregation of Duties: Performer or Requester cannot approve their own amendment, even with L5+
+    if (user.id === existing.performed_by) {
+      return c.json({ error: 'การคัดแยกหน้าที่ (Segregation of Duties): ผู้บันทึกผลการสอบเทียบไม่สามารถอนุมัติการแก้ไข (Amendment) ของตนเองได้ แม้จะมีสิทธิ์ระดับ L5+ ขึ้นไป (ต้องให้ผู้อนุมัติอื่นเป็นผู้ดำเนินการ)' }, 403);
+    }
+
+    const requesterId = body.requested_by || body.requested_by_id || null;
+    if (requesterId && (user.id === requesterId || user.username === requesterId)) {
+      return c.json({ error: 'การคัดแยกหน้าที่ (Segregation of Duties): ผู้ร้องขอแก้ไขผลไม่สามารถอนุมัติการแก้ไข (Amendment) ของตนเองได้ (ต้องให้ผู้อนุมัติแยกคนเป็นผู้ดำเนินการ)' }, 403);
+    }
+
     // Minimum requirement: L4+ (or reviewer level)
     const requiredLevel = Math.max(4, thresholds.required_reviewer_level || 4);
     if (userLevel < requiredLevel) {
       return c.json({ error: `ผู้มีอำนาจขอแก้ไขใบสั่งงานที่ปิดแล้วต้องมีระดับอนุมัติ L${requiredLevel} ขึ้นไป` }, 403);
-    }
-
-    // Segregation of Duties: Performer cannot solely amend without approver level
-    if (user.id === existing.performed_by && userLevel < thresholds.required_approver_level) {
-      return c.json({ error: 'ผู้บันทึกผลเดิมไม่สามารถอนุมัติแก้ไขใบสั่งงานที่ปิดแล้วด้วยตนเองได้ (ต้องมีระดับอนุมัติขั้นสูง L5+ หรือผู้ตรวจรับเป็นผู้อนุมัติ)' }, 403);
     }
 
     const newResultStatus = body.result_status ? String(body.result_status).trim().toUpperCase() : existing.result_status;
@@ -1871,7 +1882,9 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
     // Snapshot of existing state before changes
     const snapshotJson = JSON.stringify(existing);
 
-    const nextNcStatus = newResultStatus === 'FAIL' ? 'OPEN' : (existing.result_status === 'FAIL' && newResultStatus === 'PASS' ? 'RELEASED' : existing.nc_status);
+    // FAIL -> PASS Amendment must NEVER auto-release NC or remove ON_HOLD.
+    // The NC remains OPEN and asset remains ON_HOLD until explicit impact assessment and hold release via /release-hold.
+    const nextNcStatus = newResultStatus === 'FAIL' ? 'OPEN' : existing.nc_status;
 
     const batchStmts = [
       db.prepare(`
@@ -1928,6 +1941,11 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
         asset_id: existing.asset_id,
         amendment_seq: nextSeq,
         reason,
+        approved_by: user.id,
+        approved_by_name: user.name,
+        approver_level: userLevel,
+        original_performer: existing.performed_by,
+        requested_by: requesterId || existing.performed_by,
         before: {
           result_status: existing.result_status,
           certificate_no: existing.certificate_no,
@@ -1938,6 +1956,16 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
           certificate_no: certificateNo,
           nc_status: nextNcStatus
         }
+      }),
+      audit(db, user.id, 'VCC_WO_AMENDMENT_APPROVED', {
+        wo_id: id,
+        wo_code: existing.wo_code,
+        amendment_seq: nextSeq,
+        approved_by: user.id,
+        approved_by_name: user.name,
+        approver_level: userLevel,
+        original_performer: existing.performed_by,
+        requested_by: requesterId || existing.performed_by
       })
     ];
 
@@ -1950,20 +1978,9 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
           WHERE id = ?
         `).bind(existing.asset_id)
       );
-    } else if (existing.result_status === 'FAIL' && newResultStatus === 'PASS') {
-      batchStmts.push(
-        db.prepare(`
-          UPDATE vcc_assets
-          SET status = 'ACTIVE',
-              updated_at = ${NOW}
-          WHERE id = ?
-            AND NOT EXISTS (
-              SELECT 1 FROM vcc_work_orders
-              WHERE asset_id = ? AND id != ? AND nc_status = 'OPEN'
-            )
-        `).bind(existing.asset_id, existing.asset_id, id)
-      );
     }
+    // NOTE: When amending FAIL -> PASS, vcc_assets status MUST NOT be automatically reverted to ACTIVE.
+    // It remains ON_HOLD until explicit impact assessment and hold release is approved via POST /api/vcc/work-orders/:id/release-hold.
 
     await db.batch(batchStmts);
 

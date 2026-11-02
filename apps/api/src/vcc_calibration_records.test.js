@@ -24,7 +24,7 @@ describe('VCC Phase 3.2: Calibration Execution, Digital Certificates & Controlle
     return { status: res.status, body: await res.json() };
   };
 
-  const uploadCert = async (woId, who, body = SAMPLE_PDF, query = '') => {
+  const uploadCert = async (woId, who, body = SAMPLE_PDF, query = '', customEnv = env) => {
     const res = await app.request(
       `/api/vcc/work-orders/${woId}/certificate-file${query}`,
       {
@@ -32,7 +32,7 @@ describe('VCC Phase 3.2: Calibration Execution, Digital Certificates & Controlle
         headers: { 'Content-Type': 'application/pdf', Authorization: `Bearer ${tokens[who]}` },
         body
       },
-      env
+      customEnv
     );
     return { status: res.status, body: await res.json() };
   };
@@ -59,6 +59,8 @@ describe('VCC Phase 3.2: Calibration Execution, Digital Certificates & Controlle
         ['M1-PERF', 2, 1, 'M1QC'],
         ['M1-REV4', 4, 1, 'M1QC'],
         ['M1-APP5', 5, 1, 'M1QC'],
+        ['M1-APP5-2', 5, 1, 'M1QC'],
+        ['M1-PERF5', 5, 1, 'M1QC'],
         ['M1-OTHER', 4, 1, 'M1OTHER'],
         ['M1-NONDCC', 4, 0, 'M1QC']
       ].map(([id, level, dcc, dept]) =>
@@ -69,7 +71,7 @@ describe('VCC Phase 3.2: Calibration Execution, Digital Certificates & Controlle
       )
     ]);
 
-    for (const id of ['M1-PERF', 'M1-REV4', 'M1-APP5', 'M1-OTHER', 'M1-NONDCC']) {
+    for (const id of ['M1-PERF', 'M1-REV4', 'M1-APP5', 'M1-APP5-2', 'M1-PERF5', 'M1-OTHER', 'M1-NONDCC']) {
       const res = await app.request(
         '/api/auth/login',
         {
@@ -256,8 +258,39 @@ describe('VCC Phase 3.2: Calibration Execution, Digital Certificates & Controlle
     expect(badUpload.status).toBe(400);
     expect(badUpload.body.error).toContain('PDF');
 
-    // 3. Upload Version 1 Certificate
+    // 2.1 R2 Unavailable: When c.env.FILES is missing, returns 503 and does NOT write metadata
     const certV1Bytes = new TextEncoder().encode('%PDF-1.4\nCertificate Version 1 Data\n%%EOF');
+    const noR2Upload = await uploadCert(
+      woId,
+      'M1-PERF',
+      certV1Bytes,
+      '?filename=cert-nor2.pdf&certificate_no=CERT-NOR2',
+      { ...env, FILES: undefined }
+    );
+    expect(noR2Upload.status).toBe(503);
+    expect(noR2Upload.body.error).toContain('R2');
+    const certCountNoR2 = await env.DB.prepare('SELECT COUNT(*) as c FROM vcc_work_order_certificates WHERE work_order_id = ?').bind(woId).first();
+    expect(certCountNoR2.c).toBe(0);
+    const woNoR2 = await env.DB.prepare('SELECT certificate_file_name FROM vcc_work_orders WHERE id = ?').bind(woId).first();
+    expect(woNoR2.certificate_file_name).toBeNull();
+
+    // 2.2 R2 Put Failure: When c.env.FILES.put throws an error, returns 500 and does NOT write metadata
+    const mockBrokenR2 = { put: () => Promise.reject(new Error('Simulated R2 connection reset')) };
+    const failPutUpload = await uploadCert(
+      woId,
+      'M1-PERF',
+      certV1Bytes,
+      '?filename=cert-fail.pdf&certificate_no=CERT-FAIL',
+      { ...env, FILES: mockBrokenR2 }
+    );
+    expect(failPutUpload.status).toBe(500);
+    expect(failPutUpload.body.error).toContain('การอัปโหลดไฟล์ใบรับรองไปยังระบบจัดเก็บ R2 ล้มเหลว');
+    const certCountFail = await env.DB.prepare('SELECT COUNT(*) as c FROM vcc_work_order_certificates WHERE work_order_id = ?').bind(woId).first();
+    expect(certCountFail.c).toBe(0);
+    const woFail = await env.DB.prepare('SELECT certificate_file_name FROM vcc_work_orders WHERE id = ?').bind(woId).first();
+    expect(woFail.certificate_file_name).toBeNull();
+
+    // 3. Upload Version 1 Certificate
     const v1Hash = await computeSha256(certV1Bytes);
 
     const up1 = await uploadCert(
@@ -371,6 +404,38 @@ describe('VCC Phase 3.2: Calibration Execution, Digital Certificates & Controlle
       amendment_reason: 'ผู้บันทึกผลพยายามแก้เอง'
     });
     expect(perfAloneAmend.status).toBe(403);
+    expect(perfAloneAmend.body.error).toContain('การคัดแยกหน้าที่');
+
+    // 6.1 SoD: Performer with L5+ cannot approve their own amendment
+    const woL5Id = 'WO-M1-AMEND-L5PERF';
+    await env.DB.prepare(`
+      INSERT INTO vcc_work_orders (
+        id, wo_code, asset_id, provider_name, planned_month, baseline_planned_date,
+        scheduled_date, due_date, original_due_date, required_due_date, status, result_status,
+        performed_by, performed_at, created_by, updated_by
+      ) VALUES (?, 'WO-2026-01-AMENDL5', ?, 'ทวนสอบภายใน', 1, '2026-01-15', '2026-01-15', '2026-01-15', '2026-01-15', '2026-01-15', 'CLOSED', 'PASS', 'M1-PERF5', '2026-01-12', 'M1-PERF5', 'M1-PERF5')
+    `).bind(woL5Id, assetId).run();
+
+    const perf5AloneAmend = await call('POST', `/api/vcc/work-orders/${woL5Id}/amend`, 'M1-PERF5', {
+      amendment_reason: 'ผู้บันทึกผลระดับ L5 พยายามอนุมัติการแก้ไขของตนเอง'
+    });
+    expect(perf5AloneAmend.status).toBe(403);
+    expect(perf5AloneAmend.body.error).toContain('การคัดแยกหน้าที่');
+
+    // 6.2 SoD: Requester cannot approve their own amendment
+    const requesterAloneAmend = await call('POST', `/api/vcc/work-orders/${woL5Id}/amend`, 'M1-APP5', {
+      requested_by: 'M1-APP5',
+      amendment_reason: 'ผู้ร้องขอพยายามอนุมัติการแก้ไขของตนเอง'
+    });
+    expect(requesterAloneAmend.status).toBe(403);
+    expect(requesterAloneAmend.body.error).toContain('ผู้ร้องขอแก้ไขผลไม่สามารถอนุมัติ');
+
+    // 6.3 Separate L5 Approver can approve the amendment
+    const separateL5Amend = await call('POST', `/api/vcc/work-orders/${woL5Id}/amend`, 'M1-APP5-2', {
+      requested_by: 'M1-PERF5',
+      amendment_reason: 'ผู้อนุมัติแยกคนอนุมัติการแก้ไขอย่างถูกต้อง'
+    });
+    expect(separateL5Amend.status).toBe(200);
 
     // Missing reason rejected
     const noReasonAmend = await call('POST', `/api/vcc/work-orders/${woId}/amend`, 'M1-REV4', {
@@ -405,15 +470,53 @@ describe('VCC Phase 3.2: Calibration Execution, Digital Certificates & Controlle
     const heldAfterAmend = await env.DB.prepare('SELECT status FROM vcc_assets WHERE id = ?').bind(assetId).first();
     expect(heldAfterAmend.status).toBe('ON_HOLD');
 
+    // 7.1 FAIL -> PASS Amendment must NEVER auto-release NC or auto-clear ON_HOLD (Issue 2)
+    const validAmend2 = await call('POST', `/api/vcc/work-orders/${woId}/amend`, 'M1-APP5-2', {
+      result_status: 'PASS',
+      certificate_no: 'CERT-AMEND-REV-02',
+      result_remarks: 'แล็บส่งใบรับรองฉบับแก้ไข ผลสอบเทียบผ่านเกณฑ์แล้ว',
+      amendment_reason: 'สถาบันสอบเทียบได้ดำเนินการสอบเทียบซ้ำและออกใบรับรองที่ถูกต้อง ผลการวัดผ่านเกณฑ์ยอมรับ'
+    });
+    expect(validAmend2.status).toBe(200);
+    expect(validAmend2.body.amendment_seq).toBe(2);
+    const woAmended2 = validAmend2.body.workOrder;
+    expect(woAmended2.result_status).toBe('PASS');
+    expect(woAmended2.nc_status).toBe('OPEN'); // NC MUST remain OPEN, NOT auto-released!
+
+    const assetStillHeld = await env.DB.prepare('SELECT status FROM vcc_assets WHERE id = ?').bind(assetId).first();
+    expect(assetStillHeld.status).toBe('ON_HOLD'); // Asset MUST remain ON_HOLD, NOT auto-reverted to ACTIVE!
+
+    // 7.2 Hold Release Workflow: To release ON_HOLD, authorized L5+ must submit impact assessment
+    const releaseRes = await call('POST', `/api/vcc/work-orders/${woId}/release-hold`, 'M1-APP5', {
+      impact_assessment: 'ประเมินผลกระทบย้อนหลังต่อผลิตภัณฑ์ล็อตที่ใช้เครื่องมือนี้แล้ว ไม่พบความเสี่ยงเนื่องจากค่าเบี่ยงเบนอยู่ในขอบเขตปลอดภัย'
+    });
+    expect(releaseRes.status).toBe(200);
+    expect(releaseRes.body.workOrder.nc_status).toBe('RELEASED');
+
+    const assetReleased = await env.DB.prepare('SELECT status FROM vcc_assets WHERE id = ?').bind(assetId).first();
+    expect(assetReleased.status).toBe('ACTIVE');
+
+    // 7.3 Verify Audit Trail for Amendment Approval
+    const auditRes = await env.DB.prepare(
+      "SELECT action, details FROM audit_log WHERE action = 'VCC_WO_AMENDMENT_APPROVED' AND details LIKE ?"
+    ).bind(`%${woId}%`).all();
+    expect(auditRes.results.length).toBeGreaterThanOrEqual(1);
+    const parsedAudit = JSON.parse(auditRes.results[0].details);
+    expect(parsedAudit.approved_by).toBe('M1-APP5');
+    expect(parsedAudit.original_performer).toBe('M1-PERF');
+
     // 8. Query Amendment History
     const amendListRes = await call('GET', `/api/vcc/work-orders/${woId}/amendments`, 'M1-REV4');
     expect(amendListRes.status).toBe(200);
     const amendments = amendListRes.body.amendments;
-    expect(amendments.length).toBe(1);
-    expect(amendments[0].amendment_seq).toBe(1);
-    expect(amendments[0].amended_by_name).toBe('M1-APP5');
-    expect(amendments[0].snapshot.result_status).toBe('PASS'); // Original state was preserved
-    expect(amendments[0].amendment_reason).toContain('ISO/IEC 17025 clause 7.8.8');
+    expect(amendments.length).toBe(2);
+    expect(amendments[0].amendment_seq).toBe(2);
+    expect(amendments[0].amended_by_name).toBe('M1-APP5-2');
+    expect(amendments[0].snapshot.result_status).toBe('FAIL'); // Pre-amendment state before Seq 2
+    expect(amendments[1].amendment_seq).toBe(1);
+    expect(amendments[1].amended_by_name).toBe('M1-APP5');
+    expect(amendments[1].snapshot.result_status).toBe('PASS'); // Original state was preserved in Seq 1
+    expect(amendments[1].amendment_reason).toContain('ISO/IEC 17025 clause 7.8.8');
 
     // 9. Work Order Full Detail View includes certificates and amendments
     const detailRes = await call('GET', `/api/vcc/work-orders/${woId}`, 'M1-REV4');
@@ -421,8 +524,8 @@ describe('VCC Phase 3.2: Calibration Execution, Digital Certificates & Controlle
     expect(detailRes.body.workOrder.is_amended).toBe(1);
     expect(Array.isArray(detailRes.body.certificates)).toBe(true);
     expect(Array.isArray(detailRes.body.amendments)).toBe(true);
-    expect(detailRes.body.amendments.length).toBe(1);
-    expect(detailRes.body.amendments[0].snapshot.wo_code).toBe('WO-2026-01-AMEND01');
+    expect(detailRes.body.amendments.length).toBe(2);
+    expect(detailRes.body.amendments[1].snapshot.wo_code).toBe('WO-2026-01-AMEND01');
   });
 
   it('generates VCC_CALIBRATION_REVIEW tasks in GET /api/vcc/tasks when result is submitted, enforcing Segregation of Duties', async () => {

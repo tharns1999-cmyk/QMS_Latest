@@ -611,10 +611,20 @@ export const amendVccWorkOrder = async (id, payload) => {
   if (existing.status !== 'CLOSED') {
     throw new Error('การแก้ไข (Amendment) ทำได้เฉพาะใบสั่งงานที่ปิดงาน (CLOSED) สำเร็จแล้วเท่านั้น');
   }
+  if (user.id === existing.performed_by) {
+    throw new Error('การคัดแยกหน้าที่ (Segregation of Duties): ผู้บันทึกผลการสอบเทียบไม่สามารถอนุมัติการแก้ไข (Amendment) ของตนเองได้ แม้จะมีสิทธิ์ระดับ L5+ ขึ้นไป (ต้องให้ผู้อนุมัติอื่นเป็นผู้ดำเนินการ)');
+  }
+  const requesterId = payload.requested_by || payload.requested_by_id || null;
+  if (requesterId && (user.id === requesterId || user.username === requesterId)) {
+    throw new Error('การคัดแยกหน้าที่ (Segregation of Duties): ผู้ร้องขอแก้ไขผลไม่สามารถอนุมัติการแก้ไข (Amendment) ของตนเองได้ (ต้องให้ผู้อนุมัติแยกคนเป็นผู้ดำเนินการ)');
+  }
   const now = new Date().toISOString();
+  // FAIL -> PASS Amendment must NEVER auto-release NC or remove ON_HOLD
+  const nextNcStatus = payload.result_status === 'FAIL' ? 'OPEN' : existing.nc_status;
   const updated = {
     ...existing,
     ...payload,
+    nc_status: nextNcStatus,
     is_amended: 1,
     amended_at: now,
     amended_by: user.id,
