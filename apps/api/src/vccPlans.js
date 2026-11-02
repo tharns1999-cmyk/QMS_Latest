@@ -2416,20 +2416,88 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
         initialCycleIds.push(null);
       }
 
+      const usedTargetIndices = new Set();
       const mappings = Array.isArray(res.mappings) ? res.mappings : (res.base_cycle_id ? [res] : []);
+
       for (const m of mappings) {
-        const targetMonth = Number(m.target_month);
-        const baseCycleId = m.base_cycle_id;
-        const monthIdx = cleanMonths.indexOf(targetMonth);
-        if (monthIdx !== -1) {
-          initialCycleIds[monthIdx] = baseCycleId || crypto.randomUUID();
-          auditDetails.push({
-            asset_id: itemRow.asset_id,
-            target_month: targetMonth,
-            base_cycle_id: baseCycleId,
-            assigned_initial_cycle_id: initialCycleIds[monthIdx]
-          });
+        let targetIndex = -1;
+
+        // 1. Direct Stable Sequence Match (1-based sequence or 0-based index)
+        if (m.target_cycle_seq !== undefined && Number.isInteger(Number(m.target_cycle_seq))) {
+          const s = Number(m.target_cycle_seq);
+          if (s >= 1 && s <= cleanMonths.length) {
+            targetIndex = s - 1;
+          }
+        } else if (m.cycle_index !== undefined && Number.isInteger(Number(m.cycle_index))) {
+          const idx = Number(m.cycle_index);
+          if (idx >= 0 && idx < cleanMonths.length) {
+            targetIndex = idx;
+          }
+        } else if (m.target_cycle_id) {
+          // Stable Cycle Identity Match by Cycle ID
+          targetIndex = initialCycleIds.findIndex((cid, i) => cid === m.target_cycle_id || `${itemRow.id}-c${i + 1}` === m.target_cycle_id);
         }
+
+        // 2. Unambiguous Month Match (tracks used indices to support duplicate months)
+        if (targetIndex === -1 && m.target_month !== undefined) {
+          const targetMonth = Number(m.target_month);
+          for (let i = 0; i < cleanMonths.length; i++) {
+            if (cleanMonths[i] === targetMonth && !usedTargetIndices.has(i)) {
+              targetIndex = i;
+              break;
+            }
+          }
+        }
+
+        if (targetIndex === -1 || targetIndex >= cleanMonths.length) {
+          return c.json({
+            error: `ไม่สามารถจับคู่รอบเป้าหมาย (target_month: ${m.target_month ?? 'N/A'}, seq: ${m.target_cycle_seq ?? m.cycle_index ?? 'N/A'}) ในรายการเครื่องมือ ${itemRow.asset_id} ได้`
+          }, 400);
+        }
+
+        usedTargetIndices.add(targetIndex);
+        const baseCycleId = m.base_cycle_id;
+
+        // Evidence Protection: Verify CLOSED Work Orders
+        let closedWoInfo = null;
+        if (baseCycleId) {
+          const closedWo = await db.prepare(`
+            SELECT id, wo_code, status, cycle_id, cycle_key, certificate_no
+            FROM vcc_work_orders
+            WHERE (cycle_id = ? OR cycle_key = ?) AND status = 'CLOSED'
+          `).bind(baseCycleId, baseCycleId).first();
+
+          if (closedWo) {
+            closedWoInfo = {
+              wo_id: closedWo.id,
+              wo_code: closedWo.wo_code,
+              certificate_no: closedWo.certificate_no
+            };
+          }
+        } else {
+          // If trying to clear or nullify a cycle: check if it previously had a CLOSED Work Order
+          const priorCid = initialCycleIds[targetIndex];
+          if (priorCid) {
+            const closedWoPrior = await db.prepare(`
+              SELECT id, wo_code FROM vcc_work_orders WHERE (cycle_id = ? OR cycle_key = ?) AND status = 'CLOSED'
+            `).bind(priorCid, priorCid).first();
+            if (closedWoPrior) {
+              return c.json({
+                error: `ไม่อนุญาตให้ปลดหรือลบรอบการสอบเทียบที่มีใบสั่งงานปิดสมบูรณ์แล้ว (CLOSED Work Order: ${closedWoPrior.wo_code})`
+              }, 400);
+            }
+          }
+        }
+
+        initialCycleIds[targetIndex] = baseCycleId || crypto.randomUUID();
+        auditDetails.push({
+          asset_id: itemRow.asset_id,
+          target_cycle_seq: targetIndex + 1,
+          target_month: cleanMonths[targetIndex],
+          base_cycle_id: baseCycleId,
+          assigned_initial_cycle_id: initialCycleIds[targetIndex],
+          closed_work_order: closedWoInfo
+        });
       }
 
       updateStmts.push(

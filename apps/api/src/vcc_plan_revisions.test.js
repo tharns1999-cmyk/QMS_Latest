@@ -1776,4 +1776,133 @@ describe('VCC Phase 3.1: Plan Revision Foundation & Diff Engine Tests', () => {
     expect(preflight.violations.some((v) => v.planId === badPlanId && v.type === 'APPROVED_MISSING_APPROVER')).toBe(true);
     expect(preflight.reportText).toContain('VCC Preflight Diagnostic Report');
   });
+
+  it('38. Conflict Resolution & Cycle Identity Integrity: Duplicate Planned Months [6, 6], CLOSED WO Protection & Cross-Revision Lineage', async () => {
+    // 1. Cross-Revision Cycle Lineage (Non-Global Uniqueness of initial_cycle_id)
+    // Prove that initial_cycle_id is shared across revisions (Revision 00 and Revision 01)
+    // without violating any global unique constraints in vcc_plan_cycles.
+    const sharedInitialCycleId = 'init-cycle-lineage-' + crypto.randomUUID();
+    const cycleRev00Id = 'cycle-rev00-' + crypto.randomUUID();
+    const cycleRev01Id = 'cycle-rev01-' + crypto.randomUUID();
+    const planRev00Id = crypto.randomUUID();
+    const planRev01Id = crypto.randomUUID();
+
+    // Insert dummy assets
+    await env.DB.prepare(`
+      INSERT OR IGNORE INTO vcc_assets (id, asset_code, name, asset_type, department, status, created_at, updated_at)
+      VALUES ('EQ-DUP-01', 'EQ-DUP-01', 'เครื่องมือสอบเทียบ 1', 'เครื่องชั่ง', 'QC', 'ACTIVE', 'now', 'now')
+    `).run();
+    await env.DB.prepare(`
+      INSERT OR IGNORE INTO vcc_assets (id, asset_code, name, asset_type, department, status, created_at, updated_at)
+      VALUES ('EQ-CAL-DUP', 'EQ-CAL-DUP', 'เครื่องมือสอบเทียบ 2', 'เครื่องชั่ง', 'QC', 'ACTIVE', 'now', 'now')
+    `).run();
+
+    // Insert dummy plans
+    await env.DB.prepare(`
+      INSERT INTO vcc_annual_plans (id, plan_year, department, revision, title, status, effective_status, is_current, approved_by, approved_at, created_at, updated_at)
+      VALUES (?, 2035, 'QC', '00', 'Plan Rev 00', 'APPROVED', 'SUPERSEDED', 0, 'REV-QA-MGR', '2035-01-01', 'now', 'now')
+    `).bind(planRev00Id).run();
+    await env.DB.prepare(`
+      INSERT INTO vcc_annual_plans (id, plan_year, department, revision, title, status, effective_status, is_current, approved_by, approved_at, created_at, updated_at)
+      VALUES (?, 2035, 'QC', '01', 'Plan Rev 01', 'APPROVED', 'CURRENT', 1, 'REV-QA-MGR', '2035-06-01', 'now', 'now')
+    `).bind(planRev01Id).run();
+
+    // Insert items for plans
+    await env.DB.prepare(`
+      INSERT INTO vcc_annual_plan_items (id, plan_id, asset_id, provider_name, responsible_dept, planned_months, created_at, updated_at)
+      VALUES ('item-00', ?, 'EQ-DUP-01', 'ภายนอก', 'QC', '[6]', 'now', 'now')
+    `).bind(planRev00Id).run();
+    await env.DB.prepare(`
+      INSERT INTO vcc_annual_plan_items (id, plan_id, asset_id, provider_name, responsible_dept, planned_months, created_at, updated_at)
+      VALUES ('item-01', ?, 'EQ-DUP-01', 'ภายนอก', 'QC', '[6]', 'now', 'now')
+    `).bind(planRev01Id).run();
+
+    // Insert cycle in Rev 00
+    await env.DB.prepare(`
+      INSERT INTO vcc_plan_cycles (id, plan_id, plan_item_id, asset_id, cycle_seq, planned_month, baseline_planned_date, cycle_status, initial_cycle_id, plan_revision, created_at, created_by)
+      VALUES (?, ?, 'item-00', 'EQ-DUP-01', 1, 6, '2035-06-15', 'SCHEDULED', ?, '00', 'now', 'REV-QC-SUP')
+    `).bind(cycleRev00Id, planRev00Id, sharedInitialCycleId).run();
+
+    // Insert cycle in Rev 01 sharing the exact same initial_cycle_id
+    // This MUST succeed without UNIQUE constraint violation
+    await env.DB.prepare(`
+      INSERT INTO vcc_plan_cycles (id, plan_id, plan_item_id, asset_id, cycle_seq, planned_month, baseline_planned_date, cycle_status, initial_cycle_id, plan_revision, created_at, created_by)
+      VALUES (?, ?, 'item-01', 'EQ-DUP-01', 1, 6, '2035-06-20', 'SCHEDULED', ?, '01', 'now', 'REV-QC-SUP')
+    `).bind(cycleRev01Id, planRev01Id, sharedInitialCycleId).run();
+
+    const { results: lineageRows } = await env.DB.prepare(`
+      SELECT id, plan_id, plan_revision, initial_cycle_id FROM vcc_plan_cycles WHERE initial_cycle_id = ?
+    `).bind(sharedInitialCycleId).all();
+    expect(lineageRows.length).toBe(2);
+    expect(lineageRows.map((r) => r.plan_revision).sort()).toEqual(['00', '01']);
+
+    // 2. Conflict Resolution with Duplicate Planned Months [6, 6]
+    // Create a plan with duplicate months in planned_months
+    const planDraftId = crypto.randomUUID();
+    const itemId = crypto.randomUUID();
+    await env.DB.prepare(`
+      INSERT INTO vcc_annual_plans (id, plan_year, department, revision, title, status, effective_status, is_current, created_at, updated_at)
+      VALUES (?, 2036, 'QC', '01', 'Duplicate Month Plan', 'DRAFT', 'PENDING', 0, 'now', 'now')
+    `).bind(planDraftId).run();
+
+    await env.DB.prepare(`
+      INSERT INTO vcc_annual_plan_items (id, plan_id, asset_id, provider_name, responsible_dept, planned_months, initial_cycle_ids, created_at, updated_at)
+      VALUES (?, ?, 'EQ-CAL-DUP', 'ภายใน', 'QC', '[6, 6]', '["init-c1", "init-c2"]', 'now', 'now')
+    `).bind(itemId, planDraftId).run();
+
+    // Resolve conflict using unambiguous target_cycle_seq (1-based sequence: 1 and 2)
+    const baseC1 = 'base-cycle-c1-' + crypto.randomUUID();
+    const baseC2 = 'base-cycle-c2-' + crypto.randomUUID();
+    const resolveRes = await call('POST', `/api/vcc/plans/${planDraftId}/diff/resolve-conflicts`, 'REV-QC-SUP', {
+      resolution_reason: 'ระบุรอบเป้าหมายอย่างชัดเจนตามลำดับ 1 และ 2',
+      resolutions: [
+        {
+          asset_id: 'EQ-CAL-DUP',
+          mappings: [
+            { target_cycle_seq: 1, base_cycle_id: baseC1 },
+            { target_cycle_seq: 2, base_cycle_id: baseC2 }
+          ]
+        }
+      ]
+    });
+
+    expect(resolveRes.status).toBe(200);
+    expect(resolveRes.body.success).toBe(true);
+    expect(resolveRes.body.resolved_items_count).toBe(2);
+
+    // Verify database stored the respective initial_cycle_ids for sequence 1 and 2
+    const updatedItem = await env.DB.prepare('SELECT initial_cycle_ids FROM vcc_annual_plan_items WHERE id = ?').bind(itemId).first();
+    const parsedInit = JSON.parse(updatedItem.initial_cycle_ids);
+    expect(parsedInit[0]).toBe(baseC1);
+    expect(parsedInit[1]).toBe(baseC2);
+
+    // 3. Evidence Protection: CLOSED Work Order cannot be orphaned or cleared
+    const closedWoCycleId = 'closed-cycle-' + crypto.randomUUID();
+    const closedWoId = 'WO-CLOSED-' + crypto.randomUUID();
+    await env.DB.prepare(`
+      INSERT INTO vcc_work_orders (id, wo_code, plan_id, plan_item_id, cycle_id, cycle_key, asset_id, provider_name, due_date, original_due_date, status, plan_year, created_at)
+      VALUES (?, 'WO-2036-CLOSED-01', ?, ?, ?, ?, 'EQ-CAL-DUP', 'ภายใน', '2036-06-30', '2036-06-30', 'CLOSED', 2036, 'now')
+    `).bind(closedWoId, planDraftId, itemId, closedWoCycleId, closedWoCycleId).run();
+
+    // Set item initial_cycle_ids to include the closed cycle
+    await env.DB.prepare('UPDATE vcc_annual_plan_items SET initial_cycle_ids = ? WHERE id = ?')
+      .bind(JSON.stringify([closedWoCycleId, baseC2]), itemId).run();
+
+    // Attempt to clear/nullify target_cycle_seq 1 (which holds closedWoCycleId)
+    const clearConflictRes = await call('POST', `/api/vcc/plans/${planDraftId}/diff/resolve-conflicts`, 'REV-QC-SUP', {
+      resolution_reason: 'พยายามปลดรอบที่มี Closed Work Order',
+      resolutions: [
+        {
+          asset_id: 'EQ-CAL-DUP',
+          mappings: [
+            { target_cycle_seq: 1, base_cycle_id: null } // Try to wipe out cycle with closed WO!
+          ]
+        }
+      ]
+    });
+
+    expect(clearConflictRes.status).toBe(400);
+    expect(clearConflictRes.body.error).toContain('ไม่อนุญาตให้ปลดหรือลบรอบการสอบเทียบที่มีใบสั่งงานปิดสมบูรณ์แล้ว');
+    expect(clearConflictRes.body.error).toContain('WO-2036-CLOSED-01');
+  });
 });

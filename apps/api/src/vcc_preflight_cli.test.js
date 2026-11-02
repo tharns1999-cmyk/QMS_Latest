@@ -10,7 +10,11 @@ import {
   runSafeMigrationWorkflow,
   createConsistentSqliteBackup,
   verifySqliteBackupIntegrity,
-  verifyAuditStorageReadiness
+  verifyAuditStorageReadiness,
+  generateTrustedDrillEvidence,
+  verifyDrillEvidenceSignature,
+  withAuditLock,
+  isProcessAlive
 } from '../scripts/vcc-migrate-safe.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -374,14 +378,15 @@ describe('VCC Final Security Gate & Real Integrity Verification Tests', () => {
         isTestRunner: true,
         isTestHarness: true,
         auditPath: testAuditPath,
-        verifiedRestoreDrill: {
+        verifiedRestoreDrill: generateTrustedDrillEvidence({
+          issuer: 'vcc-automated-restore-drill-service',
           database_id: 'WRONG-DATABASE-UUID',
           environment: 'production',
           recovery_point: 'SNAP-20261102-001',
           drill_status: 'SUCCESS',
           integrity_check: 'ok',
           tested_at: new Date().toISOString()
-        }
+        })
       });
     } catch (err) {
       caughtMismatched = err;
@@ -392,8 +397,9 @@ describe('VCC Final Security Gate & Real Integrity Verification Tests', () => {
     expect(caughtMismatched.message).toContain('หลักฐาน Restore Drill ไม่ตรงกับเป้าหมาย');
   });
 
-  it('10. P0 Remote Restore Evidence: ผ่านการตรวจสอบเมื่อมีหลักฐาน Restore Drill ที่ถูกต้อง ครบถ้วน และตรงกับเป้าหมาย', async () => {
-    const validDrillEvidence = {
+  it('10. P0 Remote Restore Evidence: ผ่านการตรวจสอบเมื่อมีหลักฐาน Restore Drill ที่ถูกต้อง ครบถ้วน ลายเซ็นสมบูรณ์ และตรงกับเป้าหมาย', async () => {
+    const rawDrill = {
+      issuer: 'vcc-automated-restore-drill-service',
       database_id: '05a8bae0-70de-4bfc-bc74-4a8971b307e0',
       environment: 'production',
       recovery_point: 'SNAP-20261102-VALID',
@@ -401,6 +407,7 @@ describe('VCC Final Security Gate & Real Integrity Verification Tests', () => {
       integrity_check: 'ok',
       tested_at: new Date().toISOString()
     };
+    const validDrillEvidence = generateTrustedDrillEvidence(rawDrill);
 
     const mockValidDb = {
       prepare: (sql) => ({
@@ -432,6 +439,85 @@ describe('VCC Final Security Gate & Real Integrity Verification Tests', () => {
     expect(result.result).toBe('SUCCESS');
     expect(result.backup_reference.restore_tested).toBe(true);
     expect(result.backup_reference.drill_evidence.recovery_point).toBe('SNAP-20261102-VALID');
+    expect(result.backup_reference.drill_evidence.issuer).toBe('vcc-automated-restore-drill-service');
+    expect(result.backup_reference.drill_evidence.signature).toBeTruthy();
+  });
+
+  it('10.1 P0 Remote Restore Evidence: ปฏิเสธหลักฐานที่ไม่มีลายเซ็น ลายเซ็นผิด หรือสร้างขึ้นเองโดยไม่ผ่านระบบที่เชื่อถือได้ (Fail-Closed)', async () => {
+    const mockValidDb = {
+      prepare: () => ({
+        first: async () => ({ is_alive: 1 }),
+        all: async () => []
+      })
+    };
+
+    // Case A: Unsigned / Self-created evidence (no signature field)
+    const unsignedEvidence = {
+      database_id: '05a8bae0-70de-4bfc-bc74-4a8971b307e0',
+      environment: 'production',
+      recovery_point: 'SNAP-20261102-VALID',
+      drill_status: 'SUCCESS',
+      integrity_check: 'ok',
+      tested_at: new Date().toISOString()
+    };
+
+    let caughtUnsigned = null;
+    try {
+      await runSafeMigrationWorkflow([
+        '--remote',
+        '--database', 'DB',
+        '--backup-ref', 'SNAP-20261102-VALID',
+        '--confirm-migration'
+      ], {
+        mockDb: mockValidDb,
+        isTestRunner: true,
+        isTestHarness: true,
+        auditPath: testAuditPath,
+        verifiedRestoreDrill: unsignedEvidence
+      });
+    } catch (err) {
+      caughtUnsigned = err;
+    }
+
+    expect(caughtUnsigned).not.toBeNull();
+    expect(caughtUnsigned.message).toContain('ไม่พบลายเซ็นดิจิทัล');
+
+    // Case B: Tampered / Modified payload with forged signature
+    const validEvidence = generateTrustedDrillEvidence({
+      issuer: 'vcc-automated-restore-drill-service',
+      database_id: '05a8bae0-70de-4bfc-bc74-4a8971b307e0',
+      environment: 'production',
+      recovery_point: 'SNAP-20261102-VALID',
+      drill_status: 'SUCCESS',
+      integrity_check: 'ok',
+      tested_at: new Date().toISOString()
+    });
+
+    const tamperedEvidence = {
+      ...validEvidence,
+      recovery_point: 'SNAP-FORGED-POINT' // Tamper recovery point after signing!
+    };
+
+    let caughtTampered = null;
+    try {
+      await runSafeMigrationWorkflow([
+        '--remote',
+        '--database', 'DB',
+        '--backup-ref', 'SNAP-FORGED-POINT',
+        '--confirm-migration'
+      ], {
+        mockDb: mockValidDb,
+        isTestRunner: true,
+        isTestHarness: true,
+        auditPath: testAuditPath,
+        verifiedRestoreDrill: tamperedEvidence
+      });
+    } catch (err) {
+      caughtTampered = err;
+    }
+
+    expect(caughtTampered).not.toBeNull();
+    expect(caughtTampered.message).toContain('ลายเซ็นดิจิทัล (HMAC-SHA256) ไม่ตรงกับข้อมูลหลักฐาน');
   });
 
   it('11. P0 Remote Restore Evidence: แฟล็ก --remote-restore-verified บน CLI ถูกปฏิเสธด้วย SECURITY VIOLATION', () => {
@@ -501,5 +587,175 @@ describe('VCC Final Security Gate & Real Integrity Verification Tests', () => {
     const outProd = procProd.stderr || procProd.stdout;
     expect(outProd).toContain('SECURITY VIOLATION');
     expect(outProd).toContain('ห้ามรัน Raw Migration บน Remote หรือ Production เด็ดขาด');
+  });
+
+  it('15. P0.4 Real Concurrent Backup: VACUUM INTO ทำงานควบคู่กับ Separate OS Process Writer ใน WAL Mode โดยไม่เกิด Corruption', async () => {
+    const tempDir = path.resolve(apiDir, `.wrangler/test-wal-concurrent-${Date.now()}`);
+    fs.mkdirSync(tempDir, { recursive: true });
+    const sourceDb = path.resolve(tempDir, 'source.sqlite');
+    const backupDb = path.resolve(tempDir, 'backup.sqlite');
+    const stopSignalFile = path.resolve(tempDir, 'stop.signal');
+
+    // Initialize source database in WAL mode with initial dataset
+    const initDb = new DatabaseSync(sourceDb);
+    initDb.exec('PRAGMA journal_mode = WAL;');
+    initDb.exec('CREATE TABLE metrics (id INTEGER PRIMARY KEY AUTOINCREMENT, payload TEXT, created_at TEXT);');
+    for (let i = 0; i < 50; i++) {
+      initDb.exec(`INSERT INTO metrics (payload, created_at) VALUES ('initial-record-${i}', '${new Date().toISOString()}');`);
+    }
+    initDb.close();
+
+    // Spawn a REAL separate OS process writer that writes transactions continuously in WAL mode
+    const writerScript = `
+      import { DatabaseSync } from 'node:sqlite';
+      import fs from 'node:fs';
+
+      const dbPath = process.argv[2];
+      const stopSignal = process.argv[3];
+      const db = new DatabaseSync(dbPath);
+      db.exec('PRAGMA busy_timeout = 5000;');
+
+      let count = 0;
+      while (!fs.existsSync(stopSignal) && count < 200) {
+        try {
+          db.exec('BEGIN IMMEDIATE;');
+          db.exec("INSERT INTO metrics (payload, created_at) VALUES ('concurrent-write-" + count + "', '" + new Date().toISOString() + "');");
+          db.exec('COMMIT;');
+          count++;
+        } catch (e) {
+          try { db.exec('ROLLBACK;'); } catch {}
+        }
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
+      }
+      db.close();
+      process.exit(0);
+    `;
+
+    const writerFile = path.resolve(tempDir, 'writer.mjs');
+    fs.writeFileSync(writerFile, writerScript, 'utf-8');
+
+    const writerProcess = spawn(process.execPath, [writerFile, sourceDb, stopSignalFile], {
+      stdio: 'ignore'
+    });
+
+    // Wait a brief moment for the writer process to be actively inserting
+    await new Promise((r) => setTimeout(r, 60));
+
+    // Execute VACUUM INTO concurrently while separate OS process is writing
+    expect(() => {
+      createConsistentSqliteBackup(sourceDb, backupDb);
+    }).not.toThrow();
+
+    // Signal writer process to stop and wait for it
+    fs.writeFileSync(stopSignalFile, 'STOP', 'utf-8');
+    await new Promise((resolve) => {
+      writerProcess.on('exit', resolve);
+      setTimeout(() => {
+        try { writerProcess.kill(); } catch {}
+        resolve();
+      }, 5000);
+    });
+
+    // Deep SQLite Restore Verification on the concurrent backup
+    const integrityResult = verifySqliteBackupIntegrity(backupDb);
+    expect(integrityResult.integrity).toBe('ok');
+    expect(integrityResult.tableCount).toBeGreaterThanOrEqual(1);
+
+    // Verify data inside backup is readable, integral, and matches snapshot consistency
+    const verifyDb = new DatabaseSync(backupDb, { readOnly: true });
+    const countRow = verifyDb.prepare('SELECT count(*) as count FROM metrics').all();
+    expect(countRow[0].count).toBeGreaterThanOrEqual(50);
+    verifyDb.close();
+
+    // Cleanup
+    try { fs.rmSync(tempDir, { recursive: true, force: true }); } catch {}
+  });
+
+  it('16. P0.5 Stale Lock Safety: ไม่ทำลาย Lock หาก Process เจ้าของยังคงทำงานอยู่จริง (isProcessAlive)', () => {
+    const lockDir = `${testAuditPath}.lock`;
+    const ownerFile = path.resolve(lockDir, 'owner.json');
+    fs.mkdirSync(lockDir, { recursive: true });
+
+    // Set lock owner to CURRENT PROCESS PID (which is definitely running!) and set mtime to 60s ago
+    fs.writeFileSync(ownerFile, JSON.stringify({
+      pid: process.pid,
+      created_at: Date.now() - 60000
+    }), 'utf-8');
+
+    // Also set mtime of directory to 60s ago
+    const pastTime = (Date.now() - 60000) / 1000;
+    fs.utimesSync(lockDir, pastTime, pastTime);
+
+    // Try to acquire lock with short timeout (150ms)
+    // Because owner process (process.pid) is STILL ALIVE, the lock MUST NOT be broken!
+    let caughtLockErr = null;
+    try {
+      withAuditLock(testAuditPath, () => {
+        return 'ACQUIRED';
+      }, 150);
+    } catch (err) {
+      caughtLockErr = err;
+    }
+
+    expect(caughtLockErr).not.toBeNull();
+    expect(caughtLockErr.message).toContain('ไม่สามารถขอรับ Lock');
+    // Lock directory still exists because it was NOT destroyed
+    expect(fs.existsSync(lockDir)).toBe(true);
+
+    // Cleanup
+    try {
+      if (fs.existsSync(ownerFile)) fs.unlinkSync(ownerFile);
+      fs.rmSync(lockDir, { recursive: true, force: true });
+    } catch {}
+  });
+
+  it('17. P0.5 Partial Apply Failure: บันทึก FAILED_PARTIAL_APPLY และ database_mutated = true เมื่อเกิดความล้มเหลวระหว่างทาง', async () => {
+    let migrationCalls = 0;
+    const mockDbWithMigrations = {
+      prepare: (sql) => ({
+        first: async () => {
+          if (sql.includes('is_alive')) return { is_alive: 1 };
+          if (sql.includes('sqlite_master')) return { name: 'vcc_annual_plans' };
+          if (sql.includes('d1_migrations')) {
+            migrationCalls++;
+            return { count: migrationCalls === 1 ? 3 : 5 };
+          }
+          return { is_alive: 1, 1: 1, total: 0, approved_count: 0, current_count: 0, cnt: 0 };
+        },
+        all: async () => []
+      })
+    };
+
+    let caught = null;
+    try {
+      await runSafeMigrationWorkflow([
+        '--local',
+        '--database', 'DB',
+        '--confirm-migration'
+      ], {
+        mockDb: mockDbWithMigrations,
+        isTestRunner: true,
+        isTestHarness: true,
+        auditPath: testAuditPath,
+        mockPlanResult: { status: 0, stdout: '0033_vcc_plan_revision_control.sql\n0034_vcc_plan_historical.sql' },
+        mockApplyResult: { status: 1, stderr: 'D1 error at migration 0034: constraint failed' }
+      });
+    } catch (err) {
+      caught = err;
+    }
+
+    expect(caught).not.toBeNull();
+    expect(caught.auditRecord.result).toBe('FAILED_PARTIAL_APPLY');
+    expect(caught.auditRecord.database_mutated).toBe(true);
+    expect(caught.auditRecord.rollback_status).toBe('NOT_PERFORMED');
+    expect(caught.auditRecord.failure_evidence.details.initial_migrations).toBe(3);
+    expect(caught.auditRecord.failure_evidence.details.post_failure_migrations).toBe(5);
+
+    // Verify stored audit file reflects this
+    const stored = JSON.parse(fs.readFileSync(testAuditPath, 'utf-8'));
+    const finalRecord = stored[stored.length - 1];
+    expect(finalRecord.result).toBe('FAILED_PARTIAL_APPLY');
+    expect(finalRecord.database_mutated).toBe(true);
+    expect(finalRecord.rollback_status).toBe('NOT_PERFORMED');
   });
 });

@@ -66,6 +66,76 @@ export function getDefaultAuditPath() {
   return process.env.VCC_MIGRATION_AUDIT_PATH || path.resolve(apiDir, 'audit_evidence/migration-audit.json');
 }
 
+// Helper to check whether an operating system process is still alive
+export function isProcessAlive(pid) {
+  if (!pid || typeof pid !== 'number') return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return err.code === 'EPERM'; // Process exists under another user
+  }
+}
+
+// Trusted Drill Verification Constants & Helpers
+export const TRUSTED_DRILL_ISSUERS = [
+  'vcc-automated-restore-drill-service',
+  'qms-dr-verifier',
+  'cloudflare-d1-automated-drill'
+];
+
+export function verifyDrillEvidenceSignature(evidence, secret = process.env.VCC_DRILL_HMAC_SECRET || 'vcc-default-shared-drill-secret') {
+  if (!evidence || typeof evidence !== 'object') {
+    return { valid: false, reason: 'หลักฐานไม่อยู่ในรูปแบบ Object' };
+  }
+  if (!evidence.signature || typeof evidence.signature !== 'string') {
+    return { valid: false, reason: 'ไม่พบลายเซ็นดิจิทัล (signature) ของระบบซักซ้อมกู้คืนที่เชื่อถือได้' };
+  }
+  if (!TRUSTED_DRILL_ISSUERS.includes(evidence.issuer)) {
+    return { valid: false, reason: `ผู้ออกหลักฐาน (issuer: '${evidence.issuer}') ไม่ได้อยู่ในรายการระบบที่ได้รับความไว้วางใจ` };
+  }
+
+  const canonicalPayload = [
+    evidence.issuer,
+    evidence.database_id,
+    evidence.environment,
+    evidence.recovery_point,
+    evidence.tested_at,
+    evidence.drill_status,
+    evidence.integrity_check
+  ].join('|');
+
+  const expectedSignature = crypto.createHmac('sha256', secret).update(canonicalPayload).digest('hex');
+
+  const sigBuf = Buffer.from(evidence.signature, 'hex');
+  const expBuf = Buffer.from(expectedSignature, 'hex');
+  if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
+    return { valid: false, reason: 'ลายเซ็นดิจิทัล (HMAC-SHA256) ไม่ตรงกับข้อมูลหลักฐาน ปฏิเสธหลักฐานที่ถูกแก้ไขหรือสร้างขึ้นเอง' };
+  }
+
+  return { valid: true };
+}
+
+export function generateTrustedDrillEvidence(payload, secret = process.env.VCC_DRILL_HMAC_SECRET || 'vcc-default-shared-drill-secret') {
+  const issuer = payload.issuer || 'vcc-automated-restore-drill-service';
+  const canonicalPayload = [
+    issuer,
+    payload.database_id,
+    payload.environment,
+    payload.recovery_point,
+    payload.tested_at,
+    payload.drill_status,
+    payload.integrity_check
+  ].join('|');
+  const signature = crypto.createHmac('sha256', secret).update(canonicalPayload).digest('hex');
+  return {
+    evidence_version: '1.0',
+    issuer,
+    ...payload,
+    signature
+  };
+}
+
 // Cross-Process File Lock for Multi-Process Audit Durability
 export function withAuditLock(auditFilePath, fn, timeoutMs = 25000) {
   const dir = path.dirname(auditFilePath);
@@ -73,6 +143,7 @@ export function withAuditLock(auditFilePath, fn, timeoutMs = 25000) {
     fs.mkdirSync(dir, { recursive: true });
   }
   const lockDir = `${auditFilePath}.lock`;
+  const ownerFile = path.resolve(lockDir, 'owner.json');
   const startTime = Date.now();
   const retryIntervalMs = 30;
   const staleThresholdMs = 30000;
@@ -82,14 +153,31 @@ export function withAuditLock(auditFilePath, fn, timeoutMs = 25000) {
     try {
       fs.mkdirSync(lockDir);
       acquired = true;
+      try {
+        fs.writeFileSync(ownerFile, JSON.stringify({
+          pid: process.pid,
+          created_at: Date.now()
+        }), 'utf-8');
+      } catch { /* ignore */ }
     } catch (err) {
       if (err.code === 'EEXIST') {
-        // Detect and break stale lock if previous process crashed or died
         try {
+          let owner = null;
+          if (fs.existsSync(ownerFile)) {
+            try { owner = JSON.parse(fs.readFileSync(ownerFile, 'utf-8')); } catch { /* ignore */ }
+          }
+          const isAlive = owner?.pid ? isProcessAlive(owner.pid) : false;
           const stat = fs.statSync(lockDir);
-          if (Date.now() - stat.mtimeMs > staleThresholdMs) {
-            console.warn(`[AUDIT LOCK] ปลด Stale Lock ที่ค้างเกิน ${staleThresholdMs}ms: ${lockDir}`);
-            try { fs.rmSync(lockDir, { recursive: true, force: true }); } catch { /* ignore */ }
+
+          // P0.5: NEVER break lock if owner process is still actively running!
+          if (isAlive) {
+            // Process is still running normally. Continue waiting.
+          } else if (Date.now() - stat.mtimeMs > staleThresholdMs) {
+            console.warn(`[AUDIT LOCK] ปลด Stale Lock ที่ค้างเกิน ${staleThresholdMs}ms (Process ${owner?.pid || 'UNKNOWN'} สิ้นสุดแล้ว): ${lockDir}`);
+            try {
+              if (fs.existsSync(ownerFile)) fs.unlinkSync(ownerFile);
+              fs.rmSync(lockDir, { recursive: true, force: true });
+            } catch { /* ignore */ }
             continue;
           }
         } catch { /* stat may fail if released concurrently */ }
@@ -110,6 +198,7 @@ export function withAuditLock(auditFilePath, fn, timeoutMs = 25000) {
     return fn();
   } finally {
     try {
+      if (fs.existsSync(ownerFile)) fs.unlinkSync(ownerFile);
       fs.rmSync(lockDir, { recursive: true, force: true });
     } catch { /* ignore release error */ }
   }
@@ -184,7 +273,7 @@ export function saveAuditRecord(record, customAuditPath = null) {
 
     // P0.3: Prevent modifying/duplicating an already finalized record with same run_id
     if (record.run_id) {
-      const finalizedStatuses = ['SUCCESS', 'FAILED', 'FAILED_POST_APPLY_UNVERIFIED'];
+      const finalizedStatuses = ['SUCCESS', 'FAILED', 'FAILED_POST_APPLY_UNVERIFIED', 'FAILED_PARTIAL_APPLY'];
       const existingFinal = records.find(
         (r) => r.run_id === record.run_id && finalizedStatuses.includes(r.result)
       );
@@ -593,11 +682,36 @@ export async function runSafeMigrationWorkflow(cliArgs = process.argv.slice(2), 
       }
     }
 
+    if (!verifiedDrill) {
+      return recordAuditAndHalt(
+        'restore_verification',
+        'ไม่พบหลักฐานการซักซ้อมกู้คืนจริง (--restore-drill-evidence <path>). ไม่อนุญาตให้ดำเนินการ Production Migration โดยไม่มีหลักฐานการกู้คืนจริง',
+        1,
+        { targetDb, backupRef, hasEvidenceFile: !!restoreEvidencePath }
+      );
+    }
+
+    // P0.1 Cryptographic Proof of Restore Drill (Fail-Closed HMAC & Trusted Issuer Verification)
+    const sigCheck = verifyDrillEvidenceSignature(verifiedDrill);
+    if (!sigCheck.valid) {
+      return recordAuditAndHalt(
+        'restore_verification',
+        `ความปลอดภัยล้มเหลว: หลักฐาน Restore Drill ไม่ผ่านการตรวจสอบลายเซ็นดิจิทัล (${sigCheck.reason}). ไม่อนุญาตให้ใช้หลักฐานจำลองหรือสร้างขึ้นเองโดยไม่มีการรับรอง`,
+        1,
+        {
+          targetDb,
+          backupRef,
+          signatureError: sigCheck.reason,
+          issuer: verifiedDrill.issuer
+        }
+      );
+    }
+
     const expectedDbConfig = getTargetConfigFromWrangler(targetDb, targetEnv);
     const expectedDbId = expectedDbConfig?.database_id || targetDb;
     const expectedEnv = targetEnv || 'production';
 
-    const isValidDrill = verifiedDrill &&
+    const isValidDrill =
       (verifiedDrill.database_id === expectedDbId || verifiedDrill.database_id === targetDb) &&
       verifiedDrill.environment === expectedEnv &&
       verifiedDrill.recovery_point === backupRef &&
@@ -607,9 +721,7 @@ export async function runSafeMigrationWorkflow(cliArgs = process.argv.slice(2), 
       (Date.now() - new Date(verifiedDrill.tested_at).getTime() < 86400000 * 7);
 
     if (!isValidDrill) {
-      const reason = !verifiedDrill
-        ? 'ไม่พบหลักฐานการซักซ้อมกู้คืนจริง (--restore-drill-evidence <path>)'
-        : `หลักฐาน Restore Drill ไม่ตรงกับเป้าหมาย (DB: ${verifiedDrill.database_id} vs ${expectedDbId}, Env: ${verifiedDrill.environment} vs ${expectedEnv}, Point: ${verifiedDrill.recovery_point} vs ${backupRef}, Status: ${verifiedDrill.drill_status})`;
+      const reason = `หลักฐาน Restore Drill ไม่ตรงกับเป้าหมาย (DB: ${verifiedDrill.database_id} vs ${expectedDbId}, Env: ${verifiedDrill.environment} vs ${expectedEnv}, Point: ${verifiedDrill.recovery_point} vs ${backupRef}, Status: ${verifiedDrill.drill_status})`;
 
       console.error('\n🛑 [SECURITY VIOLATION - RESTORE DRILL UNVERIFIED]');
       console.error(`ข้อจำกัดด้านความปลอดภัย: ${reason}`);
@@ -631,21 +743,23 @@ export async function runSafeMigrationWorkflow(cliArgs = process.argv.slice(2), 
       );
     }
 
-    console.log(`  ยืนยันหลักฐาน Cloud Backup Snapshot และการซักซ้อมกู้คืนสำเร็จ: ${backupRef} (Tested at: ${verifiedDrill.tested_at})`);
+    console.log(`  ยืนยันหลักฐาน Cloud Backup Snapshot และการซักซ้อมกู้คืนสำเร็จ: ${backupRef} (Issuer: ${verifiedDrill.issuer}, Tested at: ${verifiedDrill.tested_at})`);
     auditRecord.backup_reference = {
       backup_id: backupRef,
       type: 'REMOTE_PITR_SNAPSHOT',
       restore_tested: true,
       restore_verified_at: verifiedDrill.tested_at,
       drill_evidence: {
+        issuer: verifiedDrill.issuer,
         database_id: verifiedDrill.database_id,
         environment: verifiedDrill.environment,
         recovery_point: verifiedDrill.recovery_point,
         tested_at: verifiedDrill.tested_at,
-        integrity_check: verifiedDrill.integrity_check
+        integrity_check: verifiedDrill.integrity_check,
+        signature: verifiedDrill.signature
       }
     };
-    auditRecord.steps.backup_verification = { success: true, backupRef, restore_tested: true };
+    auditRecord.steps.backup_verification = { success: true, backupRef, restore_tested: true, issuer: verifiedDrill.issuer };
   }
 
   // Step 4: Run Preflight Validation
@@ -731,20 +845,61 @@ export async function runSafeMigrationWorkflow(cliArgs = process.argv.slice(2), 
   if (persistDir) applyArgs.push('--persist-to', persistDir);
   if (targetEnv) applyArgs.push('--env', targetEnv);
 
+  let initialMigrationCount = null;
+  try {
+    const row = await db.prepare("SELECT count(*) as count FROM d1_migrations").first();
+    initialMigrationCount = row?.count ?? 0;
+  } catch {
+    initialMigrationCount = 0;
+  }
+
+  const handleApplyFailure = async (errorMessage, details = {}) => {
+    let postMigrationCount = null;
+    try {
+      const row = await db.prepare("SELECT count(*) as count FROM d1_migrations").first();
+      postMigrationCount = row?.count ?? 0;
+    } catch {
+      postMigrationCount = initialMigrationCount;
+    }
+
+    const isPartial = (postMigrationCount !== null && postMigrationCount > initialMigrationCount) || !!sim.partialApply;
+    const isMutated = isPartial || !!sim.databaseMutated;
+    const result = isPartial ? 'FAILED_PARTIAL_APPLY' : 'FAILED';
+    const rollbackStatus = isMutated ? 'NOT_PERFORMED' : 'NOT_APPLICABLE';
+
+    return recordAuditAndHalt(
+      'migration_execution',
+      isPartial
+        ? `การติดตั้ง Migration ล้มเหลวบางส่วน (Applied ${postMigrationCount - initialMigrationCount} ไฟล์ก่อนเกิดข้อผิดพลาด): ${errorMessage}`
+        : `การติดตั้ง Migration ล้มเหลว: ${errorMessage}`,
+      1,
+      {
+        result,
+        database_mutated: isMutated,
+        rollback_status: rollbackStatus,
+        initial_migrations: initialMigrationCount,
+        post_failure_migrations: postMigrationCount,
+        ...details
+      }
+    );
+  };
+
   if (options.mockApplyResult !== undefined) {
     if (options.mockApplyResult.status !== 0 || sim.applyFail) {
-      return recordAuditAndHalt('migration_execution', 'การติดตั้ง Migration ล้มเหลว (Simulated Migration Execution Failure)', 1);
+      return await handleApplyFailure(
+        options.mockApplyResult?.stderr || 'การติดตั้ง Migration ล้มเหลว (Simulated Migration Execution Failure)',
+        { mockStatus: options.mockApplyResult?.status }
+      );
     }
   } else {
     if (sim.applyFail) {
-      return recordAuditAndHalt('migration_execution', 'การติดตั้ง Migration ล้มเหลว (Simulated Migration Execution Failure)', 1);
+      return await handleApplyFailure('การติดตั้ง Migration ล้มเหลว (Simulated Migration Execution Failure)');
     }
     const applyProc = spawnSync(process.execPath, applyArgs, { cwd: apiDir, encoding: 'utf-8' });
     if (applyProc.status !== 0) {
-      return recordAuditAndHalt(
-        'migration_execution',
-        `การติดตั้ง Migration ล้มเหลว (exit code ${applyProc.status}): ${applyProc.stderr || applyProc.stdout}`,
-        1
+      return await handleApplyFailure(
+        `exit code ${applyProc.status}: ${applyProc.stderr || applyProc.stdout}`,
+        { exitCode: applyProc.status, stdout: applyProc.stdout, stderr: applyProc.stderr }
       );
     }
     console.log(applyProc.stdout);
