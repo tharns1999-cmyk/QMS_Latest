@@ -1,7 +1,25 @@
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
 import { getPlatformProxy } from 'wrangler';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import app from './index.js';
 import { hashPassword } from './password.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const readTriggersFromSql = (filename) => {
+  const content = fs.readFileSync(path.resolve(__dirname, `../migrations/${filename}`), 'utf8');
+  const matches = content.match(/CREATE TRIGGER[\s\S]*?END;/gi);
+  return matches || [];
+};
+
+const realMigrationTriggers = [
+  ...readTriggersFromSql('0032_vcc_cycle_integrity_hardening.sql'),
+  ...readTriggersFromSql('0033_vcc_plan_revision_control.sql').filter((t) => !t.includes('trg_prevent_tamper_approved_annual_plan')),
+  ...readTriggersFromSql('0034_vcc_plan_historical_protection_hardening.sql')
+];
 
 describe('VCC Phase 3.1: Plan Revision Foundation & Diff Engine Tests', () => {
   let proxy;
@@ -41,7 +59,7 @@ describe('VCC Phase 3.1: Plan Revision Foundation & Diff Engine Tests', () => {
       ...[
         ['REV-QC-STAFF', 2, 1, 'QC', '["QC"]'],
         ['REV-QC-SUP', 4, 1, 'QC', '["QC"]'],
-        ['REV-QA-MGR', 6, 1, 'QC', '["QC","QA"]'],
+        ['REV-QA-MGR', 6, 1, 'QA', '["QA"]'],
         ['REV-QA-STAFF', 2, 0, 'QA', '["QA"]'],
         ['REV-PD-STAFF', 2, 0, 'PD', '["PD"]']
       ].map(([id, level, dcc, dept, depts]) =>
@@ -81,51 +99,7 @@ describe('VCC Phase 3.1: Plan Revision Foundation & Diff Engine Tests', () => {
     'DROP TRIGGER IF EXISTS trg_prevent_delete_closed_plan_cycle'
   ];
 
-  const createHistoricalTriggers = [
-    `CREATE TRIGGER IF NOT EXISTS trg_prevent_delete_approved_annual_plan
-     BEFORE DELETE ON vcc_annual_plans
-     FOR EACH ROW WHEN OLD.status = 'APPROVED'
-     BEGIN SELECT RAISE(ABORT, 'Cannot delete an APPROVED annual plan. QMS integrity violation.'); END;`,
-    `CREATE TRIGGER IF NOT EXISTS trg_prevent_delete_approved_plan_item
-     BEFORE DELETE ON vcc_annual_plan_items
-     FOR EACH ROW WHEN (SELECT status FROM vcc_annual_plans WHERE id = OLD.plan_id) = 'APPROVED'
-     BEGIN SELECT RAISE(ABORT, 'Cannot delete items from an APPROVED annual plan. QMS integrity violation.'); END;`,
-    `CREATE TRIGGER IF NOT EXISTS trg_prevent_update_approved_plan_item
-     BEFORE UPDATE ON vcc_annual_plan_items
-     FOR EACH ROW WHEN (SELECT status FROM vcc_annual_plans WHERE id = OLD.plan_id) = 'APPROVED'
-     BEGIN SELECT RAISE(ABORT, 'Cannot modify items of an APPROVED annual plan. QMS integrity violation.'); END;`,
-    `CREATE TRIGGER IF NOT EXISTS trg_prevent_delete_closed_work_order
-     BEFORE DELETE ON vcc_work_orders
-     FOR EACH ROW WHEN OLD.status = 'CLOSED' OR OLD.certificate_no IS NOT NULL
-     BEGIN SELECT RAISE(ABORT, 'Cannot delete a CLOSED work order or a work order with certificate evidence. QMS integrity violation.'); END;`,
-    `CREATE TRIGGER IF NOT EXISTS trg_prevent_delete_closed_plan_cycle
-     BEFORE DELETE ON vcc_plan_cycles
-     FOR EACH ROW WHEN OLD.cycle_status = 'CLOSED' OR EXISTS (SELECT 1 FROM vcc_work_orders WHERE cycle_id = OLD.id AND status = 'CLOSED')
-     BEGIN SELECT RAISE(ABORT, 'Cannot delete a cycle with CLOSED work order or closed cycle status. QMS integrity violation.'); END;`,
-    `CREATE TRIGGER IF NOT EXISTS trg_prevent_tamper_approved_annual_plan
-     BEFORE UPDATE ON vcc_annual_plans
-     FOR EACH ROW
-     WHEN OLD.status = 'APPROVED' AND (
-       NEW.status != 'APPROVED' OR
-       NEW.plan_year != OLD.plan_year OR
-       NEW.department != OLD.department OR
-       NEW.revision != OLD.revision OR
-       NEW.document_code != OLD.document_code OR
-       NEW.due_date_rule != OLD.due_date_rule OR
-       NEW.parent_plan_id IS NOT OLD.parent_plan_id OR
-       NEW.revision_reason IS NOT OLD.revision_reason OR
-       NEW.prepared_by IS NOT OLD.prepared_by OR
-       NEW.prepared_at IS NOT OLD.prepared_at OR
-       NEW.reviewed_by IS NOT OLD.reviewed_by OR
-       NEW.reviewed_at IS NOT OLD.reviewed_at OR
-       NEW.approved_by IS NOT OLD.approved_by OR
-       NEW.approved_at IS NOT OLD.approved_at OR
-       NEW.title IS NOT OLD.title OR
-       NEW.effective_status = 'PENDING' OR
-       (OLD.effective_status = 'SUPERSEDED' AND NEW.effective_status != 'SUPERSEDED')
-     )
-     BEGIN SELECT RAISE(ABORT, 'Cannot alter status, core identity, or historical evidence of an APPROVED annual plan. QMS integrity violation.'); END;`
-  ];
+  const createHistoricalTriggers = realMigrationTriggers;
 
   const cleanDb = async () => {
     await env.DB.batch([
@@ -1167,5 +1141,307 @@ describe('VCC Phase 3.1: Plan Revision Foundation & Diff Engine Tests', () => {
     // Rev.01 must NOT have generated any work orders
     const rev01Wos = await env.DB.prepare('SELECT COUNT(*) AS c FROM vcc_work_orders WHERE plan_id = ?').bind(rev01Id).first();
     expect(rev01Wos.c).toBe(0);
+  });
+
+  it('28. Integrity Test 10 (P0.A): Cycle Identity & Reconciliation preserves CLOSED work orders and links active cycles without sequence corruption', async () => {
+    // Rev.00 has cycles for months [3, 9]
+    const aRes = await call('POST', '/api/vcc/assets', 'REV-QC-STAFF', {
+      asset_code: 'QC-RECON-01',
+      name: 'เครื่องวัดความดันสุญญากาศ',
+      asset_type: 'เครื่องชั่ง',
+      department: 'QC',
+      status: 'ACTIVE'
+    });
+    const assetId = aRes.body.asset.id;
+
+    const planRes = await call('POST', '/api/vcc/plans', 'REV-QC-STAFF', {
+      plan_year: 2026,
+      department: 'QC',
+      title: 'แผนทดสอบ Reconciliation Rev.00'
+    });
+    const planId = planRes.body.plan.id;
+
+    await call('POST', `/api/vcc/plans/${planId}/items`, 'REV-QC-STAFF', {
+      asset_id: assetId,
+      provider_name: 'Calibration Lab',
+      frequency_label: '2 ครั้ง/ปี',
+      planned_months: [3, 9],
+      responsible_dept: 'QC'
+    });
+
+    // Submit, review, and approve Rev.00
+    await call('POST', `/api/vcc/plans/${planId}/submit`, 'REV-QC-STAFF');
+    await call('POST', `/api/vcc/plans/${planId}/review`, 'REV-QC-SUP', { comment: 'ทบทวน' });
+    await call('POST', `/api/vcc/plans/${planId}/approve`, 'REV-QA-MGR', { comment: 'อนุมัติ' });
+
+    // Verify 2 work orders generated for Rev.00
+    const { results: rev00Wos } = await env.DB.prepare(`
+      SELECT * FROM vcc_work_orders WHERE plan_id = ? ORDER BY planned_month ASC
+    `).bind(planId).all();
+    expect(rev00Wos.length).toBe(2);
+
+    const woM3 = rev00Wos.find((w) => w.planned_month === 3);
+    const woM9 = rev00Wos.find((w) => w.planned_month === 9);
+    expect(woM3).toBeDefined();
+    expect(woM9).toBeDefined();
+
+    // Perform and CLOSE Month 3 work order
+    const submitResultRes = await call('POST', `/api/vcc/work-orders/${woM3.id}/submit-result`, 'REV-QC-STAFF', {
+      performed_at: '2026-03-20',
+      result_status: 'PASS',
+      certificate_no: 'CERT-M3-CLOSED',
+      acceptance_criteria: '± 0.01 bar'
+    });
+    expect(submitResultRes.status).toBe(200);
+
+    const approveWoRes = await call('POST', `/api/vcc/work-orders/${woM3.id}/approve`, 'REV-QC-SUP', {
+      comment: 'ตรวจรับผลสอบเทียบเดือน 3 ปิดงานสมบูรณ์'
+    });
+    expect(approveWoRes.status).toBe(200);
+
+    // Verify Month 3 is CLOSED
+    const closedWoM3 = await env.DB.prepare('SELECT * FROM vcc_work_orders WHERE id = ?').bind(woM3.id).first();
+    expect(closedWoM3.status).toBe('CLOSED');
+
+    // Create Rev.01 leaving ONLY Month 9 (Month 3 removed)
+    const rev01Res = await call('POST', `/api/vcc/plans/${planId}/revisions`, 'REV-QC-STAFF', {
+      revision_reason: 'ปรับลดรอบสอบเทียบเหลือเฉพาะเดือน 9'
+    });
+    const rev01Id = rev01Res.body.plan.id;
+
+    // Get item in Rev.01 and update planned_months to [9] keeping initial_cycle_ids [woM9.cycle_id]
+    const { results: rev01Items } = await env.DB.prepare('SELECT * FROM vcc_annual_plan_items WHERE plan_id = ?').bind(rev01Id).all();
+    expect(rev01Items.length).toBe(1);
+
+    await call('PUT', `/api/vcc/plans/${rev01Id}/items/${rev01Items[0].id}`, 'REV-QC-STAFF', {
+      planned_months: [9],
+      initial_cycle_ids: [woM9.cycle_id],
+      provider_name: 'Calibration Lab',
+      frequency_label: '1 ครั้ง/ปี',
+      responsible_dept: 'QC'
+    });
+
+    // Submit, review, and approve Rev.01
+    const submitRev01 = await call('POST', `/api/vcc/plans/${rev01Id}/submit`, 'REV-QC-STAFF');
+    expect(submitRev01.status).toBe(200);
+
+    const reviewRev01 = await call('POST', `/api/vcc/plans/${rev01Id}/review`, 'REV-QC-SUP', { comment: 'ทบทวน Rev.01' });
+    expect(reviewRev01.status).toBe(200);
+
+    const approveRev01 = await call('POST', `/api/vcc/plans/${rev01Id}/approve`, 'REV-QA-MGR', { comment: 'อนุมัติ Rev.01' });
+    expect(approveRev01.status).toBe(200);
+
+    // Assert Reconciliation Results:
+    // 1. Month 3 work order remains CLOSED and UNMODIFIED as historical evidence
+    const verifyWoM3 = await env.DB.prepare('SELECT * FROM vcc_work_orders WHERE id = ?').bind(woM3.id).first();
+    expect(verifyWoM3.status).toBe('CLOSED');
+    expect(verifyWoM3.certificate_no).toBe('CERT-M3-CLOSED');
+    expect(verifyWoM3.cycle_id).toBe(woM3.cycle_id);
+
+    // 2. Month 9 work order remains SCHEDULED, active, and retains its exact cycle_id
+    const verifyWoM9 = await env.DB.prepare('SELECT * FROM vcc_work_orders WHERE id = ?').bind(woM9.id).first();
+    expect(verifyWoM9.status).toBe('SCHEDULED');
+    expect(verifyWoM9.cycle_id).toBe(woM9.cycle_id);
+    expect(verifyWoM9.plan_id).toBe(rev01Id);
+
+    // 3. Total active work orders for Month 9 is exactly 1 (no duplicate generated)
+    const activeM9Count = await env.DB.prepare(`
+      SELECT COUNT(*) AS c FROM vcc_work_orders WHERE asset_id = ? AND status != 'CANCELLED'
+    `).bind(assetId).first();
+    expect(activeM9Count.c).toBe(2); // 1 CLOSED (M3) + 1 SCHEDULED (M9)
+  });
+
+  it('29. Integrity Test 11 (P0.B): Approval conflict guard blocks submit, review, and approve when unresolved conflicts exist', async () => {
+    const { planId: rev00Id } = await setupApprovedRev00Plan(2026);
+
+    // Create Rev.01
+    const rev01Res = await call('POST', `/api/vcc/plans/${rev00Id}/revisions`, 'REV-QC-STAFF', {
+      revision_reason: 'ทดสอบ Approval Conflict Guard'
+    });
+    const rev01Id = rev01Res.body.plan.id;
+
+    // Fetch items and find the 2-cycle item (Asset 1: [3, 9])
+    const { results: rev01Items } = await env.DB.prepare('SELECT * FROM vcc_annual_plan_items WHERE plan_id = ?').bind(rev01Id).all();
+    const itemWith2Cycles = rev01Items.find((i) => {
+      const ms = JSON.parse(i.planned_months || '[]');
+      return ms.length === 2;
+    }) || rev01Items[0];
+
+    // Trigger an ambiguous reschedule by setting planned_months to [4, 10] with empty initial_cycle_ids
+    // (Both months shifted, neither matches original [3, 9], and no explicit mapping -> ambiguous match conflict)
+    const updateRes = await call('POST', `/api/vcc/plans/${rev01Id}/items`, 'REV-QC-STAFF', {
+      asset_id: itemWith2Cycles.asset_id,
+      provider_name: 'Lab',
+      frequency_label: '2 ครั้ง/ปี',
+      planned_months: [4, 10],
+      initial_cycle_ids: [null, null],
+      responsible_dept: 'QC'
+    });
+    expect(updateRes.status).toBe(200);
+
+    // 1. Submit must fail with 409 Conflict
+    const submitRes = await call('POST', `/api/vcc/plans/${rev01Id}/submit`, 'REV-QC-STAFF');
+    expect(submitRes.status).toBe(409);
+    expect(submitRes.body.error).toContain('Unresolved Conflicts');
+    expect(submitRes.body.conflicts.length).toBeGreaterThan(0);
+
+    // Force status to PENDING_REVIEW in DB to test review guard
+    await env.DB.prepare("UPDATE vcc_annual_plans SET status = 'PENDING_REVIEW' WHERE id = ?").bind(rev01Id).run();
+
+    // 2. Review must fail with 409 Conflict
+    const reviewRes = await call('POST', `/api/vcc/plans/${rev01Id}/review`, 'REV-QC-SUP', { comment: 'ทบทวน' });
+    expect(reviewRes.status).toBe(409);
+    expect(reviewRes.body.error).toContain('Unresolved Conflicts');
+
+    // Force status to PENDING_APPROVAL in DB to test approve guard
+    await env.DB.prepare("UPDATE vcc_annual_plans SET status = 'PENDING_APPROVAL' WHERE id = ?").bind(rev01Id).run();
+
+    // 3. Approve must fail with 409 Conflict
+    const approveRes = await call('POST', `/api/vcc/plans/${rev01Id}/approve`, 'REV-QA-MGR', { comment: 'อนุมัติ' });
+    expect(approveRes.status).toBe(409);
+    expect(approveRes.body.error).toContain('Unresolved Conflicts');
+  });
+
+  it('30. Integrity Test 12 (P0.C): Department scope & RBAC strictly blocks cross-department modifications', async () => {
+    const { planId: qcPlanId } = await setupApprovedRev00Plan(2026);
+
+    const { results: qcWos } = await env.DB.prepare('SELECT * FROM vcc_work_orders WHERE plan_id = ?').bind(qcPlanId).all();
+    expect(qcWos.length).toBeGreaterThan(0);
+    const qcWo = qcWos[0];
+
+    // QA user (unauthorized for QC work order actions without general permissions) attempts QC actions:
+    // 1. Reschedule
+    const reschRes = await call('POST', `/api/vcc/work-orders/${qcWo.id}/reschedule`, 'REV-QA-STAFF', {
+      new_due_date: '2026-10-31',
+      reason: 'Cross-dept reschedule attempt'
+    });
+    expect(reschRes.status).toBe(403);
+    expect(reschRes.body.error).toContain('ไม่มีสิทธิ์');
+
+    // 2. Submit Result
+    const submitResultRes = await call('POST', `/api/vcc/work-orders/${qcWo.id}/submit-result`, 'REV-QA-STAFF', {
+      performed_at: '2026-04-10',
+      result_status: 'PASS',
+      certificate_no: 'ILLEGAL-CERT',
+      acceptance_criteria: 'Criteria'
+    });
+    expect(submitResultRes.status).toBe(403);
+    expect(submitResultRes.body.error).toContain('ไม่มีสิทธิ์');
+
+    // 3. Cancel
+    const cancelRes = await call('POST', `/api/vcc/work-orders/${qcWo.id}/cancel`, 'REV-QA-STAFF', {
+      cancellation_category: 'MISTAKE_CREATION',
+      cancellation_reason: 'Cross-dept cancel attempt'
+    });
+    expect(cancelRes.status).toBe(403);
+    expect(cancelRes.body.error).toContain('ไม่มีสิทธิ์');
+
+    // 4. Resolve conflicts on QC Plan
+    const resolveRes = await call('POST', `/api/vcc/plans/${qcPlanId}/diff/resolve-conflicts`, 'REV-QA-STAFF', {
+      resolution_reason: 'Cross-dept conflict resolution',
+      resolutions: [{ asset_id: qcWo.asset_id, mappings: [] }]
+    });
+    expect(resolveRes.status).toBe(403);
+    expect(resolveRes.body.error).toContain('ไม่มีสิทธิ์');
+  });
+
+  it('31. Integrity Test 13 (P0.D): Date integrity protects user scheduled_date during reconciliation', async () => {
+    const { planId: rev00Id } = await setupApprovedRev00Plan(2026);
+
+    const wo = await env.DB.prepare('SELECT * FROM vcc_work_orders WHERE plan_id = ?').bind(rev00Id).first();
+    expect(wo).toBeDefined();
+
+    // User reschedules work order to 2026-05-15 with valid reason
+    const customDate = '2026-05-15';
+    const reschRes = await call('POST', `/api/vcc/work-orders/${wo.id}/reschedule`, 'REV-QC-SUP', {
+      new_due_date: customDate,
+      reason: 'เลื่อนตามกำหนดการซ่อมบำรุงเครื่องจักร'
+    });
+    expect(reschRes.status).toBe(200);
+
+    const rescheduledWo = await env.DB.prepare('SELECT * FROM vcc_work_orders WHERE id = ?').bind(wo.id).first();
+    expect(rescheduledWo.scheduled_date).toBe(customDate);
+    expect(rescheduledWo.due_date).toBe(customDate);
+    expect(rescheduledWo.reschedule_reason).toBe('เลื่อนตามกำหนดการซ่อมบำรุงเครื่องจักร');
+
+    // Create Rev.01 and approve it
+    const rev01Res = await call('POST', `/api/vcc/plans/${rev00Id}/revisions`, 'REV-QC-STAFF', {
+      revision_reason: 'ทดสอบ Reconciliation Date Integrity'
+    });
+    const rev01Id = rev01Res.body.plan.id;
+
+    await call('POST', `/api/vcc/plans/${rev01Id}/submit`, 'REV-QC-STAFF');
+    await call('POST', `/api/vcc/plans/${rev01Id}/review`, 'REV-QC-SUP', { comment: 'ทบทวน' });
+    const approveRes = await call('POST', `/api/vcc/plans/${rev01Id}/approve`, 'REV-QA-MGR', { comment: 'อนุมัติ' });
+    expect(approveRes.status).toBe(200);
+
+    // After reconciliation, verify scheduled_date and due_date were NOT overwritten by month baseline
+    const reconciledWo = await env.DB.prepare('SELECT * FROM vcc_work_orders WHERE id = ?').bind(wo.id).first();
+    expect(reconciledWo.scheduled_date).toBe(customDate);
+    expect(reconciledWo.due_date).toBe(customDate);
+    expect(reconciledWo.reschedule_reason).toBe('เลื่อนตามกำหนดการซ่อมบำรุงเครื่องจักร');
+  });
+
+  it('32. Integrity Test 14 (P0.E): Result date validation rejects future or invalid calendar dates', async () => {
+    const { planId } = await setupApprovedRev00Plan(2026);
+    const wo = await env.DB.prepare('SELECT * FROM vcc_work_orders WHERE plan_id = ?').bind(planId).first();
+
+    // 1. Invalid calendar date (February 31)
+    const invDateRes = await call('POST', `/api/vcc/work-orders/${wo.id}/submit-result`, 'REV-QC-STAFF', {
+      performed_at: '2026-02-31',
+      result_status: 'PASS',
+      certificate_no: 'CERT-INV',
+      acceptance_criteria: 'Criteria'
+    });
+    expect(invDateRes.status).toBe(400);
+    expect(invDateRes.body.error).toContain('ไม่ถูกต้องตามปฏิทิน');
+
+    // 2. Far future date
+    const futDateRes = await call('POST', `/api/vcc/work-orders/${wo.id}/submit-result`, 'REV-QC-STAFF', {
+      performed_at: '2099-12-31',
+      result_status: 'PASS',
+      certificate_no: 'CERT-FUT',
+      acceptance_criteria: 'Criteria'
+    });
+    expect(futDateRes.status).toBe(400);
+    expect(futDateRes.body.error).toContain('อนาคต');
+  });
+
+  it('33. Integrity Test 15 (P0.F & P1.3): Superseded plan protection and FM-QC-46 filter resolution', async () => {
+    const { planId: rev00Id } = await setupApprovedRev00Plan(2026);
+
+    // Create and approve Rev.01, superseding Rev.00
+    const rev01Res = await call('POST', `/api/vcc/plans/${rev00Id}/revisions`, 'REV-QC-STAFF', {
+      revision_reason: 'แผนปรับปรุงฉบับที่ 1'
+    });
+    const rev01Id = rev01Res.body.plan.id;
+
+    await call('POST', `/api/vcc/plans/${rev01Id}/submit`, 'REV-QC-STAFF');
+    await call('POST', `/api/vcc/plans/${rev01Id}/review`, 'REV-QC-SUP', { comment: 'ทบทวน' });
+    await call('POST', `/api/vcc/plans/${rev01Id}/approve`, 'REV-QA-MGR', { comment: 'อนุมัติ' });
+
+    // Rev.00 is now SUPERSEDED
+    const rev00 = await env.DB.prepare('SELECT * FROM vcc_annual_plans WHERE id = ?').bind(rev00Id).first();
+    expect(rev00.effective_status).toBe('SUPERSEDED');
+    expect(rev00.is_current).toBe(0);
+
+    // 1. Attempting to create work order from SUPERSEDED plan is rejected
+    const { results: rev00Items } = await env.DB.prepare('SELECT * FROM vcc_annual_plan_items WHERE plan_id = ?').bind(rev00Id).all();
+    const createFromSuperseded = await call('POST', '/api/vcc/work-orders', 'REV-QC-STAFF', {
+      plan_id: rev00Id,
+      plan_item_id: rev00Items[0].id,
+      planned_month: 3,
+      asset_id: rev00Items[0].asset_id
+    });
+    expect(createFromSuperseded.status).toBe(409);
+    expect(createFromSuperseded.body.error).toContain('SUPERSEDED');
+
+    // 2. FM-QC-46 Export filters correctly by department and effective_status
+    const exportRes = await call('GET', '/api/vcc/export/annual-plan?year=2026&department=QC&effective_status=CURRENT', 'REV-QC-STAFF');
+    expect(exportRes.status).toBe(200);
+
+    // 3. Unauthorized department cannot export
+    const unauthExport = await call('GET', '/api/vcc/export/annual-plan?year=2026&department=QC', 'REV-PD-STAFF');
+    expect(unauthExport.status).toBe(403);
   });
 });

@@ -111,7 +111,7 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
   // Record Result Modal
   const [resultWo, setResultWo] = useState(null);
   const [resultForm, setResultForm] = useState({
-    performed_at: '2026-03-25',
+    performed_at: new Date().toISOString().slice(0, 10),
     result_status: 'PASS',
     certificate_no: '',
     acceptance_criteria: '',
@@ -276,7 +276,7 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
     setResultWo(wo);
     setResultError('');
     setResultForm({
-      performed_at: wo.performed_at || '2026-03-25',
+      performed_at: wo.performed_at || new Date().toISOString().slice(0, 10),
       result_status: wo.result_status === 'PENDING' ? 'PASS' : wo.result_status,
       certificate_no: wo.certificate_no || '',
       acceptance_criteria: wo.acceptance_criteria || woSettings.default_acceptance_criteria?.[0] || '',

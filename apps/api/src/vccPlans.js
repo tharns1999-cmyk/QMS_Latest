@@ -1,7 +1,7 @@
 // VCC (Verify and Calibration Center) — Phase 2: Calibration Schedule Rules, Annual Plan Matrix & Plan Approval API.
 import { getThresholds } from './approval.js';
 import { requireVccAccess, requireDccOnly } from './vccAuth.js';
-import { generateWorkOrdersForApprovedPlan } from './vccWorkOrders.js';
+import { generateWorkOrdersForApprovedPlan, buildWorkOrderReconciliationStatements } from './vccWorkOrders.js';
 
 const DCC_ONLY = { error: 'เฉพาะ DCC เท่านั้นที่ใช้งานส่วนนี้ได้' };
 const NOW = `strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`;
@@ -145,7 +145,7 @@ export const getCyclesForPlan = async (db, plan) => {
       FROM vcc_plan_cycles c
       JOIN vcc_assets a ON a.id = c.asset_id
       JOIN vcc_annual_plan_items i ON i.id = c.plan_item_id
-      LEFT JOIN vcc_work_orders w ON w.cycle_id = c.id AND w.status != 'CANCELLED'
+      LEFT JOIN vcc_work_orders w ON (w.cycle_id = c.initial_cycle_id OR w.cycle_id = c.id) AND w.status != 'CANCELLED'
       WHERE c.plan_id = ?
       ORDER BY a.asset_code ASC, c.cycle_seq ASC
     `).bind(plan.id).all();
@@ -153,6 +153,7 @@ export const getCyclesForPlan = async (db, plan) => {
     if (persistedCycles && persistedCycles.length > 0) {
       return persistedCycles.map((c) => ({
         ...c,
+        id: c.initial_cycle_id || c.id,
         initial_cycle_id: c.initial_cycle_id || c.id,
         required_due_date: c.required_due_date || c.baseline_planned_date,
         scheduled_date: c.scheduled_date || c.baseline_planned_date
@@ -1512,6 +1513,27 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
       }, 400);
     }
 
+    // Submission gate 3: Plan Revisions must have 0 unresolved conflicts
+    if (plan.parent_plan_id) {
+      const parentPlan = await fetchPlan(db, plan.parent_plan_id);
+      if (parentPlan) {
+        const diff = await computePlanDiff(db, plan, parentPlan);
+        if (diff.unresolved_conflicts && diff.unresolved_conflicts.length > 0) {
+          return c.json({
+            error: 'ไม่สามารถส่งแผนได้เนื่องจากมีรอบสอบเทียบที่ขัดแย้งหรือคลุมเครือ (Unresolved Conflicts) กรุณาระบุการจับคู่รอบให้ชัดเจนก่อนส่งแผน',
+            conflicts: diff.unresolved_conflicts,
+            diff_summary: diff.summary
+          }, 409);
+        }
+        if (!diff.summary.invariants_satisfied || !diff.summary.can_reconcile) {
+          return c.json({
+            error: 'ไม่สามารถส่งแผนได้เนื่องจากผลการวิเคราะห์ความแตกต่างของแผนไม่ผ่านเงื่อนไขความถูกต้อง (Invariants Check Failed)',
+            diff_summary: diff.summary
+          }, 409);
+        }
+      }
+    }
+
     // Freeze scope: persist any virtual items into vcc_annual_plan_items
     const batchStatements = [];
     for (const item of items) {
@@ -1614,6 +1636,27 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
       return c.json({ error: `ผู้ทบทวนต้องมีระดับอนุมัติ L${thresholds.required_reviewer_level} ขึ้นไปตาม Approval Matrix` }, 403);
     }
 
+    // Review gate: Plan Revisions must have 0 unresolved conflicts
+    if (plan.parent_plan_id) {
+      const parentPlan = await fetchPlan(db, plan.parent_plan_id);
+      if (parentPlan) {
+        const diff = await computePlanDiff(db, plan, parentPlan);
+        if (diff.unresolved_conflicts && diff.unresolved_conflicts.length > 0) {
+          return c.json({
+            error: 'ไม่สามารถทบทวนแผนได้เนื่องจากมีรอบสอบเทียบที่ขัดแย้งหรือคลุมเครือ (Unresolved Conflicts) กรุณาระบุการจับคู่รอบให้ชัดเจนก่อนทบทวนแผน',
+            conflicts: diff.unresolved_conflicts,
+            diff_summary: diff.summary
+          }, 409);
+        }
+        if (!diff.summary.invariants_satisfied || !diff.summary.can_reconcile) {
+          return c.json({
+            error: 'ไม่สามารถทบทวนแผนได้เนื่องจากผลการวิเคราะห์ความแตกต่างของแผนไม่ผ่านเงื่อนไขความถูกต้อง (Invariants Check Failed)',
+            diff_summary: diff.summary
+          }, 409);
+        }
+      }
+    }
+
     const batchRes = await db.batch([
       db.prepare(`
         UPDATE vcc_annual_plans
@@ -1678,7 +1721,34 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
       return c.json({ error: `ผู้อนุมัติต้องมีระดับอนุมัติ L${thresholds.required_approver_level} ขึ้นไปตาม Approval Matrix` }, 403);
     }
 
-    const batchRes = await db.batch([
+    // Approval gate: Plan Revisions must have 0 unresolved conflicts
+    if (plan.parent_plan_id) {
+      const parentPlan = await fetchPlan(db, plan.parent_plan_id);
+      if (parentPlan) {
+        const diff = await computePlanDiff(db, plan, parentPlan);
+        if (diff.unresolved_conflicts && diff.unresolved_conflicts.length > 0) {
+          return c.json({
+            error: 'ไม่สามารถอนุมัติแผนได้เนื่องจากมีรอบสอบเทียบที่ขัดแย้งหรือคลุมเครือ (Unresolved Conflicts) กรุณาระบุการจับคู่รอบให้ชัดเจนก่อนอนุมัติแผน',
+            conflicts: diff.unresolved_conflicts,
+            diff_summary: diff.summary
+          }, 409);
+        }
+        if (!diff.summary.invariants_satisfied || !diff.summary.can_reconcile) {
+          return c.json({
+            error: 'ไม่สามารถอนุมัติแผนได้เนื่องจากผลการวิเคราะห์ความแตกต่างของแผนไม่ผ่านเงื่อนไขความถูกต้อง (Invariants Check Failed)',
+            diff_summary: diff.summary
+          }, 409);
+        }
+      }
+    }
+
+    // Prepare reconciliation statements and execute atomic batch transaction
+    const reconciliation = await buildWorkOrderReconciliationStatements(db, id, user.id);
+    if (reconciliation.error) {
+      return c.json({ error: reconciliation.error }, 409);
+    }
+
+    const allStatements = [
       db.prepare(`
         UPDATE vcc_annual_plans
         SET effective_status = 'SUPERSEDED',
@@ -1699,6 +1769,7 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
             updated_by = ?
         WHERE id = ? AND status = 'PENDING_APPROVAL'
       `).bind(user.id, comment, user.id, id),
+      ...reconciliation.batchStatements,
       audit(db, user.id, 'VCC_PLAN_APPROVED', {
         plan_id: id,
         plan_year: plan.plan_year,
@@ -1710,16 +1781,17 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
         before: { status: 'PENDING_APPROVAL' },
         after: { status: 'APPROVED' }
       })
-    ]);
+    ];
+
+    const batchRes = await db.batch(allStatements);
     if (batchRes?.[1]?.meta?.changes === 0) {
       return c.json({ error: 'แผนนี้ถูกดำเนินการไปแล้ว กรุณารีเฟรชหน้าจอ' }, 409);
     }
 
-    const generationResult = await generateWorkOrdersForApprovedPlan(db, id, user.id, audit);
-
+    const { batchStatements: _bs, ...reconciliationResult } = reconciliation;
     return c.json({
       plan: await fetchPlan(db, id),
-      work_orders_generation: generationResult
+      work_orders_generation: reconciliationResult
     });
   });
 
@@ -2284,6 +2356,10 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
     const planId = c.req.param('id');
     const targetPlan = await fetchPlan(db, planId);
     if (!targetPlan) return c.json({ error: 'ไม่พบแผนการสอบเทียบประจำปี' }, 404);
+
+    if (!isUserAuthorizedForPlanDept(user, targetPlan.department)) {
+      return c.json({ error: 'ไม่มีสิทธิ์แก้ไขข้อขัดแย้งของแผนประจำปีในแผนกนี้' }, 403);
+    }
 
     if (targetPlan.status === 'APPROVED') {
       return c.json({ error: 'ไม่สามารถแก้ไขความขัดแย้งของแผนที่ได้รับการอนุมัติแล้วได้ (APPROVED plan is immutable)' }, 400);
