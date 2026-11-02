@@ -5,6 +5,7 @@ import * as vccWorkOrderApi from '../api/vccWorkOrderApi';
 import { RecordResultModal } from '../components/RecordResultModal';
 import { AmendmentModal } from '../components/AmendmentModal';
 import { WorkOrderSideDrawer } from '../components/WorkOrderSideDrawer';
+import { DigitalRecordModal } from '../components/DigitalRecordModal';
 
 describe('VCC Phase 3.2 — Calibration Records & Execution UI Tests', () => {
   const sampleWorkOrder = {
@@ -172,5 +173,74 @@ describe('VCC Phase 3.2 — Calibration Records & Execution UI Tests', () => {
     const submitBtn = screen.getByRole('button', { name: /บันทึกการขอแก้ไข \(Amendment\)/i });
     // When amendment_reason is empty, submit button must be disabled
     expect(submitBtn).toBeDisabled();
+  });
+
+  it('DigitalRecordModal_RendersCompleteElectronicRecordAndPrint: แสดงเอกสารดิจิทัลครบถ้วนและรองรับการสั่งพิมพ์', () => {
+    const printSpy = vi.spyOn(window, 'print').mockImplementation(() => {});
+    const onDownloadCert = vi.fn();
+    const onClose = vi.fn();
+
+    const closedWo = {
+      ...sampleWorkOrder,
+      status: 'CLOSED',
+      result_status: 'PASS',
+      performed_by_name: 'สมชาย นักสอบเทียบ',
+      performed_at: '2026-05-15',
+      reviewed_by_name: 'สมหญิง หัวหน้างาน',
+      reviewed_at: '2026-05-16',
+      certificate_no: 'CERT-2026-0099',
+      acceptance_criteria: 'Error <= 0.1°C',
+      is_amended: 1,
+      amended_at: '2026-05-18',
+      amended_by_name: 'สมปอง ผู้จัดการ',
+      amendment_reason: 'ปรับแก้ค่าความไม่แน่นอนตามสถาบันมาตรวิทยาฉบับแก้ไข'
+    };
+
+    render(
+      <DigitalRecordModal
+        workOrder={closedWo}
+        onClose={onClose}
+        onDownloadCert={onDownloadCert}
+      />
+    );
+
+    // Verify modal header & standard compliance tags
+    expect(screen.getByText(/DIGITAL RECORD: WO-2026-099/i)).toBeInTheDocument();
+    expect(screen.getByText(/ใบบันทึกผลการทวนสอบ \/ สอบเทียบดิจิทัล/i)).toBeInTheDocument();
+    expect(screen.getByText(/ISO 9001:2015 ข้อ 7.1.5 และ ISO\/IEC 17025:2017 ข้อ 7.8/i)).toBeInTheDocument();
+
+    // Verify instrument & result
+    expect(screen.getByText('CAL-TH-001')).toBeInTheDocument();
+    expect(screen.getByText('Thermometer Digital')).toBeInTheDocument();
+    expect(screen.getByText(/PASS — ผ่านเกณฑ์ยอมรับ/i)).toBeInTheDocument();
+    expect(screen.getByText(/AMENDED \(ฉบับแก้ไข\)/i)).toBeInTheDocument();
+
+    // Verify traceability & environmental conditions
+    expect(screen.getByText('NIMT Primary Standard Block')).toBeInTheDocument();
+    expect(screen.getByText('23.5 °C / 50% RH')).toBeInTheDocument();
+    expect(screen.getByText('± 0.02 °C')).toBeInTheDocument();
+
+    // Verify certificate file & SHA-256 hash
+    expect(screen.getByText('cert_cal_099.pdf')).toBeInTheDocument();
+    expect(screen.getByText(/SHA-256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855/i)).toBeInTheDocument();
+
+    // Verify sign-off section
+    expect(screen.getByText('สมชาย นักสอบเทียบ')).toBeInTheDocument();
+    expect(screen.getByText('สมหญิง หัวหน้างาน')).toBeInTheDocument();
+
+    // Verify amendment section
+    expect(screen.getByText(/ปรับแก้ค่าความไม่แน่นอนตามสถาบันมาตรวิทยาฉบับแก้ไข/i)).toBeInTheDocument();
+
+    // Test print button triggers window.print()
+    const printBtn = screen.getByRole('button', { name: /พิมพ์เอกสาร/i });
+    fireEvent.click(printBtn);
+    expect(printSpy).toHaveBeenCalled();
+
+    // Test close button
+    const closeBtn = screen.getByRole('button', { name: /ปิดหน้าต่าง/i });
+    fireEvent.click(closeBtn);
+    expect(onClose).toHaveBeenCalled();
+
+    printSpy.mockRestore();
   });
 });

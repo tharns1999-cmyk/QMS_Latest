@@ -213,6 +213,7 @@ export const CreateWorkOrderModal = ({
 
 export { RecordResultModal } from './RecordResultModal';
 export { AmendmentModal } from './AmendmentModal';
+export { DigitalRecordModal } from './DigitalRecordModal';
 
 export const WorkOrderActionModal = ({
   modal,

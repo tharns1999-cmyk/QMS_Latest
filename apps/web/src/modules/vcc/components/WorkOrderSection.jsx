@@ -28,7 +28,8 @@ import {
   RecordResultModal,
   WorkOrderActionModal,
   WorkOrderSettingsModal,
-  AmendmentModal
+  AmendmentModal,
+  DigitalRecordModal
 } from './WorkOrderModals';
 import WorkOrderInfoBar from './WorkOrderInfoBar';
 import WorkOrderSideDrawer from './WorkOrderSideDrawer';
@@ -169,6 +170,9 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
   });
   const [amendError, setAmendError] = useState('');
   const [savingAmend, setSavingAmend] = useState(false);
+
+  // Digital Calibration Record Modal (Print / Export View)
+  const [digitalRecordWo, setDigitalRecordWo] = useState(null);
 
   // Action Modal (RESCHEDULE | APPROVE | REJECT | RELEASE_HOLD)
   const [actionModal, setActionModal] = useState(null);
@@ -688,6 +692,7 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
         onResetFilters={handleResetFilters}
         onOpenCreate={openCreateModal}
         onAmend={openAmendModal}
+        onViewDigitalRecord={(wo) => setDigitalRecordWo(wo)}
       />
 
       {/* 5. Side Drawer for Work Order Details */}
@@ -702,6 +707,7 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
         onReleaseHold={(wo) => openAction('RELEASE_HOLD', wo)}
         onAmend={openAmendModal}
         onDownloadCert={handleDownloadCert}
+        onViewDigitalRecord={(wo) => setDigitalRecordWo(wo)}
       />
 
       {/* 6. Modals */}
@@ -739,6 +745,12 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
         saving={savingAmend}
         onSubmit={handleAmendSubmit}
         criteriaOptions={woSettings.default_acceptance_criteria}
+      />
+
+      <DigitalRecordModal
+        workOrder={digitalRecordWo}
+        onClose={() => setDigitalRecordWo(null)}
+        onDownloadCert={handleDownloadCert}
       />
 
       <WorkOrderActionModal

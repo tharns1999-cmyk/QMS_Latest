@@ -15,7 +15,8 @@ import {
   FileText,
   Download,
   ExternalLink,
-  Layers
+  Layers,
+  Printer
 } from 'lucide-react';
 import { fetchVccWorkOrderDetail } from '../api/vccWorkOrderApi';
 
@@ -29,7 +30,8 @@ export const WorkOrderSideDrawer = ({
   onReject,
   onReleaseHold,
   onAmend,
-  onDownloadCert
+  onDownloadCert,
+  onViewDigitalRecord
 }) => {
   const [detail, setDetail] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -155,6 +157,17 @@ export const WorkOrderSideDrawer = ({
                 {currentWo.plan_year ? `อิงแผนการทวนสอบประจำปี ${currentWo.plan_year} (เดือน ${currentWo.planned_month})` : 'ใบสั่งงานนอกแผน (Ad-hoc)'}
               </p>
             </div>
+
+            {currentWo.performed_at && (
+              <button
+                type="button"
+                onClick={() => onViewDigitalRecord?.(currentWo)}
+                className="h-9 inline-flex items-center gap-1.5 px-3.5 rounded-xl border border-purple-200 bg-purple-50 text-purple-700 text-xs font-semibold hover:bg-purple-100 transition-colors cursor-pointer shadow-2xs"
+              >
+                <Printer size={14} />
+                <span>พิมพ์/ดูเอกสารดิจิทัล</span>
+              </button>
+            )}
 
             <button
               type="button"
@@ -559,6 +572,17 @@ export const WorkOrderSideDrawer = ({
               >
                 <History size={14} />
                 <span>ขอแก้ไขผล (Amendment)</span>
+              </button>
+            )}
+
+            {currentWo.performed_at && (
+              <button
+                type="button"
+                onClick={() => onViewDigitalRecord?.(currentWo)}
+                className="h-9 inline-flex items-center gap-1.5 px-3.5 rounded-xl border border-purple-200 bg-purple-50 text-purple-700 text-xs font-semibold hover:bg-purple-100 transition-colors cursor-pointer shadow-2xs"
+              >
+                <Printer size={14} />
+                <span>พิมพ์/ดูเอกสารดิจิทัล</span>
               </button>
             )}
 

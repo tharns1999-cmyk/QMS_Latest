@@ -11,7 +11,8 @@ import {
   Plus,
   FilterX,
   MoreHorizontal,
-  History
+  History,
+  Printer
 } from 'lucide-react';
 import { FloatingOverlay } from '../../../shared/components/ui/FloatingOverlay';
 
@@ -28,7 +29,8 @@ const WorkOrderRowActions = ({
   onReschedule,
   onReject,
   onRowClick,
-  onAmend
+  onAmend,
+  onViewDigitalRecord
 }) => {
   const [isMenuOpen, setIsMenuOpen] = React.useState(false);
   const triggerRef = React.useRef(null);
@@ -143,6 +145,20 @@ const WorkOrderRowActions = ({
           </button>
         )}
 
+        {wo.performed_at && onViewDigitalRecord && (
+          <button
+            type="button"
+            onClick={() => {
+              handleClose();
+              onViewDigitalRecord(wo);
+            }}
+            className="w-full text-left px-3 py-2 text-xs font-semibold text-purple-700 hover:bg-purple-50 flex items-center gap-2 transition-colors cursor-pointer"
+          >
+            <Printer size={13} className="text-purple-600" />
+            <span>พิมพ์/ดูเอกสารดิจิทัล</span>
+          </button>
+        )}
+
         <button
           type="button"
           onClick={() => {
@@ -175,7 +191,8 @@ export const WorkOrderTable = ({
   onReleaseHold,
   onResetFilters,
   onOpenCreate,
-  onAmend
+  onAmend,
+  onViewDigitalRecord
 }) => {
   const reqApproverLevel = thresholds.required_approver_level ?? 5;
 
@@ -448,6 +465,7 @@ export const WorkOrderTable = ({
                     onReject={onReject}
                     onRowClick={onRowClick}
                     onAmend={onAmend}
+                    onViewDigitalRecord={onViewDigitalRecord}
                   />
                 </td>
               </tr>
