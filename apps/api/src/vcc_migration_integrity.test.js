@@ -227,4 +227,75 @@ describe('VCC Migration Upgrade & Historical Integrity Tests (0032 -> 0033 -> 00
     expect(woAfter.result_status).toBe('PASS');
     expect(woAfter.certificate_no).toBe('CERT-HIST-123');
   });
+
+  it('8. Field-by-Field Preservation: Strict equality comparison for all historical fields', async () => {
+    const pId = crypto.randomUUID();
+    const beforePlan = {
+      id: pId,
+      plan_year: 2046,
+      department: 'QC',
+      document_code: 'FM-QC-46',
+      revision: '00',
+      title: 'แผนตรวจสอบรายฟิลด์',
+      status: 'APPROVED',
+      effective_status: 'CURRENT',
+      is_current: 1,
+      due_date_rule: 'END_OF_MONTH',
+      prepared_by: 'test-user',
+      prepared_at: '2026-01-01T08:00:00Z',
+      reviewed_by: 'test-user',
+      reviewed_at: '2026-01-02T08:00:00Z',
+      approved_by: 'test-user',
+      approved_at: '2026-01-03T08:00:00Z'
+    };
+
+    await env.DB.prepare(`
+      INSERT INTO vcc_annual_plans (
+        id, plan_year, department, document_code, revision, title, status, effective_status, is_current,
+        due_date_rule, prepared_by, prepared_at, reviewed_by, reviewed_at, approved_by, approved_at,
+        created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'now', 'now')
+    `).bind(
+      beforePlan.id, beforePlan.plan_year, beforePlan.department, beforePlan.document_code, beforePlan.revision,
+      beforePlan.title, beforePlan.status, beforePlan.effective_status, beforePlan.is_current, beforePlan.due_date_rule,
+      beforePlan.prepared_by, beforePlan.prepared_at, beforePlan.reviewed_by, beforePlan.reviewed_at, beforePlan.approved_by, beforePlan.approved_at
+    ).run();
+
+    // Fetch and verify every field matches exactly
+    const afterPlan = await env.DB.prepare('SELECT * FROM vcc_annual_plans WHERE id = ?').bind(pId).first();
+    for (const [key, val] of Object.entries(beforePlan)) {
+      expect(afterPlan[key]).toBe(val);
+    }
+  });
+
+  it('9. Atomic Transaction Rollback: Database rolls back completely on migration transaction failure', async () => {
+    // Simulate transactional failure: a batch statement that fails midway
+    const testId = crypto.randomUUID();
+    let batchFailed = false;
+
+    try {
+      await env.DB.batch([
+        env.DB.prepare(`
+          INSERT INTO vcc_annual_plans (
+            id, plan_year, department, revision, title, status, effective_status, is_current, created_at, updated_at
+          ) VALUES (?, 2047, 'QC', '00', 'แผนทดสอบ Rollback', 'APPROVED', 'CURRENT', 1, 'now', 'now')
+        `).bind(testId),
+        // Intentional constraint violation in same batch
+        env.DB.prepare(`
+          INSERT INTO vcc_annual_plans (
+            id, plan_year, department, revision, title, status, effective_status, is_current, created_at, updated_at
+          ) VALUES (?, 2047, 'QC', '00', 'แผนซ้ำซ้อนให้พัง', 'APPROVED', 'CURRENT', 1, 'now', 'now')
+        `).bind(crypto.randomUUID())
+      ]);
+    } catch (err) {
+      batchFailed = true;
+      expect(err.message).toContain('constraint');
+    }
+
+    expect(batchFailed).toBe(true);
+
+    // Verify first insert was completely rolled back and does NOT exist
+    const rolledBack = await env.DB.prepare('SELECT id FROM vcc_annual_plans WHERE id = ?').bind(testId).first();
+    expect(rolledBack).toBeNull();
+  });
 });
