@@ -348,6 +348,76 @@ export const generateLocalVccTasks = (user) => {
       }
     }
   }
+
+  // Work Orders awaiting review (VCC_CALIBRATION_REVIEW) and rejected (VCC_CALIBRATION_REVISE)
+  const allWos = readJson('qms-vcc-local-work-orders-v1', () => []);
+  const allAssets = getLocalAssets();
+
+  for (const wo of allWos) {
+    const asset = allAssets.find((a) => a.id === wo.asset_id);
+    const woDept = wo.department || asset?.department;
+    const isDeptAllowed = isUserAuthorizedForPlanDept(user, woDept);
+
+    if (wo.status === 'PENDING_REVIEW') {
+      if (isDeptAllowed && user.id !== wo.performed_by && userLevel >= thresholds.required_reviewer_level) {
+        tasks.push({
+          id: `api-vcc-wo-${wo.id}-review`,
+          woId: wo.id,
+          workOrderId: wo.id,
+          referenceId: wo.id,
+          referenceType: 'VCC_WORK_ORDER',
+          docCode: wo.wo_code,
+          document_code: wo.wo_code,
+          docTitle: `ใบสั่งงาน ${wo.wo_code} (${asset?.code || ''} - ${asset?.name || ''})`,
+          docName: `ใบสั่งงาน ${wo.wo_code}`,
+          title: `[ตรวจรับผลสอบเทียบ VCC] ${wo.wo_code} (${asset?.code || ''} - ${asset?.name || ''})`,
+          type: 'Review',
+          taskType: 'VCC_CALIBRATION_REVIEW',
+          task_type: 'VCC_CALIBRATION_REVIEW',
+          category: 'REVIEW',
+          department: woDept,
+          target_department: woDept,
+          owner_dept: woDept,
+          required_approval_level: thresholds.required_reviewer_level,
+          requesterId: wo.performed_by,
+          prepared_by: wo.performed_by,
+          status: 'PENDING',
+          statusTab: 'PENDING_REVIEW',
+          createdAt: wo.performed_at || wo.created_at
+        });
+      }
+    } else if (wo.status === 'REJECTED') {
+      if (user.id === wo.performed_by || user.isDcc || user.isQmr) {
+        tasks.push({
+          id: `api-vcc-wo-${wo.id}-revise`,
+          woId: wo.id,
+          workOrderId: wo.id,
+          referenceId: wo.id,
+          referenceType: 'VCC_WORK_ORDER',
+          docCode: wo.wo_code,
+          document_code: wo.wo_code,
+          docTitle: `ใบสั่งงาน ${wo.wo_code} (${asset?.code || ''} - ${asset?.name || ''})`,
+          docName: `ใบสั่งงาน ${wo.wo_code}`,
+          title: `[แก้ไขผลสอบเทียบ VCC ส่งกลับ] ${wo.wo_code} (${asset?.code || ''} - ${asset?.name || ''})`,
+          type: 'Revise',
+          taskType: 'VCC_CALIBRATION_REVISE',
+          task_type: 'VCC_CALIBRATION_REVISE',
+          category: 'REVISE',
+          department: woDept,
+          target_department: woDept,
+          owner_dept: woDept,
+          assigneeId: wo.performed_by,
+          assignee_id: wo.performed_by,
+          requesterId: wo.performed_by,
+          returnReason: wo.rejected_reason,
+          status: 'PENDING',
+          statusTab: 'REJECTED',
+          createdAt: wo.rejected_at
+        });
+      }
+    }
+  }
+
   return tasks;
 };
 

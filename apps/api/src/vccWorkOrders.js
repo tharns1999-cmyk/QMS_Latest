@@ -54,6 +54,15 @@ const readWorkOrderSettings = async (db) => {
   }
 };
 
+export const MAX_CERTIFICATE_PDF_BYTES = 25 * 1024 * 1024; // 25 MB
+
+export const computeSha256 = async (bytes) => {
+  const hashBuffer = await crypto.subtle.digest('SHA-256', bytes);
+  return Array.from(new Uint8Array(hashBuffer))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+};
+
 const fetchWorkOrder = async (db, id) =>
   db.prepare(`
     SELECT w.*,
@@ -74,7 +83,9 @@ const fetchWorkOrder = async (db, id) =>
       u_perf.name AS performed_by_name,
       u_rev.name AS reviewed_by_name,
       u_rel.name AS hold_released_by_name,
-      u_canc.name AS cancelled_by_name
+      u_canc.name AS cancelled_by_name,
+      u_cert.name AS certificate_uploaded_by_name,
+      u_amend.name AS amended_by_name
     FROM vcc_work_orders w
     JOIN vcc_assets a ON a.id = w.asset_id
     LEFT JOIN vcc_assets p ON p.id = a.parent_id
@@ -84,6 +95,8 @@ const fetchWorkOrder = async (db, id) =>
     LEFT JOIN users u_rev ON u_rev.id = w.reviewed_by
     LEFT JOIN users u_rel ON u_rel.id = w.hold_released_by
     LEFT JOIN users u_canc ON u_canc.id = w.cancelled_by
+    LEFT JOIN users u_cert ON u_cert.id = w.certificate_uploaded_by
+    LEFT JOIN users u_amend ON u_amend.id = w.amended_by
     WHERE w.id = ?
   `).bind(id).first();
 
@@ -786,14 +799,38 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
     const settings = await readWorkOrderSettings(db);
     const thresholds = await getThresholds(db, settings.approval_doc_type);
 
-    const { results: auditRows } = await db.prepare(`
-      SELECT l.id, l.at, l.actor_id, u.name AS actor_name, l.action, l.details
-      FROM audit_log l
-      LEFT JOIN users u ON u.id = l.actor_id
-      WHERE l.action GLOB 'VCC_WO_*'
-        AND json_extract(l.details, '$.wo_id') = ?
-      ORDER BY l.id DESC
-    `).bind(id).all();
+    const [{ results: auditRows }, { results: certRows }, { results: amendmentRows }, { results: amendmentReqRows }] = await Promise.all([
+      db.prepare(`
+        SELECT l.id, l.at, l.actor_id, u.name AS actor_name, l.action, l.details
+        FROM audit_log l
+        LEFT JOIN users u ON u.id = l.actor_id
+        WHERE l.action GLOB 'VCC_WO_*'
+          AND json_extract(l.details, '$.wo_id') = ?
+        ORDER BY l.id DESC
+      `).bind(id).all(),
+      db.prepare(`
+        SELECT c.*, u.name AS uploaded_by_name
+        FROM vcc_work_order_certificates c
+        LEFT JOIN users u ON u.id = c.uploaded_by
+        WHERE c.work_order_id = ?
+        ORDER BY c.version DESC
+      `).bind(id).all().catch(() => ({ results: [] })),
+      db.prepare(`
+        SELECT a.*, u.name AS amended_by_name
+        FROM vcc_work_order_amendments a
+        LEFT JOIN users u ON u.id = a.amended_by
+        WHERE a.work_order_id = ?
+        ORDER BY a.amendment_seq DESC
+      `).bind(id).all().catch(() => ({ results: [] })),
+      db.prepare(`
+        SELECT r.*, u_req.name AS requester_name, u_rev.name AS reviewer_name
+        FROM vcc_work_order_amendment_requests r
+        LEFT JOIN users u_req ON u_req.id = r.requested_by
+        LEFT JOIN users u_rev ON u_rev.id = r.reviewed_by
+        WHERE r.work_order_id = ?
+        ORDER BY r.created_at DESC
+      `).bind(id).all().catch(() => ({ results: [] }))
+    ]);
 
     const history = auditRows.map((row) => ({
       ...row,
@@ -802,7 +839,112 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
       })()
     }));
 
-    return c.json({ workOrder, thresholds, history });
+    const amendments = amendmentRows.map((row) => ({
+      ...row,
+      snapshot: (() => {
+        try { return JSON.parse(row.snapshot_data || '{}'); } catch { return {}; }
+      })()
+    }));
+
+    const amendmentRequests = (amendmentReqRows || []).map((row) => ({
+      ...row,
+      proposed_changes: (() => {
+        try { return JSON.parse(row.proposed_changes || '{}'); } catch { return {}; }
+      })()
+    }));
+
+    const pendingAmendmentRequest = amendmentRequests.find((r) => r.status === 'PENDING') || null;
+
+    return c.json({
+      workOrder,
+      thresholds,
+      history,
+      certificates: certRows,
+      amendments,
+      amendmentRequests,
+      pendingAmendmentRequest
+    });
+  });
+
+  app.get('/api/vcc/work-orders/:id/certificates', requireAuth, requireVccAccess, async (c) => {
+    const db = c.env.DB;
+    const user = c.get('user');
+    const id = c.req.param('id');
+
+    const existing = await fetchWorkOrder(db, id);
+    if (!existing) return c.json({ error: 'ไม่พบใบสั่งงานทวนสอบ/สอบเทียบ' }, 404);
+    if (!isUserAuthorizedForPlanDept(user, existing.department)) {
+      return c.json({ error: 'ไม่มีสิทธิ์เข้าถึงข้อมูลของแผนกนี้' }, 403);
+    }
+
+    const { results } = await db.prepare(`
+      SELECT c.*, u.name AS uploaded_by_name
+      FROM vcc_work_order_certificates c
+      LEFT JOIN users u ON u.id = c.uploaded_by
+      WHERE c.work_order_id = ?
+      ORDER BY c.version DESC
+    `).bind(id).all();
+
+    return c.json({ certificates: results });
+  });
+
+  app.get('/api/vcc/work-orders/:id/amendments', requireAuth, requireVccAccess, async (c) => {
+    const db = c.env.DB;
+    const user = c.get('user');
+    const id = c.req.param('id');
+
+    const existing = await fetchWorkOrder(db, id);
+    if (!existing) return c.json({ error: 'ไม่พบใบสั่งงานทวนสอบ/สอบเทียบ' }, 404);
+    if (!isUserAuthorizedForPlanDept(user, existing.department)) {
+      return c.json({ error: 'ไม่มีสิทธิ์เข้าถึงข้อมูลของแผนกนี้' }, 403);
+    }
+
+    const { results } = await db.prepare(`
+      SELECT a.*, u.name AS amended_by_name
+      FROM vcc_work_order_amendments a
+      LEFT JOIN users u ON u.id = a.amended_by
+      WHERE a.work_order_id = ?
+      ORDER BY a.amendment_seq DESC
+    `).bind(id).all();
+
+    const amendments = results.map((row) => ({
+      ...row,
+      snapshot: (() => {
+        try { return JSON.parse(row.snapshot_data || '{}'); } catch { return {}; }
+      })()
+    }));
+
+    return c.json({ amendments });
+  });
+
+  app.get('/api/vcc/work-orders/:id/amendment-requests', requireAuth, requireVccAccess, async (c) => {
+    const db = c.env.DB;
+    const user = c.get('user');
+    const id = c.req.param('id');
+
+    const existing = await fetchWorkOrder(db, id);
+    if (!existing) return c.json({ error: 'ไม่พบใบสั่งงานทวนสอบ/สอบเทียบ' }, 404);
+    if (!isUserAuthorizedForPlanDept(user, existing.department)) {
+      return c.json({ error: 'ไม่มีสิทธิ์เข้าถึงข้อมูลของแผนกนี้' }, 403);
+    }
+
+    const { results } = await db.prepare(`
+      SELECT r.*, u_req.name AS requester_name, u_rev.name AS reviewer_name
+      FROM vcc_work_order_amendment_requests r
+      LEFT JOIN users u_req ON u_req.id = r.requested_by
+      LEFT JOIN users u_rev ON u_rev.id = r.reviewed_by
+      WHERE r.work_order_id = ?
+      ORDER BY r.created_at DESC
+    `).bind(id).all().catch(() => ({ results: [] }));
+
+    const requests = (results || []).map((row) => ({
+      ...row,
+      proposed_changes: (() => {
+        try { return JSON.parse(row.proposed_changes || '{}'); } catch { return {}; }
+      })()
+    }));
+
+    return c.json({ requests });
   });
 
   // Create Work Order (from APPROVED annual plan item OR ad-hoc)
@@ -931,7 +1073,7 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
     if (Number(asset.is_group) === 1 && asset.group_nature !== 'COMPOSITE_SET') {
       return c.json({ error: 'เครื่องมือแบบกลุ่มต้องแยกรหัสเครื่องมือรายตัวก่อนสร้างใบสั่งงาน' }, 400);
     }
-    if (asset.status !== 'ACTIVE') {
+    if (asset.status === 'RETIRED') {
       return c.json({ error: 'ไม่สามารถเปิดใบสั่งงานให้เครื่องมือที่ปลดออกแล้ว (RETIRED)' }, 409);
     }
     if (!isUserAuthorizedForPlanDept(user, asset.department)) {
@@ -941,8 +1083,12 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
     const openHold = await db.prepare(`
       SELECT wo_code FROM vcc_work_orders WHERE asset_id = ? AND nc_status = 'OPEN'
     `).bind(targetAssetId).first();
-    if (openHold) {
-      return c.json({ error: `เครื่องมือ ${asset.asset_code} อยู่ระหว่างระงับใช้งาน (ON_HOLD จากใบงาน ${openHold.wo_code}) ต้องปลดระงับก่อนเปิดใบงานใหม่` }, 409);
+    if (asset.status === 'ON_HOLD' || openHold) {
+      const refWo = openHold ? ` จากใบงาน ${openHold.wo_code}` : '';
+      return c.json({ error: `เครื่องมือ ${asset.asset_code} อยู่ระหว่างระงับใช้งาน (ON_HOLD${refWo}) ต้องปลดระงับก่อนเปิดใบงานใหม่` }, 409);
+    }
+    if (asset.status !== 'ACTIVE') {
+      return c.json({ error: `ไม่สามารถเปิดใบสั่งงานให้เครื่องมือที่มีสถานะ ${asset.status}` }, 409);
     }
 
     if (!providerName) return c.json({ error: 'กรุณาระบุสถาบัน/หน่วยงานที่ทวนสอบ' }, 400);
@@ -1111,10 +1257,39 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
       return c.json({ error: 'กรุณาระบุเกณฑ์ยอมรับ (Acceptance Criteria) ที่ใช้ตรวจเทียบก่อนส่งตรวจรับ' }, 400);
     }
 
+    const calibrationProviderName = body.calibration_provider_name !== undefined ? (String(body.calibration_provider_name || '').trim() || null) : existing.calibration_provider_name;
+    const calibrationMethod = body.calibration_method !== undefined ? (String(body.calibration_method || '').trim() || null) : existing.calibration_method;
+    const traceabilityRef = body.traceability_ref !== undefined ? (String(body.traceability_ref || '').trim() || null) : existing.traceability_ref;
+    const environmentalConditions = body.environmental_conditions !== undefined ? (String(body.environmental_conditions || '').trim() || null) : existing.environmental_conditions;
+    const uncertaintyValue = body.uncertainty_value !== undefined ? (String(body.uncertainty_value || '').trim() || null) : existing.uncertainty_value;
+    const calibrationErrorValue = body.calibration_error_value !== undefined ? (String(body.calibration_error_value || '').trim() || null) : existing.calibration_error_value;
+
+    let certificateIssueDate = existing.certificate_issue_date;
+    if (body.certificate_issue_date !== undefined) {
+      certificateIssueDate = String(body.certificate_issue_date || '').trim() || null;
+      if (certificateIssueDate) {
+        if (!DATE_RE.test(certificateIssueDate)) return c.json({ error: 'วันที่ออกใบรับรองไม่ถูกต้องตามรูปแบบ (YYYY-MM-DD)' }, 400);
+        if (certificateIssueDate > todayBangkok) {
+          return c.json({ error: 'วันที่ออกใบรับรองต้องไม่เป็นวันที่ในอนาคต' }, 400);
+        }
+      }
+    }
+
+    let certificateValidUntil = existing.certificate_valid_until;
+    if (body.certificate_valid_until !== undefined) {
+      certificateValidUntil = String(body.certificate_valid_until || '').trim() || null;
+      if (certificateValidUntil) {
+        if (!DATE_RE.test(certificateValidUntil)) return c.json({ error: 'วันที่ใบรับรองหมดอายุไม่ถูกต้องตามรูปแบบ (YYYY-MM-DD)' }, 400);
+        if (certificateIssueDate && certificateValidUntil < certificateIssueDate) {
+          return c.json({ error: 'วันที่ใบรับรองหมดอายุต้องไม่มาก่อนวันที่ออกใบรับรอง' }, 400);
+        }
+      }
+    }
+
     // If result is FAIL, immediately trigger ON_HOLD / NC control
     const nextNcStatus = resultStatus === 'FAIL' ? 'OPEN' : existing.nc_status;
 
-    await db.batch([
+    const batchStmts = [
       db.prepare(`
         UPDATE vcc_work_orders
         SET status = 'PENDING_REVIEW',
@@ -1123,6 +1298,14 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
             certificate_no = ?,
             acceptance_criteria = ?,
             result_remarks = ?,
+            calibration_provider_name = ?,
+            calibration_method = ?,
+            traceability_ref = ?,
+            environmental_conditions = ?,
+            uncertainty_value = ?,
+            calibration_error_value = ?,
+            certificate_issue_date = ?,
+            certificate_valid_until = ?,
             performed_by = ?,
             nc_status = ?,
             rejected_reason = NULL,
@@ -1135,6 +1318,14 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
         certificateNo,
         acceptanceCriteria,
         resultRemarks,
+        calibrationProviderName,
+        calibrationMethod,
+        traceabilityRef,
+        environmentalConditions,
+        uncertaintyValue,
+        calibrationErrorValue,
+        certificateIssueDate,
+        certificateValidUntil,
         user.id,
         nextNcStatus,
         user.id,
@@ -1149,11 +1340,32 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
         result_status: resultStatus,
         certificate_no: certificateNo,
         acceptance_criteria: acceptanceCriteria,
+        calibration_provider_name: calibrationProviderName,
+        calibration_method: calibrationMethod,
+        traceability_ref: traceabilityRef,
+        environmental_conditions: environmentalConditions,
+        uncertainty_value: uncertaintyValue,
+        calibration_error_value: calibrationErrorValue,
+        certificate_issue_date: certificateIssueDate,
+        certificate_valid_until: certificateValidUntil,
         nc_status: nextNcStatus,
         before: { status: existing.status },
         after: { status: 'PENDING_REVIEW' }
       })
-    ]);
+    ];
+
+    if (resultStatus === 'FAIL') {
+      batchStmts.push(
+        db.prepare(`
+          UPDATE vcc_assets
+          SET status = 'ON_HOLD',
+              updated_at = ${NOW}
+          WHERE id = ?
+        `).bind(existing.asset_id)
+      );
+    }
+
+    await db.batch(batchStmts);
 
     return c.json({ workOrder: await fetchWorkOrder(db, id) });
   });
@@ -1316,6 +1528,16 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
             updated_by = ?
         WHERE id = ?
       `).bind(impactAssessment, user.id, user.id, id),
+      db.prepare(`
+        UPDATE vcc_assets
+        SET status = 'ACTIVE',
+            updated_at = ${NOW}
+        WHERE id = ?
+          AND NOT EXISTS (
+            SELECT 1 FROM vcc_work_orders
+            WHERE asset_id = ? AND id != ? AND nc_status = 'OPEN'
+          )
+      `).bind(existing.asset_id, existing.asset_id, id),
       audit(db, user.id, 'VCC_WO_HOLD_RELEASED', {
         wo_id: id,
         wo_code: existing.wo_code,
@@ -1399,6 +1621,676 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
     await db.batch(batchStmts);
 
     return c.json({ workOrder: await fetchWorkOrder(db, id) });
+  });
+
+  // Upload Certificate PDF to Cloudflare R2 with SHA-256 integrity hash & versioning
+  app.put('/api/vcc/work-orders/:id/certificate-file', requireAuth, requireVccAccess, async (c) => {
+    const db = c.env.DB;
+    const user = c.get('user');
+    const id = c.req.param('id');
+
+    const existing = await fetchWorkOrder(db, id);
+    if (!existing) return c.json({ error: 'ไม่พบใบสั่งงานทวนสอบ/สอบเทียบ' }, 404);
+    if (existing.status === 'CLOSED') {
+      return c.json({ error: 'ใบสั่งงานปิดสมบูรณ์แล้ว การเปลี่ยนหรือแก้ไขไฟล์ใบรับรองต้องทำผ่านกระบวนการขอแก้ไข (Amendment) เท่านั้น' }, 409);
+    }
+    if (existing.status === 'CANCELLED') {
+      return c.json({ error: 'ไม่สามารถแนบไฟล์ใบรับรองในใบสั่งงานที่ยกเลิกไปแล้วได้' }, 409);
+    }
+    if (!isUserAuthorizedForPlanDept(user, existing.department)) {
+      return c.json({ error: 'ไม่มีสิทธิ์แนบไฟล์ใบรับรองสำหรับใบสั่งงานของแผนกนี้' }, 403);
+    }
+
+    if (Number(c.req.header('content-length')) > MAX_CERTIFICATE_PDF_BYTES) {
+      return c.json({ error: 'ไฟล์ต้องไม่เกิน 25 MB' }, 413);
+    }
+
+    const file = await c.req.arrayBuffer();
+    if (file.byteLength > MAX_CERTIFICATE_PDF_BYTES) {
+      return c.json({ error: 'ไฟล์ต้องไม่เกิน 25 MB' }, 413);
+    }
+    if (file.byteLength === 0) {
+      return c.json({ error: 'กรุณาเลือกไฟล์ PDF ที่ต้องการอัปโหลด' }, 400);
+    }
+    if (new TextDecoder().decode(file.slice(0, 5)) !== '%PDF-') {
+      return c.json({ error: 'ไฟล์ต้องเป็น PDF' }, 400);
+    }
+
+    const rawFileName = c.req.query('filename') || c.req.header('x-filename') || 'certificate.pdf';
+    const fileName = decodeURIComponent(rawFileName).trim().replace(/[/\\?%*:|"<>]/g, '_') || 'certificate.pdf';
+    const certificateNo = c.req.query('certificate_no') ? decodeURIComponent(c.req.query('certificate_no')).trim() : (existing.certificate_no || null);
+    const issueDate = c.req.query('issue_date') ? decodeURIComponent(c.req.query('issue_date')).trim() : null;
+    const validUntil = c.req.query('valid_until') ? decodeURIComponent(c.req.query('valid_until')).trim() : null;
+    const changeReason = c.req.query('change_reason') ? decodeURIComponent(c.req.query('change_reason')).trim() : null;
+
+    if (issueDate) {
+      if (!DATE_RE.test(issueDate)) return c.json({ error: 'วันที่ออกใบรับรองไม่ถูกต้องตามรูปแบบ (YYYY-MM-DD)' }, 400);
+      const todayBangkok = getBangkokDateString(new Date());
+      if (issueDate > todayBangkok) {
+        return c.json({ error: 'วันที่ออกใบรับรองต้องไม่เป็นวันที่ในอนาคต' }, 400);
+      }
+    }
+    if (validUntil) {
+      if (!DATE_RE.test(validUntil)) return c.json({ error: 'วันที่ใบรับรองหมดอายุไม่ถูกต้องตามรูปแบบ (YYYY-MM-DD)' }, 400);
+      if (issueDate && validUntil < issueDate) {
+        return c.json({ error: 'วันที่ใบรับรองหมดอายุต้องไม่มาก่อนวันที่ออกใบรับรอง' }, 400);
+      }
+    }
+
+    const fileHash = await computeSha256(file);
+    const key = `vcc/certificates/${existing.id}/${crypto.randomUUID()}.pdf`;
+
+    if (!c.env.FILES) {
+      return c.json({ error: 'ระบบจัดเก็บไฟล์ R2 ยังไม่ได้เชื่อมต่อหรือไม่พร้อมใช้งาน' }, 503);
+    }
+
+    try {
+      await c.env.FILES.put(key, file, {
+        httpMetadata: {
+          contentType: 'application/pdf',
+          contentDisposition: `inline; filename="${fileName}"`
+        },
+        customMetadata: {
+          work_order_id: existing.id,
+          file_hash: fileHash,
+          uploaded_by: user.id
+        }
+      });
+    } catch (uploadErr) {
+      return c.json({ error: `การอัปโหลดไฟล์ใบรับรองไปยังระบบจัดเก็บ R2 ล้มเหลว: ${uploadErr?.message || 'Upload failed'}` }, 500);
+    }
+
+    // Next version in immutable history
+    const latestVersionRow = await db
+      .prepare('SELECT COALESCE(MAX(version), 0) AS max_v FROM vcc_work_order_certificates WHERE work_order_id = ?')
+      .bind(existing.id)
+      .first();
+    const nextVersion = (latestVersionRow?.max_v || 0) + 1;
+    const certRecordId = crypto.randomUUID();
+
+    await db.batch([
+      db.prepare(`
+        INSERT INTO vcc_work_order_certificates (
+          id, work_order_id, version, file_key, file_name, file_size, file_hash,
+          certificate_no, issue_date, valid_until, uploaded_by, uploaded_at, change_reason, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${NOW}, ?, ${NOW})
+      `).bind(
+        certRecordId,
+        existing.id,
+        nextVersion,
+        key,
+        fileName,
+        file.byteLength,
+        fileHash,
+        certificateNo,
+        issueDate,
+        validUntil,
+        user.id,
+        changeReason
+      ),
+      db.prepare(`
+        UPDATE vcc_work_orders
+        SET certificate_file_key = ?,
+            certificate_file_name = ?,
+            certificate_file_size = ?,
+            certificate_file_hash = ?,
+            certificate_version = ?,
+            certificate_uploaded_at = ${NOW},
+            certificate_uploaded_by = ?,
+            certificate_no = COALESCE(?, certificate_no),
+            certificate_issue_date = COALESCE(?, certificate_issue_date),
+            certificate_valid_until = COALESCE(?, certificate_valid_until),
+            updated_at = ${NOW},
+            updated_by = ?
+        WHERE id = ?
+      `).bind(
+        key,
+        fileName,
+        file.byteLength,
+        fileHash,
+        nextVersion,
+        user.id,
+        certificateNo,
+        issueDate,
+        validUntil,
+        user.id,
+        existing.id
+      ),
+      audit(db, user.id, 'VCC_WO_CERTIFICATE_ATTACHED', {
+        wo_id: existing.id,
+        wo_code: existing.wo_code,
+        asset_id: existing.asset_id,
+        version: nextVersion,
+        file_key: key,
+        file_name: fileName,
+        file_size: file.byteLength,
+        file_hash: fileHash,
+        certificate_no: certificateNo
+      })
+    ]);
+
+    return c.json({ workOrder: await fetchWorkOrder(db, id), certificate_version: nextVersion, file_hash: fileHash });
+  });
+
+  // Stream/Download Certificate PDF from R2
+  app.get('/api/vcc/work-orders/:id/certificate-file', requireAuth, requireVccAccess, async (c) => {
+    const db = c.env.DB;
+    const user = c.get('user');
+    const id = c.req.param('id');
+    const purpose = c.req.query('purpose') || 'view';
+    const versionQuery = c.req.query('version');
+
+    const existing = await fetchWorkOrder(db, id);
+    if (!existing) return c.json({ error: 'ไม่พบใบสั่งงานทวนสอบ/สอบเทียบ' }, 404);
+    if (!isUserAuthorizedForPlanDept(user, existing.department)) {
+      return c.json({ error: 'ไม่มีสิทธิ์เข้าถึงไฟล์ใบรับรองของแผนกนี้' }, 403);
+    }
+
+    let fileKey = existing.certificate_file_key;
+    let fileName = existing.certificate_file_name || `${existing.wo_code}_Cert.pdf`;
+
+    if (versionQuery) {
+      const vNum = Number(versionQuery);
+      const certRow = await db
+        .prepare('SELECT file_key, file_name FROM vcc_work_order_certificates WHERE work_order_id = ? AND version = ?')
+        .bind(id, vNum)
+        .first();
+      if (!certRow) return c.json({ error: `ไม่พบประวัติไฟล์ใบรับรองเวอร์ชัน ${vNum}` }, 404);
+      fileKey = certRow.file_key;
+      fileName = certRow.file_name;
+    }
+
+    if (!fileKey) {
+      return c.json({ error: 'ยังไม่มีการแนบไฟล์ใบรับรองในใบสั่งงานนี้' }, 404);
+    }
+
+    if (!c.env.FILES) {
+      return c.json({ error: 'ระบบจัดเก็บไฟล์ R2 ยังไม่ได้เชื่อมต่อ' }, 503);
+    }
+
+    const obj = await c.env.FILES.get(fileKey);
+    if (!obj) {
+      return c.json({ error: 'ไม่พบไฟล์ในระบบจัดเก็บ' }, 404);
+    }
+
+    const disposition = purpose === 'download' ? 'attachment' : 'inline';
+    const action = purpose === 'download' ? 'VCC_WO_CERTIFICATE_DOWNLOADED' : 'VCC_WO_CERTIFICATE_VIEWED';
+
+    await audit(db, user.id, action, {
+      wo_id: existing.id,
+      wo_code: existing.wo_code,
+      file_key: fileKey,
+      file_name: fileName,
+      version: versionQuery ? Number(versionQuery) : existing.certificate_version
+    }).run();
+
+    return new Response(obj.body, {
+      headers: {
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `${disposition}; filename="${encodeURIComponent(fileName)}"`,
+        'Cache-Control': 'private, no-store'
+      }
+    });
+  });
+
+  // Controlled Amendment for CLOSED work orders (ISO/IEC 17025 clause 7.8.8)
+  // Step 1: Submit Amendment Request (Requester authenticated on server, Segregation of Duties)
+  const handleRequestAmendment = async (c) => {
+    const db = c.env.DB;
+    const user = c.get('user');
+    const id = c.req.param('id');
+    const body = await c.req.json().catch(() => ({}));
+
+    const existing = await fetchWorkOrder(db, id);
+    if (!existing) return c.json({ error: 'ไม่พบใบสั่งงานทวนสอบ/สอบเทียบ' }, 404);
+    if (existing.status !== 'CLOSED') {
+      return c.json({ error: 'การแก้ไข (Amendment) ทำได้เฉพาะใบสั่งงานที่ปิดงาน (CLOSED) สำเร็จแล้วเท่านั้น หากยังไม่ปิดงานให้แก้ไขในขั้นตอนปกติ' }, 409);
+    }
+    if (!isUserAuthorizedForPlanDept(user, existing.department)) {
+      return c.json({ error: 'ไม่มีสิทธิ์ขอแก้ไขใบสั่งงานของแผนกนี้' }, 403);
+    }
+
+    const settings = await readWorkOrderSettings(db);
+    const thresholds = await getThresholds(db, settings.approval_doc_type);
+    const userLevel = Number(user.approval_level ?? 0);
+
+    // Required requester level: at least L4+ (or reviewer level)
+    const requiredLevel = Math.max(4, thresholds.required_reviewer_level || 4);
+    if (userLevel < requiredLevel) {
+      return c.json({ error: `ผู้มีอำนาจขอแก้ไขใบสั่งงานที่ปิดแล้วต้องมีระดับอนุมัติ L${requiredLevel} ขึ้นไป` }, 403);
+    }
+
+    // Check if an amendment request is already pending
+    const pendingExisting = await db
+      .prepare('SELECT id FROM vcc_work_order_amendment_requests WHERE work_order_id = ? AND status = "PENDING"')
+      .bind(id)
+      .first()
+      .catch(() => null);
+    if (pendingExisting) {
+      return c.json({ error: 'มีคำขอแก้ไข (Amendment Request) ที่รอการอนุมัติอยู่แล้ว กรุณารอการตรวจสอบคำขอเดิมก่อนสร้างคำขอใหม่' }, 409);
+    }
+
+    const reason = String(body.amendment_reason || body.reason || '').trim();
+    if (!reason) {
+      return c.json({ error: 'กรุณาระบุเหตุผลและความจำเป็นในการแก้ไขผลใบสั่งงานที่ปิดไปแล้ว (Amendment Reason)' }, 400);
+    }
+
+    const todayBangkok = getBangkokDateString(new Date());
+    let performedAt = existing.performed_at;
+    if (body.performed_at !== undefined) {
+      performedAt = String(body.performed_at || '').trim();
+      if (!DATE_RE.test(performedAt)) return c.json({ error: 'กรุณาระบุวันที่ทวนสอบจริง (YYYY-MM-DD)' }, 400);
+      if (performedAt > todayBangkok) {
+        return c.json({ error: 'วันที่ทวนสอบจริงต้องไม่เป็นวันที่ในอนาคต' }, 400);
+      }
+    }
+
+    const newResultStatus = body.result_status ? String(body.result_status).trim().toUpperCase() : existing.result_status;
+    if (newResultStatus && !VALID_RESULT_STATUSES.has(newResultStatus)) {
+      return c.json({ error: 'ผลการทวนสอบต้องเป็น PASS, FAIL หรือ INCONCLUSIVE' }, 400);
+    }
+
+    let certificateIssueDate = existing.certificate_issue_date;
+    if (body.certificate_issue_date !== undefined) {
+      certificateIssueDate = String(body.certificate_issue_date || '').trim() || null;
+      if (certificateIssueDate) {
+        if (!DATE_RE.test(certificateIssueDate)) return c.json({ error: 'วันที่ออกใบรับรองไม่ถูกต้องตามรูปแบบ (YYYY-MM-DD)' }, 400);
+        if (certificateIssueDate > todayBangkok) {
+          return c.json({ error: 'วันที่ออกใบรับรองต้องไม่เป็นวันที่ในอนาคต' }, 400);
+        }
+      }
+    }
+
+    let certificateValidUntil = existing.certificate_valid_until;
+    if (body.certificate_valid_until !== undefined) {
+      certificateValidUntil = String(body.certificate_valid_until || '').trim() || null;
+      if (certificateValidUntil) {
+        if (!DATE_RE.test(certificateValidUntil)) return c.json({ error: 'วันที่ใบรับรองหมดอายุไม่ถูกต้องตามรูปแบบ (YYYY-MM-DD)' }, 400);
+        if (certificateIssueDate && certificateValidUntil < certificateIssueDate) {
+          return c.json({ error: 'วันที่ใบรับรองหมดอายุต้องไม่มาก่อนวันที่ออกใบรับรอง' }, 400);
+        }
+      }
+    }
+
+    const proposedChanges = {
+      result_status: newResultStatus,
+      performed_at: performedAt,
+      certificate_no: body.certificate_no !== undefined ? String(body.certificate_no || '').trim() : existing.certificate_no,
+      acceptance_criteria: body.acceptance_criteria !== undefined ? String(body.acceptance_criteria || '').trim() : existing.acceptance_criteria,
+      result_remarks: body.result_remarks !== undefined ? String(body.result_remarks || '').trim() : existing.result_remarks,
+      calibration_provider_name: body.calibration_provider_name !== undefined ? (String(body.calibration_provider_name || '').trim() || null) : existing.calibration_provider_name,
+      calibration_method: body.calibration_method !== undefined ? (String(body.calibration_method || '').trim() || null) : existing.calibration_method,
+      traceability_ref: body.traceability_ref !== undefined ? (String(body.traceability_ref || '').trim() || null) : existing.traceability_ref,
+      environmental_conditions: body.environmental_conditions !== undefined ? (String(body.environmental_conditions || '').trim() || null) : existing.environmental_conditions,
+      uncertainty_value: body.uncertainty_value !== undefined ? (String(body.uncertainty_value || '').trim() || null) : existing.uncertainty_value,
+      calibration_error_value: body.calibration_error_value !== undefined ? (String(body.calibration_error_value || '').trim() || null) : existing.calibration_error_value,
+      certificate_issue_date: certificateIssueDate,
+      certificate_valid_until: certificateValidUntil
+    };
+
+    const requestId = crypto.randomUUID();
+    const batchStmts = [
+      db.prepare(`
+        INSERT INTO vcc_work_order_amendment_requests (
+          id, work_order_id, requested_by, requested_at, amendment_reason, proposed_changes, status, created_at, updated_at
+        ) VALUES (?, ?, ?, ${NOW}, ?, ?, 'PENDING', ${NOW}, ${NOW})
+      `).bind(requestId, id, user.id, reason, JSON.stringify(proposedChanges)),
+      audit(db, user.id, 'VCC_WO_AMENDMENT_REQUESTED', {
+        wo_id: id,
+        wo_code: existing.wo_code,
+        asset_id: existing.asset_id,
+        request_id: requestId,
+        requested_by: user.id,
+        requested_by_name: user.name,
+        reason,
+        proposed_changes: proposedChanges
+      })
+    ];
+
+    await db.batch(batchStmts);
+
+    const createdRequest = {
+      id: requestId,
+      work_order_id: id,
+      requested_by: user.id,
+      requested_by_name: user.name,
+      amendment_reason: reason,
+      proposed_changes: proposedChanges,
+      status: 'PENDING'
+    };
+
+    return c.json({
+      message: 'บันทึกคำขอแก้ไข (Amendment Request) เรียบร้อยแล้ว รอการอนุมัติ',
+      request: createdRequest
+    }, 201);
+  };
+
+  // Step 2: Approve Amendment Request (SoD: Requester != Approver and Performer != Approver)
+  const handleApproveAmendment = async (c) => {
+    const db = c.env.DB;
+    const user = c.get('user');
+    const id = c.req.param('id');
+    const paramRequestId = c.req.param('requestId');
+    const body = await c.req.json().catch(() => ({}));
+    const targetRequestId = paramRequestId || body.request_id || body.requestId || null;
+
+    const existing = await fetchWorkOrder(db, id);
+    if (!existing) return c.json({ error: 'ไม่พบใบสั่งงานทวนสอบ/สอบเทียบ' }, 404);
+    if (existing.status !== 'CLOSED') {
+      return c.json({ error: 'การแก้ไข (Amendment) ทำได้เฉพาะใบสั่งงานที่ปิดงาน (CLOSED) สำเร็จแล้วเท่านั้น หากยังไม่ปิดงานให้แก้ไขในขั้นตอนปกติ' }, 409);
+    }
+    if (!isUserAuthorizedForPlanDept(user, existing.department)) {
+      return c.json({ error: 'ไม่มีสิทธิ์ขอแก้ไขใบสั่งงานของแผนกนี้' }, 403);
+    }
+
+    // Load request from DB
+    let reqRow;
+    if (targetRequestId) {
+      reqRow = await db
+        .prepare('SELECT * FROM vcc_work_order_amendment_requests WHERE id = ? AND work_order_id = ?')
+        .bind(targetRequestId, id)
+        .first();
+    } else {
+      reqRow = await db
+        .prepare('SELECT * FROM vcc_work_order_amendment_requests WHERE work_order_id = ? AND status = "PENDING" ORDER BY created_at DESC')
+        .bind(id)
+        .first();
+    }
+
+    if (!reqRow) {
+      return c.json({ error: 'ไม่พบคำขอแก้ไข (Amendment Request) ที่รอการอนุมัติ' }, 404);
+    }
+    if (reqRow.status !== 'PENDING') {
+      return c.json({ error: `คำขอแก้ไขนี้ได้รับการดำเนินการไปแล้ว (สถานะ: ${reqRow.status})` }, 409);
+    }
+
+    const settings = await readWorkOrderSettings(db);
+    const thresholds = await getThresholds(db, settings.approval_doc_type);
+    const userLevel = Number(user.approval_level ?? 0);
+
+    // Segregation of Duties 1: Performer cannot approve amendment of their own work order, even with L5+
+    if (user.id === existing.performed_by || user.username === existing.performed_by) {
+      return c.json({ error: 'การคัดแยกหน้าที่ (Segregation of Duties): ผู้บันทึกผลการสอบเทียบไม่สามารถอนุมัติการแก้ไข (Amendment) ของตนเองได้ แม้จะมีสิทธิ์ระดับ L5+ ขึ้นไป (ต้องให้ผู้อนุมัติอื่นเป็นผู้ดำเนินการ)' }, 403);
+    }
+
+    // Segregation of Duties 2: Requester loaded STRICTLY from database row cannot approve their own amendment
+    // NOTE: Client body.requested_by is completely ignored and untrusted to prevent spoofing.
+    const dbRequesterId = reqRow.requested_by;
+    if (user.id === dbRequesterId || user.username === dbRequesterId) {
+      return c.json({ error: 'การคัดแยกหน้าที่ (Segregation of Duties): ผู้ร้องขอแก้ไขผลไม่สามารถอนุมัติการแก้ไข (Amendment) ของตนเองได้ (ต้องให้ผู้อนุมัติแยกคนเป็นผู้ดำเนินการ)' }, 403);
+    }
+
+    // Minimum requirement: L4+ (or reviewer level)
+    const requiredLevel = Math.max(4, thresholds.required_reviewer_level || 4);
+    if (userLevel < requiredLevel) {
+      return c.json({ error: `ผู้มีอำนาจขอแก้ไขใบสั่งงานที่ปิดแล้วต้องมีระดับอนุมัติ L${requiredLevel} ขึ้นไป` }, 403);
+    }
+
+    let proposed = {};
+    try {
+      proposed = JSON.parse(reqRow.proposed_changes || '{}');
+    } catch {
+      proposed = {};
+    }
+
+    const newResultStatus = proposed.result_status ? String(proposed.result_status).trim().toUpperCase() : existing.result_status;
+    if (newResultStatus && !VALID_RESULT_STATUSES.has(newResultStatus)) {
+      return c.json({ error: 'ผลการทวนสอบต้องเป็น PASS, FAIL หรือ INCONCLUSIVE' }, 400);
+    }
+
+    // If changing to FAIL or if existing was FAIL, requires L5+ (approver level)
+    if ((existing.result_status === 'FAIL' || newResultStatus === 'FAIL') && userLevel < thresholds.required_approver_level) {
+      return c.json({ error: `การแก้ไขผลการสอบเทียบที่เกี่ยวข้องกับสถานะไม่ผ่านเกณฑ์ (FAIL) ต้องได้รับการอนุมัติโดยผู้มีอำนาจระดับ L${thresholds.required_approver_level} ขึ้นไป` }, 403);
+    }
+
+    const reason = reqRow.amendment_reason;
+    const performedAt = proposed.performed_at !== undefined ? proposed.performed_at : existing.performed_at;
+    const certificateNo = proposed.certificate_no !== undefined ? proposed.certificate_no : existing.certificate_no;
+    const acceptanceCriteria = proposed.acceptance_criteria !== undefined ? proposed.acceptance_criteria : existing.acceptance_criteria;
+    const resultRemarks = proposed.result_remarks !== undefined ? proposed.result_remarks : existing.result_remarks;
+    const calibrationProviderName = proposed.calibration_provider_name !== undefined ? proposed.calibration_provider_name : existing.calibration_provider_name;
+    const calibrationMethod = proposed.calibration_method !== undefined ? proposed.calibration_method : existing.calibration_method;
+    const traceabilityRef = proposed.traceability_ref !== undefined ? proposed.traceability_ref : existing.traceability_ref;
+    const environmentalConditions = proposed.environmental_conditions !== undefined ? proposed.environmental_conditions : existing.environmental_conditions;
+    const uncertaintyValue = proposed.uncertainty_value !== undefined ? proposed.uncertainty_value : existing.uncertainty_value;
+    const calibrationErrorValue = proposed.calibration_error_value !== undefined ? proposed.calibration_error_value : existing.calibration_error_value;
+    const certificateIssueDate = proposed.certificate_issue_date !== undefined ? proposed.certificate_issue_date : existing.certificate_issue_date;
+    const certificateValidUntil = proposed.certificate_valid_until !== undefined ? proposed.certificate_valid_until : existing.certificate_valid_until;
+
+    // Fetch next amendment sequence
+    const seqRow = await db
+      .prepare('SELECT COALESCE(MAX(amendment_seq), 0) AS max_seq FROM vcc_work_order_amendments WHERE work_order_id = ?')
+      .bind(id)
+      .first();
+    const nextSeq = (seqRow?.max_seq || 0) + 1;
+    const amendmentId = crypto.randomUUID();
+
+    // Snapshot of existing state before changes
+    const snapshotJson = JSON.stringify(existing);
+
+    // FAIL -> PASS Amendment must NEVER auto-release NC or remove ON_HOLD.
+    // The NC remains OPEN and asset remains ON_HOLD until explicit impact assessment and hold release via /release-hold.
+    const nextNcStatus = newResultStatus === 'FAIL' ? 'OPEN' : existing.nc_status;
+
+    const reviewComment = body.comment || body.review_comment || null;
+
+    const batchStmts = [
+      db.prepare(`
+        INSERT INTO vcc_work_order_amendments (
+          id, work_order_id, amendment_seq, snapshot_data, amendment_reason, amended_by, amended_at, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ${NOW}, ${NOW})
+      `).bind(amendmentId, id, nextSeq, snapshotJson, reason, user.id),
+      db.prepare(`
+        UPDATE vcc_work_order_amendment_requests
+        SET status = 'APPROVED',
+            reviewed_by = ?,
+            reviewed_at = ${NOW},
+            review_comment = ?,
+            updated_at = ${NOW}
+        WHERE id = ?
+      `).bind(user.id, reviewComment, reqRow.id),
+      db.prepare(`
+        UPDATE vcc_work_orders
+        SET result_status = ?,
+            performed_at = ?,
+            certificate_no = ?,
+            acceptance_criteria = ?,
+            result_remarks = ?,
+            calibration_provider_name = ?,
+            calibration_method = ?,
+            traceability_ref = ?,
+            environmental_conditions = ?,
+            uncertainty_value = ?,
+            calibration_error_value = ?,
+            certificate_issue_date = ?,
+            certificate_valid_until = ?,
+            nc_status = ?,
+            is_amended = 1,
+            amended_at = ${NOW},
+            amended_by = ?,
+            amendment_reason = ?,
+            updated_at = ${NOW},
+            updated_by = ?
+        WHERE id = ?
+      `).bind(
+        newResultStatus,
+        performedAt,
+        certificateNo,
+        acceptanceCriteria,
+        resultRemarks,
+        calibrationProviderName,
+        calibrationMethod,
+        traceabilityRef,
+        environmentalConditions,
+        uncertaintyValue,
+        calibrationErrorValue,
+        certificateIssueDate,
+        certificateValidUntil,
+        nextNcStatus,
+        user.id,
+        reason,
+        user.id,
+        id
+      ),
+      audit(db, user.id, 'VCC_WO_AMENDED', {
+        wo_id: id,
+        wo_code: existing.wo_code,
+        asset_id: existing.asset_id,
+        request_id: reqRow.id,
+        amendment_seq: nextSeq,
+        reason,
+        approved_by: user.id,
+        approved_by_name: user.name,
+        approver_level: userLevel,
+        original_performer: existing.performed_by,
+        requested_by: dbRequesterId,
+        before: {
+          result_status: existing.result_status,
+          certificate_no: existing.certificate_no,
+          nc_status: existing.nc_status
+        },
+        after: {
+          result_status: newResultStatus,
+          certificate_no: certificateNo,
+          nc_status: nextNcStatus
+        }
+      }),
+      audit(db, user.id, 'VCC_WO_AMENDMENT_APPROVED', {
+        wo_id: id,
+        wo_code: existing.wo_code,
+        request_id: reqRow.id,
+        amendment_seq: nextSeq,
+        approved_by: user.id,
+        approved_by_name: user.name,
+        approver_level: userLevel,
+        original_performer: existing.performed_by,
+        requested_by: dbRequesterId
+      })
+    ];
+
+    if (newResultStatus === 'FAIL') {
+      batchStmts.push(
+        db.prepare(`
+          UPDATE vcc_assets
+          SET status = 'ON_HOLD',
+              updated_at = ${NOW}
+          WHERE id = ?
+        `).bind(existing.asset_id)
+      );
+    }
+    // NOTE: When amending FAIL -> PASS, vcc_assets status MUST NOT be automatically reverted to ACTIVE.
+    // It remains ON_HOLD until explicit impact assessment and hold release is approved via POST /api/vcc/work-orders/:id/release-hold.
+
+    await db.batch(batchStmts);
+
+    return c.json({ workOrder: await fetchWorkOrder(db, id), amendment_seq: nextSeq, request_id: reqRow.id });
+  };
+
+  // Reject Amendment Request
+  const handleRejectAmendment = async (c) => {
+    const db = c.env.DB;
+    const user = c.get('user');
+    const id = c.req.param('id');
+    const paramRequestId = c.req.param('requestId');
+    const body = await c.req.json().catch(() => ({}));
+    const targetRequestId = paramRequestId || body.request_id || body.requestId || null;
+
+    const existing = await fetchWorkOrder(db, id);
+    if (!existing) return c.json({ error: 'ไม่พบใบสั่งงานทวนสอบ/สอบเทียบ' }, 404);
+    if (existing.status !== 'CLOSED') {
+      return c.json({ error: 'การแก้ไข (Amendment) ทำได้เฉพาะใบสั่งงานที่ปิดงาน (CLOSED) สำเร็จแล้วเท่านั้น' }, 409);
+    }
+    if (!isUserAuthorizedForPlanDept(user, existing.department)) {
+      return c.json({ error: 'ไม่มีสิทธิ์เข้าถึงใบสั่งงานของแผนกนี้' }, 403);
+    }
+
+    let reqRow;
+    if (targetRequestId) {
+      reqRow = await db
+        .prepare('SELECT * FROM vcc_work_order_amendment_requests WHERE id = ? AND work_order_id = ?')
+        .bind(targetRequestId, id)
+        .first();
+    } else {
+      reqRow = await db
+        .prepare('SELECT * FROM vcc_work_order_amendment_requests WHERE work_order_id = ? AND status = "PENDING" ORDER BY created_at DESC')
+        .bind(id)
+        .first();
+    }
+
+    if (!reqRow) {
+      return c.json({ error: 'ไม่พบคำขอแก้ไข (Amendment Request) ที่รอการอนุมัติ' }, 404);
+    }
+    if (reqRow.status !== 'PENDING') {
+      return c.json({ error: `คำขอแก้ไขนี้ได้รับการดำเนินการไปแล้ว (สถานะ: ${reqRow.status})` }, 409);
+    }
+
+    // Segregation of Duties
+    if (user.id === existing.performed_by || user.username === existing.performed_by) {
+      return c.json({ error: 'การคัดแยกหน้าที่ (Segregation of Duties): ผู้บันทึกผลการสอบเทียบไม่สามารถดำเนินการคำขอแก้ไข (Amendment) ของตนเองได้' }, 403);
+    }
+    if (user.id === reqRow.requested_by || user.username === reqRow.requested_by) {
+      return c.json({ error: 'การคัดแยกหน้าที่ (Segregation of Duties): ผู้ร้องขอแก้ไขผลไม่สามารถดำเนินการคำขอแก้ไข (Amendment) ของตนเองได้' }, 403);
+    }
+
+    const settings = await readWorkOrderSettings(db);
+    const thresholds = await getThresholds(db, settings.approval_doc_type);
+    const userLevel = Number(user.approval_level ?? 0);
+    const requiredLevel = Math.max(4, thresholds.required_reviewer_level || 4);
+    if (userLevel < requiredLevel) {
+      return c.json({ error: `ผู้มีอำนาจปฏิเสธคำขอแก้ไขต้องมีระดับอนุมัติ L${requiredLevel} ขึ้นไป` }, 403);
+    }
+
+    const reviewComment = body.comment || body.review_comment || body.reason || null;
+
+    const batchStmts = [
+      db.prepare(`
+        UPDATE vcc_work_order_amendment_requests
+        SET status = 'REJECTED',
+            reviewed_by = ?,
+            reviewed_at = ${NOW},
+            review_comment = ?,
+            updated_at = ${NOW}
+        WHERE id = ?
+      `).bind(user.id, reviewComment, reqRow.id),
+      audit(db, user.id, 'VCC_WO_AMENDMENT_REJECTED', {
+        wo_id: id,
+        wo_code: existing.wo_code,
+        request_id: reqRow.id,
+        rejected_by: user.id,
+        rejected_by_name: user.name,
+        requested_by: reqRow.requested_by,
+        review_comment: reviewComment
+      })
+    ];
+
+    await db.batch(batchStmts);
+
+    return c.json({ message: 'ปฏิเสธคำขอแก้ไขเรียบร้อยแล้ว', request_id: reqRow.id, status: 'REJECTED' });
+  };
+
+  // Route: Submit Amendment Request
+  app.post('/api/vcc/work-orders/:id/amendment-requests', requireAuth, requireVccAccess, handleRequestAmendment);
+  app.post('/api/vcc/work-orders/:id/amend-request', requireAuth, requireVccAccess, handleRequestAmendment);
+
+  // Route: Approve Amendment Request
+  app.post('/api/vcc/work-orders/:id/amendment-requests/:requestId/approve', requireAuth, requireVccAccess, handleApproveAmendment);
+  app.post('/api/vcc/work-orders/:id/approve-amendment', requireAuth, requireVccAccess, handleApproveAmendment);
+
+  // Route: Reject Amendment Request
+  app.post('/api/vcc/work-orders/:id/amendment-requests/:requestId/reject', requireAuth, requireVccAccess, handleRejectAmendment);
+  app.post('/api/vcc/work-orders/:id/reject-amendment', requireAuth, requireVccAccess, handleRejectAmendment);
+
+  // Legacy / Direct route: Dispatches to approve/reject if action is requested, otherwise submits amendment request
+  app.post('/api/vcc/work-orders/:id/amend', requireAuth, requireVccAccess, async (c) => {
+    const rawBody = await c.req.raw.clone().json().catch(() => ({}));
+    const action = String(rawBody.action || c.req.query('action') || '').toLowerCase();
+    if (action === 'approve' || rawBody.request_id || rawBody.requestId) {
+      return handleApproveAmendment(c);
+    }
+    if (action === 'reject') {
+      return handleRejectAmendment(c);
+    }
+    return handleRequestAmendment(c);
   });
 };
 

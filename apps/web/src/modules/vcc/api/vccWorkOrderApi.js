@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiPut, isApiMode } from '../../../api/client';
+import { apiGet, apiPost, apiPut, apiUpload, apiBlob, isApiMode } from '../../../api/client';
 import useStore from '../../../store/useStore';
 import {
   readJson,
@@ -10,7 +10,7 @@ import {
   getLocalAudit,
   appendLocalAudit
 } from './vccApi';
-import { computeDueDateForMonth, getLocalPlans, getLocalPlanItems } from './vccPlanApi';
+import { computeDueDateForMonth, getLocalPlans, getLocalPlanItems, syncVccTasks } from './vccPlanApi';
 
 const STORAGE_WO_KEY = 'qms-vcc-local-work-orders-v1';
 const STORAGE_WO_SETTINGS_KEY = 'qms-vcc-local-wo-settings-v1';
@@ -340,6 +340,7 @@ export const rescheduleVccWorkOrder = async (id, { new_due_date, reason }) => {
 export const submitVccWorkOrderResult = async (id, payload) => {
   if (isApiMode) {
     const { workOrder } = await apiPost(`/api/vcc/work-orders/${encodeURIComponent(id)}/submit-result`, payload);
+    await syncVccTasks().catch(() => {});
     return workOrder;
   }
   const user = assertLocalVccAccess();
@@ -374,6 +375,14 @@ export const submitVccWorkOrderResult = async (id, payload) => {
     certificate_no: certificateNo,
     acceptance_criteria: acceptanceCriteria,
     result_remarks: resultRemarks,
+    calibration_provider_name: payload.calibration_provider_name || existing.calibration_provider_name || null,
+    calibration_method: payload.calibration_method || existing.calibration_method || null,
+    traceability_ref: payload.traceability_ref || existing.traceability_ref || null,
+    environmental_conditions: payload.environmental_conditions || existing.environmental_conditions || null,
+    uncertainty_value: payload.uncertainty_value || existing.uncertainty_value || null,
+    calibration_error_value: payload.calibration_error_value || existing.calibration_error_value || null,
+    certificate_issue_date: payload.certificate_issue_date || existing.certificate_issue_date || null,
+    certificate_valid_until: payload.certificate_valid_until || existing.certificate_valid_until || null,
     performed_by: user.id,
     performed_by_name: user.name,
     nc_status: nextNcStatus,
@@ -392,12 +401,14 @@ export const submitVccWorkOrderResult = async (id, payload) => {
     acceptance_criteria: acceptanceCriteria,
     nc_status: nextNcStatus
   });
+  await syncVccTasks(user).catch(() => {});
   return enrichLocalWo(updated, getLocalAssets(), getDepartmentMap(), getLocalPlans());
 };
 
 export const approveVccWorkOrder = async (id, comment = '') => {
   if (isApiMode) {
     const { workOrder } = await apiPost(`/api/vcc/work-orders/${encodeURIComponent(id)}/approve`, { comment });
+    await syncVccTasks().catch(() => {});
     return workOrder;
   }
   const user = assertLocalVccAccess();
@@ -439,12 +450,14 @@ export const approveVccWorkOrder = async (id, comment = '') => {
     wo_code: existing.wo_code,
     comment: updated.review_comment
   });
+  await syncVccTasks(user).catch(() => {});
   return enrichLocalWo(updated, getLocalAssets(), getDepartmentMap(), getLocalPlans());
 };
 
 export const rejectVccWorkOrder = async (id, reason = '') => {
   if (isApiMode) {
     const { workOrder } = await apiPost(`/api/vcc/work-orders/${encodeURIComponent(id)}/reject`, { reason });
+    await syncVccTasks().catch(() => {});
     return workOrder;
   }
   const user = assertLocalVccAccess();
@@ -477,6 +490,7 @@ export const rejectVccWorkOrder = async (id, reason = '') => {
   next[idx] = updated;
   setLocalWos(next);
   appendLocalAudit('VCC_WO_REJECTED', { wo_id: id, wo_code: existing.wo_code, reason: trimmedReason });
+  await syncVccTasks(user).catch(() => {});
   return enrichLocalWo(updated, getLocalAssets(), getDepartmentMap(), getLocalPlans());
 };
 
@@ -526,5 +540,165 @@ export const releaseVccWorkOrderHold = async (id, impact_assessment = '') => {
     impact_assessment: trimmedImpact
   });
   return enrichLocalWo(updated, getLocalAssets(), getDepartmentMap(), getLocalPlans());
+};
+
+export const uploadVccWorkOrderCertificate = async (id, file, { filename, certificate_no, issue_date, valid_until, change_reason } = {}) => {
+  if (isApiMode) {
+    const params = new URLSearchParams();
+    if (filename) params.append('filename', filename);
+    if (certificate_no) params.append('certificate_no', certificate_no);
+    if (issue_date) params.append('issue_date', issue_date);
+    if (valid_until) params.append('valid_until', valid_until);
+    if (change_reason) params.append('change_reason', change_reason);
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    const res = await apiUpload(`/api/vcc/work-orders/${encodeURIComponent(id)}/certificate-file${qs}`, file);
+    return res;
+  }
+  const user = assertLocalVccAccess();
+  const allWos = getLocalWos();
+  const idx = allWos.findIndex((w) => w.id === id);
+  if (idx === -1) throw new Error('ไม่พบใบสั่งงานทวนสอบ/สอบเทียบ');
+  const existing = allWos[idx];
+  const now = new Date().toISOString();
+  const updated = {
+    ...existing,
+    certificate_file_name: filename || file.name || 'certificate.pdf',
+    certificate_file_size: file.size || 0,
+    certificate_file_hash: 'mock-sha256-hash-' + Date.now(),
+    certificate_version: (existing.certificate_version || 0) + 1,
+    certificate_uploaded_at: now,
+    certificate_uploaded_by: user.id,
+    certificate_uploaded_by_name: user.name,
+    updated_at: now,
+    updated_by: user.id
+  };
+  const next = [...allWos];
+  next[idx] = updated;
+  setLocalWos(next);
+  return { workOrder: enrichLocalWo(updated, getLocalAssets(), getDepartmentMap(), getLocalPlans()), certificate_version: updated.certificate_version };
+};
+
+export const downloadVccWorkOrderCertificate = async (id, { version, purpose = 'view' } = {}) => {
+  if (isApiMode) {
+    const params = new URLSearchParams();
+    if (version) params.append('version', version);
+    if (purpose) params.append('purpose', purpose);
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    const blob = await apiBlob(`/api/vcc/work-orders/${encodeURIComponent(id)}/certificate-file${qs}`, { purpose });
+    return blob;
+  }
+  return new Blob(['%PDF-1.4 Mock Calibration Certificate'], { type: 'application/pdf' });
+};
+
+export const fetchVccWorkOrderCertificates = async (id) => {
+  if (isApiMode) {
+    const { certificates } = await apiGet(`/api/vcc/work-orders/${encodeURIComponent(id)}/certificates`);
+    return certificates || [];
+  }
+  return [];
+};
+
+export const requestVccWorkOrderAmendment = async (id, payload) => {
+  if (isApiMode) {
+    const res = await apiPost(`/api/vcc/work-orders/${encodeURIComponent(id)}/amendment-requests`, payload);
+    return res;
+  }
+  const user = assertLocalVccAccess();
+  const allWos = getLocalWos();
+  const idx = allWos.findIndex((w) => w.id === id);
+  if (idx === -1) throw new Error('ไม่พบใบสั่งงานทวนสอบ/สอบเทียบ');
+  const existing = allWos[idx];
+  if (existing.status !== 'CLOSED') {
+    throw new Error('การแก้ไข (Amendment) ทำได้เฉพาะใบสั่งงานที่ปิดงาน (CLOSED) สำเร็จแล้วเท่านั้น');
+  }
+  const reason = String(payload.amendment_reason || payload.reason || '').trim();
+  if (!reason) {
+    throw new Error('กรุณาระบุเหตุผลและความจำเป็นในการแก้ไขผลใบสั่งงานที่ปิดไปแล้ว (Amendment Reason)');
+  }
+  const reqId = `AMEND-REQ-${Date.now()}`;
+  const newReq = {
+    id: reqId,
+    work_order_id: id,
+    requested_by: user.id,
+    requested_by_name: user.name,
+    requested_at: new Date().toISOString(),
+    amendment_reason: reason,
+    proposed_changes: payload,
+    status: 'PENDING'
+  };
+  return { request: newReq, message: 'บันทึกคำขอแก้ไข (Amendment Request) เรียบร้อยแล้ว รอการอนุมัติ' };
+};
+
+export const approveVccWorkOrderAmendment = async (id, requestId, payload = {}) => {
+  if (isApiMode) {
+    const url = requestId
+      ? `/api/vcc/work-orders/${encodeURIComponent(id)}/amendment-requests/${encodeURIComponent(requestId)}/approve`
+      : `/api/vcc/work-orders/${encodeURIComponent(id)}/approve-amendment`;
+    const res = await apiPost(url, payload);
+    return res;
+  }
+  const user = assertLocalVccAccess();
+  const allWos = getLocalWos();
+  const idx = allWos.findIndex((w) => w.id === id);
+  if (idx === -1) throw new Error('ไม่พบใบสั่งงานทวนสอบ/สอบเทียบ');
+  const existing = allWos[idx];
+  if (user.id === existing.performed_by) {
+    throw new Error('การคัดแยกหน้าที่ (Segregation of Duties): ผู้บันทึกผลการสอบเทียบไม่สามารถอนุมัติการแก้ไข (Amendment) ของตนเองได้ แม้จะมีสิทธิ์ระดับ L5+ ขึ้นไป (ต้องให้ผู้อนุมัติอื่นเป็นผู้ดำเนินการ)');
+  }
+  if (payload.requested_by && (user.id === payload.requested_by || user.username === payload.requested_by)) {
+    throw new Error('การคัดแยกหน้าที่ (Segregation of Duties): ผู้ร้องขอแก้ไขผลไม่สามารถอนุมัติการแก้ไข (Amendment) ของตนเองได้ (ต้องให้ผู้อนุมัติแยกคนเป็นผู้ดำเนินการ)');
+  }
+  const now = new Date().toISOString();
+  const nextNcStatus = payload.result_status === 'FAIL' ? 'OPEN' : existing.nc_status;
+  const updated = {
+    ...existing,
+    ...payload,
+    nc_status: nextNcStatus,
+    is_amended: 1,
+    amended_at: now,
+    amended_by: user.id,
+    amended_by_name: user.name,
+    amendment_reason: payload.amendment_reason || payload.reason || '',
+    updated_at: now,
+    updated_by: user.id
+  };
+  const next = [...allWos];
+  next[idx] = updated;
+  setLocalWos(next);
+  return { workOrder: enrichLocalWo(updated, getLocalAssets(), getDepartmentMap(), getLocalPlans()), amendment_seq: 1 };
+};
+
+export const rejectVccWorkOrderAmendment = async (id, requestId, payload = {}) => {
+  if (isApiMode) {
+    const url = requestId
+      ? `/api/vcc/work-orders/${encodeURIComponent(id)}/amendment-requests/${encodeURIComponent(requestId)}/reject`
+      : `/api/vcc/work-orders/${encodeURIComponent(id)}/reject-amendment`;
+    return await apiPost(url, payload);
+  }
+  return { message: 'ปฏิเสธคำขอแก้ไขเรียบร้อยแล้ว', status: 'REJECTED' };
+};
+
+export const fetchVccWorkOrderAmendmentRequests = async (id) => {
+  if (isApiMode) {
+    const { requests } = await apiGet(`/api/vcc/work-orders/${encodeURIComponent(id)}/amendment-requests`);
+    return requests || [];
+  }
+  return [];
+};
+
+export const amendVccWorkOrder = async (id, payload) => {
+  if (isApiMode) {
+    const res = await apiPost(`/api/vcc/work-orders/${encodeURIComponent(id)}/amend`, payload);
+    return res;
+  }
+  return await requestVccWorkOrderAmendment(id, payload);
+};
+
+export const fetchVccWorkOrderAmendments = async (id) => {
+  if (isApiMode) {
+    const { amendments } = await apiGet(`/api/vcc/work-orders/${encodeURIComponent(id)}/amendments`);
+    return amendments || [];
+  }
+  return [];
 };
 

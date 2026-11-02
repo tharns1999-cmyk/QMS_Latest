@@ -11,7 +11,12 @@ import {
   ShieldAlert,
   Clock,
   History,
-  AlertTriangle
+  AlertTriangle,
+  FileText,
+  Download,
+  ExternalLink,
+  Layers,
+  Printer
 } from 'lucide-react';
 import { fetchVccWorkOrderDetail } from '../api/vccWorkOrderApi';
 
@@ -23,7 +28,10 @@ export const WorkOrderSideDrawer = ({
   onReschedule,
   onApprove,
   onReject,
-  onReleaseHold
+  onReleaseHold,
+  onAmend,
+  onDownloadCert,
+  onViewDigitalRecord
 }) => {
   const [detail, setDetail] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -54,7 +62,7 @@ export const WorkOrderSideDrawer = ({
     return () => {
       isMounted = false;
     };
-  }, [workOrder, thresholds]);
+  }, [workOrder?.id]);
 
   useEffect(() => {
     if (!workOrder) return;
@@ -149,6 +157,17 @@ export const WorkOrderSideDrawer = ({
                 {currentWo.plan_year ? `อิงแผนการทวนสอบประจำปี ${currentWo.plan_year} (เดือน ${currentWo.planned_month})` : 'ใบสั่งงานนอกแผน (Ad-hoc)'}
               </p>
             </div>
+
+            {currentWo.performed_at && (
+              <button
+                type="button"
+                onClick={() => onViewDigitalRecord?.(currentWo)}
+                className="h-9 inline-flex items-center gap-1.5 px-3.5 rounded-xl border border-purple-200 bg-purple-50 text-purple-700 text-xs font-semibold hover:bg-purple-100 transition-colors cursor-pointer shadow-2xs"
+              >
+                <Printer size={14} />
+                <span>พิมพ์/ดูเอกสารดิจิทัล</span>
+              </button>
+            )}
 
             <button
               type="button"
@@ -293,6 +312,121 @@ export const WorkOrderSideDrawer = ({
                     <p className="leading-relaxed font-medium">{currentWo.rejected_reason}</p>
                   </div>
                 )}
+
+                {/* Digital Certificate File Attachment Card */}
+                {currentWo.certificate_file_name && (
+                  <div className="p-3 rounded-xl bg-white border border-indigo-200/90 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <FileText size={16} className="text-indigo-600 shrink-0" />
+                        <div className="min-w-0">
+                          <span className="font-bold text-xs text-slate-900 truncate block">
+                            {currentWo.certificate_file_name}
+                          </span>
+                          <span className="text-[11px] text-slate-500">
+                            เวอร์ชัน v{currentWo.certificate_version || 1} {currentWo.certificate_file_size ? `• ${(currentWo.certificate_file_size / 1024).toFixed(1)} KB` : ''}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => onDownloadCert?.(currentWo, { purpose: 'view' })}
+                          className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-indigo-600 text-xs font-semibold inline-flex items-center gap-1 cursor-pointer"
+                          title="เปิดดูไฟล์ในแท็บใหม่"
+                        >
+                          <ExternalLink size={13} />
+                          <span>ดูไฟล์</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onDownloadCert?.(currentWo, { purpose: 'download' })}
+                          className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold inline-flex items-center gap-1 cursor-pointer"
+                          title="ดาวน์โหลดไฟล์ PDF"
+                        >
+                          <Download size={13} />
+                          <span>ดาวน์โหลด</span>
+                        </button>
+                      </div>
+                    </div>
+                    {currentWo.certificate_file_hash && (
+                      <div className="p-1.5 rounded-md bg-slate-50 border border-slate-100 text-[10px] font-mono text-slate-500 truncate" title={`SHA-256: ${currentWo.certificate_file_hash}`}>
+                        SHA-256: {currentWo.certificate_file_hash}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Measurement Traceability & Environmental Conditions (ISO/IEC 17025) */}
+                {(currentWo.calibration_provider_name || currentWo.calibration_method || currentWo.traceability_ref || currentWo.environmental_conditions || currentWo.uncertainty_value || currentWo.calibration_error_value) && (
+                  <div className="p-3 rounded-xl bg-white border border-slate-200 space-y-2">
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
+                      <Layers size={14} className="text-indigo-600" />
+                      <span>ข้อมูลการสอบกลับได้และสภาวะแวดล้อม (Traceability)</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                      {currentWo.calibration_provider_name && (
+                        <div>
+                          <span className="text-slate-400 block text-[11px]">สถาบัน/แล็บสอบเทียบ:</span>
+                          <span className="font-semibold text-slate-800">{currentWo.calibration_provider_name}</span>
+                        </div>
+                      )}
+                      {currentWo.calibration_method && (
+                        <div>
+                          <span className="text-slate-400 block text-[11px]">วิธีการสอบเทียบ:</span>
+                          <span className="font-semibold text-slate-800">{currentWo.calibration_method}</span>
+                        </div>
+                      )}
+                      {currentWo.traceability_ref && (
+                        <div className="sm:col-span-2">
+                          <span className="text-slate-400 block text-[11px]">การสอบกลับได้สู่มาตรฐานแห่งชาติ:</span>
+                          <span className="font-mono text-slate-800">{currentWo.traceability_ref}</span>
+                        </div>
+                      )}
+                      {currentWo.environmental_conditions && (
+                        <div className="sm:col-span-2">
+                          <span className="text-slate-400 block text-[11px]">สภาวะแวดล้อม (Temp / RH):</span>
+                          <span className="text-slate-800">{currentWo.environmental_conditions}</span>
+                        </div>
+                      )}
+                      {currentWo.uncertainty_value && (
+                        <div>
+                          <span className="text-slate-400 block text-[11px]">ความไม่แน่นอนขยาย (U):</span>
+                          <span className="font-mono font-bold text-indigo-700">{currentWo.uncertainty_value}</span>
+                        </div>
+                      )}
+                      {currentWo.calibration_error_value && (
+                        <div>
+                          <span className="text-slate-400 block text-[11px]">ค่าความคลาดเคลื่อน (Error):</span>
+                          <span className="font-mono font-bold text-slate-800">{currentWo.calibration_error_value}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Controlled Amendment Banner */}
+                {Boolean(currentWo.is_amended) && (
+                  <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-950 space-y-1">
+                    <div className="font-bold flex items-center justify-between">
+                      <span className="flex items-center gap-1.5 text-amber-900">
+                        <History size={14} className="text-amber-700" />
+                        <span>ใบสั่งงานนี้ผ่านการแก้ไข (Controlled Amendment)</span>
+                      </span>
+                      <span className="font-mono text-[10px] text-amber-800">{currentWo.amended_at}</span>
+                    </div>
+                    {currentWo.amended_by_name && (
+                      <div>แก้ไขโดย: <span className="font-bold">{currentWo.amended_by_name}</span></div>
+                    )}
+                    {currentWo.amendment_reason && (
+                      <div className="bg-white/80 p-2 rounded-lg border border-amber-200/60 mt-1">
+                        <span className="font-semibold block text-[11px] text-amber-900">เหตุผลในการแก้ไข:</span>
+                        <span>{currentWo.amendment_reason}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -424,6 +558,31 @@ export const WorkOrderSideDrawer = ({
               >
                 <ShieldAlert size={14} />
                 <span>ปลดระงับ ON_HOLD (L{reqApproverLevel}+)</span>
+              </button>
+            )}
+
+            {currentWo.status === 'CLOSED' && (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onAmend?.(currentWo);
+                }}
+                className="h-9 inline-flex items-center gap-1.5 px-3.5 rounded-xl bg-amber-600 text-white text-xs font-semibold hover:bg-amber-700 transition-colors cursor-pointer shadow-2xs"
+              >
+                <History size={14} />
+                <span>ขอแก้ไขผล (Amendment)</span>
+              </button>
+            )}
+
+            {currentWo.performed_at && (
+              <button
+                type="button"
+                onClick={() => onViewDigitalRecord?.(currentWo)}
+                className="h-9 inline-flex items-center gap-1.5 px-3.5 rounded-xl border border-purple-200 bg-purple-50 text-purple-700 text-xs font-semibold hover:bg-purple-100 transition-colors cursor-pointer shadow-2xs"
+              >
+                <Printer size={14} />
+                <span>พิมพ์/ดูเอกสารดิจิทัล</span>
               </button>
             )}
 
