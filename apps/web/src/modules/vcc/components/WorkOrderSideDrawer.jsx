@@ -19,6 +19,7 @@ import {
   Printer
 } from 'lucide-react';
 import { fetchVccWorkOrderDetail } from '../api/vccWorkOrderApi';
+import { WorkOrderAmendmentRequests } from './WorkOrderAmendmentRequests';
 
 export const WorkOrderSideDrawer = ({
   workOrder,
@@ -31,7 +32,8 @@ export const WorkOrderSideDrawer = ({
   onReleaseHold,
   onAmend,
   onDownloadCert,
-  onViewDigitalRecord
+  onViewDigitalRecord,
+  onAmendmentResolved
 }) => {
   const [detail, setDetail] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -426,6 +428,10 @@ export const WorkOrderSideDrawer = ({
                       </div>
                     )}
                   </div>
+                )}
+
+                {currentWo.status === 'CLOSED' && (
+                  <WorkOrderAmendmentRequests workOrderId={currentWo.id} onResolved={onAmendmentResolved} />
                 )}
               </div>
             </div>

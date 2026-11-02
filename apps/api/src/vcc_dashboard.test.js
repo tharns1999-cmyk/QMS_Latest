@@ -141,4 +141,18 @@ describe('VCC Phase 4: Dashboard KPI, Notification Policy, Audit Log & CSV Expor
     expect(auditRes.body.history.some((h) => h.action === 'VCC_EXPORT_WORK_ORDERS')).toBe(true);
     expect(auditRes.body.history.some((h) => h.action === 'VCC_NOTIFICATION_SETTINGS_UPDATED')).toBe(true);
   });
+
+  it('rejects an invalid year with HTTP 400 on every year-filtered dashboard endpoint, and still serves valid or default years', async () => {
+    const paths = ['/api/vcc/dashboard', '/api/vcc/compliance-report', '/api/vcc/export/compliance-report', '/api/vcc/export/annual-plan'];
+    for (const path of paths) {
+      for (const bad of ['abc', '1999', '2101', '2026.5', '-1', '20x6']) {
+        expect((await call('GET', `${path}?year=${bad}`, 'VDS-DCC')).status, `${path}?year=${bad}`).toBe(400);
+      }
+      // The annual-plan export answers 404 when that year has no plan yet; anything but 400/5xx proves the year was accepted
+      const accepted = path.endsWith('/annual-plan') ? [200, 404] : [200];
+      for (const q of ['?year=2026', '', '?year=']) {
+        expect(accepted, `${path}${q}`).toContain((await call('GET', path + q, 'VDS-DCC')).status);
+      }
+    }
+  });
 });

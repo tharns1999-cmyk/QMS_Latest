@@ -403,7 +403,11 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
       }
       const { certificate_file: _cf, ...payload } = amendForm;
       const updated = await amendVccWorkOrder(amendWo.id, payload);
-      toast.success(`บันทึกการแก้ไขผลของใบสั่งงาน ${updated.wo_code} แล้ว (ฉบับแก้ไข)`);
+      toast.success(
+        updated?.request
+          ? 'ส่งคำขอแก้ไขผลแล้ว รอผู้อนุมัติที่ไม่ใช่ผู้ขอตรวจสอบและอนุมัติ'
+          : `บันทึกการแก้ไขผลของใบสั่งงาน ${updated.wo_code} แล้ว (ฉบับแก้ไข)`
+      );
       setAmendWo(null);
       if (selectedDrawerWo?.id === amendWo.id) {
         setSelectedDrawerWo(null);
@@ -708,6 +712,7 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
         onAmend={openAmendModal}
         onDownloadCert={handleDownloadCert}
         onViewDigitalRecord={(wo) => setDigitalRecordWo(wo)}
+        onAmendmentResolved={loadData}
       />
 
       {/* 6. Modals */}

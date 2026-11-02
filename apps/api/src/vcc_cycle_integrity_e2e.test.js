@@ -235,6 +235,12 @@ describe('VCC Phase 2.5: Stable Planned Cycle Identity, Reconciliation & E2E Ver
     expect(approveRes.body.work_orders_generation.total_cycles).toBe(17);
     expect(approveRes.body.work_orders_generation.generated_count).toBe(17);
 
+    // The approval audit entry must say how many work orders the approval created
+    const approvalAudit = await env.DB.prepare(
+      "SELECT details FROM audit_log WHERE action = 'VCC_PLAN_APPROVED' AND json_extract(details, '$.plan_id') = ?"
+    ).bind(planId).first();
+    expect(JSON.parse(approvalAudit.details).work_orders_generated).toBe(17);
+
     // G. Verify backend created EXACTLY 17 work orders
     const approvedWos = await call('GET', `/api/vcc/work-orders?plan_id=${planId}`, 'E2E-QC-STAFF');
     expect(approvedWos.status).toBe(200);

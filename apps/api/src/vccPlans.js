@@ -1783,6 +1783,7 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
         department: plan.department,
         revision: plan.revision,
         comment,
+        work_orders_generated: reconciliation.generated_count,
         required_approver_level: thresholds.required_approver_level,
         task_reference: `api-vcc-plan-${id}-approve`,
         before: { status: 'PENDING_APPROVAL' },

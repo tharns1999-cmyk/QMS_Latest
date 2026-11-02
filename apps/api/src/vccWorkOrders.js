@@ -792,9 +792,13 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
 
   app.get('/api/vcc/work-orders/:id', requireAuth, requireVccAccess, async (c) => {
     const db = c.env.DB;
+    const user = c.get('user');
     const id = c.req.param('id');
     const workOrder = await fetchWorkOrder(db, id);
     if (!workOrder) return c.json({ error: 'ไม่พบใบสั่งงานทวนสอบ/สอบเทียบ' }, 404);
+    // Any VCC department may read the work order itself, but certificates and amendment records follow the
+    // same department rule as their dedicated endpoints
+    const canSeeRecords = isUserAuthorizedForPlanDept(user, workOrder.department);
 
     const settings = await readWorkOrderSettings(db);
     const thresholds = await getThresholds(db, settings.approval_doc_type);
@@ -859,10 +863,10 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
       workOrder,
       thresholds,
       history,
-      certificates: certRows,
-      amendments,
-      amendmentRequests,
-      pendingAmendmentRequest
+      certificates: canSeeRecords ? certRows : [],
+      amendments: canSeeRecords ? amendments : [],
+      amendmentRequests: canSeeRecords ? amendmentRequests : [],
+      pendingAmendmentRequest: canSeeRecords ? pendingAmendmentRequest : null
     });
   });
 

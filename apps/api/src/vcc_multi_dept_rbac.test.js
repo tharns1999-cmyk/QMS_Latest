@@ -394,4 +394,40 @@ describe('VCC Multi-Department Access & Approval Workflow (RBAC & SoD)', () => {
     const postApproveTasks = await call('GET', '/api/vcc/tasks', 'QC-HOD-L5');
     expect(postApproveTasks.body.tasks.some(t => t.planId === planId)).toBe(false);
   });
+
+  it('7. Work-order detail keeps shared read access but hides certificates and amendment records from other departments, like their dedicated endpoints do', async () => {
+    const assetRes = await call('POST', '/api/vcc/assets', 'DCC-USER', {
+      asset_code: 'RBAC-DETAIL-01', name: 'เครื่องมือทดสอบสิทธิ์รายละเอียด', asset_type: 'เทอร์โมมิเตอร์', department: 'QC', is_group: 0
+    });
+    const woRes = await call('POST', '/api/vcc/work-orders', 'QC-STAFF', {
+      mode: 'ADHOC', asset_id: assetRes.body.asset.id, provider_name: 'ทวนสอบภายใน', due_date: '2026-04-30'
+    });
+    const woId = woRes.body.workOrder.id;
+    await call('POST', `/api/vcc/work-orders/${woId}/submit-result`, 'QC-STAFF', {
+      performed_at: '2026-04-10', result_status: 'PASS', certificate_no: 'CERT-DETAIL-001', acceptance_criteria: '± 0.5 °C'
+    });
+    await call('POST', `/api/vcc/work-orders/${woId}/approve`, 'QC-LEAD', { comment: 'ตรวจรับ' });
+    const req = await call('POST', `/api/vcc/work-orders/${woId}/amendment-requests`, 'QC-LEAD', { amendment_reason: 'แก้เลขใบรับรอง' });
+    expect(req.status).toBe(201);
+
+    const own = await call('GET', `/api/vcc/work-orders/${woId}`, 'QC-LEAD');
+    expect(own.status).toBe(200);
+    expect(own.body.amendmentRequests).toHaveLength(1);
+    expect(own.body.pendingAmendmentRequest).not.toBeNull();
+
+    // Same rule as the dedicated endpoints: another VCC department is refused there ...
+    expect((await call('GET', `/api/vcc/work-orders/${woId}/amendment-requests`, 'LB-STAFF')).status).toBe(403);
+    // ... so the detail must not hand the same records over either, while still answering (shared read access).
+    const other = await call('GET', `/api/vcc/work-orders/${woId}`, 'LB-STAFF');
+    expect(other.status).toBe(200);
+    expect(other.body.workOrder.wo_code).toBe(own.body.workOrder.wo_code);
+    expect(other.body.amendmentRequests).toEqual([]);
+    expect(other.body.amendments).toEqual([]);
+    expect(other.body.certificates).toEqual([]);
+    expect(other.body.pendingAmendmentRequest).toBeNull();
+
+    // L6+ managers and DCC keep full access
+    expect((await call('GET', `/api/vcc/work-orders/${woId}`, 'QA-MGR')).body.amendmentRequests).toHaveLength(1);
+    expect((await call('GET', `/api/vcc/work-orders/${woId}`, 'DCC-USER')).body.amendmentRequests).toHaveLength(1);
+  });
 });

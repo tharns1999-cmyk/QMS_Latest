@@ -1,6 +1,14 @@
 import { requireVccAccess, requireDccOnly } from './vccAuth.js';
 import { isUserAuthorizedForPlanDept, getUserDepartments } from './vccPlans.js';
 
+// Same range the plan list accepts. Empty means "use the current year in Bangkok" (a plain getFullYear() lags a day behind New Year there).
+const parseYearParam = (raw) => {
+  if (raw === undefined || raw === '') return new Date(Date.now() + 7 * 3600 * 1000).getUTCFullYear();
+  const y = Number(raw);
+  return Number.isInteger(y) && y >= 2000 && y <= 2100 ? y : null;
+};
+const INVALID_YEAR = { error: 'ปีไม่ถูกต้อง (ต้องเป็นตัวเลขปี ค.ศ. 2000–2100)' };
+
 const NOW = "strftime('%Y-%m-%dT%H:%M:%SZ', 'now')";
 const DCC_ONLY = { error: 'เฉพาะเจ้าหน้าที่ DCC เท่านั้นที่ได้รับอนุญาตให้ใช้งานส่วนนี้' };
 
@@ -136,8 +144,8 @@ export const registerVccDashboardRoutes = (app, { requireAuth, audit }) => {
   app.get('/api/vcc/dashboard', requireAuth, requireVccAccess, async (c) => {
     const db = c.env.DB;
     const user = c.get('user');
-    const currentYear = new Date().getFullYear();
-    const year = Number(c.req.query('year') || currentYear);
+    const year = parseYearParam(c.req.query('year'));
+    if (year === null) return c.json(INVALID_YEAR, 400);
     const refDateQuery = c.req.query('reference_date');
     const refDate = refDateQuery && /^\d{4}-\d{2}-\d{2}$/.test(refDateQuery)
       ? refDateQuery
@@ -729,8 +737,8 @@ export const registerVccDashboardRoutes = (app, { requireAuth, audit }) => {
   app.get('/api/vcc/compliance-report', requireAuth, requireVccAccess, async (c) => {
     const db = c.env.DB;
     const user = c.get('user');
-    const currentYear = new Date().getFullYear();
-    const year = c.req.query('year') ? Number(c.req.query('year')) : currentYear;
+    const year = parseYearParam(c.req.query('year'));
+    if (year === null) return c.json(INVALID_YEAR, 400);
     const filterDept = c.req.query('department') ? String(c.req.query('department')).trim().toUpperCase() : null;
     const filterStatus = c.req.query('status') ? String(c.req.query('status')).trim().toUpperCase() : null;
     const filterResult = c.req.query('result_status') ? String(c.req.query('result_status')).trim().toUpperCase() : null;
@@ -893,8 +901,8 @@ export const registerVccDashboardRoutes = (app, { requireAuth, audit }) => {
   app.get('/api/vcc/export/compliance-report', requireAuth, requireVccAccess, async (c) => {
     const db = c.env.DB;
     const user = c.get('user');
-    const currentYear = new Date().getFullYear();
-    const year = c.req.query('year') ? Number(c.req.query('year')) : currentYear;
+    const year = parseYearParam(c.req.query('year'));
+    if (year === null) return c.json(INVALID_YEAR, 400);
     const filterDept = c.req.query('department') ? String(c.req.query('department')).trim().toUpperCase() : null;
     const filterStatus = c.req.query('status') ? String(c.req.query('status')).trim().toUpperCase() : null;
     const filterResult = c.req.query('result_status') ? String(c.req.query('result_status')).trim().toUpperCase() : null;
@@ -1066,8 +1074,8 @@ export const registerVccDashboardRoutes = (app, { requireAuth, audit }) => {
   app.get('/api/vcc/export/annual-plan', requireAuth, requireVccAccess, async (c) => {
     const db = c.env.DB;
     const user = c.get('user');
-    const currentYear = new Date().getFullYear();
-    const year = Number(c.req.query('year') || currentYear);
+    const year = parseYearParam(c.req.query('year'));
+    if (year === null) return c.json(INVALID_YEAR, 400);
     const department = c.req.query('department') ? String(c.req.query('department')).trim().toUpperCase() : null;
     const revision = c.req.query('revision') ? String(c.req.query('revision')).trim() : null;
     const effectiveStatus = c.req.query('effective_status') ? String(c.req.query('effective_status')).trim().toUpperCase() : null;

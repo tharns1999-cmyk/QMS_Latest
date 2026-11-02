@@ -52,7 +52,7 @@ const EMPTY_FORM = {
 };
 
 const AssetRegisterPageInner = () => {
-  const { departments: storeDepts, masterDepartments } = useStore();
+  const { departments: storeDepts, masterDepartments, currentUser } = useStore();
 
   const activeDepartments = useMemo(() => {
     const raw = masterDepartments?.length ? masterDepartments : storeDepts || [];
@@ -429,7 +429,8 @@ const AssetRegisterPageInner = () => {
             </div>
 
             {/* Contextual Actions (for ASSETS page) */}
-            {moduleView === 'ASSETS' && (
+            {/* Both actions are DCC-only on the API; other VCC users would just get a 403 */}
+            {moduleView === 'ASSETS' && currentUser?.isDcc && (
               <div className="flex flex-wrap items-center gap-2.5 shrink-0">
                 <button
                   type="button"
