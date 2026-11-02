@@ -10,7 +10,8 @@ import {
   AlertCircle,
   Plus,
   FilterX,
-  MoreHorizontal
+  MoreHorizontal,
+  History
 } from 'lucide-react';
 import { FloatingOverlay } from '../../../shared/components/ui/FloatingOverlay';
 
@@ -26,7 +27,8 @@ const WorkOrderRowActions = ({
   onReleaseHold,
   onReschedule,
   onReject,
-  onRowClick
+  onRowClick,
+  onAmend
 }) => {
   const [isMenuOpen, setIsMenuOpen] = React.useState(false);
   const triggerRef = React.useRef(null);
@@ -127,6 +129,20 @@ const WorkOrderRowActions = ({
           </button>
         )}
 
+        {wo.status === 'CLOSED' && onAmend && (
+          <button
+            type="button"
+            onClick={() => {
+              handleClose();
+              onAmend(wo);
+            }}
+            className="w-full text-left px-3 py-2 text-xs font-semibold text-amber-700 hover:bg-amber-50 flex items-center gap-2 transition-colors cursor-pointer"
+          >
+            <History size={13} className="text-amber-600" />
+            <span>ขอแก้ไขผล (Amendment)</span>
+          </button>
+        )}
+
         <button
           type="button"
           onClick={() => {
@@ -158,7 +174,8 @@ export const WorkOrderTable = ({
   onReject,
   onReleaseHold,
   onResetFilters,
-  onOpenCreate
+  onOpenCreate,
+  onAmend
 }) => {
   const reqApproverLevel = thresholds.required_approver_level ?? 5;
 
@@ -374,11 +391,21 @@ export const WorkOrderTable = ({
                   </div>
 
                   {wo.certificate_no && (
-                    <div className="text-xs">
+                    <div className="text-xs flex items-center gap-1.5 flex-wrap">
                       <span className="text-slate-500 font-medium">ใบรับรอง:</span>{' '}
                       <span className="font-mono font-bold text-slate-900 bg-slate-100 px-1.5 py-0.2 rounded text-xs">
                         {wo.certificate_no}
                       </span>
+                      {wo.certificate_file_name && (
+                        <span className="inline-flex items-center px-1.5 py-0.2 rounded-md bg-indigo-50 text-indigo-700 font-bold text-[10px] border border-indigo-200" title={`ไฟล์ PDF: ${wo.certificate_file_name} (v${wo.certificate_version || 1})`}>
+                          PDF v{wo.certificate_version || 1}
+                        </span>
+                      )}
+                      {Boolean(wo.is_amended) && (
+                        <span className="inline-flex items-center px-1.5 py-0.2 rounded-md bg-amber-100 text-amber-800 font-bold text-[10px] border border-amber-300" title={`แก้ไขแล้ว: ${wo.amendment_reason || ''}`}>
+                          AMENDED
+                        </span>
+                      )}
                     </div>
                   )}
 
@@ -420,6 +447,7 @@ export const WorkOrderTable = ({
                     onReschedule={onReschedule}
                     onReject={onReject}
                     onRowClick={onRowClick}
+                    onAmend={onAmend}
                   />
                 </td>
               </tr>

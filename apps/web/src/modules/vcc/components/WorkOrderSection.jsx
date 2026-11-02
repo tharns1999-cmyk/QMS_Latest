@@ -18,13 +18,17 @@ import {
   submitVccWorkOrderResult,
   approveVccWorkOrder,
   rejectVccWorkOrder,
-  releaseVccWorkOrderHold
+  releaseVccWorkOrderHold,
+  uploadVccWorkOrderCertificate,
+  downloadVccWorkOrderCertificate,
+  amendVccWorkOrder
 } from '../api/vccWorkOrderApi';
 import {
   CreateWorkOrderModal,
   RecordResultModal,
   WorkOrderActionModal,
-  WorkOrderSettingsModal
+  WorkOrderSettingsModal,
+  AmendmentModal
 } from './WorkOrderModals';
 import WorkOrderInfoBar from './WorkOrderInfoBar';
 import WorkOrderSideDrawer from './WorkOrderSideDrawer';
@@ -132,10 +136,39 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
     result_status: 'PASS',
     certificate_no: '',
     acceptance_criteria: '',
-    result_remarks: ''
+    result_remarks: '',
+    calibration_provider_name: '',
+    calibration_method: 'EXTERNAL_LAB',
+    traceability_ref: '',
+    environmental_conditions: '',
+    uncertainty_value: '',
+    calibration_error_value: '',
+    certificate_issue_date: '',
+    certificate_valid_until: '',
+    certificate_file: null,
+    certificate_name: ''
   });
   const [resultError, setResultError] = useState('');
   const [savingResult, setSavingResult] = useState(false);
+
+  // Amendment Modal (Controlled Amendment for CLOSED work orders)
+  const [amendWo, setAmendWo] = useState(null);
+  const [amendForm, setAmendForm] = useState({
+    result_status: 'PASS',
+    certificate_no: '',
+    acceptance_criteria: '',
+    result_remarks: '',
+    calibration_provider_name: '',
+    calibration_method: 'EXTERNAL_LAB',
+    traceability_ref: '',
+    environmental_conditions: '',
+    uncertainty_value: '',
+    calibration_error_value: '',
+    amendment_reason: '',
+    certificate_file: null
+  });
+  const [amendError, setAmendError] = useState('');
+  const [savingAmend, setSavingAmend] = useState(false);
 
   // Action Modal (RESCHEDULE | APPROVE | REJECT | RELEASE_HOLD)
   const [actionModal, setActionModal] = useState(null);
@@ -297,7 +330,17 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
       result_status: wo.result_status === 'PENDING' ? 'PASS' : wo.result_status,
       certificate_no: wo.certificate_no || '',
       acceptance_criteria: wo.acceptance_criteria || woSettings.default_acceptance_criteria?.[0] || '',
-      result_remarks: wo.result_remarks || ''
+      result_remarks: wo.result_remarks || '',
+      calibration_provider_name: wo.calibration_provider_name || wo.provider_name || '',
+      calibration_method: wo.calibration_method || 'EXTERNAL_LAB',
+      traceability_ref: wo.traceability_ref || '',
+      environmental_conditions: wo.environmental_conditions || '',
+      uncertainty_value: wo.uncertainty_value || '',
+      calibration_error_value: wo.calibration_error_value || '',
+      certificate_issue_date: wo.certificate_issue_date || '',
+      certificate_valid_until: wo.certificate_valid_until || '',
+      certificate_file: null,
+      certificate_name: wo.certificate_file_name || ''
     });
   };
 
@@ -307,7 +350,11 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
     setSavingResult(true);
     setResultError('');
     try {
-      const updated = await submitVccWorkOrderResult(resultWo.id, resultForm);
+      if (resultForm.certificate_file) {
+        await uploadVccWorkOrderCertificate(resultWo.id, resultForm.certificate_file);
+      }
+      const { certificate_file: _cf, certificate_name: _cn, ...payload } = resultForm;
+      const updated = await submitVccWorkOrderResult(resultWo.id, payload);
       toast.success(`ส่งผลใบสั่งงาน ${updated.wo_code} เข้าสู่คิวตรวจรับแล้ว`);
       setResultWo(null);
       if (selectedDrawerWo?.id === resultWo.id) {
@@ -319,6 +366,57 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
       setResultError(err.message || 'ไม่สามารถส่งผลการทวนสอบได้');
     } finally {
       setSavingResult(false);
+    }
+  };
+
+  const openAmendModal = (wo) => {
+    setAmendWo(wo);
+    setAmendError('');
+    setAmendForm({
+      result_status: wo.result_status || 'PASS',
+      certificate_no: wo.certificate_no || '',
+      acceptance_criteria: wo.acceptance_criteria || woSettings.default_acceptance_criteria?.[0] || '',
+      result_remarks: wo.result_remarks || '',
+      calibration_provider_name: wo.calibration_provider_name || wo.provider_name || '',
+      calibration_method: wo.calibration_method || 'EXTERNAL_LAB',
+      traceability_ref: wo.traceability_ref || '',
+      environmental_conditions: wo.environmental_conditions || '',
+      uncertainty_value: wo.uncertainty_value || '',
+      calibration_error_value: wo.calibration_error_value || '',
+      amendment_reason: '',
+      certificate_file: null
+    });
+  };
+
+  const handleAmendSubmit = async (e) => {
+    e.preventDefault();
+    if (!amendWo) return;
+    setSavingAmend(true);
+    setAmendError('');
+    try {
+      if (amendForm.certificate_file) {
+        await uploadVccWorkOrderCertificate(amendWo.id, amendForm.certificate_file);
+      }
+      const { certificate_file: _cf, ...payload } = amendForm;
+      const updated = await amendVccWorkOrder(amendWo.id, payload);
+      toast.success(`บันทึกการแก้ไขผลของใบสั่งงาน ${updated.wo_code} แล้ว (ฉบับแก้ไข)`);
+      setAmendWo(null);
+      if (selectedDrawerWo?.id === amendWo.id) {
+        setSelectedDrawerWo(null);
+      }
+      await loadData();
+    } catch (err) {
+      setAmendError(err.message || 'ไม่สามารถบันทึกการแก้ไขผลได้');
+    } finally {
+      setSavingAmend(false);
+    }
+  };
+
+  const handleDownloadCert = async (workOrder) => {
+    try {
+      await downloadVccWorkOrderCertificate(workOrder.id, workOrder.certificate_file_name);
+    } catch (err) {
+      toast.error(err.message || 'ดาวน์โหลดใบรับรองไม่สำเร็จ');
     }
   };
 
@@ -589,6 +687,7 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
         onReleaseHold={(wo) => openAction('RELEASE_HOLD', wo)}
         onResetFilters={handleResetFilters}
         onOpenCreate={openCreateModal}
+        onAmend={openAmendModal}
       />
 
       {/* 5. Side Drawer for Work Order Details */}
@@ -601,6 +700,8 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
         onApprove={(wo) => openAction('APPROVE', wo)}
         onReject={(wo) => openAction('REJECT', wo)}
         onReleaseHold={(wo) => openAction('RELEASE_HOLD', wo)}
+        onAmend={openAmendModal}
+        onDownloadCert={handleDownloadCert}
       />
 
       {/* 6. Modals */}
@@ -626,6 +727,17 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
         error={resultError}
         saving={savingResult}
         onSubmit={handleResultSubmit}
+        criteriaOptions={woSettings.default_acceptance_criteria}
+      />
+
+      <AmendmentModal
+        workOrder={amendWo}
+        onClose={() => setAmendWo(null)}
+        form={amendForm}
+        setForm={setAmendForm}
+        error={amendError}
+        saving={savingAmend}
+        onSubmit={handleAmendSubmit}
         criteriaOptions={woSettings.default_acceptance_criteria}
       />
 

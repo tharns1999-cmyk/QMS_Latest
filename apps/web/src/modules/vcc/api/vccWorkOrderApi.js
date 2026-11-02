@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiPut, isApiMode } from '../../../api/client';
+import { apiGet, apiPost, apiPut, apiUpload, apiBlob, isApiMode } from '../../../api/client';
 import useStore from '../../../store/useStore';
 import {
   readJson,
@@ -374,6 +374,14 @@ export const submitVccWorkOrderResult = async (id, payload) => {
     certificate_no: certificateNo,
     acceptance_criteria: acceptanceCriteria,
     result_remarks: resultRemarks,
+    calibration_provider_name: payload.calibration_provider_name || existing.calibration_provider_name || null,
+    calibration_method: payload.calibration_method || existing.calibration_method || null,
+    traceability_ref: payload.traceability_ref || existing.traceability_ref || null,
+    environmental_conditions: payload.environmental_conditions || existing.environmental_conditions || null,
+    uncertainty_value: payload.uncertainty_value || existing.uncertainty_value || null,
+    calibration_error_value: payload.calibration_error_value || existing.calibration_error_value || null,
+    certificate_issue_date: payload.certificate_issue_date || existing.certificate_issue_date || null,
+    certificate_valid_until: payload.certificate_valid_until || existing.certificate_valid_until || null,
     performed_by: user.id,
     performed_by_name: user.name,
     nc_status: nextNcStatus,
@@ -526,5 +534,100 @@ export const releaseVccWorkOrderHold = async (id, impact_assessment = '') => {
     impact_assessment: trimmedImpact
   });
   return enrichLocalWo(updated, getLocalAssets(), getDepartmentMap(), getLocalPlans());
+};
+
+export const uploadVccWorkOrderCertificate = async (id, file, { filename, certificate_no, issue_date, valid_until, change_reason } = {}) => {
+  if (isApiMode) {
+    const params = new URLSearchParams();
+    if (filename) params.append('filename', filename);
+    if (certificate_no) params.append('certificate_no', certificate_no);
+    if (issue_date) params.append('issue_date', issue_date);
+    if (valid_until) params.append('valid_until', valid_until);
+    if (change_reason) params.append('change_reason', change_reason);
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    const res = await apiUpload(`/api/vcc/work-orders/${encodeURIComponent(id)}/certificate-file${qs}`, file);
+    return res;
+  }
+  const user = assertLocalVccAccess();
+  const allWos = getLocalWos();
+  const idx = allWos.findIndex((w) => w.id === id);
+  if (idx === -1) throw new Error('ไม่พบใบสั่งงานทวนสอบ/สอบเทียบ');
+  const existing = allWos[idx];
+  const now = new Date().toISOString();
+  const updated = {
+    ...existing,
+    certificate_file_name: filename || file.name || 'certificate.pdf',
+    certificate_file_size: file.size || 0,
+    certificate_file_hash: 'mock-sha256-hash-' + Date.now(),
+    certificate_version: (existing.certificate_version || 0) + 1,
+    certificate_uploaded_at: now,
+    certificate_uploaded_by: user.id,
+    certificate_uploaded_by_name: user.name,
+    updated_at: now,
+    updated_by: user.id
+  };
+  const next = [...allWos];
+  next[idx] = updated;
+  setLocalWos(next);
+  return { workOrder: enrichLocalWo(updated, getLocalAssets(), getDepartmentMap(), getLocalPlans()), certificate_version: updated.certificate_version };
+};
+
+export const downloadVccWorkOrderCertificate = async (id, { version, purpose = 'view' } = {}) => {
+  if (isApiMode) {
+    const params = new URLSearchParams();
+    if (version) params.append('version', version);
+    if (purpose) params.append('purpose', purpose);
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    const blob = await apiBlob(`/api/vcc/work-orders/${encodeURIComponent(id)}/certificate-file${qs}`, { purpose });
+    return blob;
+  }
+  return new Blob(['%PDF-1.4 Mock Calibration Certificate'], { type: 'application/pdf' });
+};
+
+export const fetchVccWorkOrderCertificates = async (id) => {
+  if (isApiMode) {
+    const { certificates } = await apiGet(`/api/vcc/work-orders/${encodeURIComponent(id)}/certificates`);
+    return certificates || [];
+  }
+  return [];
+};
+
+export const amendVccWorkOrder = async (id, payload) => {
+  if (isApiMode) {
+    const res = await apiPost(`/api/vcc/work-orders/${encodeURIComponent(id)}/amend`, payload);
+    return res;
+  }
+  const user = assertLocalVccAccess();
+  const allWos = getLocalWos();
+  const idx = allWos.findIndex((w) => w.id === id);
+  if (idx === -1) throw new Error('ไม่พบใบสั่งงานทวนสอบ/สอบเทียบ');
+  const existing = allWos[idx];
+  if (existing.status !== 'CLOSED') {
+    throw new Error('การแก้ไข (Amendment) ทำได้เฉพาะใบสั่งงานที่ปิดงาน (CLOSED) สำเร็จแล้วเท่านั้น');
+  }
+  const now = new Date().toISOString();
+  const updated = {
+    ...existing,
+    ...payload,
+    is_amended: 1,
+    amended_at: now,
+    amended_by: user.id,
+    amended_by_name: user.name,
+    amendment_reason: payload.amendment_reason || payload.reason || '',
+    updated_at: now,
+    updated_by: user.id
+  };
+  const next = [...allWos];
+  next[idx] = updated;
+  setLocalWos(next);
+  return { workOrder: enrichLocalWo(updated, getLocalAssets(), getDepartmentMap(), getLocalPlans()), amendment_seq: 1 };
+};
+
+export const fetchVccWorkOrderAmendments = async (id) => {
+  if (isApiMode) {
+    const { amendments } = await apiGet(`/api/vcc/work-orders/${encodeURIComponent(id)}/amendments`);
+    return amendments || [];
+  }
+  return [];
 };
 
