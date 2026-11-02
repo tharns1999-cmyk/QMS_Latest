@@ -19,6 +19,14 @@ export default function VccNotificationSettingsModal({
   setAnnualOverdueText,
   reviewSlaDays,
   setReviewSlaDays,
+  escalationL1Days = 1,
+  setEscalationL1Days,
+  escalationL2Days = 7,
+  setEscalationL2Days,
+  escalationL3Days = 14,
+  setEscalationL3Days,
+  gracePeriodDays = 3,
+  setGracePeriodDays,
   saving = false
 }) {
   if (!isOpen) return null;
@@ -119,6 +127,70 @@ export default function VccNotificationSettingsModal({
               onChange={(e) => setReviewSlaDays(e.target.value)}
               className="w-full h-9 rounded-xl border border-slate-200 px-3 text-sm font-medium text-slate-900 focus:outline-hidden focus-visible:ring-2 focus-visible:ring-indigo-500 bg-white"
             />
+          </div>
+
+          <div className="pt-2 border-t border-slate-100">
+            <h4 className="text-xs font-bold text-slate-800 mb-2">
+              เกณฑ์การยกระดับแจ้งเตือน (Escalation Multi-tier & Grace Period)
+            </h4>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                  Overdue L1 (วัน)
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  max={30}
+                  aria-label="เกณฑ์ Overdue L1"
+                  value={escalationL1Days}
+                  onChange={(e) => setEscalationL1Days && setEscalationL1Days(Number(e.target.value))}
+                  className="w-full h-8 rounded-lg border border-slate-200 px-2.5 text-xs font-medium text-slate-900 bg-white"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                  Overdue L2 (วัน)
+                </label>
+                <input
+                  type="number"
+                  min={2}
+                  max={60}
+                  aria-label="เกณฑ์ Overdue L2"
+                  value={escalationL2Days}
+                  onChange={(e) => setEscalationL2Days && setEscalationL2Days(Number(e.target.value))}
+                  className="w-full h-8 rounded-lg border border-slate-200 px-2.5 text-xs font-medium text-slate-900 bg-white"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                  Overdue L3 วิกฤต (วัน)
+                </label>
+                <input
+                  type="number"
+                  min={3}
+                  max={90}
+                  aria-label="เกณฑ์ Overdue L3"
+                  value={escalationL3Days}
+                  onChange={(e) => setEscalationL3Days && setEscalationL3Days(Number(e.target.value))}
+                  className="w-full h-8 rounded-lg border border-slate-200 px-2.5 text-xs font-medium text-slate-900 bg-white"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                  ระยะผ่อนผันหลังรับทราบ (วัน)
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  max={14}
+                  aria-label="ระยะผ่อนผัน Grace Period"
+                  value={gracePeriodDays}
+                  onChange={(e) => setGracePeriodDays && setGracePeriodDays(Number(e.target.value))}
+                  className="w-full h-8 rounded-lg border border-slate-200 px-2.5 text-xs font-medium text-slate-900 bg-white"
+                />
+              </div>
+            </div>
           </div>
 
           <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-100">

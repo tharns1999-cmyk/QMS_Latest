@@ -9,10 +9,15 @@ export const DEFAULT_NOTIFICATION_SETTINGS = {
   monthly_overdue_days: [1, 3, 7],
   annual_due_soon_days: [30, 14, 7],
   annual_overdue_days: [1, 7, 14],
-  review_sla_days: 3
+  review_sla_days: 3,
+  overdue_escalation_days_l2: 7,
+  overdue_escalation_days_l3: 14,
+  on_hold_escalation_days: 14,
+  acknowledgement_grace_days: 3,
+  cert_expiring_days: [60, 30]
 };
 
-const loadNotificationSettings = async (db) => {
+export const loadNotificationSettings = async (db) => {
   const row = await db
     .prepare("SELECT value FROM settings WHERE key = 'vcc_notification_settings'")
     .first()
@@ -73,12 +78,31 @@ export const registerVccDashboardRoutes = (app, { requireAuth, audit }) => {
       ? sanitizeDaysArray(body.annual_overdue_days)?.sort((a, b) => a - b)
       : before.annual_overdue_days;
     const reviewSlaDays = body.review_sla_days !== undefined ? Number(body.review_sla_days) : before.review_sla_days;
+    const l2Escalation = body.overdue_escalation_days_l2 !== undefined ? Number(body.overdue_escalation_days_l2) : (before.overdue_escalation_days_l2 || 7);
+    const l3Escalation = body.overdue_escalation_days_l3 !== undefined ? Number(body.overdue_escalation_days_l3) : (before.overdue_escalation_days_l3 || 14);
+    const onHoldEscalation = body.on_hold_escalation_days !== undefined ? Number(body.on_hold_escalation_days) : (before.on_hold_escalation_days || 14);
+    const graceDays = body.acknowledgement_grace_days !== undefined ? Number(body.acknowledgement_grace_days) : (before.acknowledgement_grace_days || 3);
+    const certExpiring = body.cert_expiring_days !== undefined
+      ? sanitizeDaysArray(body.cert_expiring_days)
+      : (before.cert_expiring_days || [60, 30]);
 
-    if (!monthlyDueSoon || !monthlyOverdue || !annualDueSoon || !annualOverdue) {
+    if (!monthlyDueSoon || !monthlyOverdue || !annualDueSoon || !annualOverdue || !certExpiring) {
       return c.json({ error: 'รายการวันแจ้งเตือนต้องเป็นตัวเลขจำนวนเต็มระหว่าง 1 ถึง 365 วัน' }, 400);
     }
     if (!Number.isInteger(reviewSlaDays) || reviewSlaDays < 1 || reviewSlaDays > 60) {
       return c.json({ error: 'ระยะเวลา SLA รอตรวจรับต้องอยู่ระหว่าง 1 ถึง 60 วัน' }, 400);
+    }
+    if (!Number.isInteger(l2Escalation) || l2Escalation < 1 || l2Escalation > 60) {
+      return c.json({ error: 'เกณฑ์ยกระดับ Overdue L2 ต้องเป็นตัวเลขจำนวนเต็มระหว่าง 1 ถึง 60 วัน' }, 400);
+    }
+    if (!Number.isInteger(l3Escalation) || l3Escalation < l2Escalation || l3Escalation > 180) {
+      return c.json({ error: 'เกณฑ์ยกระดับ Overdue L3 ต้องมากกว่าหรือเท่ากับเกณฑ์ L2 และไม่เกิน 180 วัน' }, 400);
+    }
+    if (!Number.isInteger(onHoldEscalation) || onHoldEscalation < 1 || onHoldEscalation > 90) {
+      return c.json({ error: 'เกณฑ์ยกระดับ ON_HOLD ต้องเป็นตัวเลขจำนวนเต็มระหว่าง 1 ถึง 90 วัน' }, 400);
+    }
+    if (!Number.isInteger(graceDays) || graceDays < 1 || graceDays > 30) {
+      return c.json({ error: 'ระยะเวลาผ่อนผันการรับทราบต้องอยู่ระหว่าง 1 ถึง 30 วัน' }, 400);
     }
 
     const updated = {
@@ -86,7 +110,12 @@ export const registerVccDashboardRoutes = (app, { requireAuth, audit }) => {
       monthly_overdue_days: monthlyOverdue,
       annual_due_soon_days: annualDueSoon,
       annual_overdue_days: annualOverdue,
-      review_sla_days: reviewSlaDays
+      review_sla_days: reviewSlaDays,
+      overdue_escalation_days_l2: l2Escalation,
+      overdue_escalation_days_l3: l3Escalation,
+      on_hold_escalation_days: onHoldEscalation,
+      acknowledgement_grace_days: graceDays,
+      cert_expiring_days: certExpiring
     };
 
     await db.batch([

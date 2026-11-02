@@ -1359,6 +1359,7 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
         db.prepare(`
           UPDATE vcc_assets
           SET status = 'ON_HOLD',
+              hold_started_at = COALESCE(hold_started_at, ${NOW}),
               updated_at = ${NOW}
           WHERE id = ?
         `).bind(existing.asset_id)
@@ -1531,6 +1532,7 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
       db.prepare(`
         UPDATE vcc_assets
         SET status = 'ACTIVE',
+            hold_started_at = NULL,
             updated_at = ${NOW}
         WHERE id = ?
           AND NOT EXISTS (
@@ -2173,6 +2175,7 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
         db.prepare(`
           UPDATE vcc_assets
           SET status = 'ON_HOLD',
+              hold_started_at = COALESCE(hold_started_at, ${NOW}),
               updated_at = ${NOW}
           WHERE id = ?
         `).bind(existing.asset_id)

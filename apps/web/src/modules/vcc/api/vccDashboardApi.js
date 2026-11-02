@@ -19,7 +19,11 @@ export const DEFAULT_VCC_NOTIFICATION_SETTINGS = {
   monthly_overdue_days: [1, 3, 7],
   annual_due_soon_days: [30, 14, 7],
   annual_overdue_days: [1, 7, 14],
-  review_sla_days: 3
+  review_sla_days: 3,
+  escalation_l1_days: 1,
+  escalation_l2_days: 7,
+  escalation_l3_days: 14,
+  acknowledgement_grace_period_days: 3
 };
 
 const getLocalNotificationSettings = () =>
@@ -76,6 +80,10 @@ export const saveVccNotificationSettings = async (payload = {}) => {
     ? sanitizeDaysArray(payload.annual_overdue_days)?.sort((a, b) => a - b)
     : before.annual_overdue_days;
   const reviewSlaDays = payload.review_sla_days !== undefined ? Number(payload.review_sla_days) : before.review_sla_days;
+  const escalationL1 = payload.escalation_l1_days !== undefined ? Number(payload.escalation_l1_days) : (before.escalation_l1_days ?? 1);
+  const escalationL2 = payload.escalation_l2_days !== undefined ? Number(payload.escalation_l2_days) : (before.escalation_l2_days ?? 7);
+  const escalationL3 = payload.escalation_l3_days !== undefined ? Number(payload.escalation_l3_days) : (before.escalation_l3_days ?? 14);
+  const gracePeriod = payload.acknowledgement_grace_period_days !== undefined ? Number(payload.acknowledgement_grace_period_days) : (before.acknowledgement_grace_period_days ?? 3);
 
   if (!monthlyDueSoon || !monthlyOverdue || !annualDueSoon || !annualOverdue) {
     throw new Error('รายการวันแจ้งเตือนต้องเป็นตัวเลขจำนวนเต็มระหว่าง 1 ถึง 365 วัน');
@@ -89,7 +97,11 @@ export const saveVccNotificationSettings = async (payload = {}) => {
     monthly_overdue_days: monthlyOverdue,
     annual_due_soon_days: annualDueSoon,
     annual_overdue_days: annualOverdue,
-    review_sla_days: reviewSlaDays
+    review_sla_days: reviewSlaDays,
+    escalation_l1_days: escalationL1,
+    escalation_l2_days: escalationL2,
+    escalation_l3_days: escalationL3,
+    acknowledgement_grace_period_days: gracePeriod
   };
   setLocalNotificationSettings(next);
   appendLocalAudit('VCC_NOTIFICATION_SETTINGS_UPDATED', { before, after: next });

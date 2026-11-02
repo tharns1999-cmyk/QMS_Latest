@@ -11,6 +11,7 @@ import {
   getLocalAudit,
   appendLocalAudit
 } from './vccApi';
+import { getLocalNotifications } from './vccNotificationApi';
 
 const STORAGE_PLANS_KEY = 'qms-vcc-local-plans-v1';
 const STORAGE_PLAN_ITEMS_KEY = 'qms-vcc-local-plan-items-v1';
@@ -416,6 +417,48 @@ export const generateLocalVccTasks = (user) => {
         });
       }
     }
+  }
+
+  // Include active notification tasks in local mode
+  try {
+    const localNotifs = getLocalNotifications();
+    for (const n of (localNotifs || [])) {
+      if (n.status !== 'PENDING' && n.status !== 'ACKNOWLEDGED') continue;
+      if (!isGlobal && !userDepts.includes(n.department)) continue;
+      let isEligible = false;
+      if (isGlobal) isEligible = true;
+      else if (n.escalation_level === 1) isEligible = true;
+      else if (n.escalation_level === 2) isEligible = userLevel >= 4;
+      else if (n.escalation_level === 3) isEligible = userLevel >= 5;
+      if (!isEligible) continue;
+
+      tasks.push({
+        id: `api-vcc-notif-${n.id}`,
+        notificationId: n.id,
+        referenceId: n.reference_id,
+        referenceType: n.reference_type,
+        workOrderId: n.work_order_id,
+        assetId: n.asset_id,
+        docCode: n.wo_code || n.asset_code || n.id,
+        document_code: n.wo_code || n.asset_code || n.id,
+        docTitle: n.title,
+        docName: n.asset_name || n.title,
+        title: n.title,
+        message: n.message,
+        type: n.severity === 'CRITICAL' ? 'Critical' : (n.severity === 'WARNING' ? 'Warning' : 'Alert'),
+        taskType: 'VCC_NOTIFICATION_ALERT',
+        task_type: 'VCC_NOTIFICATION_ALERT',
+        category: n.notification_type?.startsWith('OVERDUE') ? 'OVERDUE' : (n.notification_type?.startsWith('CERT') ? 'CERT_EXPIRING' : 'ALERT'),
+        department: n.department,
+        target_department: n.department,
+        owner_dept: n.department,
+        severity: n.severity,
+        due_date: n.due_date,
+        createdAt: n.created_at
+      });
+    }
+  } catch {
+    // Ignore dynamic import failure in edge environments
   }
 
   return tasks;

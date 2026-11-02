@@ -2,6 +2,7 @@
 import { getThresholds } from './approval.js';
 import { requireVccAccess, requireDccOnly } from './vccAuth.js';
 import { generateWorkOrdersForApprovedPlan, buildWorkOrderReconciliationStatements } from './vccWorkOrders.js';
+import { fetchNotificationTasks } from './vccNotifications.js';
 
 const DCC_ONLY = { error: 'เฉพาะ DCC เท่านั้นที่ใช้งานส่วนนี้ได้' };
 const NOW = `strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`;
@@ -2152,6 +2153,9 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
         }
       }
     }
+
+    const notifTasks = await fetchNotificationTasks(db, user).catch(() => []);
+    tasks.push(...notifTasks);
 
     return c.json({ tasks });
   });

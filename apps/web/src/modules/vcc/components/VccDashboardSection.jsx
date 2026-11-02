@@ -24,11 +24,13 @@ import VccDepartmentSummary from './VccDepartmentSummary';
 import VccNotificationSettingsModal from './VccNotificationSettingsModal';
 import VccOnHoldTrackerTab from './VccOnHoldTrackerTab';
 import VccComplianceReportTab from './VccComplianceReportTab';
+import VccNotificationAuditTab from './VccNotificationAuditTab';
 
 const MAIN_TABS = [
   { id: 'OVERVIEW', label: 'ภาพรวมและแจ้งเตือน', icon: LayoutDashboard },
   { id: 'ON_HOLD', label: 'ติดตาม ON_HOLD & NC', icon: ShieldAlert },
-  { id: 'COMPLIANCE', label: 'รายงานตรวจสอบย้อนกลับ (Compliance Report)', icon: FileCheck2 }
+  { id: 'COMPLIANCE', label: 'รายงานตรวจสอบย้อนกลับ (Compliance Report)', icon: FileCheck2 },
+  { id: 'NOTIFICATIONS', label: 'ประวัติการแจ้งเตือน & Escalation (Audit)', icon: Bell }
 ];
 
 const ALERT_TABS = [
@@ -82,6 +84,10 @@ export default function VccDashboardSection({ onNavigateToWorkOrders }) {
   const [annualDueSoonText, setAnnualDueSoonText] = useState('30, 14, 7');
   const [annualOverdueText, setAnnualOverdueText] = useState('1, 7, 14');
   const [reviewSlaDays, setReviewSlaDays] = useState(3);
+  const [escalationL1Days, setEscalationL1Days] = useState(1);
+  const [escalationL2Days, setEscalationL2Days] = useState(7);
+  const [escalationL3Days, setEscalationL3Days] = useState(14);
+  const [gracePeriodDays, setGracePeriodDays] = useState(3);
   const [savingSettings, setSavingSettings] = useState(false);
 
   const loadData = useCallback(async () => {
@@ -97,6 +103,10 @@ export default function VccDashboardSection({ onNavigateToWorkOrders }) {
         setAnnualDueSoonText((s.annual_due_soon_days || [30, 14, 7]).join(', '));
         setAnnualOverdueText((s.annual_overdue_days || [1, 7, 14]).join(', '));
         setReviewSlaDays(s.review_sla_days || 3);
+        setEscalationL1Days(s.escalation_l1_days ?? 1);
+        setEscalationL2Days(s.escalation_l2_days ?? 7);
+        setEscalationL3Days(s.escalation_l3_days ?? 14);
+        setGracePeriodDays(s.acknowledgement_grace_period_days ?? 3);
       }
     } catch (err) {
       setErrorMsg(err?.message || 'ไม่สามารถโหลดข้อมูลสรุปภาพรวมได้');
@@ -119,7 +129,11 @@ export default function VccDashboardSection({ onNavigateToWorkOrders }) {
         monthly_overdue_days: parseDaysInput(monthlyOverdueText),
         annual_due_soon_days: parseDaysInput(annualDueSoonText),
         annual_overdue_days: parseDaysInput(annualOverdueText),
-        review_sla_days: Number(reviewSlaDays)
+        review_sla_days: Number(reviewSlaDays),
+        escalation_l1_days: Number(escalationL1Days),
+        escalation_l2_days: Number(escalationL2Days),
+        escalation_l3_days: Number(escalationL3Days),
+        acknowledgement_grace_period_days: Number(gracePeriodDays)
       });
       setSettingsOpen(false);
       await loadData();
@@ -217,6 +231,11 @@ export default function VccDashboardSection({ onNavigateToWorkOrders }) {
       {/* Tab 3: Compliance Report for Auditor */}
       {mainTab === 'COMPLIANCE' && (
         <VccComplianceReportTab />
+      )}
+
+      {/* Tab 4: Notification Audit & Escalation */}
+      {mainTab === 'NOTIFICATIONS' && (
+        <VccNotificationAuditTab />
       )}
 
       {/* Tab 1: Overview & Alerts */}
@@ -439,6 +458,14 @@ export default function VccDashboardSection({ onNavigateToWorkOrders }) {
             setAnnualOverdueText={setAnnualOverdueText}
             reviewSlaDays={reviewSlaDays}
             setReviewSlaDays={setReviewSlaDays}
+            escalationL1Days={escalationL1Days}
+            setEscalationL1Days={setEscalationL1Days}
+            escalationL2Days={escalationL2Days}
+            setEscalationL2Days={setEscalationL2Days}
+            escalationL3Days={escalationL3Days}
+            setEscalationL3Days={setEscalationL3Days}
+            gracePeriodDays={gracePeriodDays}
+            setGracePeriodDays={setGracePeriodDays}
             saving={savingSettings}
           />
         </>
