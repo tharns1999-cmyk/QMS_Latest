@@ -6,7 +6,10 @@ import {
   Clock,
   RefreshCw,
   FileSpreadsheet,
-  ArrowRight
+  ArrowRight,
+  LayoutDashboard,
+  ShieldAlert,
+  FileCheck2
 } from 'lucide-react';
 import {
   fetchVccDashboard,
@@ -19,6 +22,14 @@ import VccMetricsStrip from './VccMetricsStrip';
 import VccPlanActualChart from './VccPlanActualChart';
 import VccDepartmentSummary from './VccDepartmentSummary';
 import VccNotificationSettingsModal from './VccNotificationSettingsModal';
+import VccOnHoldTrackerTab from './VccOnHoldTrackerTab';
+import VccComplianceReportTab from './VccComplianceReportTab';
+
+const MAIN_TABS = [
+  { id: 'OVERVIEW', label: 'ภาพรวมและแจ้งเตือน', icon: LayoutDashboard },
+  { id: 'ON_HOLD', label: 'ติดตาม ON_HOLD & NC', icon: ShieldAlert },
+  { id: 'COMPLIANCE', label: 'รายงานตรวจสอบย้อนกลับ (Compliance Report)', icon: FileCheck2 }
+];
 
 const ALERT_TABS = [
   { key: 'OVERDUE', label: 'เลยกำหนด (OVERDUE)', alertBadgeClass: 'bg-amber-100 text-amber-900' },
@@ -53,9 +64,10 @@ const triggerCsvDownload = (csvText, filename) => {
 
 /**
  * VccDashboardSection
- * Clean, Minimal, Professional Enterprise SaaS QMS Dashboard for VCC.
+ * Clean, Minimal, Professional Enterprise SaaS QMS Dashboard for VCC (Phase 3.3).
  */
 export default function VccDashboardSection({ onNavigateToWorkOrders }) {
+  const [mainTab, setMainTab] = useState('OVERVIEW');
   const [year, setYear] = useState(2026);
   const [dashboard, setDashboard] = useState(null);
   const [alertTab, setAlertTab] = useState('OVERDUE');
@@ -146,6 +158,7 @@ export default function VccDashboardSection({ onNavigateToWorkOrders }) {
 
   const eq = dashboard?.equipment_kpi || {};
   const wo = dashboard?.work_order_kpi || {};
+  const certKpi = dashboard?.certificate_kpi || {};
   const allAlerts = useMemo(() => dashboard?.alerts || [], [dashboard?.alerts]);
 
   const filteredAlerts = useMemo(() => {
@@ -165,217 +178,271 @@ export default function VccDashboardSection({ onNavigateToWorkOrders }) {
 
   return (
     <div className="space-y-6 text-slate-800" data-testid="vcc-dashboard-section">
-      {/* 1. Header Toolbar (Clean Minimalist Action Bar) */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-2 border-b border-slate-200/80">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-            <span className="text-slate-500 font-normal">ปีแผน:</span>
-            <select
-              aria-label="เลือกปีแผน Dashboard"
-              value={year}
-              onChange={(e) => setYear(Number(e.target.value))}
-              className="h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-sm font-semibold text-slate-900 focus:outline-hidden focus:border-slate-400 cursor-pointer shadow-2xs"
-            >
-              <option value={2026}>2026 (พ.ศ. 2569)</option>
-              <option value={2027}>2027 (พ.ศ. 2570)</option>
-            </select>
-          </div>
-
-          <div className="hidden lg:flex items-center gap-1.5 text-xs text-slate-500 pl-3 border-l border-slate-200">
-            <Clock size={13} className="text-slate-400 shrink-0" />
-            <span>เกณฑ์ On-Time: ปิดงาน (CLOSED) และเสร็จภายในกำหนด</span>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={handleExportPlanCsv}
-            data-testid="vcc-export-plan-csv-btn"
-            className="h-8 inline-flex items-center gap-1.5 px-3 rounded-lg bg-white hover:bg-slate-50 text-slate-700 border border-slate-200/90 text-xs font-semibold transition-colors shadow-2xs cursor-pointer"
-          >
-            <FileSpreadsheet size={14} className="text-emerald-600 shrink-0" />
-            <span>แผน FM-QC-46 (CSV)</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={handleExportWoCsv}
-            data-testid="vcc-export-wo-csv-btn"
-            className="h-8 inline-flex items-center gap-1.5 px-3 rounded-lg bg-white hover:bg-slate-50 text-slate-700 border border-slate-200/90 text-xs font-semibold transition-colors shadow-2xs cursor-pointer"
-          >
-            <Download size={14} className="text-sky-600 shrink-0" />
-            <span>ใบงาน/ใบรับรอง (CSV)</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setSettingsOpen(true)}
-            data-testid="vcc-open-notification-settings-btn"
-            className="h-8 inline-flex items-center gap-1.5 px-3 rounded-lg bg-white hover:bg-slate-50 text-slate-700 border border-slate-200/90 text-xs font-semibold transition-colors shadow-2xs cursor-pointer"
-          >
-            <Settings size={14} className="text-slate-500 shrink-0" />
-            <span>ตั้งค่าแจ้งเตือน</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={loadData}
-            title="รีเฟรชข้อมูล"
-            className="h-8 w-8 inline-flex items-center justify-center rounded-lg bg-white hover:bg-slate-50 text-slate-600 border border-slate-200/90 transition-colors shadow-2xs cursor-pointer"
-          >
-            <RefreshCw size={14} className={loading ? 'animate-spin text-indigo-600' : ''} />
-          </button>
-        </div>
-      </div>
-
-      {errorMsg && (
-        <div role="alert" className="rounded-xl bg-rose-50 border border-rose-200 px-4 py-3 text-sm font-medium text-rose-700">
-          {errorMsg}
-        </div>
-      )}
-
-      {exportMsg && (
-        <div data-testid="vcc-export-success-banner" className="rounded-xl bg-emerald-50 border border-emerald-200 px-4 py-3 text-sm font-semibold text-emerald-800">
-          {exportMsg}
-        </div>
-      )}
-
-      {/* 2. Executive Metrics Strip */}
-      <VccMetricsStrip
-        eq={eq}
-        wo={wo}
-        reviewSlaDays={dashboard?.notification_settings?.review_sla_days ?? 3}
-      />
-
-      {/* 3. Actionable Alert Worklist */}
-      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs p-5 sm:p-6 space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b border-slate-100">
-          <div>
-            <div className="flex items-center gap-2">
-              <Bell size={17} className="text-slate-900 shrink-0" />
-              <h2 className="text-base font-bold text-slate-900 tracking-tight">ศูนย์แจ้งเตือนตามกติกา QMS</h2>
-            </div>
-            <p className="text-xs text-slate-500 mt-0.5">
-              แสดงเฉพาะงานที่ต้องดำเนินการตามเงื่อนไข (งานที่ปิดแล้วจะไม่แจ้งเตือนซ้ำ)
-            </p>
-          </div>
-          {onNavigateToWorkOrders && (
-            <button
-              type="button"
-              onClick={onNavigateToWorkOrders}
-              className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-semibold text-indigo-600 hover:text-indigo-800 transition-colors group cursor-pointer self-start sm:self-auto"
-            >
-              <span>ไปที่หน้าใบสั่งงานทั้งหมด</span>
-              <ArrowRight size={14} className="group-hover:translate-x-0.5 transition-transform" />
-            </button>
-          )}
-        </div>
-
-        {/* Compact Segmented Tabs with Underline */}
-        <div className="flex flex-wrap gap-4 sm:gap-6 border-b border-slate-100 pt-1">
-          {ALERT_TABS.map((t) => {
-            const count = countByAlertTab(t.key);
-            const isActive = alertTab === t.key;
+      {/* 0. Top-Level Main Dashboard Navigation Tabs (Approach A) */}
+      <div className="flex border-b border-slate-200">
+        <nav className="-mb-px flex space-x-6" aria-label="Dashboard Tabs">
+          {MAIN_TABS.map((tab) => {
+            const Icon = tab.icon;
+            const isActive = mainTab === tab.id;
             return (
               <button
-                key={t.key}
+                key={tab.id}
                 type="button"
-                onClick={() => setAlertTab(t.key)}
-                data-testid={`alert-tab-${t.key}`}
-                className={`pb-3 text-xs sm:text-sm font-medium transition-all flex items-center gap-2 cursor-pointer border-b-2 -mb-px ${
+                onClick={() => setMainTab(tab.id)}
+                data-testid={`main-tab-${tab.id}`}
+                className={`py-3 px-1 inline-flex items-center gap-2 border-b-2 text-sm font-semibold transition-colors cursor-pointer ${
                   isActive
-                    ? 'border-slate-900 text-slate-900 font-semibold'
-                    : 'border-transparent text-slate-500 hover:text-slate-800'
+                    ? 'border-indigo-600 text-indigo-600'
+                    : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
                 }`}
               >
-                <span>{t.label}</span>
-                <span
-                  className={`text-xs font-mono font-medium px-1.5 py-0.2 rounded ${
-                    count > 0 && (t.key === 'OVERDUE' || t.key === 'ON_HOLD')
-                      ? t.alertBadgeClass
-                      : 'bg-slate-100 text-slate-600'
-                  }`}
-                >
-                  {count}
-                </span>
+                <Icon size={16} />
+                <span>{tab.label}</span>
+                {tab.id === 'ON_HOLD' && (eq.on_hold_assets ?? 0) > 0 && (
+                  <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-rose-100 text-rose-700">
+                    {eq.on_hold_assets}
+                  </span>
+                )}
               </button>
             );
           })}
-        </div>
+        </nav>
+      </div>
 
-        {/* Worklist Items */}
-        {loading ? (
-          <div className="py-12 text-center text-sm text-slate-400 font-medium">กำลังประมวลผลรายการแจ้งเตือน...</div>
-        ) : filteredAlerts.length === 0 ? (
-          <div className="py-12 text-center space-y-1.5" data-testid="alert-empty-state">
-            <div className="text-sm font-medium text-slate-600">ไม่มีรายการแจ้งเตือนในสถานะนี้</div>
-            <div className="text-xs text-slate-400">ทุกรายการได้รับการบันทึกและจัดการเรียบร้อยตามเกณฑ์</div>
-          </div>
-        ) : (
-          <div className="divide-y divide-slate-100" data-testid={`alert-list-${alertTab}`}>
-            {filteredAlerts.map((alert) => (
-              <div
-                key={alert.dedupe_key}
-                className="py-3 px-2.5 -mx-2.5 rounded-xl hover:bg-slate-50/80 transition-colors flex flex-col md:flex-row md:items-center md:justify-between gap-3 text-sm"
-              >
-                <div className="flex items-center gap-2.5 flex-wrap">
-                  <span className="font-mono font-bold text-slate-900">{alert.wo_code}</span>
-                  <span className="font-mono text-xs font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200/60">
-                    {alert.asset_code}
-                  </span>
-                  <span className="text-slate-800 font-medium text-xs sm:text-sm">{alert.asset_name}</span>
-                  <DepartmentBadge department={alert.department} />
-                </div>
-                <div className="flex items-center gap-4 justify-between md:justify-end">
-                  <span className="text-slate-600 text-xs sm:text-sm font-medium">{alert.message}</span>
-                  {onNavigateToWorkOrders && (
-                    <button
-                      type="button"
-                      onClick={onNavigateToWorkOrders}
-                      className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 whitespace-nowrap inline-flex items-center gap-1 cursor-pointer"
-                    >
-                      จัดการใบงาน <ArrowRight size={12} />
-                    </button>
-                  )}
-                </div>
+      {/* Tab 2: ON_HOLD / NC Tracker */}
+      {mainTab === 'ON_HOLD' && (
+        <VccOnHoldTrackerTab onNavigateToWorkOrder={onNavigateToWorkOrders} />
+      )}
+
+      {/* Tab 3: Compliance Report for Auditor */}
+      {mainTab === 'COMPLIANCE' && (
+        <VccComplianceReportTab />
+      )}
+
+      {/* Tab 1: Overview & Alerts */}
+      {mainTab === 'OVERVIEW' && (
+        <>
+          {/* 1. Header Toolbar (Clean Minimalist Action Bar) */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-2 border-b border-slate-200/80">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                <span className="text-slate-500 font-normal">ปีแผน:</span>
+                <select
+                  aria-label="เลือกปีแผน Dashboard"
+                  value={year}
+                  onChange={(e) => setYear(Number(e.target.value))}
+                  className="h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-sm font-semibold text-slate-900 focus:outline-hidden focus:border-slate-400 cursor-pointer shadow-2xs"
+                >
+                  <option value={2026}>2026 (พ.ศ. 2569)</option>
+                  <option value={2027}>2027 (พ.ศ. 2570)</option>
+                </select>
               </div>
-            ))}
+
+              <div className="hidden lg:flex items-center gap-1.5 text-xs text-slate-500 pl-3 border-l border-slate-200">
+                <Clock size={13} className="text-slate-400 shrink-0" />
+                <span>คำนวณ Overdue จาก Required Due Date แท้จริง ป้องกันประวัติสูญหายจากการเลื่อนกำหนด</span>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={handleExportPlanCsv}
+                data-testid="vcc-export-plan-csv-btn"
+                className="h-8 inline-flex items-center gap-1.5 px-3 rounded-lg bg-white hover:bg-slate-50 text-slate-700 border border-slate-200/90 text-xs font-semibold transition-colors shadow-2xs cursor-pointer"
+              >
+                <FileSpreadsheet size={14} className="text-emerald-600 shrink-0" />
+                <span>แผน FM-QC-46 (CSV)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleExportWoCsv}
+                data-testid="vcc-export-wo-csv-btn"
+                className="h-8 inline-flex items-center gap-1.5 px-3 rounded-lg bg-white hover:bg-slate-50 text-slate-700 border border-slate-200/90 text-xs font-semibold transition-colors shadow-2xs cursor-pointer"
+              >
+                <Download size={14} className="text-sky-600 shrink-0" />
+                <span>ใบงาน/ใบรับรอง (CSV)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSettingsOpen(true)}
+                data-testid="vcc-open-notification-settings-btn"
+                className="h-8 inline-flex items-center gap-1.5 px-3 rounded-lg bg-white hover:bg-slate-50 text-slate-700 border border-slate-200/90 text-xs font-semibold transition-colors shadow-2xs cursor-pointer"
+              >
+                <Settings size={14} className="text-slate-500 shrink-0" />
+                <span>ตั้งค่าแจ้งเตือน</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={loadData}
+                title="รีเฟรชข้อมูล"
+                className="h-8 w-8 inline-flex items-center justify-center rounded-lg bg-white hover:bg-slate-50 text-slate-600 border border-slate-200/90 transition-colors shadow-2xs cursor-pointer"
+              >
+                <RefreshCw size={14} className={loading ? 'animate-spin text-indigo-600' : ''} />
+              </button>
+            </div>
           </div>
-        )}
-      </div>
 
-      {/* 4. Analytics Section (Plan vs Actual Visual Chart & Department Summary) */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
-        {/* 12-Month Plan vs Actual Visual Chart */}
-        <VccPlanActualChart
-          monthlyComparison={dashboard?.monthly_comparison || []}
-          year={year}
-        />
+          {errorMsg && (
+            <div role="alert" className="rounded-xl bg-rose-50 border border-rose-200 px-4 py-3 text-sm font-medium text-rose-700">
+              {errorMsg}
+            </div>
+          )}
 
-        {/* Department Summary Compact Visualization */}
-        <VccDepartmentSummary
-          departmentBreakdown={dashboard?.department_breakdown || []}
-        />
-      </div>
+          {exportMsg && (
+            <div data-testid="vcc-export-success-banner" className="rounded-xl bg-emerald-50 border border-emerald-200 px-4 py-3 text-sm font-semibold text-emerald-800">
+              {exportMsg}
+            </div>
+          )}
 
-      {/* 5. Notification Settings Modal */}
-      <VccNotificationSettingsModal
-        isOpen={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
-        onSubmit={handleSaveSettings}
-        monthlyDueSoonText={monthlyDueSoonText}
-        setMonthlyDueSoonText={setMonthlyDueSoonText}
-        monthlyOverdueText={monthlyOverdueText}
-        setMonthlyOverdueText={setMonthlyOverdueText}
-        annualDueSoonText={annualDueSoonText}
-        setAnnualDueSoonText={setAnnualDueSoonText}
-        annualOverdueText={annualOverdueText}
-        setAnnualOverdueText={setAnnualOverdueText}
-        reviewSlaDays={reviewSlaDays}
-        setReviewSlaDays={setReviewSlaDays}
-        saving={savingSettings}
-      />
+          {/* 2. Executive Metrics Strip (with Certificate & Overdue Invariance KPI) */}
+          <VccMetricsStrip
+            eq={eq}
+            wo={wo}
+            certKpi={certKpi}
+            reviewSlaDays={dashboard?.notification_settings?.review_sla_days ?? 3}
+          />
+
+          {/* 3. Actionable Alert Worklist */}
+          <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs p-5 sm:p-6 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b border-slate-100">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Bell size={17} className="text-slate-900 shrink-0" />
+                  <h2 className="text-base font-bold text-slate-900 tracking-tight">ศูนย์แจ้งเตือนตามกติกา QMS</h2>
+                </div>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  แสดงเฉพาะงานที่ต้องดำเนินการตามเงื่อนไข (งานที่ปิดแล้วจะไม่แจ้งเตือนซ้ำ)
+                </p>
+              </div>
+              {onNavigateToWorkOrders && (
+                <button
+                  type="button"
+                  onClick={onNavigateToWorkOrders}
+                  className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-semibold text-indigo-600 hover:text-indigo-800 transition-colors group cursor-pointer self-start sm:self-auto"
+                >
+                  <span>ไปที่หน้าใบสั่งงานทั้งหมด</span>
+                  <ArrowRight size={14} className="group-hover:translate-x-0.5 transition-transform" />
+                </button>
+              )}
+            </div>
+
+            {/* Compact Segmented Tabs with Underline */}
+            <div className="flex flex-wrap gap-4 sm:gap-6 border-b border-slate-100 pt-1">
+              {ALERT_TABS.map((t) => {
+                const count = countByAlertTab(t.key);
+                const isActive = alertTab === t.key;
+                return (
+                  <button
+                    key={t.key}
+                    type="button"
+                    onClick={() => setAlertTab(t.key)}
+                    data-testid={`alert-tab-${t.key}`}
+                    className={`pb-3 text-xs sm:text-sm font-medium transition-all flex items-center gap-2 cursor-pointer border-b-2 -mb-px ${
+                      isActive
+                        ? 'border-slate-900 text-slate-900 font-semibold'
+                        : 'border-transparent text-slate-500 hover:text-slate-800'
+                    }`}
+                  >
+                    <span>{t.label}</span>
+                    <span
+                      className={`text-xs font-mono font-medium px-1.5 py-0.2 rounded ${
+                        count > 0 && (t.key === 'OVERDUE' || t.key === 'ON_HOLD')
+                          ? t.alertBadgeClass
+                          : 'bg-slate-100 text-slate-600'
+                      }`}
+                    >
+                      {count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Worklist Items */}
+            {loading ? (
+              <div className="py-12 text-center text-sm text-slate-400 font-medium">กำลังประมวลผลรายการแจ้งเตือน...</div>
+            ) : filteredAlerts.length === 0 ? (
+              <div className="py-12 text-center space-y-1.5" data-testid="alert-empty-state">
+                <div className="text-sm font-medium text-slate-600">ไม่มีรายการแจ้งเตือนในสถานะนี้</div>
+                <div className="text-xs text-slate-400">ทุกรายการได้รับการบันทึกและจัดการเรียบร้อยตามเกณฑ์</div>
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-100" data-testid={`alert-list-${alertTab}`}>
+                {filteredAlerts.map((alert) => (
+                  <div
+                    key={alert.dedupe_key}
+                    className="py-3 px-2.5 -mx-2.5 rounded-xl hover:bg-slate-50/80 transition-colors flex flex-col md:flex-row md:items-center md:justify-between gap-3 text-sm"
+                  >
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                      <span className="font-mono font-bold text-slate-900">{alert.wo_code}</span>
+                      <span className="font-mono text-xs font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200/60">
+                        {alert.asset_code}
+                      </span>
+                      <span className="text-slate-800 font-medium text-xs sm:text-sm">{alert.asset_name}</span>
+                      <DepartmentBadge department={alert.department} />
+                    </div>
+                    <div className="flex items-center gap-4 justify-between md:justify-end">
+                      <div className="text-right">
+                        <span className="text-slate-600 text-xs sm:text-sm font-medium block">{alert.message}</span>
+                        {alert.recommended_action && (
+                          <span className="text-[11px] text-indigo-600 font-medium block mt-0.5">
+                            แนะนำ: {alert.recommended_action}
+                          </span>
+                        )}
+                      </div>
+                      {onNavigateToWorkOrders && (
+                        <button
+                          type="button"
+                          onClick={onNavigateToWorkOrders}
+                          className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 whitespace-nowrap inline-flex items-center gap-1 cursor-pointer"
+                        >
+                          จัดการใบงาน <ArrowRight size={12} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* 4. Analytics Section (Plan vs Actual Visual Chart & Department Summary) */}
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+            {/* 12-Month Plan vs Actual Visual Chart */}
+            <VccPlanActualChart
+              monthlyComparison={dashboard?.monthly_comparison || []}
+              year={year}
+            />
+
+            {/* Department Summary Compact Visualization */}
+            <VccDepartmentSummary
+              departmentBreakdown={dashboard?.department_breakdown || []}
+            />
+          </div>
+
+          {/* 5. Notification Settings Modal */}
+          <VccNotificationSettingsModal
+            isOpen={settingsOpen}
+            onClose={() => setSettingsOpen(false)}
+            onSubmit={handleSaveSettings}
+            monthlyDueSoonText={monthlyDueSoonText}
+            setMonthlyDueSoonText={setMonthlyDueSoonText}
+            monthlyOverdueText={monthlyOverdueText}
+            setMonthlyOverdueText={setMonthlyOverdueText}
+            annualDueSoonText={annualDueSoonText}
+            setAnnualDueSoonText={setAnnualDueSoonText}
+            annualOverdueText={annualOverdueText}
+            setAnnualOverdueText={setAnnualOverdueText}
+            reviewSlaDays={reviewSlaDays}
+            setReviewSlaDays={setReviewSlaDays}
+            saving={savingSettings}
+          />
+        </>
+      )}
     </div>
   );
 }
