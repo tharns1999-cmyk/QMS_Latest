@@ -86,6 +86,17 @@ describe('VCC Phase 3.2: Calibration Execution, Digital Certificates & Controlle
   });
 
   afterAll(async () => {
+    try {
+      await env.DB.batch([
+        env.DB.prepare('DELETE FROM vcc_work_order_amendments'),
+        env.DB.prepare('DELETE FROM vcc_work_order_certificates'),
+        env.DB.prepare('DELETE FROM vcc_work_orders'),
+        env.DB.prepare('DELETE FROM vcc_plan_cycles'),
+        env.DB.prepare('DELETE FROM vcc_annual_plan_items'),
+        env.DB.prepare('DELETE FROM vcc_annual_plans'),
+        env.DB.prepare('DELETE FROM vcc_assets')
+      ]);
+    } catch (_) {}
     await proxy?.dispose();
   });
 

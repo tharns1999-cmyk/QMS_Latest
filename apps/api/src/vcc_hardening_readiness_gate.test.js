@@ -129,6 +129,8 @@ describe('VCC Phase 2.5: Final Hardening & Phase 3 Readiness Gate Tests', () => 
   const cleanDb = async () => {
     await env.DB.batch([
       ...dropHistoricalTriggers.map((s) => env.DB.prepare(s)),
+      env.DB.prepare('DELETE FROM vcc_work_order_amendments'),
+      env.DB.prepare('DELETE FROM vcc_work_order_certificates'),
       env.DB.prepare('DELETE FROM vcc_work_orders'),
       env.DB.prepare('DELETE FROM vcc_plan_cycles'),
       env.DB.prepare('DELETE FROM vcc_annual_plan_items'),
@@ -418,6 +420,8 @@ describe('VCC Phase 2.5: Final Hardening & Phase 3 Readiness Gate Tests', () => 
     expect(approveRes.status).toBe(200);
 
     // Now delete work orders to test from 0 work orders with 5 concurrent requests
+    await env.DB.prepare('DELETE FROM vcc_work_order_amendments').run().catch(() => {});
+    await env.DB.prepare('DELETE FROM vcc_work_order_certificates').run().catch(() => {});
     await env.DB.prepare("UPDATE vcc_work_orders SET status = 'CANCELLED'").run();
     await env.DB.prepare('DELETE FROM vcc_work_orders').run();
 
