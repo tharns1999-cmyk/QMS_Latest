@@ -49,6 +49,7 @@ export function createWranglerD1Adapter(options = {}) {
   const dbName = options.database || targetDb;
   const wranglerBin = options.wranglerBin || getWranglerBinPath();
   const cwd = options.cwd || apiDir;
+  const spawnFn = options.customSpawn || spawnSync;
 
   const baseArgs = [wranglerBin, 'd1', 'execute', dbName];
   if (options.remote ?? isRemote) {
@@ -78,7 +79,7 @@ export function createWranglerD1Adapter(options = {}) {
         },
         async all() {
           const execArgs = [...baseArgs, '--command', sql];
-          const proc = spawnSync(process.execPath, execArgs, {
+          const proc = spawnFn(process.execPath, execArgs, {
             cwd,
             encoding: 'utf-8',
             maxBuffer: 10 * 1024 * 1024

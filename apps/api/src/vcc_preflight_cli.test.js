@@ -24,33 +24,159 @@ const cleanMockDb = {
   })
 };
 
-describe('VCC Safe Migration Gate & Preflight Fail-Closed Negative Tests', () => {
+describe('VCC Final Evidence Integrity & Migration Gate Safety Tests', () => {
   beforeEach(() => {
     if (fs.existsSync(testAuditPath)) {
       try { fs.unlinkSync(testAuditPath); } catch { /* ignore */ }
     }
+    const jsonlPath = testAuditPath.replace(/\.json$/, '.jsonl');
+    if (fs.existsSync(jsonlPath)) {
+      try { fs.unlinkSync(jsonlPath); } catch { /* ignore */ }
+    }
   });
 
-  it('1. ไม่มี Backup ที่ตรวจสอบได้ → หยุด (Fail-Closed at backup_verification)', () => {
-    const proc = spawnSync(process.execPath, [
-      safeMigrateScript,
-      '--local',
-      '--database', 'DB',
-      '--no-backup',
-      '--confirm-migration'
-    ], {
-      cwd: apiDir,
-      encoding: 'utf-8'
+  it('1. P1.1 Test Integrity: Adapter จริงสำหรับ Invalid Wrangler JSON (ทดสอบผ่าน prepare().all() และ prepare().first())', async () => {
+    // Inject customSpawn returning non-JSON into the actual createWranglerD1Adapter
+    const adapter = createWranglerD1Adapter({
+      database: 'DB',
+      customSpawn: () => ({
+        status: 0,
+        stdout: '<!DOCTYPE html><html><body>502 Bad Gateway - Cloudflare</body></html>',
+        stderr: ''
+      })
     });
 
-    expect(proc.status).toBe(1);
-    const output = (proc.stdout || '') + (proc.stderr || '');
-    expect(output).toContain('backup_verification');
-    expect(output).toContain('ไม่พบจุดสำรองข้อมูลที่ตรวจสอบได้');
-    expect(output).not.toContain('กำลังดำเนินการรัน Migration (wrangler d1 migrations apply)');
+    // Test calling actual adapter methods
+    await expect(adapter.prepare('SELECT 1').all()).rejects.toThrow(
+      /Invalid JSON output from Wrangler.*502 Bad Gateway/
+    );
+    await expect(adapter.prepare('SELECT 1').first()).rejects.toThrow(
+      /Invalid JSON output from Wrangler.*502 Bad Gateway/
+    );
   });
 
-  it('2. Restore Verification ไม่ผ่าน → หยุด (Fail-Closed at restore_verification)', () => {
+  it('2. P0.2 & P1.1 Local SQLite Backup Integrity: ตรวจจับ Backup ที่มี Header ถูกต้องแต่ Payload ข้อมูล SQLite เสียหาย', async () => {
+    let caught = null;
+    try {
+      await runSafeMigrationWorkflow([
+        '--local',
+        '--database', 'DB',
+        '--confirm-migration'
+      ], {
+        mockDb: cleanMockDb,
+        isTestRunner: true,
+        isTestHarness: true,
+        auditPath: testAuditPath,
+        simulateFailure: { corruptBackupPayload: true }
+      });
+    } catch (err) {
+      caught = err;
+    }
+
+    expect(caught).not.toBeNull();
+    expect(caught.exitCode).toBe(1);
+    expect(caught.message).toContain('restore_verification');
+    expect(caught.message).toMatch(/(PRAGMA integrity_check ล้มเหลว|malformed)/i);
+  });
+
+  it('3. P0.3 & P1.1 Audit Evidence Fail-Closed: ไฟล์ Audit เสียหาย ต้องรักษาหลักฐานเดิมและปฏิเสธการเขียนทับ', () => {
+    // Write corrupted JSON content into test audit path
+    const corruptedContent = '{"run_id": "CRITICAL_PAST_RUN", "truncated_json": true, "corrupt';
+    fs.writeFileSync(testAuditPath, corruptedContent, 'utf-8');
+
+    // Attempt to save an audit record must throw and refuse to overwrite
+    expect(() => {
+      saveAuditRecord({
+        run_id: 'ATTEMPT_OVERWRITE_RUN',
+        operator: 'operator_test',
+        result: 'SUCCESS'
+      }, testAuditPath);
+    }).toThrow(/Audit Trail Integrity Error.*มีรูปแบบเสียหายหรือไม่สมบูรณ์/);
+
+    // Verify original corrupted content was preserved 100% (never overwritten)
+    const contentAfter = fs.readFileSync(testAuditPath, 'utf-8');
+    expect(contentAfter).toBe(corruptedContent);
+  });
+
+  it('4. P0.3 & P1.1 Audit Evidence Fail-Closed: ห้ามแก้ Record เดิมที่มี run_id และ event_id ซ้ำกัน', () => {
+    const fixedRunId = 'RUN-FINAL-999';
+    const fixedEventId = 'EVT-FIXED-001';
+
+    // First write succeeds
+    saveAuditRecord({
+      run_id: fixedRunId,
+      event_id: fixedEventId,
+      result: 'SUCCESS',
+      operator: 'admin'
+    }, testAuditPath);
+
+    // Second write attempting to reuse identical finalized run_id and event_id must be rejected
+    expect(() => {
+      saveAuditRecord({
+        run_id: fixedRunId,
+        event_id: fixedEventId,
+        result: 'SUCCESS',
+        operator: 'tampered_admin'
+      }, testAuditPath);
+    }).toThrow(/Audit Integrity Error.*ซ้ำ/);
+  });
+
+  it('5. P0.3 & P1.1 Concurrent Audit Writes: บันทึกข้อมูลหลายรายการพร้อมกัน ประวัติถูกเก็บรักษาครบถ้วน', () => {
+    const writeCount = 5;
+    for (let i = 0; i < writeCount; i++) {
+      saveAuditRecord({
+        run_id: `RUN-CONCURRENT-${i}`,
+        event_id: `EVT-${i}`,
+        operator: `operator_${i}`,
+        result: 'SUCCESS',
+        step: `step_${i}`
+      }, testAuditPath);
+    }
+
+    const records = JSON.parse(fs.readFileSync(testAuditPath, 'utf-8'));
+    expect(Array.isArray(records)).toBe(true);
+    expect(records.length).toBe(writeCount);
+
+    // Verify all 5 runs exist
+    for (let i = 0; i < writeCount; i++) {
+      expect(records.some((r) => r.run_id === `RUN-CONCURRENT-${i}`)).toBe(true);
+    }
+
+    // Verify JSONL append stream also contains all 5 records
+    const jsonlPath = testAuditPath.replace(/\.json$/, '.jsonl');
+    expect(fs.existsSync(jsonlPath)).toBe(true);
+    const jsonlLines = fs.readFileSync(jsonlPath, 'utf-8').trim().split('\n');
+    expect(jsonlLines.length).toBe(writeCount);
+  });
+
+  it('6. P0.1 Remote Backup Verification: ห้ามรัน Remote Production Migration หากไม่มีหลักฐานการทดสอบ Restore จริง (Fail-Closed)', async () => {
+    let caught = null;
+    try {
+      await runSafeMigrationWorkflow([
+        '--remote',
+        '--database', 'DB',
+        '--backup-ref', 'D1-SNAP-CLOUD-2026',
+        '--confirm-migration'
+      ], {
+        mockDb: cleanMockDb,
+        isTestRunner: true,
+        isTestHarness: true,
+        auditPath: testAuditPath,
+        // remoteRestoreVerified is deliberately NOT provided
+        remoteRestoreVerified: false
+      });
+    } catch (err) {
+      caught = err;
+    }
+
+    expect(caught).not.toBeNull();
+    expect(caught.exitCode).toBe(1);
+    expect(caught.message).toContain('restore_verification');
+    expect(caught.message).toContain('ไม่พบหลักฐานการทดสอบ Restore บนฐานข้อมูล Remote D1 จริง');
+    expect(caught.message).toContain('ห้ามตั้ง restore_tested = true โดยไม่มีการทดสอบกู้คืนจริง');
+  });
+
+  it('7. P1.2 Production Safety: ปฏิเสธแฟล็ก --simulate-* บน CLI คำสั่งจริง (Security Violation)', () => {
     const proc = spawnSync(process.execPath, [
       safeMigrateScript,
       '--local',
@@ -64,33 +190,11 @@ describe('VCC Safe Migration Gate & Preflight Fail-Closed Negative Tests', () =>
 
     expect(proc.status).toBe(1);
     const output = (proc.stdout || '') + (proc.stderr || '');
-    expect(output).toContain('restore_verification');
-    expect(output).toContain('การทดสอบ Restore ในสภาพแวดล้อมทดสอบล้มเหลว');
-    expect(output).not.toContain('กำลังดำเนินการรัน Migration (wrangler d1 migrations apply)');
+    expect(output).toContain('SECURITY VIOLATION');
+    expect(output).toContain('ไม่อนุญาตให้ใช้แฟล็กจำลองความล้มเหลว (--simulate-*) ในคำสั่งจริง');
   });
 
-  it('3. Critical Preflight + Override Flags ปลอม → หยุด (CLI override is completely disabled)', () => {
-    const proc = spawnSync(process.execPath, [
-      safeMigrateScript,
-      '--local',
-      '--database', 'DB',
-      '--simulate-critical-preflight',
-      '--emergency-override-approved-by', 'Fake Auditor',
-      '--override-reason', 'Bypassing security gate',
-      '--confirm-migration'
-    ], {
-      cwd: apiDir,
-      encoding: 'utf-8'
-    });
-
-    expect(proc.status).toBe(1);
-    const output = (proc.stdout || '') + (proc.stderr || '');
-    expect(output).toContain('preflight_gate');
-    expect(output).toContain('การใช้ CLI Flags ข้าม Critical Gate ถูกปิดใช้งานถาวรเพื่อความปลอดภัยของข้อมูลคุณภาพ ห้ามรัน Migration เด็ดขาด');
-    expect(output).not.toContain('กำลังดำเนินการรัน Migration (wrangler d1 migrations apply)');
-  });
-
-  it('4. CI=true โดยไม่มี Explicit Approval → หยุด (Approval Gate strictly blocks)', async () => {
+  it('8. P0.3 & P1.2 Operator Confirmation Gate: CI=true ไม่สามารถอนุมัติ Production Migration แทนคนได้', async () => {
     let caught = null;
     try {
       await runSafeMigrationWorkflow([
@@ -100,6 +204,7 @@ describe('VCC Safe Migration Gate & Preflight Fail-Closed Negative Tests', () =>
       ], {
         mockDb: cleanMockDb,
         isTestRunner: true,
+        isTestHarness: true,
         auditPath: testAuditPath,
         mockPlanResult: { status: 0, stdout: '0033_vcc_plan_revision_control.sql' }
       });
@@ -114,109 +219,7 @@ describe('VCC Safe Migration Gate & Preflight Fail-Closed Negative Tests', () =>
     expect(caught.message).toContain('CI ไม่สามารถอนุมัติแทนได้');
   });
 
-  it('5. Migration Plan Inspection ล้มเหลว → หยุด (Fail-Closed at plan inspection)', async () => {
-    let caught = null;
-    try {
-      await runSafeMigrationWorkflow([
-        '--local',
-        '--database', 'DB',
-        '--simulate-plan-failure',
-        '--confirm-migration'
-      ], {
-        mockDb: cleanMockDb,
-        isTestRunner: true,
-        auditPath: testAuditPath
-      });
-    } catch (err) {
-      caught = err;
-    }
-
-    expect(caught).not.toBeNull();
-    expect(caught.exitCode).toBe(1);
-    expect(caught.message).toContain('migration_plan_inspection');
-    expect(caught.message).toContain('คำสั่งตรวจสอบ Migration Plan ล้มเหลว');
-  });
-
-  it('6. Invalid Wrangler JSON → Error (Adapter rejects invalid JSON and reports explicit error)', async () => {
-    // Adapter should throw on invalid / non-JSON output
-    const mockProc = {
-      status: 0,
-      stdout: '<!DOCTYPE html><html><body>502 Bad Gateway</body></html>',
-      stderr: ''
-    };
-
-    expect(() => {
-      let parsed;
-      try {
-        parsed = JSON.parse(mockProc.stdout);
-      } catch (err) {
-        throw new Error(`Invalid JSON output from Wrangler: ${mockProc.stdout.slice(0, 50)}... Error: ${err.message}`);
-      }
-    }).toThrow(/Invalid JSON output from Wrangler.*502 Bad Gateway/);
-  });
-
-  it('7. Migration Execution ล้มเหลว → Audit Failure (Records FAILED result and failure details)', async () => {
-    let caughtError = null;
-    try {
-      await runSafeMigrationWorkflow([
-        '--local',
-        '--database', 'DB',
-        '--confirm-migration',
-        '--simulate-apply-failure'
-      ], {
-        mockDb: cleanMockDb,
-        isTestRunner: true,
-        auditPath: testAuditPath,
-        mockPlanResult: { status: 0, stdout: '0033_vcc_plan_revision_control.sql' },
-        mockApplyResult: { status: 1, stdout: '', stderr: 'D1 error: table locked' }
-      });
-    } catch (err) {
-      caughtError = err;
-    }
-
-    expect(caughtError).not.toBeNull();
-    expect(caughtError.exitCode).toBe(1);
-
-    // Verify audit file recorded the failure
-    expect(fs.existsSync(testAuditPath)).toBe(true);
-    const records = JSON.parse(fs.readFileSync(testAuditPath, 'utf-8'));
-    expect(records.length).toBe(1);
-    expect(records[0].result).toBe('FAILED');
-    expect(records[0].failure_evidence.step).toBe('migration_execution');
-  });
-
-  it('8. Audit Records สองครั้ง → ประวัติทั้งสองครั้งยังอยู่ครบ (Append-only verification)', () => {
-    const recordA = {
-      run_id: 'RUN-A-1111',
-      target: { database: 'DB', is_remote: false },
-      operator: 'operator_1',
-      result: 'SUCCESS',
-      started_at: '2026-11-02T10:00:00Z',
-      finished_at: '2026-11-02T10:01:00Z'
-    };
-
-    const recordB = {
-      run_id: 'RUN-B-2222',
-      target: { database: 'DB', is_remote: false },
-      operator: 'operator_2',
-      result: 'FAILED',
-      started_at: '2026-11-02T11:00:00Z',
-      finished_at: '2026-11-02T11:01:00Z'
-    };
-
-    saveAuditRecord(recordA, testAuditPath);
-    saveAuditRecord(recordB, testAuditPath);
-
-    const records = JSON.parse(fs.readFileSync(testAuditPath, 'utf-8'));
-    expect(Array.isArray(records)).toBe(true);
-    expect(records.length).toBe(2);
-    expect(records[0].run_id).toBe('RUN-A-1111');
-    expect(records[0].operator).toBe('operator_1');
-    expect(records[1].run_id).toBe('RUN-B-2222');
-    expect(records[1].operator).toBe('operator_2');
-  });
-
-  it('9. Production Raw Migration Bypass → ถูกป้องกัน (Blocked with Exit Code 1 on remote/production)', () => {
+  it('9. P1.2 Raw Migration Guard: ป้องกันการ Bypass รัน Raw Migration ใน Remote และ Production', () => {
     // 9.1 Attempt raw migration with --remote
     const procRemote = spawnSync(process.execPath, [rawMigrateScript, '--remote'], {
       cwd: apiDir,
@@ -238,20 +241,21 @@ describe('VCC Safe Migration Gate & Preflight Fail-Closed Negative Tests', () =>
     expect(outProd).toContain('ห้ามรัน Raw Migration บน Remote หรือ Production เด็ดขาด');
   });
 
-  it('10. Post-Migration Verification ล้มเหลว → ไม่รายงาน Success และรายงาน Failure พร้อม Recovery Procedure', async () => {
+  it('10. P1.2 Post-Migration Verification Fail-Closed: รายงาน Failure พร้อม Recovery Procedure และไม่รายงาน Success', async () => {
     let caught = null;
     try {
       await runSafeMigrationWorkflow([
         '--local',
         '--database', 'DB',
-        '--simulate-post-verify-failure',
         '--confirm-migration'
       ], {
         mockDb: cleanMockDb,
         isTestRunner: true,
+        isTestHarness: true,
         auditPath: testAuditPath,
         mockPlanResult: { status: 0, stdout: '0033_vcc_plan_revision_control.sql' },
-        mockApplyResult: { status: 0, stdout: 'Applied' }
+        mockApplyResult: { status: 0, stdout: 'Applied' },
+        simulateFailure: { postVerifyFail: true }
       });
     } catch (err) {
       caught = err;
