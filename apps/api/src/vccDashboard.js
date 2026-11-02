@@ -1,4 +1,5 @@
 import { requireVccAccess, requireDccOnly } from './vccAuth.js';
+import { isUserAuthorizedForPlanDept } from './vccPlans.js';
 
 const NOW = "strftime('%Y-%m-%dT%H:%M:%SZ', 'now')";
 const DCC_ONLY = { error: 'เฉพาะเจ้าหน้าที่ DCC เท่านั้นที่ได้รับอนุญาตให้ใช้งานส่วนนี้' };
@@ -257,9 +258,9 @@ export const registerVccDashboardRoutes = (app, { requireAuth, audit }) => {
       }
     }
 
-    // Monthly Plan vs Act for selected year (only APPROVED plans count toward official Plan)
+    // Monthly Plan vs Act for selected year (only CURRENT APPROVED plans count toward official Plan)
     const { results: approvedPlans } = await db
-      .prepare("SELECT id, plan_year, department, revision, status FROM vcc_annual_plans WHERE plan_year = ? AND status = 'APPROVED'")
+      .prepare("SELECT id, plan_year, department, revision, status FROM vcc_annual_plans WHERE plan_year = ? AND status = 'APPROVED' AND (effective_status = 'CURRENT' OR (effective_status IS NULL AND is_current = 1))")
       .bind(year)
       .all();
 
@@ -401,12 +402,36 @@ export const registerVccDashboardRoutes = (app, { requireAuth, audit }) => {
     const db = c.env.DB;
     const user = c.get('user');
     const year = Number(c.req.query('year') || 2026);
+    const department = c.req.query('department') ? String(c.req.query('department')).trim().toUpperCase() : null;
+    const revision = c.req.query('revision') ? String(c.req.query('revision')).trim() : null;
+    const effectiveStatus = c.req.query('effective_status') ? String(c.req.query('effective_status')).trim().toUpperCase() : null;
 
-    const plan = await db
-      .prepare('SELECT * FROM vcc_annual_plans WHERE plan_year = ? ORDER BY revision DESC LIMIT 1')
-      .bind(year)
-      .first();
+    let query = 'SELECT * FROM vcc_annual_plans WHERE plan_year = ?';
+    const params = [year];
+
+    if (department) {
+      query += ' AND department = ?';
+      params.push(department);
+    }
+    if (revision) {
+      query += ' AND revision = ?';
+      params.push(revision);
+    }
+    if (effectiveStatus) {
+      query += ' AND effective_status = ?';
+      params.push(effectiveStatus);
+    } else if (!revision) {
+      query += " AND (effective_status = 'CURRENT' OR status = 'APPROVED')";
+    }
+
+    query += ' ORDER BY CAST(revision AS INTEGER) DESC, revision DESC LIMIT 1';
+
+    const plan = await db.prepare(query).bind(...params).first();
     if (!plan) return c.json({ error: `ไม่พบแผนประจำปี ${year}` }, 404);
+
+    if (!isUserAuthorizedForPlanDept(user, plan.department)) {
+      return c.json({ error: 'ไม่มีสิทธิ์ดาวน์โหลดแผนประจำปีของแผนกนี้' }, 403);
+    }
 
     const { results: items } = await db
       .prepare(

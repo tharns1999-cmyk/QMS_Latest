@@ -75,6 +75,7 @@ describe('VCC Phase 3 — Work Orders, Execution, Review, Close & Hold/NC Contro
     const submitResultBtn = await screen.findByRole('button', { name: /ส่งผลให้ผู้ตรวจรับพิจารณา/i });
     expect(submitResultBtn).toBeDisabled();
 
+    fireEvent.change(screen.getByLabelText(/วันที่ทวนสอบจริง/i), { target: { value: '2026-03-25' } });
     fireEvent.change(screen.getByLabelText(/เลขที่ใบรับรอง/i), { target: { value: 'CERT-ST002-2026' } });
     expect(submitResultBtn).not.toBeDisabled();
     fireEvent.click(submitResultBtn);

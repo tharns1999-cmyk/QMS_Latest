@@ -71,16 +71,70 @@ describe('VCC Phase 2.5: Stable Planned Cycle Identity, Reconciliation & E2E Ver
     }
   });
 
+  const dropHistoricalTriggers = [
+    'DROP TRIGGER IF EXISTS trg_prevent_tamper_approved_annual_plan',
+    'DROP TRIGGER IF EXISTS trg_prevent_delete_approved_annual_plan',
+    'DROP TRIGGER IF EXISTS trg_prevent_delete_approved_plan_item',
+    'DROP TRIGGER IF EXISTS trg_prevent_update_approved_plan_item',
+    'DROP TRIGGER IF EXISTS trg_prevent_delete_closed_work_order',
+    'DROP TRIGGER IF EXISTS trg_prevent_delete_closed_plan_cycle'
+  ];
+
+  const createHistoricalTriggers = [
+    `CREATE TRIGGER IF NOT EXISTS trg_prevent_delete_approved_annual_plan
+     BEFORE DELETE ON vcc_annual_plans
+     FOR EACH ROW WHEN OLD.status = 'APPROVED'
+     BEGIN SELECT RAISE(ABORT, 'Cannot delete an APPROVED annual plan. QMS integrity violation.'); END;`,
+    `CREATE TRIGGER IF NOT EXISTS trg_prevent_delete_approved_plan_item
+     BEFORE DELETE ON vcc_annual_plan_items
+     FOR EACH ROW WHEN (SELECT status FROM vcc_annual_plans WHERE id = OLD.plan_id) = 'APPROVED'
+     BEGIN SELECT RAISE(ABORT, 'Cannot delete items from an APPROVED annual plan. QMS integrity violation.'); END;`,
+    `CREATE TRIGGER IF NOT EXISTS trg_prevent_update_approved_plan_item
+     BEFORE UPDATE ON vcc_annual_plan_items
+     FOR EACH ROW WHEN (SELECT status FROM vcc_annual_plans WHERE id = OLD.plan_id) = 'APPROVED'
+     BEGIN SELECT RAISE(ABORT, 'Cannot modify items of an APPROVED annual plan. QMS integrity violation.'); END;`,
+    `CREATE TRIGGER IF NOT EXISTS trg_prevent_delete_closed_work_order
+     BEFORE DELETE ON vcc_work_orders
+     FOR EACH ROW WHEN OLD.status = 'CLOSED' OR OLD.certificate_no IS NOT NULL
+     BEGIN SELECT RAISE(ABORT, 'Cannot delete a CLOSED work order or a work order with certificate evidence. QMS integrity violation.'); END;`,
+    `CREATE TRIGGER IF NOT EXISTS trg_prevent_delete_closed_plan_cycle
+     BEFORE DELETE ON vcc_plan_cycles
+     FOR EACH ROW WHEN OLD.cycle_status = 'CLOSED' OR EXISTS (SELECT 1 FROM vcc_work_orders WHERE cycle_id = OLD.id AND status = 'CLOSED')
+     BEGIN SELECT RAISE(ABORT, 'Cannot delete a cycle with CLOSED work order or closed cycle status. QMS integrity violation.'); END;`,
+    `CREATE TRIGGER IF NOT EXISTS trg_prevent_tamper_approved_annual_plan
+     BEFORE UPDATE ON vcc_annual_plans
+     FOR EACH ROW
+     WHEN OLD.status = 'APPROVED' AND (
+       NEW.status != 'APPROVED' OR
+       NEW.plan_year != OLD.plan_year OR
+       NEW.department != OLD.department OR
+       NEW.revision != OLD.revision OR
+       NEW.document_code != OLD.document_code OR
+       NEW.due_date_rule != OLD.due_date_rule OR
+       NEW.parent_plan_id IS NOT OLD.parent_plan_id OR
+       NEW.revision_reason IS NOT OLD.revision_reason OR
+       NEW.prepared_by IS NOT OLD.prepared_by OR
+       NEW.prepared_at IS NOT OLD.prepared_at OR
+       NEW.reviewed_by IS NOT OLD.reviewed_by OR
+       NEW.reviewed_at IS NOT OLD.reviewed_at OR
+       NEW.approved_by IS NOT OLD.approved_by OR
+       NEW.approved_at IS NOT OLD.approved_at OR
+       NEW.title IS NOT OLD.title OR
+       NEW.effective_status = 'PENDING' OR
+       (OLD.effective_status = 'SUPERSEDED' AND NEW.effective_status != 'SUPERSEDED')
+     )
+     BEGIN SELECT RAISE(ABORT, 'Cannot alter status, core identity, or historical evidence of an APPROVED annual plan. QMS integrity violation.'); END;`
+  ];
+
   const cleanDb = async () => {
     await env.DB.batch([
-      env.DB.prepare("UPDATE vcc_annual_plans SET status = 'DRAFT'"),
-      env.DB.prepare("UPDATE vcc_work_orders SET status = 'CANCELLED', certificate_no = NULL"),
-      env.DB.prepare("UPDATE vcc_plan_cycles SET cycle_status = 'CANCELLED'"),
+      ...dropHistoricalTriggers.map((s) => env.DB.prepare(s)),
       env.DB.prepare('DELETE FROM vcc_work_orders'),
       env.DB.prepare('DELETE FROM vcc_plan_cycles'),
       env.DB.prepare('DELETE FROM vcc_annual_plan_items'),
       env.DB.prepare('DELETE FROM vcc_annual_plans'),
-      env.DB.prepare('DELETE FROM vcc_assets')
+      env.DB.prepare('DELETE FROM vcc_assets'),
+      ...createHistoricalTriggers.map((s) => env.DB.prepare(s))
     ]);
   };
 
