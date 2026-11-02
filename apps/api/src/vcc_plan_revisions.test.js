@@ -1741,31 +1741,39 @@ describe('VCC Phase 3.1: Plan Revision Foundation & Diff Engine Tests', () => {
     expect(pdWoReschedule.status).toBe(403);
   });
 
-  it('37. Integration Test (Point 1): Historical Integrity & Migration 0035 Proof', async () => {
-    // 1. Insert a simulated unapproved plan with illegal CURRENT status (legacy corrupted record)
+  it('37. Integration Test (Point 1): Migration 0035 Indexing, Trigger 0034 Safety & Preflight Proof', async () => {
+    // 1. Verify Migration 0035 indexes exist and do not conflict with Trigger 0034
+    const initialIndex = await env.DB.prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'idx_vcc_plan_cycles_initial'").first();
+    expect(initialIndex).toBeTruthy();
+
+    const woIndex = await env.DB.prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'idx_vcc_wo_plan_year_dept'").first();
+    expect(woIndex).toBeTruthy();
+
+    // 2. Trigger 0034 is active and strictly protects APPROVED plans from being altered to PENDING
+    const { planId: approvedPlanId } = await setupApprovedRev00Plan(2030);
+
+    let triggerFired = false;
+    try {
+      await env.DB.prepare("UPDATE vcc_annual_plans SET effective_status = 'PENDING' WHERE id = ?").bind(approvedPlanId).run();
+    } catch (err) {
+      triggerFired = true;
+      expect(err.message).toContain('Cannot alter status, core identity, or historical evidence');
+    }
+    expect(triggerFired).toBe(true);
+
+    // 3. Preflight validation detects anomalous unapproved / incomplete plans without modifying them
     const badPlanId = crypto.randomUUID();
     await env.DB.prepare(`
       INSERT INTO vcc_annual_plans (
         id, plan_year, department, revision, title, status, effective_status, is_current,
         created_at, updated_at
-      ) VALUES (?, 2029, 'QA', '00', 'แผนร่างจำลองตกค้าง', 'DRAFT', 'CURRENT', 1, 'now', 'now')
+      ) VALUES (?, 2031, 'QA', '00', 'แผนจำลองขาดผู้อนุมัติ', 'APPROVED', 'CURRENT', 1, 'now', 'now')
     `).bind(badPlanId).run();
 
-    // 2. Execute Migration 0035 query
-    await env.DB.prepare(`
-      UPDATE vcc_annual_plans
-      SET effective_status = 'PENDING',
-          is_current = 0
-      WHERE (status != 'APPROVED' OR approved_at IS NULL OR approved_by IS NULL)
-        AND effective_status IN ('CURRENT', 'SUPERSEDED')
-    `).run();
-
-    // 3. Verify: Unapproved plan is safely reset to PENDING and is_current = 0
-    const fixedPlan = await env.DB.prepare('SELECT status, effective_status, is_current FROM vcc_annual_plans WHERE id = ?').bind(badPlanId).first();
-    expect(fixedPlan.effective_status).toBe('PENDING');
-    expect(fixedPlan.is_current).toBe(0);
-
-    // Clean up
-    await env.DB.prepare('DELETE FROM vcc_annual_plans WHERE id = ?').bind(badPlanId).run();
+    const { validateVccMigrationPreflight } = await import('./vccPreflight.js');
+    const preflight = await validateVccMigrationPreflight(env.DB);
+    expect(preflight.isValid).toBe(false);
+    expect(preflight.violations.some((v) => v.planId === badPlanId && v.type === 'APPROVED_MISSING_APPROVER')).toBe(true);
+    expect(preflight.reportText).toContain('VCC Preflight Diagnostic Report');
   });
 });
