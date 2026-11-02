@@ -85,7 +85,8 @@ describe('VCC Safe Migration Gate & Preflight Fail-Closed Negative Tests', () =>
     const proc = spawnSync(process.execPath, [
       safeMigrateScript,
       '--local',
-      '--database', 'DB'
+      '--database', 'DB',
+      '--persist-to', '.wrangler/test'
       // deliberately omitting --confirm-migration
     ], {
       cwd: apiDir,
@@ -105,6 +106,7 @@ describe('VCC Safe Migration Gate & Preflight Fail-Closed Negative Tests', () =>
       safeMigrateScript,
       '--local',
       '--database', 'DB',
+      '--persist-to', '.wrangler/test',
       '--simulate-plan-failure',
       '--confirm-migration'
     ], {
@@ -238,6 +240,7 @@ describe('VCC Safe Migration Gate & Preflight Fail-Closed Negative Tests', () =>
       safeMigrateScript,
       '--local',
       '--database', 'DB',
+      '--persist-to', '.wrangler/test',
       '--simulate-post-verify-failure',
       '--confirm-migration'
     ], {

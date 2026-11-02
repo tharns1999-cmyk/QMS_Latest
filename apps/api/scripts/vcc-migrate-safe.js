@@ -70,19 +70,24 @@ export function saveAuditRecord(record, customAuditPath = null) {
 
 // Helper to find the active SQLite database file for local D1
 export function findLocalSqliteDbPath(persistDir) {
-  const baseDir = persistDir
-    ? path.resolve(apiDir, persistDir)
-    : path.resolve(apiDir, '.wrangler/state');
+  const candidates = [];
+  if (persistDir) {
+    candidates.push(path.resolve(apiDir, persistDir));
+  }
+  candidates.push(path.resolve(apiDir, '.wrangler/test'));
+  candidates.push(path.resolve(apiDir, '.wrangler/state'));
 
-  const d1Dir = path.resolve(baseDir, 'v3/d1/miniflare-D1DatabaseObject');
-  if (!fs.existsSync(d1Dir)) return null;
-
-  const files = fs.readdirSync(d1Dir);
-  for (const f of files) {
-    if (f.endsWith('.sqlite') && f !== 'metadata.sqlite') {
-      const fullPath = path.resolve(d1Dir, f);
-      const stat = fs.statSync(fullPath);
-      if (stat.size > 0) return fullPath;
+  for (const baseDir of candidates) {
+    const d1Dir = path.resolve(baseDir, 'v3/d1/miniflare-D1DatabaseObject');
+    if (fs.existsSync(d1Dir)) {
+      const files = fs.readdirSync(d1Dir);
+      for (const f of files) {
+        if (f.endsWith('.sqlite') && f !== 'metadata.sqlite') {
+          const fullPath = path.resolve(d1Dir, f);
+          const stat = fs.statSync(fullPath);
+          if (stat.size > 0) return fullPath;
+        }
+      }
     }
   }
   return null;
@@ -92,7 +97,10 @@ export async function runSafeMigrationWorkflow(cliArgs = process.argv.slice(2), 
   const rawArgs = cliArgs;
   const isRemote = rawArgs.includes('--remote');
   const persistIndex = rawArgs.indexOf('--persist-to');
-  const persistDir = persistIndex !== -1 ? rawArgs[persistIndex + 1] : null;
+  let persistDir = persistIndex !== -1 ? rawArgs[persistIndex + 1] : null;
+  if (!persistDir && (process.env.VITEST || process.env.NODE_ENV === 'test' || process.env.CI === 'true') && fs.existsSync(path.resolve(apiDir, '.wrangler/test'))) {
+    persistDir = '.wrangler/test';
+  }
   const envIndex = rawArgs.indexOf('--env');
   const targetEnv = envIndex !== -1 ? rawArgs[envIndex + 1] : null;
   const dbIndex = rawArgs.indexOf('--database');

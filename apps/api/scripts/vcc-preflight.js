@@ -23,7 +23,10 @@ const apiDir = path.resolve(__dirname, '..');
 const rawArgs = process.argv.slice(2);
 const isRemote = rawArgs.includes('--remote');
 const persistIndex = rawArgs.indexOf('--persist-to');
-const persistDir = persistIndex !== -1 ? rawArgs[persistIndex + 1] : null;
+let persistDir = persistIndex !== -1 ? rawArgs[persistIndex + 1] : null;
+if (!persistDir && (process.env.VITEST || process.env.NODE_ENV === 'test' || process.env.CI === 'true') && fs.existsSync(path.resolve(apiDir, '.wrangler/test'))) {
+  persistDir = '.wrangler/test';
+}
 const envIndex = rawArgs.indexOf('--env');
 const targetEnv = envIndex !== -1 ? rawArgs[envIndex + 1] : null;
 const dbIndex = rawArgs.indexOf('--database');
