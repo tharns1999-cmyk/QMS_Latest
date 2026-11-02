@@ -6,6 +6,7 @@ import { hashPassword, verifyPassword } from './password.js';
 import { checkDecisionRights, getThresholds } from './approval.js';
 import { newSecret, verifyCode, otpauthUri } from './totp.js';
 import { registerVccRoutes } from './vcc.js';
+import { runVccNotificationSweep } from './vccNotifications.js';
 
 const MAX_FAILED_LOGINS = 5;
 const TOKEN_TTL_SECONDS = 8 * 60 * 60;
@@ -1463,5 +1464,19 @@ registerVccRoutes(app, { requireAuth, audit });
 export default {
   fetch: app.fetch,
   request: app.request,
-  scheduled: (event, env, ctx) => ctx.waitUntil(activateDue(env.DB))
+  scheduled: (event, env, ctx) =>
+    ctx.waitUntil(
+      (async () => {
+        try {
+          await activateDue(env.DB);
+        } catch (err) {
+          console.error('activateDue cron error:', err);
+        }
+        try {
+          await runVccNotificationSweep(env.DB);
+        } catch (err) {
+          console.error('runVccNotificationSweep cron error:', err);
+        }
+      })()
+    )
 };

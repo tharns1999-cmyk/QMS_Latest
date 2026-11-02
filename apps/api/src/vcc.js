@@ -2,6 +2,7 @@
 import { registerVccPlanRoutes } from './vccPlans.js';
 import { registerVccWorkOrderRoutes } from './vccWorkOrders.js';
 import { registerVccDashboardRoutes } from './vccDashboard.js';
+import { registerVccNotificationRoutes } from './vccNotifications.js';
 import { requireVccAccess, requireDccOnly } from './vccAuth.js';
 
 const DCC_ONLY = { error: 'เฉพาะ DCC เท่านั้นที่ใช้งานส่วนนี้ได้' };
@@ -408,5 +409,6 @@ export const registerVccRoutes = (app, { requireAuth, audit }) => {
   registerVccPlanRoutes(app, { requireAuth, audit });
   registerVccWorkOrderRoutes(app, { requireAuth, audit });
   registerVccDashboardRoutes(app, { requireAuth, audit });
+  registerVccNotificationRoutes(app, { requireAuth, audit });
 };
 
