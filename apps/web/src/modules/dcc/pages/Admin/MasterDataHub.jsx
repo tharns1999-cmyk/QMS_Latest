@@ -42,6 +42,7 @@ import { generateCursiveSignatureDataUrl } from '../../utils/pdfStamper';
 import { isApiMode } from '../../../../api/client';
 import * as serverData from '../../../../api/masterData';
 import { PasswordNotice, SecurityTab } from './ApiMasterData';
+import { isSystemAdmin } from '../../../admin/adminAccess';
 
 const MasterDataHub = () => {
   const navigate = useNavigate();
@@ -254,8 +255,8 @@ const MasterDataHub = () => {
     description: ''
   });
 
-  // Access Control: Only DCC Admin or Super Admin
-  const isAdmin = currentUser?.isDcc || currentUser?.role === 'DCC_ADMIN' || currentUser?.role === 'SUPER_ADMIN';
+  // Access Control: system administrators only (the same rule as the /admin route guard)
+  const isAdmin = isSystemAdmin(currentUser);
 
   // Fallback dept list — sourced from registry (no hardcoded dept objects)
   const departmentsList = useMemo(() => {
@@ -1007,9 +1008,10 @@ const MasterDataHub = () => {
       <div className="flex items-center justify-between gap-3 h-11">
         <div className="flex items-center gap-2.5 min-w-0">
           <button
-            onClick={() => navigate('/dcc/dashboard')}
+            onClick={() => navigate('/portal')}
             className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors shrink-0"
-            title="กลับ Dashboard"
+            title="กลับพอร์ทัล"
+            aria-label="กลับพอร์ทัล"
           >
             <ArrowLeft size={16} />
           </button>
@@ -1059,40 +1061,59 @@ const MasterDataHub = () => {
       </div>
 
       {/* 2. Modern Linear-Style Segmented Tabs */}
-      <div className="flex items-center gap-1 p-1 bg-slate-100/90 rounded-xl border border-slate-200/80 overflow-x-auto scrollbar-none">
+      <div className="flex flex-wrap items-stretch gap-2">
         {[
-          { id: 'users', label: 'ผู้ใช้งาน (Users)', legacyLabel: '1. ผู้ใช้งานและสิทธิ์', icon: Users, count: (masterUsers || []).length },
-          { id: 'departments', label: 'แผนก (Departments)', legacyLabel: '2. แผนกและโครงสร้าง', icon: Building2, count: departmentsList.length },
-          { id: 'docTypes', label: 'ประเภทเอกสาร (Doc Types)', legacyLabel: '3. ประเภทเอกสารและรหัส', icon: FileCode, count: (documentTypes || []).length },
-          { id: 'locations', label: 'จุดใช้งาน (Stations)', legacyLabel: '4. จุดใช้งานและไลน์ผลิต', icon: MapPin, count: (distributionLocations || []).length },
-          { id: 'sla', label: 'สายอนุมัติ & SLA', legacyLabel: '5. สายการอนุมัติและ SLAs', icon: Clock },
-          ...(isApiMode ? [{ id: 'security', label: 'ความปลอดภัย (2FA)', icon: ShieldCheck }] : [])
-        ].map(tab => {
-          const Icon = tab.icon;
-          const isActive = activeTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 h-8 px-3 rounded-lg text-xs font-medium transition-all whitespace-nowrap shrink-0 ${
-                isActive
-                  ? 'bg-white text-slate-900 shadow-2xs font-semibold'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
-              }`}
-            >
-              <Icon size={14} className={isActive ? 'text-sky-600' : 'text-slate-400'} />
-              <span>{tab.label}</span>
-              <span className="sr-only">{tab.legacyLabel}</span>
-              {tab.count !== undefined && (
-                <span className={`text-[11px] font-mono px-1.5 py-0.2 rounded-full ${
-                  isActive ? 'bg-sky-100 text-sky-700 font-semibold' : 'bg-slate-200/70 text-slate-600'
-                }`}>
-                  {tab.count}
-                </span>
-              )}
-            </button>
-          );
-        })}
+          {
+            id: 'core',
+            label: 'ข้อมูลระบบกลาง',
+            tabs: [
+              { id: 'users', label: 'ผู้ใช้งาน (Users)', legacyLabel: '1. ผู้ใช้งานและสิทธิ์', icon: Users, count: (masterUsers || []).length },
+              { id: 'departments', label: 'แผนก (Departments)', legacyLabel: '2. แผนกและโครงสร้าง', icon: Building2, count: departmentsList.length },
+              ...(isApiMode ? [{ id: 'security', label: 'ความปลอดภัย (2FA)', icon: ShieldCheck }] : [])
+            ]
+          },
+          {
+            id: 'dcc',
+            label: 'ข้อมูลเฉพาะงานเอกสาร DCC',
+            tabs: [
+              { id: 'docTypes', label: 'ประเภทเอกสาร (Doc Types)', legacyLabel: '3. ประเภทเอกสารและรหัส', icon: FileCode, count: (documentTypes || []).length },
+              { id: 'locations', label: 'จุดใช้งาน (Stations)', legacyLabel: '4. จุดใช้งานและไลน์ผลิต', icon: MapPin, count: (distributionLocations || []).length },
+              { id: 'sla', label: 'สายอนุมัติ & SLA', legacyLabel: '5. สายการอนุมัติและ SLAs', icon: Clock }
+            ]
+          }
+        ].map(group => (
+          <div key={group.id} role="group" aria-label={group.label} className="min-w-0 max-w-full space-y-1">
+            <div className="px-1 text-[10.5px] font-semibold uppercase tracking-wider text-slate-400 select-none">{group.label}</div>
+            <div className="flex items-center gap-1 p-1 bg-slate-100/90 rounded-xl border border-slate-200/80 overflow-x-auto scrollbar-none">
+              {group.tabs.map(tab => {
+                const Icon = tab.icon;
+                const isActive = activeTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`flex items-center gap-2 h-8 px-3 rounded-lg text-xs font-medium transition-all whitespace-nowrap shrink-0 ${
+                      isActive
+                        ? 'bg-white text-slate-900 shadow-2xs font-semibold'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                    }`}
+                  >
+                    <Icon size={14} className={isActive ? 'text-sky-600' : 'text-slate-400'} />
+                    <span>{tab.label}</span>
+                    <span className="sr-only">{tab.legacyLabel}</span>
+                    {tab.count !== undefined && (
+                      <span className={`text-[11px] font-mono px-1.5 py-0.2 rounded-full ${
+                        isActive ? 'bg-sky-100 text-sky-700 font-semibold' : 'bg-slate-200/70 text-slate-600'
+                      }`}>
+                        {tab.count}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </div>
 
       {/* Content Container */}

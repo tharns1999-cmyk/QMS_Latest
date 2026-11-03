@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import useStore from '../../store/useStore';
 import toast from 'react-hot-toast';
+import { isSystemAdmin } from '../../modules/admin/adminAccess';
 
 /**
  * Route Guard for Role-Based Access Control (RBAC)
@@ -10,7 +11,7 @@ import toast from 'react-hot-toast';
  * @param {boolean} [props.requireDcc=false] - Requires DCC staff or DCC admin
  * @param {boolean} [props.requireVcc=false] - Requires VCC authorized staff (DCC, QC, QA, QMR)
  * @param {string[]} [props.allowedDepartments=null] - Allowed department codes
- * @param {boolean} [props.requireAdmin=false] - Requires DCC admin or Super admin
+ * @param {boolean} [props.requireAdmin=false] - Requires a system administrator (isSystemAdmin); DCC staff are not admins
  * @param {string} [props.redirectPath='/dcc/dashboard'] - Target path on denial
  * @param {string} [props.deniedToastMessage] - Custom toast message when access is denied
  */
@@ -30,12 +31,6 @@ export const ProtectedRoute = ({
     currentUser?.isDcc || 
     currentUser?.role === 'DCC_ADMIN' || 
     currentUser?.role === 'DCC_STAFF'
-  );
-
-  const isDccAdmin = Boolean(
-    currentUser?.role === 'DCC_ADMIN' || 
-    currentUser?.role === 'SUPER_ADMIN' || 
-    currentUser?.isDcc
   );
 
   const userDepts = [
@@ -61,7 +56,7 @@ export const ProtectedRoute = ({
   let fallbackMessage = 'คุณไม่มีสิทธิ์เข้าถึงหน้านี้';
 
   if (requireAdmin) {
-    if (!isDccAdmin) {
+    if (!isSystemAdmin(currentUser)) {
       isAllowed = false;
       fallbackMessage = deniedToastMessage || 'คุณไม่มีสิทธิ์เข้าถึงศูนย์จัดการข้อมูลหลัก';
     }

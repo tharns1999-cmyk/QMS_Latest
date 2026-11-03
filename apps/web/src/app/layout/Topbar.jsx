@@ -14,8 +14,9 @@ const ROUTE_METADATA = {
   '/dcc/controlled-copy': { title: 'ทะเบียนสำเนาควบคุม', subtitle: 'Controlled Copies' },
   '/dcc/external-docs': { title: 'คลังเอกสารภายนอก', subtitle: 'External Documents' },
   '/dcc/periodic-reviews': { title: 'การทบทวนตามรอบ', subtitle: 'Periodic Document Reviews' },
-  '/dcc/admin/master-data': { title: 'จัดการข้อมูลหลัก', subtitle: 'Master Data Hub' },
-  '/dcc/admin/action-log': { title: 'ประวัติการทำงาน', subtitle: 'System Audit Trail' }
+  '/admin': { title: 'ศูนย์บริหารระบบ', subtitle: 'System Administration' },
+  '/admin/master-data': { title: 'ศูนย์บริหารระบบ • ข้อมูลหลัก', subtitle: 'System Administration • Master Data' },
+  '/admin/audit-log': { title: 'ศูนย์บริหารระบบ • ประวัติการดำเนินการ', subtitle: 'System Administration • Audit Trail' }
 };
 
 const Topbar = () => {
@@ -23,7 +24,7 @@ const Topbar = () => {
   const navigate = useNavigate();
   const { currentUser } = useStore();
 
-  const currentRoute = ROUTE_METADATA[location.pathname] || {
+  const currentRoute = ROUTE_METADATA[location.pathname.replace(/\/+$/, '') || '/'] || {
     title: 'ระบบควบคุมเอกสารคุณภาพ',
     subtitle: 'QMS Enterprise Portal'
   };

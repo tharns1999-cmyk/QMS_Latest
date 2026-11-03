@@ -1,4 +1,6 @@
-import { Library, Wrench } from 'lucide-react';
+import { Library, Wrench, Settings } from 'lucide-react';
+import { isSystemAdmin } from '../admin/adminAccess';
+import { ADMIN_MASTER_DATA } from '../admin/adminRoutes';
 
 export const MODULE_STATUS = {
   ACTIVE: 'ACTIVE',
@@ -7,6 +9,7 @@ export const MODULE_STATUS = {
 
 export const isUserAuthorizedForModule = (module, user) => {
   if (!module) return false;
+  if (module.adminOnly) return isSystemAdmin(user);
   if (!module.allowedDepartments && !module.dccOnly) return true;
   if (!user) return false;
   if (user.isDcc || user.isQmr) return true;
@@ -42,5 +45,15 @@ export const moduleRegistry = [
     icon: Wrench,
     allowedDepartments: ['DC', 'QC', 'QA', 'MGT', 'LB'],
     order: 2
+  },
+  {
+    moduleId: 'admin',
+    name: 'ศูนย์บริหารระบบ (System Administration)',
+    description: 'จัดการข้อมูลหลัก ผู้ใช้งาน แผนก ความปลอดภัย และตรวจสอบประวัติการดำเนินการของทุกระบบ สำหรับผู้ดูแลระบบเท่านั้น',
+    status: MODULE_STATUS.ACTIVE,
+    route: ADMIN_MASTER_DATA,
+    icon: Settings,
+    adminOnly: true,
+    order: 3
   }
 ];

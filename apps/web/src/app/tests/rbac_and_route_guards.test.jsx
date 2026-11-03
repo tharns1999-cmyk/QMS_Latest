@@ -141,8 +141,9 @@ describe('System-Wide RBAC, Route Guards & Dynamic User-Switching Tests', () => 
       );
 
       expect(screen.getByText('ทะเบียนสำเนาควบคุม')).toBeInTheDocument();
-      expect(screen.getByText('จัดการข้อมูลหลัก')).toBeInTheDocument();
-      expect(screen.getByText('ประวัติการดำเนินการ (Audit Trail)')).toBeInTheDocument();
+      // Admin menus moved to the /admin module; DCC no longer lists them
+      expect(screen.queryByText('จัดการข้อมูลหลัก')).not.toBeInTheDocument();
+      expect(screen.queryByText('ประวัติการดำเนินการ (Audit Trail)')).not.toBeInTheDocument();
       expect(screen.getByTitle(/ล้างข้อมูลจำลอง/)).toBeInTheDocument();
     });
 
