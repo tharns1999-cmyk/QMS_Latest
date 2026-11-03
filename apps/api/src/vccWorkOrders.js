@@ -1224,13 +1224,18 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
       return c.json({ error: 'วันครบกำหนดใหม่ไม่ถูกต้องตามปฏิทิน' }, 400);
     }
     if (!reason) return c.json({ error: 'กรุณาระบุเหตุผลในการขอเลื่อนวันครบกำหนด' }, 400);
+    if (newDueDate === existing.due_date) {
+      return c.json({ error: 'วันครบกำหนดใหม่ตรงกับวันครบกำหนดปัจจุบัน ไม่มีการเปลี่ยนแปลง' }, 400);
+    }
 
+    // A reschedule leaves the status unchanged, so the guard is the due date this request was based on: a second
+    // request built on the same old date (double click, concurrent) finds it already moved and gets 409.
     const conflict = await runTransition(c, db, [
       db.prepare(`
         UPDATE vcc_work_orders
         SET scheduled_date = ?, due_date = ?, reschedule_reason = ?, updated_at = ${NOW}, updated_by = ?
-        WHERE id = ? AND status = ?
-      `).bind(newDueDate, newDueDate, reason, user.id, id, existing.status),
+        WHERE id = ? AND status = ? AND due_date IS ?
+      `).bind(newDueDate, newDueDate, reason, user.id, id, existing.status, existing.due_date),
       assertRowUpdated(db),
       audit(db, user.id, 'VCC_WO_RESCHEDULED', {
         wo_id: id,

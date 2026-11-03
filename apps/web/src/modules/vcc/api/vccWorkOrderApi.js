@@ -316,6 +316,9 @@ export const rescheduleVccWorkOrder = async (id, { new_due_date, reason }) => {
     throw new Error('กรุณาระบุวันครบกำหนดใหม่ในรูปแบบ YYYY-MM-DD');
   }
   if (!trimmedReason) throw new Error('กรุณาระบุเหตุผลในการขอเลื่อนวันครบกำหนด');
+  if (String(new_due_date).trim() === existing.due_date) {
+    throw new Error('วันครบกำหนดใหม่ตรงกับวันครบกำหนดปัจจุบัน ไม่มีการเปลี่ยนแปลง');
+  }
 
   const updated = {
     ...existing,

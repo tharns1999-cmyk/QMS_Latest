@@ -4,7 +4,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import useStore from '../../../store/useStore';
 import AssetRegisterPage from '../pages/AssetRegisterPage';
 import { resetVccLocalStore } from '../api/vccApi';
-import { approveVccWorkOrder, getLocalWos, releaseVccWorkOrderHold } from '../api/vccWorkOrderApi';
+import { approveVccWorkOrder, getLocalWos, releaseVccWorkOrderHold, rescheduleVccWorkOrder } from '../api/vccWorkOrderApi';
 
 describe('VCC Phase 3 — Work Orders, Execution, Review, Close & Hold/NC Control', () => {
   beforeEach(() => {
@@ -163,6 +163,14 @@ describe('VCC Phase 3 — Work Orders, Execution, Review, Close & Hold/NC Contro
     await screen.findByText('WO-2026-001');
     expect(screen.queryByText(/ON_HOLD \(ระงับใช้ชั่วคราว\)/i)).not.toBeInTheDocument();
     expect(getLocalWos().find((w) => w.id === heldWo.id).nc_status).toBe('RELEASED');
+  });
+
+  it('3b. เลื่อนกำหนดเป็นวันเดิมไม่ได้ (ไม่มีการเปลี่ยนแปลง) และไม่เขียนประวัติ', async () => {
+    const wo = getLocalWos().find((w) => w.wo_code === 'WO-2026-001');
+    await expect(rescheduleVccWorkOrder(wo.id, { new_due_date: wo.due_date, reason: 'เลื่อน' })).rejects.toThrow(/ไม่มีการเปลี่ยนแปลง/);
+    const moved = await rescheduleVccWorkOrder(wo.id, { new_due_date: '2026-05-15', reason: 'รอคิวแล็บ' });
+    expect(moved.due_date).toBe('2026-05-15');
+    await expect(rescheduleVccWorkOrder(wo.id, { new_due_date: '2026-05-15', reason: 'กดซ้ำ' })).rejects.toThrow(/ไม่มีการเปลี่ยนแปลง/);
   });
 
   it('4. ผลรอตรวจซ้ำ (INCONCLUSIVE) ระงับใช้ทันที ผู้ตรวจรับปิดงานไม่ได้ มีปุ่มเดียวคือส่งกลับตรวจซ้ำ', async () => {

@@ -204,6 +204,40 @@ describe('VCC work-order safety (atomic transitions, INCONCLUSIVE, cancellation,
     expect(await assetStatus(assetId)).toBe('ON_HOLD');
   });
 
+  it('B1: reschedule — no-op refused, double click and concurrent requests (same or different dates) move the date once, with one audit row', async () => {
+    const { woId } = await newWorkOrder('RESCHED');
+    const reschedule = (who, date, reason = 'รอคิวห้องแล็บ') => call('POST', `/api/vcc/work-orders/${woId}/reschedule`, who, { new_due_date: date, reason });
+    const dueDate = async () => (await call('GET', `/api/vcc/work-orders/${woId}`, 'SF-REV4')).body.workOrder;
+
+    // Same date as today: refused, nothing written
+    const noop = await reschedule('SF-REV4', '2026-12-31');
+    expect(noop.status).toBe(400);
+    expect(await auditCount('VCC_WO_RESCHEDULED', woId)).toBe(0);
+
+    // Same date from two requests at once: one moves it, the other built on the old date gets 409
+    const [a, b] = await Promise.all([reschedule('SF-REV4', '2027-01-15'), reschedule('SF-REV4B', '2027-01-15')]);
+    expect([a.status, b.status].sort()).toEqual([200, 409]);
+    expect(await auditCount('VCC_WO_RESCHEDULED', woId)).toBe(1);
+    expect((await dueDate()).due_date).toBe('2027-01-15');
+
+    // Double click afterwards (the page now shows the new date): refused as a no-op, still one audit row
+    expect((await reschedule('SF-REV4', '2027-01-15')).status).toBe(400);
+    expect(await auditCount('VCC_WO_RESCHEDULED', woId)).toBe(1);
+
+    // Different dates at once: exactly one wins, the loser leaves no trace
+    const [c1, c2] = await Promise.all([reschedule('SF-REV4', '2027-02-10', 'เหตุผล A'), reschedule('SF-REV4B', '2027-03-10', 'เหตุผล B')]);
+    expect([c1.status, c2.status].sort()).toEqual([200, 409]);
+    const winner = c1.status === 200 ? { date: '2027-02-10', reason: 'เหตุผล A' } : { date: '2027-03-10', reason: 'เหตุผล B' };
+    const after = await dueDate();
+    expect(after).toMatchObject({ due_date: winner.date, reschedule_reason: winner.reason, original_due_date: '2026-12-31' });
+    expect(await auditCount('VCC_WO_RESCHEDULED', woId)).toBe(2);
+
+    // Rules around it are unchanged: another department and a closed work order are still refused
+    expect((await reschedule('SF-LB4', '2027-04-10')).status).toBe(403);
+    await call('POST', `/api/vcc/work-orders/${woId}/cancel`, 'SF-REV4', { cancellation_category: 'MISTAKE_CREATION', cancellation_reason: 'ปิดทดสอบ' });
+    expect((await reschedule('SF-REV4', '2027-04-10')).status).toBe(409);
+  });
+
   it('B1: concurrent amendment requests leave one pending request; concurrent decisions leave one outcome', async () => {
     const { woId } = await newWorkOrder('AMEND');
     await call('POST', `/api/vcc/work-orders/${woId}/submit-result`, 'SF-L2', result('PASS'));
