@@ -80,6 +80,8 @@ const getLocalThresholds = (docType = 'FM') => {
   return { min_requester_level: 1, required_reviewer_level: 4, required_approver_level: 5 };
 };
 
+export const getLocalWoThresholds = () => getLocalThresholds(getLocalWoSettings().approval_doc_type);
+
 // A SCHEDULED work order becomes a "record the result" task this many days before its due date (same as the API).
 const WORK_TASK_LEAD_DAYS = 30;
 
@@ -88,8 +90,7 @@ const WORK_TASK_LEAD_DAYS = 30;
 export const fetchVccWorkTasks = async () => {
   if (isApiMode) return (await apiGet('/api/vcc/work-tasks')).tasks || [];
   const user = assertLocalVccAccess();
-  const thresholds = getLocalThresholds(getLocalWoSettings().approval_doc_type);
-  const userLevel = Number(user.approval_level ?? user.approvalLevel ?? 0);
+  const thresholds = getLocalWoThresholds();
   const horizon = new Date(Date.now() + WORK_TASK_LEAD_DAYS * 86400000).toISOString().slice(0, 10);
   const allAssets = getLocalAssets();
   const deptMap = getDepartmentMap();

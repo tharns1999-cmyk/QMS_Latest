@@ -1,6 +1,8 @@
-import React, { useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useFloatingOverlay } from '../../hooks/useFloatingOverlay';
+
+const FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 /**
  * FloatingOverlay
@@ -57,10 +59,24 @@ export const FloatingOverlay = ({
     lockScroll
   });
 
+  const isVisible = isOpen && isCalculated;
+  const wasVisible = useRef(false);
+
+  // Keyboard users: a portaled panel sits at the end of <body>, so Tab from the trigger would never reach it. Move focus in on open,
+  // and give it back to the trigger on close (only if focus was inside the panel or lost, never stealing it from another control).
+  useEffect(() => {
+    const overlayEl = overlayRef.current;
+    if (isVisible && !wasVisible.current && portal) {
+      overlayEl?.querySelector(FOCUSABLE)?.focus({ preventScroll: true });
+    } else if (!isVisible && wasVisible.current) {
+      const active = document.activeElement;
+      if (!active || active === document.body || overlayEl?.contains(active)) triggerRef?.current?.focus({ preventScroll: true });
+    }
+    wasVisible.current = isVisible;
+  }, [isVisible, portal, triggerRef]);
+
   if (typeof document === 'undefined') return null;
   if (!isOpen && !keepMounted) return null;
-
-  const isVisible = isOpen && isCalculated;
 
   const content = (
     <div
@@ -76,6 +92,10 @@ export const FloatingOverlay = ({
         left: isVisible ? `${coords.left}px` : '-9999px',
         zIndex,
         opacity: isVisible ? 1 : 0,
+        // a closed (keepMounted) menu must not stay in the Tab order or the accessibility tree
+        visibility: isVisible ? 'visible' : 'hidden',
+        // fade only the opacity: a visibility transition keeps the panel hidden for its first moments, and a hidden element refuses focus
+        transitionProperty: 'opacity',
         pointerEvents: 'auto'
       }}
       className={className}
