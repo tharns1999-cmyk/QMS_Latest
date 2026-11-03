@@ -31,3 +31,7 @@ export const getPlanStatusTone = (status) => {
   }
 };
 
+
+// The plan scope lists every eligible asset of the department. Until someone plans months or gives a reason for it, a row is only
+// the register entry (id "virtual-…", is_persisted 0): there is nothing saved in the plan to remove.
+export const isSavedPlanItem = (item) => Boolean(item) && Number(item.is_persisted) !== 0 && !String(item.id || '').startsWith('virtual-');

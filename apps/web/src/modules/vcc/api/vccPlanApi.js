@@ -923,7 +923,11 @@ export const deleteVccPlanItem = async (planId, itemId) => {
   }
   const allItems = getLocalPlanItems();
   const target = allItems.find((i) => i.id === itemId && i.plan_id === planId);
-  if (!target) throw new Error('ไม่พบรายการเครื่องมือในแผนนี้');
+  if (!target) {
+    throw new Error(String(itemId).startsWith('virtual-')
+      ? 'รายการนี้ยังไม่ได้บันทึกเข้าแผน (เครื่องมืออยู่ในทะเบียนอยู่แล้ว) จึงไม่มีรายการให้นำออก'
+      : 'ไม่พบรายการเครื่องมือในแผนนี้');
+  }
   setLocalPlanItems(allItems.filter((i) => i.id !== itemId));
   appendLocalAudit('VCC_PLAN_ITEM_REMOVED', { plan_id: planId, item_id: itemId, asset_id: target.asset_id });
   const detail = await fetchVccPlanDetail(planId);

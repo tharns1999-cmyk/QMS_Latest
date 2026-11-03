@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { AlertTriangle, Plus } from 'lucide-react';
-import { getPlanStatusLabel } from '../utils/planLabels';
+import { getPlanStatusLabel, isSavedPlanItem } from '../utils/planLabels';
 import { fetchVccAssets, fetchVccAssetDetail } from '../api/vccApi';
 import {
   fetchVccPlanSettings,
@@ -338,13 +338,17 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
 
   const handleDeleteItem = async (item) => {
     if (!planDetail?.plan) return;
+    if (!isSavedPlanItem(item)) {
+      toast(`${item.asset_code} ยังไม่ได้บันทึกเข้าแผน จึงไม่มีรายการให้นำออก (เครื่องมืออยู่ในทะเบียนอยู่แล้ว)`);
+      return;
+    }
     try {
       await deleteVccPlanItem(planDetail.plan.id, item.id);
-      toast.success(`นำ ${item.asset_code} ออกจากแผนแล้ว`);
+      toast.success(`นำ ${item.asset_code} ออกจากแผนแล้ว เครื่องมือยังอยู่ในทะเบียนและจะแสดงเป็นยังไม่ได้วางแผน`);
       const refreshed = await fetchVccPlanDetail(planDetail.plan.id);
       setPlanDetail(refreshed);
     } catch (err) {
-      toast.error(err.message || 'ไม่สามารถลบรายการได้');
+      toast.error(err.message || 'ไม่สามารถนำรายการออกจากแผนได้');
     }
   };
 

@@ -17,6 +17,7 @@ import {
   ListFilter
 } from 'lucide-react';
 import AnnualPlanMonthCell from './AnnualPlanMonthCell';
+import { isSavedPlanItem } from '../utils/planLabels';
 import AnnualPlanSideInspector from './AnnualPlanSideInspector';
 
 const useDismiss = (open, onClose) => {
@@ -551,6 +552,9 @@ export const AnnualPlanMatrixTable = ({
                           <span>{item.remarks ? `ไม่วางแผน (${item.remarks})` : 'ยังไม่ได้วางแผน'}</span>
                         </span>
                       )}
+                      {!isSavedPlanItem(item) && (
+                        <span className="mt-1 block text-xs text-slate-500">อยู่ในทะเบียนเครื่องมือ • ยังไม่บันทึกเข้าแผน</span>
+                      )}
                     </td>
 
                     {/* Month Columns: 12-Month Single-Row Interactive Grid */}
@@ -562,7 +566,8 @@ export const AnnualPlanMatrixTable = ({
                             item={item}
                             plan={activePlan}
                             workOrders={workOrders}
-                            canEditPlan={canEditPlan}
+                            // months can only be planned for an ACTIVE asset (the server refuses others); a paused one gets a reason instead
+                            canEditPlan={canEditPlan && (item.asset_status || 'ACTIVE') === 'ACTIVE'}
                             isSaving={savingCellKey === `${item.id}-${m}`}
                             onQuickAddMonth={handleCellAddMonth}
                             onQuickRemoveMonth={handleCellRemoveMonth}
@@ -641,7 +646,7 @@ export const AnnualPlanMatrixTable = ({
                               <Edit2 size={15} />
                             </button>
 
-                            {confirmDeleteId === item.id ? (
+                            {!isSavedPlanItem(item) ? null : confirmDeleteId === item.id ? (
                               <div className="inline-flex items-center gap-0.5 bg-rose-50 border border-rose-200 rounded-lg p-0.5 animate-in fade-in duration-150 shrink-0">
                                 <button
                                   type="button"
@@ -649,8 +654,8 @@ export const AnnualPlanMatrixTable = ({
                                     onDeleteItem(item);
                                     setConfirmDeleteId(null);
                                   }}
-                                  title="ยืนยันลบรายการ"
-                                  aria-label="ยืนยันลบ"
+                                  title="ยืนยันนำออกจากแผน (เครื่องมือยังอยู่ในทะเบียน)"
+                                  aria-label="ยืนยันนำออกจากแผน"
                                   className="w-7 h-7 rounded-md flex items-center justify-center text-white bg-rose-600 hover:bg-rose-700 transition-colors cursor-pointer shadow-2xs"
                                 >
                                   <Check size={14} />
@@ -669,8 +674,8 @@ export const AnnualPlanMatrixTable = ({
                               <button
                                 type="button"
                                 onClick={() => setConfirmDeleteId(item.id)}
-                                title="ลบรายการออกจากแผน"
-                                aria-label="ลบรายการออกจากแผน"
+                                title="นำออกจากแผน (เครื่องมือยังอยู่ในทะเบียน)"
+                                aria-label="นำออกจากแผน"
                                 className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-rose-500/20 shrink-0"
                               >
                                 <Trash2 size={15} />
