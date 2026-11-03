@@ -4,6 +4,8 @@ test.describe('System Administration (global /admin)', () => {
   test('admin reaches Master Data and the Audit Trail from the portal and the sidebar', async ({ page, setupSession }) => {
     await setupSession(TEST_PERSONAS.DCC_ADMIN);
     await page.goto('/portal');
+    // the portal reaches System Administration through its module card only, not a sidebar group
+    await expect(page.getByRole('link', { name: 'จัดการข้อมูลหลัก' })).toHaveCount(0);
 
     await page.getByText('ศูนย์บริหารระบบ (System Administration)').first().click();
     await expect(page).toHaveURL(/\/admin\/master-data$/);

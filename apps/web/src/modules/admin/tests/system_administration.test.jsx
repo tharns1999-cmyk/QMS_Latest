@@ -73,36 +73,59 @@ describe('System Administration: portal card', () => {
   });
 });
 
-describe('System Administration: sidebar', () => {
+describe('System Administration: module-based sidebar (no duplicate menus)', () => {
+  const MASTER = 'จัดการข้อมูลหลัก';
+  const AUDIT = 'ประวัติการดำเนินการ (Audit Trail)';
   const renderSidebar = (path, user) => {
     useStore.setState({ currentUser: user });
     return render(<MemoryRouter initialEntries={[path]}><Sidebar /></MemoryRouter>);
   };
 
-  it('admin inside /admin/* sees the SYSTEM ADMIN group and a link back to the portal, not DCC menus', () => {
+  it('/admin/*: its own menu once each, plus a link back to the portal, and no DCC or VCC menus', () => {
     renderSidebar('/admin/audit-log', ADMIN);
     expect(screen.getByText('SYSTEM ADMIN')).toBeInTheDocument();
-    expect(screen.getByText('จัดการข้อมูลหลัก').closest('a')).toHaveAttribute('href', '/admin/master-data');
-    expect(screen.getByText('ประวัติการดำเนินการ (Audit Trail)').closest('a')).toHaveAttribute('href', '/admin/audit-log');
+    expect(screen.getAllByText(MASTER)).toHaveLength(1);
+    expect(screen.getAllByText(AUDIT)).toHaveLength(1);
+    expect(screen.getByText(MASTER).closest('a')).toHaveAttribute('href', '/admin/master-data');
+    expect(screen.getByText(AUDIT).closest('a')).toHaveAttribute('href', '/admin/audit-log');
     expect(screen.getByText('กลับสู่พอร์ทัลหลัก').closest('a')).toHaveAttribute('href', '/portal');
     expect(screen.queryByText('คลังเอกสารแม่บท')).not.toBeInTheDocument();
+    expect(screen.queryByText('ทะเบียนสำเนาควบคุม')).not.toBeInTheDocument();
+    expect(screen.queryByText('ทะเบียนเครื่องมือวัด')).not.toBeInTheDocument();
   });
 
-  it.each([['DCC staff', DCC_STAFF], ['general user', GENERAL], ['L6 department manager', DEPT_MANAGER]])(
-    '%s never sees admin menus on the portal',
-    (_name, user) => {
-      renderSidebar('/portal', user);
+  it.each([['/portal'], ['/dcc/dashboard'], ['/dcc/library'], ['/vcc/assets']])(
+    'an admin on %s sees no System Administration menu',
+    (path) => {
+      renderSidebar(path, ADMIN);
       expect(screen.queryByText('SYSTEM ADMIN')).not.toBeInTheDocument();
-      expect(screen.queryByText('จัดการข้อมูลหลัก')).not.toBeInTheDocument();
-      expect(screen.queryByText('ประวัติการดำเนินการ (Audit Trail)')).not.toBeInTheDocument();
+      expect(screen.queryByText(MASTER)).not.toBeInTheDocument();
+      expect(screen.queryByText(AUDIT)).not.toBeInTheDocument();
     }
   );
 
-  it('DCC staff do not get the admin shortcuts inside DCC either', () => {
-    renderSidebar('/dcc/dashboard', DCC_STAFF);
-    expect(screen.queryByText('จัดการข้อมูลหลัก')).not.toBeInTheDocument();
-    expect(screen.queryByText('ประวัติการดำเนินการ (Audit Trail)')).not.toBeInTheDocument();
+  it('DCC and VCC keep only their own menus', () => {
+    const { unmount } = renderSidebar('/dcc/dashboard', ADMIN);
+    expect(screen.getByText('ทะเบียนสำเนาควบคุม')).toBeInTheDocument();
+    expect(screen.queryByText('ทะเบียนเครื่องมือวัด')).not.toBeInTheDocument();
+    unmount();
+    renderSidebar('/vcc/assets', ADMIN);
+    expect(screen.getByText('ทะเบียนเครื่องมือวัด')).toBeInTheDocument();
+    expect(screen.queryByText('ทะเบียนสำเนาควบคุม')).not.toBeInTheDocument();
   });
+
+  it.each([['DCC staff', DCC_STAFF], ['general user', GENERAL], ['L6 department manager', DEPT_MANAGER]])(
+    '%s never sees admin menus, even when typing an /admin URL into the sidebar context',
+    (_name, user) => {
+      for (const path of ['/portal', '/dcc/dashboard', '/admin/master-data']) {
+        const { unmount } = renderSidebar(path, user);
+        expect(screen.queryByText('SYSTEM ADMIN')).not.toBeInTheDocument();
+        expect(screen.queryByText(MASTER)).not.toBeInTheDocument();
+        expect(screen.queryByText(AUDIT)).not.toBeInTheDocument();
+        unmount();
+      }
+    }
+  );
 });
 
 describe('System Administration: Topbar metadata', () => {

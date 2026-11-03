@@ -34,10 +34,10 @@ describe('Hub & Spoke Navigation Isolation (Context-Aware Sidebar)', () => {
     expect(screen.queryByText('ทะเบียนสำเนาควบคุม')).not.toBeInTheDocument();
     expect(screen.queryByText('กลับสู่พอร์ทัลหลัก')).not.toBeInTheDocument();
 
-    // Admins get the global SYSTEM ADMIN group on the portal
-    expect(screen.getByText('SYSTEM ADMIN')).toBeInTheDocument();
-    expect(screen.getByText('จัดการข้อมูลหลัก').closest('a')).toHaveAttribute('href', '/admin/master-data');
-    expect(screen.getByText('ประวัติการดำเนินการ (Audit Trail)').closest('a')).toHaveAttribute('href', '/admin/audit-log');
+    // Even for an admin, System Administration is reached through the portal card, not a sidebar group
+    expect(screen.queryByText('SYSTEM ADMIN')).not.toBeInTheDocument();
+    expect(screen.queryByText('จัดการข้อมูลหลัก')).not.toBeInTheDocument();
+    expect(screen.queryByText('ประวัติการดำเนินการ (Audit Trail)')).not.toBeInTheDocument();
   });
 
   it('2. When in DCC module route (/dcc/dashboard), renders DCC menus and Quick Return link', () => {
@@ -58,9 +58,9 @@ describe('Hub & Spoke Navigation Isolation (Context-Aware Sidebar)', () => {
     expect(screen.getByText('คลังเอกสารภายนอก')).toBeInTheDocument();
     expect(screen.getByText('การทบทวนตามรอบ')).toBeInTheDocument();
     expect(screen.getByText('ทะเบียนสำเนาควบคุม')).toBeInTheDocument();
-    // DCC shortcuts for admins now point at the global /admin routes
-    expect(screen.getByText('จัดการข้อมูลหลัก').closest('a')).toHaveAttribute('href', '/admin/master-data');
-    expect(screen.getByText('ประวัติการดำเนินการ (Audit Trail)').closest('a')).toHaveAttribute('href', '/admin/audit-log');
+    // System Administration menus live only in /admin/*, even for an admin
+    expect(screen.queryByText('จัดการข้อมูลหลัก')).not.toBeInTheDocument();
+    expect(screen.queryByText('ประวัติการดำเนินการ (Audit Trail)')).not.toBeInTheDocument();
     expect(screen.queryByText('SYSTEM ADMIN')).not.toBeInTheDocument();
 
     // Bottom tools always available

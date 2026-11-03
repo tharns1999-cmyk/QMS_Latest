@@ -91,9 +91,9 @@ const Sidebar = ({ isOpen = false, onClose = () => {} }) => {
 
   const isDccUser = Boolean(currentUser?.isDcc || currentUser?.role === 'DCC_ADMIN' || currentUser?.role === 'DCC_STAFF');
   const isAdmin = isSystemAdmin(currentUser);
-  // Global System Administration: its own spoke, reachable from the portal, shown to admins only
+  // Global System Administration: its own spoke with its own menu; the portal reaches it through a module card only
   const isAdminModule = isAdminPath(path);
-  const showSystemAdmin = isAdmin && (isAdminModule || path === '/portal');
+  const showSystemAdmin = isAdmin && isAdminModule;
 
   const effectiveToday = getEffectiveToday ? getEffectiveToday() : (simulatedSystemDate ? new Date(simulatedSystemDate) : new Date());
   const allDocs = useMemo(() => [...(documents || []), ...(externalDocuments || [])], [documents, externalDocuments]);
@@ -378,7 +378,7 @@ const Sidebar = ({ isOpen = false, onClose = () => {} }) => {
           />
         )}
 
-        {/* SYSTEM ADMIN (admins only; on the portal and inside /admin/*) */}
+        {/* SYSTEM ADMIN NAVIGATION (admins only, only inside /admin/*) */}
         {showSystemAdmin && (
           <>
             <SectionHeader title="SYSTEM ADMIN" />
@@ -420,20 +420,6 @@ const Sidebar = ({ isOpen = false, onClose = () => {} }) => {
                   badgeCount={ccTaskCount}
                   badgeColor="blue"
                 />
-                {isAdmin && (
-                  <>
-                    <NavItem 
-                      to={ADMIN_MASTER_DATA}
-                      icon={SlidersHorizontal}
-                      label="จัดการข้อมูลหลัก"
-                    />
-                    <NavItem
-                      to={ADMIN_AUDIT_LOG}
-                      icon={History} 
-                      label="ประวัติการดำเนินการ (Audit Trail)" 
-                    />
-                  </>
-                )}
               </>
             )}
 
