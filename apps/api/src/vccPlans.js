@@ -1046,7 +1046,9 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
     if (Number(asset.is_group) === 1 && asset.group_nature !== 'COMPOSITE_SET') {
       return c.json({ error: 'ยกเลิกการเพิ่มกลุ่มเครื่องมือแม่เข้าแผนประจำปีแล้ว กรุณาเลือกเครื่องมือวัดรายตัวหรือชุดเครื่องมือจริง' }, 400);
     }
-    if (asset.status !== 'ACTIVE') {
+    // ON_HOLD / UNDER_REPAIR assets are listed in the plan scope and need a reason before submit, so a reason with no months is accepted for them; planning months stays ACTIVE-only.
+    const reasonOnlyForPausedAsset = plannedMonths.length === 0 && ['ON_HOLD', 'UNDER_REPAIR'].includes(asset.status);
+    if (asset.status !== 'ACTIVE' && !reasonOnlyForPausedAsset) {
       return c.json({ error: 'ไม่สามารถเพิ่มเครื่องมือที่ไม่ได้ใช้งานปกติ (ACTIVE) เข้าแผนประจำปีได้' }, 400);
     }
     if (!deptRow) return c.json({ error: 'ไม่พบแผนกผู้รับผิดชอบใน Master Data' }, 400);
