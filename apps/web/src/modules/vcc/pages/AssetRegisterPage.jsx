@@ -374,10 +374,11 @@ const AssetRegisterPageInner = () => {
 
   return (
     <div className="w-full min-w-0 space-y-4 pb-8">
-      {/* Accessible navigation fallback for headless tests & assistive technology */}
+      {/* Accessible navigation fallback for headless tests & assistive technology; tabIndex=-1 keeps keyboard focus off buttons nobody can see (the sidebar is the visible menu) */}
       <div className="sr-only" role="navigation" aria-label="เมนูย่อยระบบ VCC">
         <button
           type="button"
+          tabIndex={-1}
           onClick={() => setModuleView('DASHBOARD')}
           aria-label="ภาพรวมและรายงาน (Dashboard & Export)"
         >
@@ -385,6 +386,7 @@ const AssetRegisterPageInner = () => {
         </button>
         <button
           type="button"
+          tabIndex={-1}
           onClick={() => setModuleView('WORK_ORDERS')}
           aria-label="ใบสั่งงานและบันทึกผล (Work Orders)"
         >
@@ -392,6 +394,7 @@ const AssetRegisterPageInner = () => {
         </button>
         <button
           type="button"
+          tabIndex={-1}
           onClick={() => setModuleView('ANNUAL_PLAN')}
           aria-label="แผนการทวนสอบประจำปี (FM-QC-46)"
         >
@@ -399,6 +402,7 @@ const AssetRegisterPageInner = () => {
         </button>
         <button
           type="button"
+          tabIndex={-1}
           onClick={() => setModuleView('TASKS')}
           aria-label="งานที่ต้องดำเนินการ (VCC Task Inbox)"
         >
@@ -406,6 +410,7 @@ const AssetRegisterPageInner = () => {
         </button>
         <button
           type="button"
+          tabIndex={-1}
           onClick={() => setModuleView('ASSETS')}
           aria-label="ทะเบียนเครื่องมือ (Asset Register)"
         >
