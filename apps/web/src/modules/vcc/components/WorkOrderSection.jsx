@@ -565,7 +565,7 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
       {/* 2. Status Navigation - Minimal Underline Tabs */}
       <div className="border-b border-slate-200">
         <nav
-          className="flex items-center gap-2 sm:gap-3.5 xl:gap-6 overflow-x-auto scrollbar-none"
+          className="flex flex-wrap gap-x-4 gap-y-1 xl:flex-nowrap xl:items-center xl:gap-6 xl:overflow-x-auto xl:scrollbar-none"
           role="tablist"
           aria-label="สถานะใบสั่งงาน"
         >

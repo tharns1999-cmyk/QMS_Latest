@@ -15,6 +15,8 @@ import {
   Printer
 } from 'lucide-react';
 import { FloatingOverlay } from '../../../shared/components/ui/FloatingOverlay';
+import useStore from '../../../store/useStore';
+import { canReviewWorkOrder } from '../utils/workOrderPermissions';
 
 /**
  * WorkOrderRowActions - Renders primary action and floating overflow menu for each row
@@ -23,6 +25,7 @@ import { FloatingOverlay } from '../../../shared/components/ui/FloatingOverlay';
 const WorkOrderRowActions = ({
   wo,
   reqApproverLevel,
+  thresholds,
   onRecordResult,
   onApprove,
   onReleaseHold,
@@ -34,6 +37,8 @@ const WorkOrderRowActions = ({
 }) => {
   const [isMenuOpen, setIsMenuOpen] = React.useState(false);
   const triggerRef = React.useRef(null);
+  const currentUser = useStore((s) => s.currentUser);
+  const canReview = canReviewWorkOrder(currentUser, wo, thresholds);
 
   const handleClose = () => setIsMenuOpen(false);
 
@@ -51,7 +56,11 @@ const WorkOrderRowActions = ({
         </button>
       )}
 
-      {wo.status === 'PENDING_REVIEW' && (
+      {wo.status === 'PENDING_REVIEW' && !canReview && (
+        <span className="text-xs font-medium text-slate-500 whitespace-nowrap">รอผู้ตรวจรับ</span>
+      )}
+
+      {wo.status === 'PENDING_REVIEW' && canReview && (
         <button
           type="button"
           onClick={() => onApprove(wo)}
@@ -117,7 +126,7 @@ const WorkOrderRowActions = ({
           </button>
         )}
 
-        {wo.status === 'PENDING_REVIEW' && (
+        {wo.status === 'PENDING_REVIEW' && canReview && (
           <button
             type="button"
             onClick={() => {
@@ -458,6 +467,7 @@ export const WorkOrderTable = ({
                   <WorkOrderRowActions
                     wo={wo}
                     reqApproverLevel={reqApproverLevel}
+                    thresholds={thresholds}
                     onRecordResult={onRecordResult}
                     onApprove={onApprove}
                     onReleaseHold={onReleaseHold}

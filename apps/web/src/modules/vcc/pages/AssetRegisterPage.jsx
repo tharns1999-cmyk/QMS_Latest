@@ -419,8 +419,8 @@ const AssetRegisterPageInner = () => {
                 <span className="text-slate-800 font-semibold truncate">{pageMeta.breadcrumb}</span>
               </div>
 
-              <h1 className="text-xl md:text-2xl font-bold text-slate-900 tracking-tight">
-                <span className="truncate">{pageMeta.title}</span>
+              <h1 className="text-xl md:text-2xl font-bold text-slate-900 tracking-tight break-words">
+                {pageMeta.title}
               </h1>
 
               <p className="text-sm text-slate-500">

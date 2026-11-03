@@ -4,6 +4,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import useStore from '../../../store/useStore';
 import AssetRegisterPage from '../pages/AssetRegisterPage';
 import { resetVccLocalStore } from '../api/vccApi';
+import { approveVccWorkOrder, getLocalWos } from '../api/vccWorkOrderApi';
 
 describe('VCC Phase 3 — Work Orders, Execution, Review, Close & Hold/NC Control', () => {
   beforeEach(() => {
@@ -80,17 +81,15 @@ describe('VCC Phase 3 — Work Orders, Execution, Review, Close & Hold/NC Contro
     expect(submitResultBtn).not.toBeDisabled();
     fireEvent.click(submitResultBtn);
 
-    // Moves to PENDING_REVIEW tab (not CLOSED)
-    expect(await screen.findByRole('button', { name: /ตรวจรับปิดงาน/i })).toBeInTheDocument();
+    // Moves to PENDING_REVIEW tab (not CLOSED). The performer (dc4) is not offered the close button at all ...
+    expect((await screen.findAllByText('รอผู้ตรวจรับ')).length).toBeGreaterThan(0);
+    expect(screen.queryByRole('button', { name: /ตรวจรับปิดงาน/i })).not.toBeInTheDocument();
 
-    // Performer (dc4) tries to approve own work order -> must show API error alert
-    fireEvent.click(screen.getByRole('button', { name: /ตรวจรับปิดงาน/i }));
-    fireEvent.click(await screen.findByRole('button', { name: 'ยืนยันการดำเนินการ' }));
-
-    const selfApproveAlert = await screen.findByRole('alert');
-    expect(selfApproveAlert).toHaveTextContent(/ผู้บันทึกผลไม่สามารถตรวจรับและอนุมัติปิดใบสั่งงานของตนเองได้/i);
-
-    fireEvent.click(screen.getByRole('button', { name: 'ยกเลิก' }));
+    // ... and the backend rule still refuses them if the call is made anyway
+    const pendingWo = getLocalWos().find((w) => w.status === 'PENDING_REVIEW');
+    await expect(approveVccWorkOrder(pendingWo.id, 'ลองอนุมัติงานตัวเอง')).rejects.toThrow(
+      /ผู้บันทึกผลไม่สามารถตรวจรับและอนุมัติปิดใบสั่งงานของตนเองได้/
+    );
 
     // Switch to Reviewer L4 (qc4) and approve -> moves to CLOSED
     useStore.setState({
@@ -105,7 +104,7 @@ describe('VCC Phase 3 — Work Orders, Execution, Review, Close & Hold/NC Contro
       }
     });
 
-    fireEvent.click(screen.getByRole('button', { name: /ตรวจรับปิดงาน/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /ตรวจรับปิดงาน/i }));
     fireEvent.click(await screen.findByRole('button', { name: 'ยืนยันการดำเนินการ' }));
 
     // Now in CLOSED tab
