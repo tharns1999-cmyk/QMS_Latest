@@ -61,6 +61,25 @@ export const vccDeptScopeSql = (user, column) => {
   return { sql: `${column} IN (${depts.map(() => '?').join(',')})`, args: depts };
 };
 
+// WRITE scope for the asset register: DCC manages every department; L4+ may manage only assets of a VCC department they belong to.
+// Seniority (L6+, QMR) and MGT read access do not widen this; moving an asset to another department stays DCC-only.
+export const VCC_ASSET_MANAGE_MIN_LEVEL = 4;
+export const manageableVccDepartments = (user) => {
+  if (!user) return [];
+  if (user.isDcc) return [...VCC_ALLOWED_DEPTS];
+  if (Number(user.approval_level ?? user.approvalLevel ?? 0) < VCC_ASSET_MANAGE_MIN_LEVEL) return [];
+  return getUserDepartments(user).filter((d) => VCC_ALLOWED_DEPTS.includes(d));
+};
+export const canManageVccAsset = (user, department) => {
+  if (!user) return false;
+  if (user.isDcc) return true;
+  return manageableVccDepartments(user).includes(String(department || '').toUpperCase());
+};
+export const VCC_ASSET_MANAGE_FORBIDDEN = {
+  error: 'จัดการได้เฉพาะเครื่องมือของแผนกตนเอง (หัวหน้าแผนกระดับ L4 ขึ้นไป) หรือ DCC เท่านั้น'
+};
+export const VCC_ASSET_TRANSFER_FORBIDDEN = { error: 'การโอนเครื่องมือข้ามแผนกทำได้เฉพาะ DCC เท่านั้น' };
+
 export const VCC_DEPT_FORBIDDEN = { error: 'ไม่มีสิทธิ์เข้าถึงข้อมูลของแผนกนี้' };
 export const VCC_FORBIDDEN = { error: 'เฉพาะผู้ใช้งานแผนก DCC, QC, QA, MGT และ LB เท่านั้นที่สามารถเข้าใช้งานส่วนนี้ได้' };
 export const DCC_ONLY = { error: 'เฉพาะ DCC เท่านั้นที่สามารถตั้งค่าหรือจัดการข้อมูลส่วนนี้ได้' };

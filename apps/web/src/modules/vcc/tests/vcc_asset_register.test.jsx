@@ -320,7 +320,7 @@ describe('VCC asset register: buttons follow who may use them, filters, and paus
     expect(screen.getAllByRole('button', { name: /^แก้ไข$/ }).length).toBeGreaterThan(0);
     fireEvent.click(screen.getAllByRole('button', { name: /ปลดออกจากทะเบียน/ })[0]);
     expect(screen.getByText(/ไม่ถูกลบ/)).toBeInTheDocument();
-    expect(screen.getByText(/นำออกจากแผน/)).toBeInTheDocument();
+    expect(screen.getByText(/แล้วเลือก “นำออกจากแผน”/)).toBeInTheDocument();
   });
 
   it('has a type filter and a tab for paused (ON_HOLD) assets', async () => {

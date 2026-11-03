@@ -22,6 +22,7 @@ import {
   fetchVccAssets,
   fetchVccAssetDetail,
   fetchVccAssetTypes,
+  fetchVccAssetImpact,
   saveVccAssetTypes,
   createVccAsset,
   updateVccAsset,
@@ -34,7 +35,7 @@ import {
   AssetDetailHistoryModal,
   AssetTypesModal
 } from '../components/AssetRegisterModals';
-import { filterReadableDepartments } from '../utils/departmentScope';
+import { filterReadableDepartments, manageableVccDepartments, canManageVccAsset, getUserDeptCodes } from '../utils/departmentScope';
 import AnnualPlanMatrixSection from '../components/AnnualPlanMatrixSection';
 import WorkOrderSection from '../components/WorkOrderSection';
 import VccDashboardSection from '../components/VccDashboardSection';
@@ -109,8 +110,15 @@ const AssetRegisterPageInner = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterDept, setFilterDept] = useState('');
   const [filterType, setFilterType] = useState('');
-  // Only DCC may add, edit, retire or reactivate (the server refuses everyone else), so the other buttons are not shown to others
-  const canManageAssets = Boolean(currentUser?.isDcc);
+  // DCC manages every department; L4+ only their own VCC department(s). The server enforces the same rule; here it only decides what is shown.
+  const isDccUser = Boolean(currentUser?.isDcc);
+  const manageableDepts = useMemo(() => manageableVccDepartments(currentUser), [currentUser]);
+  const canAddAsset = manageableDepts.length > 0;
+  const myDepts = useMemo(() => getUserDeptCodes(currentUser), [currentUser]);
+  const formDepartments = useMemo(
+    () => (isDccUser ? activeDepartments : activeDepartments.filter((d) => manageableDepts.includes(String(d.code).toUpperCase()))),
+    [isDccUser, activeDepartments, manageableDepts]
+  );
 
   // Add / Edit Modal
   const [formOpen, setFormOpen] = useState(false);
@@ -124,6 +132,7 @@ const AssetRegisterPageInner = () => {
   const [statusReason, setStatusReason] = useState('');
   const [savingStatus, setSavingStatus] = useState(false);
   const [statusError, setStatusError] = useState('');
+  const [statusImpact, setStatusImpact] = useState(null);
 
   // History / Detail Modal
   const [detailModalOpen, setDetailModalOpen] = useState(false);
@@ -172,7 +181,7 @@ const AssetRegisterPageInner = () => {
     setForm({
       ...EMPTY_FORM,
       asset_type: assetTypes[0] || '',
-      department: activeDepartments[0]?.code || ''
+      department: formDepartments[0]?.code || ''
     });
     setFormOpen(true);
   };
@@ -229,17 +238,15 @@ const AssetRegisterPageInner = () => {
     }
   };
 
-  const openRetireModal = (asset) => {
-    setStatusModal({ mode: 'RETIRE', asset });
+  const openStatusModal = (mode, asset) => {
+    setStatusModal({ mode, asset });
     setStatusReason('');
     setStatusError('');
+    setStatusImpact(null);
+    fetchVccAssetImpact(asset.id).then(setStatusImpact).catch(() => setStatusImpact(null));
   };
-
-  const openReactivateModal = (asset) => {
-    setStatusModal({ mode: 'REACTIVATE', asset });
-    setStatusReason('');
-    setStatusError('');
-  };
+  const openRetireModal = (asset) => openStatusModal('RETIRE', asset);
+  const openReactivateModal = (asset) => openStatusModal('REACTIVATE', asset);
 
   const handleConfirmStatusChange = async (e) => {
     e.preventDefault();
@@ -434,29 +441,6 @@ const AssetRegisterPageInner = () => {
               </p>
             </div>
 
-            {/* Contextual Actions (for ASSETS page) */}
-            {/* Both actions are DCC-only on the API; other VCC users would just get a 403 */}
-            {moduleView === 'ASSETS' && currentUser?.isDcc && (
-              <div className="flex flex-wrap items-center gap-2.5 shrink-0">
-                <button
-                  type="button"
-                  onClick={openTypesSettings}
-                  className="inline-flex items-center gap-2 px-4 py-2.5 h-10 rounded-xl border border-slate-300 bg-white text-slate-700 text-sm font-semibold hover:bg-slate-50 transition-colors shadow-2xs cursor-pointer"
-                >
-                  <SlidersHorizontal size={15} />
-                  <span>ตั้งค่าประเภทเครื่องมือ</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={openCreateModal}
-                  className="inline-flex items-center gap-2 px-4 py-2.5 h-10 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 transition-colors shadow-xs cursor-pointer"
-                >
-                  <Plus size={16} />
-                  <span>เพิ่มเครื่องมือ</span>
-                </button>
-              </div>
-            )}
           </div>
         </div>
       )}
@@ -481,10 +465,58 @@ const AssetRegisterPageInner = () => {
             </div>
           )}
 
+          {/* Management panel: who may do what, and the add / settings buttons, in plain view instead of the page corner */}
+          <section aria-label="จัดการเครื่องมือ" className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-3">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="space-y-1 min-w-0">
+                <h2 className="text-base font-bold text-slate-900">จัดการเครื่องมือ</h2>
+                <p className="text-sm text-slate-600" data-testid="asset-manage-summary">
+                  {isDccUser
+                    ? 'คุณเป็น DCC: จัดการเครื่องมือได้ทุกแผนก โอนเครื่องมือข้ามแผนกได้ และตั้งค่าประเภทเครื่องมือได้'
+                    : canAddAsset
+                      ? `คุณจัดการเครื่องมือของแผนก ${manageableDepts.join(', ')} ได้ (เพิ่ม แก้ไข ปลดออก นำกลับมาใช้) เครื่องมือของแผนกอื่นดูได้อย่างเดียว`
+                      : 'คุณดูทะเบียนเครื่องมือได้อย่างเดียว'}
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+                {isDccUser && (
+                  <button
+                    type="button"
+                    onClick={openTypesSettings}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 h-10 rounded-xl border border-slate-300 bg-white text-slate-700 text-sm font-semibold hover:bg-slate-50 transition-colors shadow-2xs cursor-pointer"
+                  >
+                    <SlidersHorizontal size={15} />
+                    <span>ตั้งค่าประเภทเครื่องมือ</span>
+                  </button>
+                )}
+                {canAddAsset && (
+                  <button
+                    type="button"
+                    onClick={openCreateModal}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 h-10 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 transition-colors shadow-xs cursor-pointer"
+                  >
+                    <Plus size={16} />
+                    <span>เพิ่มเครื่องมือ</span>
+                  </button>
+                )}
+              </div>
+            </div>
+            {!canAddAsset && (
+              <div role="note" className="rounded-xl bg-slate-50 border border-slate-200 px-4 py-3 text-sm text-slate-700">
+                การเพิ่ม แก้ไข ปลดออก และนำกลับมาใช้ ทำโดยหัวหน้าแผนก (ระดับ L4 ขึ้นไป) ของแผนกเจ้าของเครื่องมือ หรือ DCC
+                {myDepts.length > 0 ? ` — แผนกของคุณคือ ${myDepts.join(', ')}` : ''} · การตั้งค่าประเภทเครื่องมือและการโอนข้ามแผนกเป็นหน้าที่ของ DCC
+              </div>
+            )}
+            <p className="text-xs text-slate-500">
+              <span className="font-semibold text-slate-700">ปลดออกจากทะเบียน</span> = เลิกใช้เครื่องมือนั้นทั้งระบบ (ไม่ลบ ประวัติอยู่ครบ นำกลับมาใช้ได้) ·{' '}
+              <span className="font-semibold text-slate-700">นำออกจากแผน</span> = เอาออกจากแผนประจำปีเท่านั้น ทำที่หน้าแผนประจำปี เครื่องมือยังอยู่ในทะเบียน
+            </p>
+          </section>
+
           {/* Status Tabs & Filters */}
           <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 pb-4">
-              <div className="flex items-center gap-2" role="tablist" aria-label="สถานะเครื่องมือ">
+              <div className="flex flex-wrap items-center gap-2" role="tablist" aria-label="สถานะเครื่องมือ">
                 <button
                   type="button"
                   role="tab"
@@ -589,7 +621,7 @@ const AssetRegisterPageInner = () => {
                   ไม่พบรายการเครื่องมือในสถานะ {activeTab === 'ACTIVE' ? 'ใช้งานปกติ (ACTIVE)' : 'ปลดออกแล้ว (RETIRED)'}
                 </div>
                 <p className="text-slate-500 text-sm">
-                  ลองปรับเงื่อนไขการค้นหา หรือกดปุ่ม &ldquo;เพิ่มเครื่องมือ&rdquo; ด้านบน
+                  {canAddAsset ? 'ลองปรับเงื่อนไขการค้นหา หรือกดปุ่ม “เพิ่มเครื่องมือ” ด้านบน' : 'ลองปรับเงื่อนไขการค้นหา'}
                 </p>
               </div>
             ) : (
@@ -650,6 +682,20 @@ const AssetRegisterPageInner = () => {
                               {asset.department} {asset.department_name_th ? `(${asset.department_name_th})` : ''}
                             </div>
                             <div className="text-xs text-slate-600 mt-0.5">{asset.location || 'ไม่ระบุที่ตั้ง'}</div>
+                            {(() => {
+                              const mine = myDepts.includes(String(asset.department).toUpperCase());
+                              const canManage = canManageVccAsset(currentUser, asset.department);
+                              return (
+                                <span
+                                  data-testid="asset-ownership"
+                                  className={`mt-1 inline-flex px-2 py-0.5 rounded-md border text-xs font-semibold ${
+                                    canManage ? 'bg-indigo-50 text-indigo-800 border-indigo-200' : 'bg-slate-50 text-slate-600 border-slate-200'
+                                  }`}
+                                >
+                                  {canManage ? (mine ? 'แผนกของฉัน • จัดการได้' : 'จัดการได้ (DCC)') : mine ? 'แผนกของฉัน • ดูอย่างเดียว' : 'แผนกอื่น • ดูอย่างเดียว'}
+                                </span>
+                              );
+                            })()}
                           </td>
 
                           <td className="py-3.5 px-4 align-top">
@@ -681,7 +727,7 @@ const AssetRegisterPageInner = () => {
                                 <span>ประวัติ</span>
                               </button>
 
-                              {asset.status === 'ACTIVE' && canManageAssets ? (
+                              {asset.status === 'ACTIVE' && canManageVccAsset(currentUser, asset.department) ? (
                                 <>
                                   <button
                                     type="button"
@@ -700,7 +746,7 @@ const AssetRegisterPageInner = () => {
                                     <span>ปลดออกจากทะเบียน</span>
                                   </button>
                                 </>
-                              ) : asset.status === 'RETIRED' && canManageAssets ? (
+                              ) : asset.status === 'RETIRED' && canManageVccAsset(currentUser, asset.department) ? (
                                 <button
                                   type="button"
                                   onClick={() => openReactivateModal(asset)}
@@ -711,7 +757,11 @@ const AssetRegisterPageInner = () => {
                                 </button>
                               ) : asset.status === 'ON_HOLD' || asset.status === 'UNDER_REPAIR' ? (
                                 <span className="text-xs text-slate-500 max-w-[11rem] text-right">ปลดระงับที่หน้า “ใบสั่งงาน” เมื่อประเมินผลแล้ว</span>
-                              ) : null}
+                              ) : (
+                                <span className="text-xs text-slate-500 max-w-[12rem] text-right" data-testid="asset-responsible">
+                                  ผู้รับผิดชอบ: หัวหน้าแผนก {asset.department} (L4 ขึ้นไป) หรือ DCC
+                                </span>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -736,7 +786,8 @@ const AssetRegisterPageInner = () => {
         handleSaveAsset={handleSaveAsset}
         formTypeOptions={formTypeOptions}
         assetTypes={assetTypes}
-        activeDepartments={activeDepartments}
+        activeDepartments={formDepartments}
+        canTransfer={isDccUser}
       />
 
       <AssetStatusModal
@@ -745,6 +796,7 @@ const AssetRegisterPageInner = () => {
         statusReason={statusReason}
         setStatusReason={setStatusReason}
         statusError={statusError}
+        statusImpact={statusImpact}
         savingStatus={savingStatus}
         handleConfirmStatusChange={handleConfirmStatusChange}
       />

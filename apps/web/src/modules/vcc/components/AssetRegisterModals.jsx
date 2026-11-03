@@ -53,7 +53,8 @@ export const AssetFormModal = ({
   handleSaveAsset,
   formTypeOptions,
   assetTypes,
-  activeDepartments
+  activeDepartments,
+  canTransfer = true
 }) => {
   if (!formOpen) return null;
 
@@ -179,7 +180,7 @@ export const AssetFormModal = ({
               </label>
               <select
                 required
-                disabled={activeDepartments.length === 0}
+                disabled={activeDepartments.length === 0 || (Boolean(editingAsset) && !canTransfer)}
                 value={form.department}
                 onChange={(e) => setForm({ ...form, department: e.target.value })}
                 className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium bg-white focus:outline-none focus:border-indigo-600 disabled:bg-slate-100 disabled:text-slate-500"
@@ -193,6 +194,9 @@ export const AssetFormModal = ({
                   </option>
                 ))}
               </select>
+              {Boolean(editingAsset) && !canTransfer && (
+                <p className="mt-1.5 text-xs text-slate-500">การโอนเครื่องมือข้ามแผนกทำได้เฉพาะ DCC</p>
+              )}
               {activeDepartments.length === 0 && (
                 <p className="mt-1.5 text-xs text-rose-600 font-semibold">
                   ไม่สามารถโหลดแผนกจาก Master Data ได้ กรุณาตรวจสอบข้อมูลแผนกก่อนบันทึก
@@ -268,10 +272,12 @@ export const AssetStatusModal = ({
   statusReason,
   setStatusReason,
   statusError,
+  statusImpact,
   savingStatus,
   handleConfirmStatusChange
 }) => {
   if (!statusModal) return null;
+  const blockedByWorkOrders = statusModal.mode === 'RETIRE' && Number(statusImpact?.open_work_orders) > 0;
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
@@ -314,6 +320,21 @@ export const AssetStatusModal = ({
             </div>
           </div>
 
+          {statusImpact && (
+            <div
+              data-testid="asset-impact"
+              className={`p-3.5 rounded-xl border text-sm ${blockedByWorkOrders ? 'bg-rose-50 border-rose-200 text-rose-800' : 'bg-slate-50 border-slate-200 text-slate-700'}`}
+            >
+              <div className="font-bold mb-1">ผลกระทบที่ตรวจพบ</div>
+              <ul className="list-disc pl-5 space-y-0.5">
+                <li>ใบสั่งงานสอบเทียบที่ยังไม่ปิด: {statusImpact.open_work_orders}</li>
+                <li>อยู่ในแผนประจำปีฉบับปัจจุบัน: {statusImpact.plan_items} รายการ</li>
+                <li>ใบสั่งงานที่ปิดแล้ว (ประวัติ ไม่ถูกแก้ไข): {statusImpact.closed_work_orders}</li>
+              </ul>
+              {blockedByWorkOrders && <p className="mt-1.5 font-semibold">ต้องปิดหรือยกเลิกใบสั่งงานที่ค้างอยู่ก่อน จึงจะปลดออกได้</p>}
+            </div>
+          )}
+
           <div>
             <label className="block text-sm font-semibold text-slate-700 mb-1.5">
               {statusModal.mode === 'RETIRE' ? 'เหตุผลในการปลดออก' : 'เหตุผลในการนำกลับมาใช้งาน'}{' '}
@@ -343,7 +364,7 @@ export const AssetStatusModal = ({
             </button>
             <button
               type="submit"
-              disabled={savingStatus || !statusReason.trim()}
+              disabled={savingStatus || !statusReason.trim() || blockedByWorkOrders}
               className={`h-10 px-5 rounded-xl text-white text-sm font-semibold disabled:opacity-50 transition-colors cursor-pointer shadow-2xs ${
                 statusModal.mode === 'RETIRE'
                   ? 'bg-rose-600 hover:bg-rose-700'

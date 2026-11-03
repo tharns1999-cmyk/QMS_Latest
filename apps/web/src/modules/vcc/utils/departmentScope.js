@@ -19,3 +19,15 @@ export const filterReadableDepartments = (user, items, getCode = (d) => d) => {
   const own = getUserDeptCodes(user);
   return items.filter((d) => own.includes(String(getCode(d)).toUpperCase()));
 };
+
+// Mirrors the API write rule for the asset register (apps/api/src/vccAuth.js): DCC manages every department; L4+ manage only
+// assets of a VCC department they belong to. L6+, QMR and MGT read access add nothing; the API enforces it, this only decides what is shown.
+export const VCC_DEPARTMENTS = ['DC', 'QC', 'QA', 'MGT', 'LB'];
+export const manageableVccDepartments = (user) => {
+  if (!user) return [];
+  if (user.isDcc) return [...VCC_DEPARTMENTS];
+  if (Number(user.approval_level ?? user.approvalLevel ?? user.level ?? 0) < 4) return [];
+  return getUserDeptCodes(user).filter((d) => VCC_DEPARTMENTS.includes(d));
+};
+export const canManageVccAsset = (user, department) =>
+  Boolean(user?.isDcc) || manageableVccDepartments(user).includes(String(department || '').toUpperCase());

@@ -3,7 +3,10 @@ import { registerVccPlanRoutes } from './vccPlans.js';
 import { registerVccWorkOrderRoutes } from './vccWorkOrders.js';
 import { registerVccDashboardRoutes } from './vccDashboard.js';
 import { registerVccNotificationRoutes } from './vccNotifications.js';
-import { requireVccAccess, requireDccOnly, canReadVccDepartment, vccDeptScopeSql, VCC_DEPT_FORBIDDEN } from './vccAuth.js';
+import {
+  requireVccAccess, requireDccOnly, canReadVccDepartment, vccDeptScopeSql, VCC_DEPT_FORBIDDEN,
+  canManageVccAsset, manageableVccDepartments, VCC_ASSET_MANAGE_FORBIDDEN, VCC_ASSET_TRANSFER_FORBIDDEN
+} from './vccAuth.js';
 
 const DCC_ONLY = { error: 'เฉพาะ DCC เท่านั้นที่ใช้งานส่วนนี้ได้' };
 const NOW = `strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`;
@@ -39,6 +42,17 @@ const ASSET_SELECT = `
   LEFT JOIN departments d ON d.code = a.department
   LEFT JOIN vcc_assets p ON p.id = a.parent_id
 `;
+
+// What retiring / reactivating an asset touches. Calibration history is never changed; only open work orders block a retire.
+const loadAssetImpact = async (db, id) => {
+  const [wo, plan, done] = await Promise.all([
+    db.prepare("SELECT COUNT(*) AS n FROM vcc_work_orders WHERE asset_id = ? AND status NOT IN ('CLOSED', 'CANCELLED')").bind(id).first(),
+    db.prepare(`SELECT COUNT(*) AS n FROM vcc_annual_plan_items i JOIN vcc_annual_plans p ON p.id = i.plan_id
+      WHERE i.asset_id = ? AND p.is_current = 1 AND p.status IN ('DRAFT', 'PENDING_REVIEW', 'PENDING_APPROVAL', 'APPROVED')`).bind(id).first(),
+    db.prepare("SELECT COUNT(*) AS n FROM vcc_work_orders WHERE asset_id = ? AND status = 'CLOSED'").bind(id).first()
+  ]);
+  return { open_work_orders: wo.n, plan_items: plan.n, closed_work_orders: done.n };
+};
 
 const fetchAsset = (db, id) =>
   db.prepare(`${ASSET_SELECT} WHERE a.id = ?`).bind(id).first();
@@ -151,7 +165,16 @@ export const registerVccRoutes = (app, { requireAuth, audit }) => {
     return c.json({ asset, children, history });
   });
 
-  app.post('/api/vcc/assets', requireAuth, requireDccOnly, async (c) => {
+  app.get('/api/vcc/assets/:id/impact', requireAuth, requireVccAccess, async (c) => {
+    const db = c.env.DB;
+    const id = c.req.param('id');
+    const asset = await db.prepare('SELECT id, department FROM vcc_assets WHERE id = ?').bind(id).first();
+    if (!asset) return c.json({ error: 'ไม่พบเครื่องมือ' }, 404);
+    if (!canReadVccDepartment(c.get('user'), asset.department)) return c.json(VCC_DEPT_FORBIDDEN, 403);
+    return c.json({ impact: await loadAssetImpact(db, id) });
+  });
+
+  app.post('/api/vcc/assets', requireAuth, requireVccAccess, async (c) => {
     const db = c.env.DB;
     const user = c.get('user');
     const body = await c.req.json().catch(() => ({}));
@@ -159,7 +182,13 @@ export const registerVccRoutes = (app, { requireAuth, audit }) => {
     const assetCode = clean(body.asset_code, 50)?.toUpperCase();
     const name = clean(body.name, 200);
     const assetType = clean(body.asset_type, 100);
-    const department = clean(body.department, 20)?.toUpperCase();
+    let department = clean(body.department, 20)?.toUpperCase();
+    // Non-DCC users register only into a VCC department they belong to; the server decides, never the browser.
+    if (!user.isDcc) {
+      const mine = manageableVccDepartments(user);
+      if (!department && mine.length === 1) [department] = mine;
+      if (!department || !mine.includes(department)) return c.json(VCC_ASSET_MANAGE_FORBIDDEN, 403);
+    }
     const serialNo = cleanOpt(body.serial_no, 100);
     const model = cleanOpt(body.model, 200);
     const location = cleanOpt(body.location, 200);
@@ -231,6 +260,7 @@ export const registerVccRoutes = (app, { requireAuth, audit }) => {
     const id = c.req.param('id');
     const before = await db.prepare('SELECT * FROM vcc_assets WHERE id = ?').bind(id).first();
     if (!before) return c.json({ error: 'ไม่พบเครื่องมือ' }, 404);
+    if (!canManageVccAsset(user, before.department)) return c.json(VCC_ASSET_MANAGE_FORBIDDEN, 403);
     if (before.status === 'RETIRED') {
       return c.json({ error: 'เครื่องมือที่ปลดออกแล้วไม่สามารถแก้ไขได้ กรุณานำกลับมาใช้งานก่อน' }, 409);
     }
@@ -266,6 +296,7 @@ export const registerVccRoutes = (app, { requireAuth, audit }) => {
     if (!name) return c.json({ error: 'กรุณาระบุชื่อเครื่องมือ' }, 400);
     if (!assetType) return c.json({ error: 'กรุณาระบุประเภทเครื่องมือ' }, 400);
     if (!department) return c.json({ error: 'กรุณาระบุแผนกเจ้าของเครื่องมือ' }, 400);
+    if (department !== before.department && !user.isDcc) return c.json(VCC_ASSET_TRANSFER_FORBIDDEN, 403);
     if (serialNo === null || model === null || location === null || compositeDetails === null) {
       return c.json({ error: 'ข้อมูลหมายเลขเครื่อง รุ่น ที่ตั้ง หรือรายละเอียดชุดเครื่องมือยาวเกินกำหนด' }, 400);
     }
@@ -341,10 +372,10 @@ export const registerVccRoutes = (app, { requireAuth, audit }) => {
     return c.json({ asset: await fetchAsset(db, id) });
   };
 
-  app.put('/api/vcc/assets/:id', requireAuth, requireDccOnly, updateAsset);
-  app.patch('/api/vcc/assets/:id', requireAuth, requireDccOnly, updateAsset);
+  app.put('/api/vcc/assets/:id', requireAuth, requireVccAccess, updateAsset);
+  app.patch('/api/vcc/assets/:id', requireAuth, requireVccAccess, updateAsset);
 
-  app.post('/api/vcc/assets/:id/retire', requireAuth, requireDccOnly, async (c) => {
+  app.post('/api/vcc/assets/:id/retire', requireAuth, requireVccAccess, async (c) => {
     const db = c.env.DB;
     const user = c.get('user');
     const id = c.req.param('id');
@@ -354,7 +385,16 @@ export const registerVccRoutes = (app, { requireAuth, audit }) => {
 
     const before = await db.prepare('SELECT * FROM vcc_assets WHERE id = ?').bind(id).first();
     if (!before) return c.json({ error: 'ไม่พบเครื่องมือ' }, 404);
+    if (!canManageVccAsset(user, before.department)) return c.json(VCC_ASSET_MANAGE_FORBIDDEN, 403);
     if (before.status === 'RETIRED') return c.json({ error: 'เครื่องมือนี้ถูกปลดออกไปแล้ว' }, 409);
+
+    const impact = await loadAssetImpact(db, id);
+    if (impact.open_work_orders > 0) {
+      return c.json({
+        error: `ไม่สามารถปลดออกได้ เนื่องจากยังมีใบสั่งงานสอบเทียบที่ยังไม่ปิด ${impact.open_work_orders} รายการ กรุณาปิดหรือยกเลิกใบสั่งงานก่อน`,
+        impact
+      }, 409);
+    }
 
     const { n: activeChildren } = await db.prepare(
       "SELECT COUNT(*) AS n FROM vcc_assets WHERE parent_id = ? AND status = 'ACTIVE'"
@@ -375,14 +415,15 @@ export const registerVccRoutes = (app, { requireAuth, audit }) => {
         name: before.name,
         reason,
         before: { status: before.status },
-        after: { status: 'RETIRED' }
+        after: { status: 'RETIRED' },
+        impact
       })
     ]);
 
     return c.json({ asset: await fetchAsset(db, id) });
   });
 
-  app.post('/api/vcc/assets/:id/reactivate', requireAuth, requireDccOnly, async (c) => {
+  app.post('/api/vcc/assets/:id/reactivate', requireAuth, requireVccAccess, async (c) => {
     const db = c.env.DB;
     const user = c.get('user');
     const id = c.req.param('id');
@@ -392,6 +433,7 @@ export const registerVccRoutes = (app, { requireAuth, audit }) => {
 
     const before = await db.prepare('SELECT * FROM vcc_assets WHERE id = ?').bind(id).first();
     if (!before) return c.json({ error: 'ไม่พบเครื่องมือ' }, 404);
+    if (!canManageVccAsset(user, before.department)) return c.json(VCC_ASSET_MANAGE_FORBIDDEN, 403);
     if (before.status !== 'RETIRED') return c.json({ error: 'เครื่องมือนี้ไม่ได้อยู่ในสถานะปลดออก' }, 409);
 
     await db.batch([
