@@ -153,6 +153,7 @@ export const AnnualPlanWorkspaceHeader = ({
   canEditPlan = false,
   thresholds = {},
   onSubmitPlan,
+  onOpenRevision,
   onOpenSettings,
   onOpenCreatePlan,
   onOpenEditPlan,
@@ -401,10 +402,21 @@ export const AnnualPlanWorkspaceHeader = ({
             </button>
           )}
 
+          {activePlan && activePlan.status === 'APPROVED' && onOpenRevision && (
+            <button
+              type="button"
+              onClick={onOpenRevision}
+              title="คัดลอกแผนที่อนุมัติแล้วเป็นฉบับร่างใหม่เพื่อแก้ไข"
+              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-indigo-300 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold text-xs shadow-2xs transition-colors cursor-pointer"
+            >
+              <span>สร้างฉบับแก้ไข (Revision)</span>
+            </button>
+          )}
+
           {/* Secondary Action: สร้างแผนใหม่ */}
           <button
             type="button"
-            onClick={onOpenCreatePlan}
+            onClick={() => onOpenCreatePlan()}
             title="สร้างแผนการทวนสอบเครื่องมือประจำปีใหม่"
             className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
           >
@@ -462,7 +474,7 @@ export const AnnualPlanWorkspaceHeader = ({
                   type="button"
                   role="menuitem"
                   className={menuItemClass}
-                  onClick={runMenu(onOpenCreatePlan)}
+                  onClick={runMenu(() => onOpenCreatePlan())}
                 >
                   <Plus size={14} className="text-slate-500" />
                   <span>สร้างแผนประจำปีใหม่</span>

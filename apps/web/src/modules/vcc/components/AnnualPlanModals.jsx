@@ -196,6 +196,61 @@ export const PlanFormModal = ({
   );
 };
 
+export const PlanRevisionModal = ({ open, onClose, plan, reason, setReason, error, saving, onSubmit }) => {
+  if (!open || !plan) return null;
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-lg w-full overflow-hidden">
+        <div className="px-6 py-4.5 border-b border-slate-200 flex items-center justify-between">
+          <h2 className="text-xl font-bold text-slate-900 tracking-tight">
+            สร้างแผนฉบับแก้ไข (Revision) ของแผนปี {plan.plan_year}
+          </h2>
+          <button type="button" onClick={onClose} aria-label="ปิด" className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer">
+            <X size={20} />
+          </button>
+        </div>
+        <form onSubmit={onSubmit} className="p-6 space-y-4">
+          {error && (
+            <div role="alert" className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-sm font-semibold flex items-center gap-2">
+              <AlertTriangle size={17} className="text-rose-600 shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
+          <p className="text-sm text-slate-600 font-medium">
+            ระบบจะคัดลอกแผน {plan.department} Rev.{plan.revision} เป็นฉบับร่างใหม่ แผนเดิมยังใช้งานต่อจนกว่าฉบับใหม่จะผ่านการทบทวนและอนุมัติ
+          </p>
+          <div>
+            <label htmlFor="plan_revision_reason" className="block text-sm font-semibold text-slate-700 mb-1.5">
+              เหตุผลการขอปรับปรุงแผน <span className="text-rose-600">*</span>
+            </label>
+            <textarea
+              id="plan_revision_reason"
+              rows={3}
+              required
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="เช่น เพิ่มเครื่องมือใหม่เข้าแผน / เปลี่ยนรอบทวนสอบ..."
+              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-medium focus:outline-none focus:border-indigo-600"
+            />
+          </div>
+          <div className="pt-2 flex items-center justify-end gap-2.5">
+            <button type="button" onClick={onClose} className="h-10 px-4 rounded-xl border border-slate-300 text-slate-700 text-sm font-semibold hover:bg-slate-50 cursor-pointer">
+              ยกเลิก
+            </button>
+            <button
+              type="submit"
+              disabled={saving || !reason.trim()}
+              className="h-10 px-5 rounded-xl bg-indigo-600 text-white text-sm font-bold hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
+            >
+              {saving ? 'กำลังสร้าง...' : 'สร้างฉบับแก้ไข'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
 export const PlanItemModal = ({
   open,
   onClose,

@@ -718,6 +718,14 @@ export const fetchVccPlanDetail = async (id) => {
   return { plan, items, thresholds, history };
 };
 
+// New revision of an approved plan. Only the server holds the plan data, so the demo (local) mode cannot do it.
+export const createVccPlanRevision = async (planId, { revision_reason, title } = {}) => {
+  if (!isApiMode) throw new Error('การสร้าง Revision ใช้ได้เมื่อเชื่อมต่อเซิร์ฟเวอร์เท่านั้น');
+  const { plan } = await apiPost(`/api/vcc/plans/${encodeURIComponent(planId)}/revisions`, { revision_reason, title });
+  await syncVccTasks().catch(() => {});
+  return plan;
+};
+
 export const createVccPlan = async (payload) => {
   if (isApiMode) {
     const { plan } = await apiPost('/api/vcc/plans', payload);

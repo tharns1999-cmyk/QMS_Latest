@@ -11,6 +11,7 @@ import {
   fetchVccPlanDetail,
   computeDueDateForMonth,
   createVccPlan,
+  createVccPlanRevision,
   updateVccPlan,
   saveVccPlanItem,
   deleteVccPlanItem,
@@ -19,11 +20,13 @@ import {
   submitVccPlan,
   isUserAuthorizedForPlanDept,
 } from '../api/vccPlanApi';
+import { isApiMode } from '../../../api/client';
 import { fetchVccWorkOrders, createVccWorkOrder } from '../api/vccWorkOrderApi';
 import {
   PlanFormModal,
   PlanItemModal,
   PlanSubmitModal,
+  PlanRevisionModal,
   GroupWorkOrderModal,
   PlanSettingsModal,
   PlanHistoryModal,
@@ -145,6 +148,10 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
   const [justificationModalOpen, setJustificationModalOpen] = useState(false);
   const [groupConversionModal, setGroupConversionModal] = useState(null);
   const [convertingGroup, setConvertingGroup] = useState(false);
+  const [revisionOpen, setRevisionOpen] = useState(false);
+  const [revisionReason, setRevisionReason] = useState('');
+  const [revisionError, setRevisionError] = useState('');
+  const [creatingRevision, setCreatingRevision] = useState(false);
   const [planSubmitModalOpen, setPlanSubmitModalOpen] = useState(false);
   const [submittingPlan, setSubmittingPlan] = useState(false);
   const [planSubmitError, setPlanSubmitError] = useState('');
@@ -227,7 +234,9 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
 
   const openCreatePlan = (overrideYear = null) => {
     const currentYear = new Date().getFullYear();
-    const targetYear = overrideYear ? Number(overrideYear) : (filterYear ? Number(filterYear) : currentYear);
+    // Only a real year counts: a click event or a filter label must not turn into NaN
+    const fixedYear = Number.isInteger(Number(overrideYear)) && Number(overrideYear) > 0 ? Number(overrideYear) : null;
+    const targetYear = fixedYear || (Number(filterYear) > 0 ? Number(filterYear) : currentYear);
     const targetDept = filterDept || activeDepartments[0]?.code || '';
     setEditingPlan(null);
     setPlanFormError('');
@@ -415,6 +424,29 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
     setGroupConversionModal({ groupItem, groupChildren });
   };
 
+  const openRevision = () => {
+    setRevisionReason('');
+    setRevisionError('');
+    setRevisionOpen(true);
+  };
+
+  const handleCreateRevision = async (e) => {
+    e.preventDefault();
+    setCreatingRevision(true);
+    setRevisionError('');
+    try {
+      const created = await createVccPlanRevision(activePlan.id, { revision_reason: revisionReason.trim() });
+      toast.success(`สร้างแผนปี ${created.plan_year} Rev.${created.revision} (ฉบับร่าง) แล้ว`);
+      setRevisionOpen(false);
+      if (statusTab !== 'DRAFT') setStatusTab('DRAFT');
+      await loadPlansAndMeta(created.id);
+    } catch (err) {
+      setRevisionError(err.message || 'ไม่สามารถสร้างฉบับแก้ไขได้');
+    } finally {
+      setCreatingRevision(false);
+    }
+  };
+
   const handleSubmitPlan = () => {
     if (!planDetail?.plan) return;
     setWorkflowBannerError('');
@@ -582,6 +614,16 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
     isUserEligibleEditor
   );
 
+  // A new revision can only start from the plan in force (the server checks the same), by someone who may edit this department's plans
+  const canRevisePlan = Boolean(
+    isApiMode &&
+    activePlan &&
+    activePlan.status === 'APPROVED' &&
+    Number(activePlan.is_current) === 1 &&
+    activePlan.effective_status !== 'SUPERSEDED' &&
+    isUserEligibleEditor
+  );
+
   const availableYears = useMemo(() => {
     const currentYear = new Date().getFullYear();
     const dynamicBaseYears = [
@@ -648,6 +690,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
         canEditPlan={canEditPlan}
         thresholds={thresholds}
         onSubmitPlan={handleSubmitPlan}
+        onOpenRevision={canRevisePlan ? openRevision : undefined}
         onOpenSettings={openSettings}
         onOpenCreatePlan={openCreatePlan}
         onOpenEditPlan={openEditPlan}
@@ -754,6 +797,17 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
         saving={savingPlanForm}
         onSubmit={handleSavePlan}
         activeDepartments={activeDepartments}
+      />
+
+      <PlanRevisionModal
+        open={revisionOpen}
+        onClose={() => setRevisionOpen(false)}
+        plan={activePlan}
+        reason={revisionReason}
+        setReason={setRevisionReason}
+        error={revisionError}
+        saving={creatingRevision}
+        onSubmit={handleCreateRevision}
       />
 
       <PlanSubmitModal
