@@ -32,9 +32,12 @@ describe('Hub & Spoke Navigation Isolation (Context-Aware Sidebar)', () => {
     expect(screen.queryByText('คลังเอกสารภายนอก')).not.toBeInTheDocument();
     expect(screen.queryByText('การทบทวนตามรอบ')).not.toBeInTheDocument();
     expect(screen.queryByText('ทะเบียนสำเนาควบคุม')).not.toBeInTheDocument();
-    expect(screen.queryByText('จัดการข้อมูลหลัก')).not.toBeInTheDocument();
-    expect(screen.queryByText('ประวัติการดำเนินการ (Audit Trail)')).not.toBeInTheDocument();
     expect(screen.queryByText('กลับสู่พอร์ทัลหลัก')).not.toBeInTheDocument();
+
+    // Admins get the global SYSTEM ADMIN group on the portal
+    expect(screen.getByText('SYSTEM ADMIN')).toBeInTheDocument();
+    expect(screen.getByText('จัดการข้อมูลหลัก').closest('a')).toHaveAttribute('href', '/admin/master-data');
+    expect(screen.getByText('ประวัติการดำเนินการ (Audit Trail)').closest('a')).toHaveAttribute('href', '/admin/audit-log');
   });
 
   it('2. When in DCC module route (/dcc/dashboard), renders DCC menus and Quick Return link', () => {
@@ -55,8 +58,10 @@ describe('Hub & Spoke Navigation Isolation (Context-Aware Sidebar)', () => {
     expect(screen.getByText('คลังเอกสารภายนอก')).toBeInTheDocument();
     expect(screen.getByText('การทบทวนตามรอบ')).toBeInTheDocument();
     expect(screen.getByText('ทะเบียนสำเนาควบคุม')).toBeInTheDocument();
-    expect(screen.getByText('จัดการข้อมูลหลัก')).toBeInTheDocument();
-    expect(screen.getByText('ประวัติการดำเนินการ (Audit Trail)')).toBeInTheDocument();
+    // DCC shortcuts for admins now point at the global /admin routes
+    expect(screen.getByText('จัดการข้อมูลหลัก').closest('a')).toHaveAttribute('href', '/admin/master-data');
+    expect(screen.getByText('ประวัติการดำเนินการ (Audit Trail)').closest('a')).toHaveAttribute('href', '/admin/audit-log');
+    expect(screen.queryByText('SYSTEM ADMIN')).not.toBeInTheDocument();
 
     // Bottom tools always available
     expect(screen.getByText('DEV TOOLS')).toBeInTheDocument();

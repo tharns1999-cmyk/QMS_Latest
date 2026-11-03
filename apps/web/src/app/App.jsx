@@ -7,6 +7,9 @@ import SLAEngine from '../modules/dcc/components/SLAEngine';
 import ProtectedRoute from './auth/ProtectedRoute';
 import ApiSessionGate from './auth/ApiSessionGate';
 import { isApiMode } from '../api/client';
+import { ADMIN_MASTER_DATA, ADMIN_AUDIT_LOG } from '../modules/admin/adminRoutes';
+
+const ADMIN_DENIED = 'คุณไม่มีสิทธิ์เข้าถึงศูนย์บริหารระบบ';
 
 // [Safe Cache Maintenance: รันตอน Boot เพื่อเคลียร์ Temporary Cache ที่บวมเกิน 1.5MB โดยไม่แตะต้อง Vault หลัก]
 (() => {
@@ -105,7 +108,8 @@ export const AliasRedirect = ({ to }) => {
     resolvedPath = resolvedPath.replace(`:${key}`, params[key]);
   });
   const search = location.search || '';
-  return <Navigate to={`${resolvedPath}${search}`} replace state={location.state} />;
+  const hash = location.hash || '';
+  return <Navigate to={`${resolvedPath}${search}${hash}`} replace state={location.state} />;
 };
 
 function App() {
@@ -228,9 +232,10 @@ function App() {
             <Route path="viewer/:docId/:rev" element={withSuspense(Viewer)} />
 
             <Route path="admin/health" element={withSuspense(AdminHealth)} />
-            <Route path="admin/action-log" element={<ProtectedRoute requireAdmin deniedToastMessage="เฉพาะเจ้าหน้าที่ DCC Admin เท่านั้นที่สามารถเข้าถึงประวัติการดำเนินการได้">{withSuspense(ActionLog)}</ProtectedRoute>} />
-            <Route path="admin/audit-trail" element={<AliasRedirect to="/dcc/admin/action-log" />} />
-            <Route path="admin/master-data" element={<ProtectedRoute requireAdmin deniedToastMessage="คุณไม่มีสิทธิ์เข้าถึงศูนย์จัดการข้อมูลหลัก">{withSuspense(MasterDataHub)}</ProtectedRoute>} />
+            {/* Master Data and Audit Trail moved to the global System Administration routes (/admin/*); old links keep working */}
+            <Route path="admin/action-log" element={<AliasRedirect to={ADMIN_AUDIT_LOG} />} />
+            <Route path="admin/audit-trail" element={<AliasRedirect to={ADMIN_AUDIT_LOG} />} />
+            <Route path="admin/master-data" element={<AliasRedirect to={ADMIN_MASTER_DATA} />} />
             <Route path="reports" element={withSuspense(Reports)} />
 
             <Route path="controlled-copy" element={<ProtectedRoute requireDcc deniedToastMessage="คุณไม่มีสิทธิ์เข้าถึงศูนย์ควบคุมงาน DCC">{withSuspense(ControlledCopyRegister)}</ProtectedRoute>} />
@@ -300,10 +305,16 @@ function App() {
           <Route path="documents/:id" element={<AliasRedirect to="/dcc/library/:id" />} />
           <Route path="viewer/:docId/:rev" element={<AliasRedirect to="/dcc/viewer/:docId/:rev" />} />
 
-          <Route path="admin/health" element={<AliasRedirect to="/dcc/admin/health" />} />
-          <Route path="admin/action-log" element={<AliasRedirect to="/dcc/admin/action-log" />} />
-          <Route path="admin/master-data" element={<AliasRedirect to="/dcc/admin/master-data" />} />
-          <Route path="master-data" element={<AliasRedirect to="/dcc/admin/master-data" />} />
+          {/* Global System Administration: admins only (the same rule as the API's admin endpoints) */}
+          <Route path="admin">
+            <Route index element={<ProtectedRoute requireAdmin redirectPath="/portal" deniedToastMessage={ADMIN_DENIED}><AliasRedirect to={ADMIN_MASTER_DATA} /></ProtectedRoute>} />
+            <Route path="master-data" element={<ProtectedRoute requireAdmin redirectPath="/portal" deniedToastMessage="คุณไม่มีสิทธิ์เข้าถึงศูนย์จัดการข้อมูลหลัก">{withSuspense(MasterDataHub)}</ProtectedRoute>} />
+            <Route path="audit-log" element={<ProtectedRoute requireAdmin redirectPath="/portal" deniedToastMessage="เฉพาะผู้ดูแลระบบ (DCC Admin) เท่านั้นที่สามารถเข้าถึงประวัติการดำเนินการได้">{withSuspense(ActionLog)}</ProtectedRoute>} />
+            <Route path="action-log" element={<AliasRedirect to={ADMIN_AUDIT_LOG} />} />
+            <Route path="audit-trail" element={<AliasRedirect to={ADMIN_AUDIT_LOG} />} />
+            <Route path="health" element={<AliasRedirect to="/dcc/admin/health" />} />
+          </Route>
+          <Route path="master-data" element={<AliasRedirect to={ADMIN_MASTER_DATA} />} />
           <Route path="reports" element={<AliasRedirect to="/dcc/reports" />} />
 
           <Route path="controlled-copy" element={<AliasRedirect to="/dcc/controlled-copy" />} />

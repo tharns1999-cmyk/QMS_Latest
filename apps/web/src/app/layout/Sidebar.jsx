@@ -26,7 +26,9 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import NotificationPopover from './NotificationPopover';
-import { isActionableTask, isAssignedToSomeoneElse, isDccAdmin as checkDccAdmin, isSameDepartment } from '../../modules/dcc/utils/taskFilter';
+import { isActionableTask, isAssignedToSomeoneElse, isSameDepartment } from '../../modules/dcc/utils/taskFilter';
+import { isSystemAdmin } from '../../modules/admin/adminAccess';
+import { isAdminPath, ADMIN_MASTER_DATA, ADMIN_AUDIT_LOG } from '../../modules/admin/adminRoutes';
 import { evaluateDocumentReviewStatus } from '../../modules/dcc/utils/documentUtils';
 import { extractDeptCode } from '../../modules/dcc/services/darService';
 import SystemTimeSimulatorWidget from '../../modules/dcc/components/common/SystemTimeSimulatorWidget';
@@ -88,8 +90,10 @@ const Sidebar = ({ isOpen = false, onClose = () => {} }) => {
   );
 
   const isDccUser = Boolean(currentUser?.isDcc || currentUser?.role === 'DCC_ADMIN' || currentUser?.role === 'DCC_STAFF');
-  const isDccAdmin = checkDccAdmin(currentUser);
-  const isAdmin = isDccAdmin;
+  const isAdmin = isSystemAdmin(currentUser);
+  // Global System Administration: its own spoke, reachable from the portal, shown to admins only
+  const isAdminModule = isAdminPath(path);
+  const showSystemAdmin = isAdmin && (isAdminModule || path === '/portal');
 
   const effectiveToday = getEffectiveToday ? getEffectiveToday() : (simulatedSystemDate ? new Date(simulatedSystemDate) : new Date());
   const allDocs = useMemo(() => [...(documents || []), ...(externalDocuments || [])], [documents, externalDocuments]);
@@ -341,11 +345,11 @@ const Sidebar = ({ isOpen = false, onClose = () => {} }) => {
                 QMS
               </h1>
               <span className="px-1.5 py-0.2 text-[9px] font-black font-mono bg-blue-50 text-blue-700 border border-blue-200 rounded shrink-0 uppercase tracking-wider">
-                {isVccModule ? 'VCC' : isDccModule ? 'DCC' : 'Portal'}
+                {isVccModule ? 'VCC' : isDccModule ? 'DCC' : isAdminModule ? 'Admin' : 'Portal'}
               </span>
             </div>
             <p className="text-[10.5px] text-slate-500 font-medium tracking-tight truncate mt-0.5">
-              {isVccModule ? 'Calibration & Verification' : 'Enterprise Quality Suite'}
+              {isVccModule ? 'Calibration & Verification' : isAdminModule ? 'System Administration' : 'Enterprise Quality Suite'}
             </p>
           </div>
         </div>
@@ -358,7 +362,7 @@ const Sidebar = ({ isOpen = false, onClose = () => {} }) => {
       <nav className="flex-1 overflow-y-auto px-3 py-2 space-y-1">
         {/* WORKSPACE NAVIGATION (Hub vs Spoke) */}
         <SectionHeader title="WORKSPACE" />
-        {(!isDccModule && !isVccModule) ? (
+        {(!isDccModule && !isVccModule && !isAdminModule) ? (
           <NavItem 
             to="/portal" 
             end
@@ -372,6 +376,23 @@ const Sidebar = ({ isOpen = false, onClose = () => {} }) => {
             icon={ArrowLeft} 
             label="กลับสู่พอร์ทัลหลัก" 
           />
+        )}
+
+        {/* SYSTEM ADMIN (admins only; on the portal and inside /admin/*) */}
+        {showSystemAdmin && (
+          <>
+            <SectionHeader title="SYSTEM ADMIN" />
+            <NavItem
+              to={ADMIN_MASTER_DATA}
+              icon={SlidersHorizontal}
+              label="จัดการข้อมูลหลัก"
+            />
+            <NavItem
+              to={ADMIN_AUDIT_LOG}
+              icon={History}
+              label="ประวัติการดำเนินการ (Audit Trail)"
+            />
+          </>
         )}
 
         {/* DCC MODULE NAVIGATION (Shown only when active in DCC module route) */}
@@ -402,12 +423,12 @@ const Sidebar = ({ isOpen = false, onClose = () => {} }) => {
                 {isAdmin && (
                   <>
                     <NavItem 
-                      to="/dcc/admin/master-data" 
-                      icon={SlidersHorizontal} 
-                      label="จัดการข้อมูลหลัก" 
+                      to={ADMIN_MASTER_DATA}
+                      icon={SlidersHorizontal}
+                      label="จัดการข้อมูลหลัก"
                     />
-                    <NavItem 
-                      to="/dcc/admin/action-log" 
+                    <NavItem
+                      to={ADMIN_AUDIT_LOG}
                       icon={History} 
                       label="ประวัติการดำเนินการ (Audit Trail)" 
                     />

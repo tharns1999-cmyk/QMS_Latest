@@ -22,6 +22,7 @@ import {
 import dayjs from 'dayjs';
 import { isApiMode, apiGet } from '../../../../api/client';
 import ApiAdminPanel from './ApiAdminPanel';
+import { isSystemAdmin } from '../../../admin/adminAccess';
 import { TablePagination } from '../../../../shared/components/common/TablePagination';
 import { useTablePagination } from '../../../../shared/hooks/useTablePagination';
 
@@ -151,14 +152,8 @@ const ActionLog = () => {
   const [dateTo, setDateTo] = useState('');
   const [activeDetailItem, setActiveDetailItem] = useState(null);
 
-  // Protect route for DCC Admin / Staff
-  const isDccAdmin = Boolean(
-    currentUser?.isDcc || 
-    currentUser?.role === 'DCC_ADMIN' || 
-    currentUser?.role === 'DCC_STAFF' || 
-    currentUser?.role === 'SUPER_ADMIN' ||
-    currentUser?.isDccAdmin
-  );
+  // System administrators only (the same rule as the /admin route guard); DCC staff are not admins
+  const isDccAdmin = isSystemAdmin(currentUser);
 
   // API mode: the server's audit log is the master record
   const [serverRows, setServerRows] = useState([]);
@@ -492,7 +487,7 @@ const ActionLog = () => {
         </div>
         <h2 className="text-xl font-bold text-slate-900">Access Denied (จำกัดสิทธิ์)</h2>
         <p className="text-sm text-slate-500 mt-1 max-w-md">
-          เฉพาะเจ้าหน้าที่ DCC Admin และผู้ดูแลระบบเท่านั้นที่สามารถดูบันทึกประวัติการดำเนินการ (Audit Trail) ได้
+          เฉพาะผู้ดูแลระบบ (DCC Admin) เท่านั้นที่สามารถดูบันทึกประวัติการดำเนินการ (Audit Trail) ได้
         </p>
       </div>
     );
