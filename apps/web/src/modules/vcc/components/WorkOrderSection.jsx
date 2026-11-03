@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import {
   Plus,
@@ -237,6 +238,25 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Deep link from the task inbox / notifications: /vcc/work-orders?wo=<id> opens that work order's drawer on its own tab
+  const [searchParams, setSearchParams] = useSearchParams();
+  const deepLinkedWoId = searchParams.get('wo');
+  useEffect(() => {
+    if (!deepLinkedWoId || loading || fetchError) return;
+    const tab = Object.keys(rawWosByTab).find((key) => rawWosByTab[key].some((w) => w.id === deepLinkedWoId));
+    if (tab) {
+      setActiveTab(tab);
+      setSelectedDrawerWo(rawWosByTab[tab].find((w) => w.id === deepLinkedWoId));
+    } else {
+      toast.error('ไม่พบใบสั่งงานที่ระบุ หรือคุณไม่มีสิทธิ์ดูใบสั่งงานนี้');
+    }
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete('wo');
+      return next;
+    }, { replace: true });
+  }, [deepLinkedWoId, loading, fetchError, rawWosByTab, setSearchParams]);
 
   useEffect(() => {
     if (createForm.mode === 'PLAN' && createForm.plan_id) {

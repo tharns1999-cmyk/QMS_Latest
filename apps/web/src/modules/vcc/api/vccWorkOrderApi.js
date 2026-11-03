@@ -10,8 +10,9 @@ import {
   getLocalAudit,
   appendLocalAudit
 } from './vccApi';
-import { computeDueDateForMonth, getLocalPlans, getLocalPlanItems, syncVccTasks } from './vccPlanApi';
+import { computeDueDateForMonth, getLocalPlans, getLocalPlanItems, syncVccTasks as syncVccPlanTasks, isUserAuthorizedForPlanDept } from './vccPlanApi';
 import { canManageVccAsset } from '../utils/departmentScope';
+import { canReviewWorkOrder, canReleaseWorkOrderHold } from '../utils/workOrderPermissions';
 
 const STORAGE_WO_KEY = 'qms-vcc-local-work-orders-v1';
 const STORAGE_WO_SETTINGS_KEY = 'qms-vcc-local-wo-settings-v1';
@@ -80,6 +81,57 @@ const getLocalThresholds = (docType = 'FM') => {
 };
 
 export const getLocalWoThresholds = () => getLocalThresholds(getLocalWoSettings().approval_doc_type);
+
+// A SCHEDULED work order becomes a "record the result" task this many days before its due date (same as the API).
+const WORK_TASK_LEAD_DAYS = 30;
+
+// Work-order steps the current user can act on now, for the VCC task inbox and the sidebar count.
+// API mode asks the server (the authority); demo mode applies the same rules to the browser data.
+export const fetchVccWorkTasks = async () => {
+  if (isApiMode) return (await apiGet('/api/vcc/work-tasks')).tasks || [];
+  const user = assertLocalVccAccess();
+  const thresholds = getLocalWoThresholds();
+  const horizon = new Date(Date.now() + WORK_TASK_LEAD_DAYS * 86400000).toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' }); // YYYY-MM-DD, Thai date like the API
+  const allAssets = getLocalAssets();
+  const deptMap = getDepartmentMap();
+  const allPlans = getLocalPlans();
+
+  const tasks = [];
+  for (const raw of getLocalWos()) {
+    const wo = enrichLocalWo(raw, allAssets, deptMap, allPlans);
+    if (!isUserAuthorizedForPlanDept(user, wo.department)) continue;
+    const add = (kind, extra = {}) => tasks.push({
+      id: `${kind}:${wo.id}`, kind, wo_id: wo.id, wo_code: wo.wo_code, asset_code: wo.asset_code, asset_name: wo.asset_name,
+      department: wo.department, due_date: wo.due_date, result_status: wo.result_status,
+      link: `/vcc/work-orders?wo=${encodeURIComponent(wo.id)}`, created_at: wo.performed_at || wo.created_at, ...extra
+    });
+    if (wo.status === 'OPEN' || wo.status === 'SCHEDULED') {
+      if (wo.status === 'OPEN' || (wo.due_date && wo.due_date <= horizon)) add('RECORD_RESULT');
+    } else if (wo.status === 'REJECTED') {
+      if (user.id === wo.performed_by || user.isDcc || user.isQmr) add('REVISE_RESULT', { reason: wo.rejected_reason });
+    } else if (wo.status === 'PENDING_REVIEW') {
+      if (canReviewWorkOrder(user, wo, thresholds)) add('REVIEW_RESULT');
+    } else if (wo.status === 'CLOSED' && wo.nc_status === 'OPEN') {
+      if (canReleaseWorkOrderHold(user, wo, thresholds)) add('RELEASE_HOLD');
+    }
+  }
+  // shortcut: demo mode keeps no amendment requests (its amend flow is applied directly), so it has no APPROVE_AMENDMENT tasks
+  return tasks;
+};
+
+export const syncVccWorkTasks = async () => {
+  try {
+    useStore.setState({ vccWorkTasks: await fetchVccWorkTasks() });
+  } catch {
+    // the badge simply keeps its last value; the inbox page reports load errors itself
+  }
+};
+
+// Refreshes everything the sidebar count is built from: the plan/notification tasks and the work-order tasks.
+const syncVccTasks = async (user) => {
+  await syncVccPlanTasks(user);
+  await syncVccWorkTasks();
+};
 
 const enrichLocalWo = (wo, allAssets, deptMap, allPlans) => {
   const asset = allAssets.find((a) => a.id === wo.asset_id) || {};

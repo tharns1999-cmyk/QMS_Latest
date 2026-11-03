@@ -142,6 +142,8 @@ export const getUserTaskBadgeCount = (tasks = [], user = null, documents = [], r
 export const createSystemAndTaskSlice = (set, get) => ({
   // State
   tasks: [],
+  // VCC work-order steps the current user can act on (GET /api/vcc/work-tasks); kept apart from `tasks` so DCC screens never see them
+  vccWorkTasks: [],
   completedTasks: [],
   timeline: [],
   notifications: [...INITIAL_NOTIFICATIONS],

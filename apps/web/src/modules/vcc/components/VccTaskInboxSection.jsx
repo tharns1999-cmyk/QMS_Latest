@@ -27,6 +27,8 @@ import {
   isUserAuthorizedForPlanDept
 } from '../api/vccPlanApi';
 import { getPlanStatusLabel, getDueDateRuleLabel } from '../utils/planLabels';
+import { fetchVccWorkTasks, syncVccWorkTasks } from '../api/vccWorkOrderApi';
+import { describeWorkTask, sortWorkTasks } from '../utils/workTaskLabels';
 import { PlanWorkflowModal } from './AnnualPlanModals';
 
 const MONTH_LABELS = [
@@ -71,6 +73,7 @@ const getActionLabelThai = (action) => {
 
 const TABS = [
   { id: 'MY_TASKS', label: 'งานที่ต้องทำของฉัน' },
+  { id: 'RECORD_RESULT', label: 'งานบันทึกผล' },
   { id: 'PENDING_REVIEW', label: 'งานรอทบทวน' },
   { id: 'PENDING_APPROVAL', label: 'งานรออนุมัติ' },
   { id: 'REJECTED', label: 'งานส่งกลับให้แก้ไข' },
@@ -101,6 +104,8 @@ export const VccTaskInboxSection = () => {
     required_approver_level: 5
   });
   const [loading, setLoading] = useState(true);
+  // Work-order steps (record result, review, revise, release hold, approve amendment) the user can act on, from the API
+  const [workTasks, setWorkTasks] = useState([]);
 
   // Dedicated Task Detail State
   const [selectedPlanId, setSelectedPlanId] = useState(queryPlanId);
@@ -117,15 +122,18 @@ export const VccTaskInboxSection = () => {
   const loadAllWorkflowData = useCallback(async () => {
     setLoading(true);
     try {
-      const [settingsRes, plansList] = await Promise.all([
+      const [settingsRes, plansList, workTaskList] = await Promise.all([
         fetchVccPlanSettings(),
-        fetchVccPlans({ status: 'ALL' })
+        fetchVccPlans({ status: 'ALL' }),
+        fetchVccWorkTasks()
       ]);
+      setWorkTasks(workTaskList || []);
       if (settingsRes?.thresholds) {
         setThresholds(settingsRes.thresholds);
       }
       setAllPlans(plansList || []);
       await syncVccTasks(currentUser).catch(() => {});
+      await syncVccWorkTasks();
     } catch (err) {
       toast.error(err.message || 'ไม่สามารถโหลดรายการงาน VCC ได้');
     } finally {
@@ -281,19 +289,38 @@ export const VccTaskInboxSection = () => {
       });
   }, [allPlans, evaluatePlanTaskRole]);
 
+  // Each work task belongs to exactly one tab, so the tab counts always add up to "my tasks"
+  const workTasksByTab = useMemo(() => {
+    const byTab = {};
+    for (const task of sortWorkTasks(workTasks)) {
+      const tab = describeWorkTask(task)?.tab;
+      if (tab) (byTab[tab] ||= []).push(task);
+    }
+    return byTab;
+  }, [workTasks]);
   const tabCounts = useMemo(() => {
+    const workCount = (tab) => (workTasksByTab[tab] || []).length;
     return {
-      MY_TASKS: enrichedTaskItems.filter((x) => x.roleInfo.isMyActionable).length,
-      PENDING_REVIEW: enrichedTaskItems.filter((x) => x.plan.status === 'PENDING_REVIEW' && x.roleInfo.canReview).length,
-      PENDING_APPROVAL: enrichedTaskItems.filter((x) => x.plan.status === 'PENDING_APPROVAL' && x.roleInfo.canApprove).length,
-      REJECTED: enrichedTaskItems.filter((x) => x.plan.status === 'REJECTED' && x.roleInfo.canRevise).length,
+      MY_TASKS: enrichedTaskItems.filter((x) => x.roleInfo.isMyActionable).length + Object.values(workTasksByTab).flat().length,
+      RECORD_RESULT: workCount('RECORD_RESULT'),
+      PENDING_REVIEW: enrichedTaskItems.filter((x) => x.plan.status === 'PENDING_REVIEW' && x.roleInfo.canReview).length + workCount('PENDING_REVIEW'),
+      PENDING_APPROVAL: enrichedTaskItems.filter((x) => x.plan.status === 'PENDING_APPROVAL' && x.roleInfo.canApprove).length + workCount('PENDING_APPROVAL'),
+      REJECTED: enrichedTaskItems.filter((x) => x.plan.status === 'REJECTED' && x.roleInfo.canRevise).length + workCount('REJECTED'),
       WAITING_OTHERS: enrichedTaskItems.filter((x) => x.roleInfo.isWaitingOthers).length,
       COMPLETED: enrichedTaskItems.filter((x) => x.roleInfo.isCompleted).length
     };
-  }, [enrichedTaskItems]);
+  }, [enrichedTaskItems, workTasksByTab]);
+
+  // Work tasks shown in the active tab (waiting / completed are plan-only views)
+  const filteredWorkTasks = useMemo(() => {
+    if (activeFilter === 'MY_TASKS') return Object.values(workTasksByTab).flat();
+    return workTasksByTab[activeFilter] || [];
+  }, [workTasksByTab, activeFilter]);
 
   const filteredItems = useMemo(() => {
     switch (activeFilter) {
+      case 'RECORD_RESULT':
+        return [];
       case 'PENDING_REVIEW':
         return enrichedTaskItems.filter((x) => x.plan.status === 'PENDING_REVIEW' && x.roleInfo.canReview);
       case 'PENDING_APPROVAL':
@@ -835,7 +862,7 @@ export const VccTaskInboxSection = () => {
           <div className="p-12 text-center text-sm text-slate-500">
             กำลังตรวจสอบงานที่ได้รับมอบหมาย...
           </div>
-        ) : filteredItems.length === 0 ? (
+        ) : filteredItems.length === 0 && filteredWorkTasks.length === 0 ? (
           <div className="p-12 text-center space-y-2">
             <CheckSquare size={28} className="text-slate-300 mx-auto" />
             <div className="text-sm font-bold text-slate-700">
@@ -847,6 +874,57 @@ export const VccTaskInboxSection = () => {
           </div>
         ) : (
           <div className="divide-y divide-slate-200">
+            {filteredWorkTasks.map((task) => {
+              const info = describeWorkTask(task);
+              return (
+                <div
+                  key={task.id}
+                  data-testid={`vcc-work-task-${task.id}`}
+                  className="p-4 hover:bg-slate-50/80 transition-colors flex flex-col lg:flex-row lg:items-center justify-between gap-4"
+                >
+                  <div className="space-y-1.5 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-bold border ${info.tone}`}>
+                        {info.label}
+                      </span>
+                      <span className="font-mono text-xs font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                        {task.wo_code}
+                      </span>
+                      <span className="text-xs font-semibold text-slate-700">แผนก {task.department}</span>
+                    </div>
+                    <div className="text-sm font-bold text-slate-900">
+                      {task.asset_code} · {task.asset_name}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-600">
+                      {task.due_date && (
+                        <span>
+                          <strong className="text-slate-700">ครบกำหนด:</strong> {task.due_date}
+                        </span>
+                      )}
+                      <span>
+                        <strong className="text-slate-700">สิ่งที่ต้องทำต่อ:</strong> {info.next}
+                      </span>
+                    </div>
+                    {task.reason && (
+                      <div className="mt-1 p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-900 text-xs font-medium">
+                        <strong>เหตุผลที่ส่งกลับ:</strong> {task.reason}
+                      </div>
+                    )}
+                  </div>
+                  <div className="shrink-0">
+                    <button
+                      type="button"
+                      data-testid={`vcc-work-task-open-${task.id}`}
+                      onClick={() => navigate(task.link)}
+                      className="inline-flex items-center gap-1.5 h-9 px-4 rounded-xl text-xs font-semibold transition-colors cursor-pointer shadow-2xs bg-indigo-600 hover:bg-indigo-700 text-white"
+                    >
+                      <span>{info.button}</span>
+                      <ArrowRight size={13} />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
             {filteredItems.map(({ plan, roleInfo }) => {
               const isReview = plan.status === 'PENDING_REVIEW';
               const isApprove = plan.status === 'PENDING_APPROVAL';
