@@ -34,6 +34,7 @@ import {
   AssetDetailHistoryModal,
   AssetTypesModal
 } from '../components/AssetRegisterModals';
+import { filterReadableDepartments } from '../utils/departmentScope';
 import AnnualPlanMatrixSection from '../components/AnnualPlanMatrixSection';
 import WorkOrderSection from '../components/WorkOrderSection';
 import VccDashboardSection from '../components/VccDashboardSection';
@@ -56,14 +57,15 @@ const AssetRegisterPageInner = () => {
 
   const activeDepartments = useMemo(() => {
     const raw = masterDepartments?.length ? masterDepartments : storeDepts || [];
-    return raw
+    const all = raw
       .map((d) => ({
         code: d.code || d.deptCode || d.id,
         nameTh: d.name_th || d.nameTh || d.name || d.code,
         status: d.status || 'ACTIVE'
       }))
       .filter((d) => d.code && d.status === 'ACTIVE');
-  }, [masterDepartments, storeDepts]);
+    return filterReadableDepartments(currentUser, all, (d) => d.code);
+  }, [masterDepartments, storeDepts, currentUser]);
 
   const location = useLocation();
   const navigate = useNavigate();

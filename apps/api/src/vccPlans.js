@@ -1,6 +1,6 @@
 // VCC (Verify and Calibration Center) — Phase 2: Calibration Schedule Rules, Annual Plan Matrix & Plan Approval API.
 import { getThresholds } from './approval.js';
-import { requireVccAccess, requireDccOnly } from './vccAuth.js';
+import { requireVccAccess, requireDccOnly, getUserDepartments, canReadVccDepartment, vccDeptScopeSql, VCC_DEPT_FORBIDDEN } from './vccAuth.js';
 import { generateWorkOrdersForApprovedPlan, buildWorkOrderReconciliationStatements } from './vccWorkOrders.js';
 import { fetchNotificationTasks } from './vccNotifications.js';
 
@@ -70,23 +70,7 @@ const loadPlanSettings = async (db) => {
   }
 };
 
-export const getUserDepartments = (user) => {
-  if (!user) return [];
-  const depts = [];
-  if (user.department) depts.push(user.department);
-  if (user.primary_department) depts.push(user.primary_department);
-  if (user.dept) depts.push(user.dept);
-  if (user.dept_code) depts.push(user.dept_code);
-  let parsedDepts = user.departments;
-  if (typeof parsedDepts === 'string' && parsedDepts.startsWith('[')) {
-    try { parsedDepts = JSON.parse(parsedDepts); } catch {}
-  }
-  if (Array.isArray(parsedDepts)) depts.push(...parsedDepts);
-  if (Array.isArray(user.secondaryDepartments)) depts.push(...user.secondaryDepartments);
-  if (Array.isArray(user.depts)) depts.push(...user.depts);
-  if (Array.isArray(user.affiliated_departments)) depts.push(...user.affiliated_departments);
-  return [...new Set(depts.filter(Boolean).map((d) => String(d).toUpperCase()))];
-};
+export { getUserDepartments };
 
 export const isUserAuthorizedForPlanDept = (user, planDepartment) => {
   if (!user) return false;
@@ -835,6 +819,12 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
     const clauses = ['p.status = ?'];
     const args = [status];
 
+    const scope = vccDeptScopeSql(c.get('user'), 'p.department');
+    if (scope) {
+      clauses.push(scope.sql);
+      args.push(...scope.args);
+    }
+
     if (yearParam !== undefined && yearParam !== '') {
       const yr = Number(yearParam);
       if (!Number.isInteger(yr) || yr < 2000 || yr > 2100) {
@@ -858,6 +848,7 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
     const id = c.req.param('id');
     const plan = await fetchPlan(db, id);
     if (!plan) return c.json({ error: 'ไม่พบแผนการสอบเทียบประจำปี' }, 404);
+    if (!canReadVccDepartment(c.get('user'), plan.department)) return c.json(VCC_DEPT_FORBIDDEN, 403);
 
     const [items, planSettings, { results: rawHistory }] = await Promise.all([
       fetchPlanItems(db, id),
@@ -2375,6 +2366,7 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
     const id = c.req.param('id');
     const plan = await fetchPlan(db, id);
     if (!plan) return c.json({ error: 'ไม่พบแผนการสอบเทียบประจำปี' }, 404);
+    if (!canReadVccDepartment(c.get('user'), plan.department)) return c.json(VCC_DEPT_FORBIDDEN, 403);
 
     const { results } = await db.prepare(`
       SELECT p.*,
@@ -2408,6 +2400,7 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
     const id = c.req.param('id');
     const targetPlan = await fetchPlan(db, id);
     if (!targetPlan) return c.json({ error: 'ไม่พบแผนการสอบเทียบประจำปี' }, 404);
+    if (!canReadVccDepartment(c.get('user'), targetPlan.department)) return c.json(VCC_DEPT_FORBIDDEN, 403);
 
     const compareToId = c.req.query('compare_to') || targetPlan.parent_plan_id;
     let basePlan = null;
@@ -2416,6 +2409,7 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
       if (!basePlan) {
         return c.json({ error: 'ไม่พบแผนการสอบเทียบฉบับอ้างอิงที่ระบุ' }, 404);
       }
+      if (!canReadVccDepartment(c.get('user'), basePlan.department)) return c.json(VCC_DEPT_FORBIDDEN, 403);
     } else {
       // Find prior approved revision in the same plan year and department
       basePlan = await db

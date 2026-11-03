@@ -25,6 +25,8 @@ import {
 import { downloadVccWorkOrderCertificate } from '../api/vccWorkOrderApi';
 import { DigitalRecordModal } from './DigitalRecordModal';
 import DepartmentBadge from '../../../shared/components/ui/DepartmentBadge';
+import useStore from '../../../store/useStore';
+import { canReadAllVccDepartments, filterReadableDepartments } from '../utils/departmentScope';
 
 const VERDICT_OPTIONS = [
   { value: '', label: 'ทุกผลการประเมิน (All Verdicts)' },
@@ -58,6 +60,11 @@ export default function VccComplianceReportTab() {
   const currentYear = useMemo(() => new Date().getFullYear(), []);
   const [year, setYear] = useState(currentYear);
   const [department, setDepartment] = useState('');
+  const currentUser = useStore((s) => s.currentUser);
+  const departmentOptions = useMemo(
+    () => filterReadableDepartments(currentUser, ['DC', 'QC', 'QA', 'MGT', 'LB', 'PD', 'WH', 'ENG']),
+    [currentUser]
+  );
   const [verdict, setVerdict] = useState('');
   const [status, setStatus] = useState('');
   const [resultStatus, setResultStatus] = useState('');
@@ -328,15 +335,10 @@ export default function VccComplianceReportTab() {
             aria-label="เลือกแผนกรายงาน Compliance"
             className="h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-900 cursor-pointer shadow-2xs"
           >
-            <option value="">ทุกแผนก</option>
-            <option value="DC">DC</option>
-            <option value="QC">QC</option>
-            <option value="QA">QA</option>
-            <option value="MGT">MGT</option>
-            <option value="LB">LB</option>
-            <option value="PD">PD</option>
-            <option value="WH">WH</option>
-            <option value="ENG">ENG</option>
+            <option value="">{canReadAllVccDepartments(currentUser) ? 'ทุกแผนก' : 'แผนกของฉัน'}</option>
+            {departmentOptions.map((d) => (
+              <option key={d} value={d}>{d}</option>
+            ))}
           </select>
         </div>
 

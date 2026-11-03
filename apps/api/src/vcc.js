@@ -3,7 +3,7 @@ import { registerVccPlanRoutes } from './vccPlans.js';
 import { registerVccWorkOrderRoutes } from './vccWorkOrders.js';
 import { registerVccDashboardRoutes } from './vccDashboard.js';
 import { registerVccNotificationRoutes } from './vccNotifications.js';
-import { requireVccAccess, requireDccOnly } from './vccAuth.js';
+import { requireVccAccess, requireDccOnly, canReadVccDepartment, vccDeptScopeSql, VCC_DEPT_FORBIDDEN } from './vccAuth.js';
 
 const DCC_ONLY = { error: 'เฉพาะ DCC เท่านั้นที่ใช้งานส่วนนี้ได้' };
 const NOW = `strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`;
@@ -86,6 +86,11 @@ export const registerVccRoutes = (app, { requireAuth, audit }) => {
     const clauses = ['a.status = ?'];
     const args = [status];
 
+    const scope = vccDeptScopeSql(c.get('user'), 'a.department');
+    if (scope) {
+      clauses.push(scope.sql);
+      args.push(...scope.args);
+    }
     if (department) {
       clauses.push('a.department = ?');
       args.push(department);
@@ -123,6 +128,7 @@ export const registerVccRoutes = (app, { requireAuth, audit }) => {
     const id = c.req.param('id');
     const asset = await fetchAsset(db, id);
     if (!asset) return c.json({ error: 'ไม่พบเครื่องมือ' }, 404);
+    if (!canReadVccDepartment(c.get('user'), asset.department)) return c.json(VCC_DEPT_FORBIDDEN, 403);
 
     const { results: children } = await db.prepare(
       `${ASSET_SELECT} WHERE a.parent_id = ? ORDER BY a.asset_code ASC`

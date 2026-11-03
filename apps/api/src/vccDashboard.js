@@ -1,4 +1,4 @@
-import { requireVccAccess, requireDccOnly } from './vccAuth.js';
+import { requireVccAccess, requireDccOnly, canReadAllVccDepartments, canReadVccDepartment, vccDeptScopeSql } from './vccAuth.js';
 import { isUserAuthorizedForPlanDept, getUserDepartments } from './vccPlans.js';
 
 // Same range the plan list accepts. Empty means "use the current year in Bangkok" (a plain getFullYear() lags a day behind New Year there).
@@ -151,14 +151,11 @@ export const registerVccDashboardRoutes = (app, { requireAuth, audit }) => {
       ? refDateQuery
       : new Date().toISOString().slice(0, 10);
 
-    const isDccUser = Boolean(user.isDcc || user.is_dcc);
-    const isQmrUser = Boolean(user.isQmr || user.is_qmr);
-    const userLevel = Number(user.approval_level ?? user.approvalLevel ?? 0);
-    const hasGlobalAccess = isDccUser || isQmrUser || userLevel >= 6;
+    const hasGlobalAccess = canReadAllVccDepartments(user);
     const userDepts = getUserDepartments(user);
 
     const queryDept = c.req.query('department') ? String(c.req.query('department')).trim().toUpperCase() : null;
-    if (queryDept && !isUserAuthorizedForPlanDept(user, queryDept)) {
+    if (queryDept && !canReadVccDepartment(user, queryDept)) {
       return c.json({ error: `ไม่มีสิทธิ์เข้าถึงข้อมูลแผนก ${queryDept}` }, 403);
     }
 
@@ -691,7 +688,7 @@ export const registerVccDashboardRoutes = (app, { requireAuth, audit }) => {
     const items = results
       .filter((r) => {
         if (filterDept && r.department !== filterDept) return false;
-        return isUserAuthorizedForPlanDept(user, r.department);
+        return canReadVccDepartment(user, r.department);
       })
       .map((r) => {
         const auditInfo = r.wo_id ? auditMap.get(r.wo_id) : null;
@@ -746,7 +743,7 @@ export const registerVccDashboardRoutes = (app, { requireAuth, audit }) => {
     const filterAsset = c.req.query('asset_code') ? String(c.req.query('asset_code')).trim() : null;
     const refDate = c.req.query('reference_date') || new Date().toISOString().slice(0, 10);
 
-    if (filterDept && !isUserAuthorizedForPlanDept(user, filterDept)) {
+    if (filterDept && !canReadVccDepartment(user, filterDept)) {
       return c.json({ error: `ไม่มีสิทธิ์เข้าถึงข้อมูลแผนก ${filterDept}` }, 403);
     }
 
@@ -779,7 +776,7 @@ export const registerVccDashboardRoutes = (app, { requireAuth, audit }) => {
       if (year && woYear !== year) continue;
 
       if (filterDept && w.department !== filterDept) continue;
-      if (!isUserAuthorizedForPlanDept(user, w.department)) continue;
+      if (!canReadVccDepartment(user, w.department)) continue;
 
       if (filterStatus && w.status !== filterStatus) continue;
       if (filterResult && w.result_status !== filterResult) continue;
@@ -910,7 +907,7 @@ export const registerVccDashboardRoutes = (app, { requireAuth, audit }) => {
     const filterAsset = c.req.query('asset_code') ? String(c.req.query('asset_code')).trim() : null;
     const refDate = c.req.query('reference_date') || new Date().toISOString().slice(0, 10);
 
-    if (filterDept && !isUserAuthorizedForPlanDept(user, filterDept)) {
+    if (filterDept && !canReadVccDepartment(user, filterDept)) {
       return c.json({ error: `ไม่มีสิทธิ์เข้าถึงข้อมูลแผนก ${filterDept}` }, 403);
     }
 
@@ -964,7 +961,7 @@ export const registerVccDashboardRoutes = (app, { requireAuth, audit }) => {
       const woYear = Number(String(w.due_date || '').slice(0, 4)) || w.plan_year;
       if (year && woYear !== year) continue;
       if (filterDept && w.department !== filterDept) continue;
-      if (!isUserAuthorizedForPlanDept(user, w.department)) continue;
+      if (!canReadVccDepartment(user, w.department)) continue;
 
       if (filterStatus && w.status !== filterStatus) continue;
       if (filterResult && w.result_status !== filterResult) continue;
@@ -1039,16 +1036,19 @@ export const registerVccDashboardRoutes = (app, { requireAuth, audit }) => {
       ? prefix
       : 'VCC_';
 
+    // Other departments' events stay hidden: only rows tagged with the user's department(s) or made by the user.
+    const user = c.get('user');
+    const scope = vccDeptScopeSql(user, "json_extract(a.details, '$.department')");
     const { results } = await db
       .prepare(
         `SELECT a.id, a.at, a.actor_id, u.name AS actor_name, a.action, a.details
          FROM audit_log a
          LEFT JOIN users u ON u.id = a.actor_id
-         WHERE a.action LIKE ?
+         WHERE a.action LIKE ?${scope ? ` AND (${scope.sql} OR a.actor_id = ?)` : ''}
          ORDER BY a.at DESC, a.id DESC
          LIMIT 200`
       )
-      .bind(`${safePrefix}%`)
+      .bind(`${safePrefix}%`, ...(scope ? [...scope.args, user.id] : []))
       .all();
 
     const history = results.map((r) => {
@@ -1103,7 +1103,7 @@ export const registerVccDashboardRoutes = (app, { requireAuth, audit }) => {
     const plan = await db.prepare(query).bind(...params).first();
     if (!plan) return c.json({ error: `ไม่พบแผนประจำปี ${year}` }, 404);
 
-    if (!isUserAuthorizedForPlanDept(user, plan.department)) {
+    if (!canReadVccDepartment(user, plan.department)) {
       return c.json({ error: 'ไม่มีสิทธิ์ดาวน์โหลดแผนประจำปีของแผนกนี้' }, 403);
     }
 
@@ -1218,6 +1218,7 @@ export const registerVccDashboardRoutes = (app, { requireAuth, audit }) => {
     const db = c.env.DB;
     const user = c.get('user');
 
+    const scope = vccDeptScopeSql(user, 'a.department');
     const { results } = await db
       .prepare(
         `SELECT w.*, a.asset_code, a.name AS asset_name, a.department,
@@ -1226,8 +1227,10 @@ export const registerVccDashboardRoutes = (app, { requireAuth, audit }) => {
          JOIN vcc_assets a ON a.id = w.asset_id
          LEFT JOIN users p ON p.id = w.performed_by
          LEFT JOIN users r ON r.id = w.reviewed_by
+         ${scope ? `WHERE ${scope.sql}` : ''}
          ORDER BY w.due_date DESC, w.wo_code DESC`
       )
+      .bind(...(scope ? scope.args : []))
       .all();
 
     const header = [

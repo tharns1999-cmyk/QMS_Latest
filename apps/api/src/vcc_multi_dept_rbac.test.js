@@ -395,7 +395,7 @@ describe('VCC Multi-Department Access & Approval Workflow (RBAC & SoD)', () => {
     expect(postApproveTasks.body.tasks.some(t => t.planId === planId)).toBe(false);
   });
 
-  it('7. Work-order detail keeps shared read access but hides certificates and amendment records from other departments, like their dedicated endpoints do', async () => {
+  it('7. Work-order detail and its certificate/amendment records are refused to other departments, but open to the owning department, MGT, DCC and L6+', async () => {
     const assetRes = await call('POST', '/api/vcc/assets', 'DCC-USER', {
       asset_code: 'RBAC-DETAIL-01', name: 'เครื่องมือทดสอบสิทธิ์รายละเอียด', asset_type: 'เทอร์โมมิเตอร์', department: 'QC', is_group: 0
     });
@@ -415,19 +415,97 @@ describe('VCC Multi-Department Access & Approval Workflow (RBAC & SoD)', () => {
     expect(own.body.amendmentRequests).toHaveLength(1);
     expect(own.body.pendingAmendmentRequest).not.toBeNull();
 
-    // Same rule as the dedicated endpoints: another VCC department is refused there ...
-    expect((await call('GET', `/api/vcc/work-orders/${woId}/amendment-requests`, 'LB-STAFF')).status).toBe(403);
-    // ... so the detail must not hand the same records over either, while still answering (shared read access).
-    const other = await call('GET', `/api/vcc/work-orders/${woId}`, 'LB-STAFF');
-    expect(other.status).toBe(200);
-    expect(other.body.workOrder.wo_code).toBe(own.body.workOrder.wo_code);
-    expect(other.body.amendmentRequests).toEqual([]);
-    expect(other.body.amendments).toEqual([]);
-    expect(other.body.certificates).toEqual([]);
-    expect(other.body.pendingAmendmentRequest).toBeNull();
+    // Another VCC department gets nothing: not the detail, and not the dedicated record endpoints either
+    for (const suffix of ['', '/certificates', '/amendments', '/amendment-requests']) {
+      expect((await call('GET', `/api/vcc/work-orders/${woId}${suffix}`, 'LB-STAFF')).status).toBe(403);
+    }
 
-    // L6+ managers and DCC keep full access
+    // L6+ managers, DCC and MGT see every department
     expect((await call('GET', `/api/vcc/work-orders/${woId}`, 'QA-MGR')).body.amendmentRequests).toHaveLength(1);
     expect((await call('GET', `/api/vcc/work-orders/${woId}`, 'DCC-USER')).body.amendmentRequests).toHaveLength(1);
+    expect((await call('GET', `/api/vcc/work-orders/${woId}`, 'MGT-STAFF')).body.amendmentRequests).toHaveLength(1);
+  });
+
+  it('8. Reads are limited to the user\'s own department; MGT, DCC and L6+ see every department, and MGT still cannot write elsewhere', async () => {
+    const mkAsset = async (code, dept) => {
+      const res = await call('POST', '/api/vcc/assets', 'DCC-USER', {
+        asset_code: code, name: `[ข้อมูลทดสอบ] ${code}`, asset_type: 'เทอร์โมมิเตอร์', department: dept, is_group: 0
+      });
+      expect(res.status).toBe(201);
+      return res.body.asset;
+    };
+    const mkWo = async (asUser, asset) => {
+      const res = await call('POST', '/api/vcc/work-orders', asUser, {
+        mode: 'ADHOC', asset_id: asset.id, provider_name: 'ทวนสอบภายใน', due_date: '2026-05-30'
+      });
+      expect(res.status).toBe(201);
+      return res.body.workOrder;
+    };
+    const mkPlan = async (asUser, dept) => {
+      const res = await call('POST', '/api/vcc/plans', asUser, { plan_year: 2031, department: dept, title: `แผน ${dept} 2031` });
+      expect(res.status).toBe(201);
+      return res.body.plan;
+    };
+
+    const qcAsset = await mkAsset('RBAC-SCOPE-QC', 'QC');
+    const lbAsset = await mkAsset('RBAC-SCOPE-LB', 'LB');
+    const qcWo = await mkWo('QC-STAFF', qcAsset);
+    const lbWo = await mkWo('LB-STAFF', lbAsset);
+    const qcPlan = await mkPlan('QC-STAFF', 'QC');
+    const lbPlan = await mkPlan('LB-STAFF', 'LB');
+
+    const assetCodes = async (asUser, query = '') =>
+      (await call('GET', `/api/vcc/assets${query}`, asUser)).body.assets.map((a) => a.asset_code);
+    const woCodes = async (asUser) =>
+      (await call('GET', '/api/vcc/work-orders?status=OPEN', asUser)).body.workOrders.map((w) => w.wo_code);
+    const planIds = async (asUser) =>
+      (await call('GET', '/api/vcc/plans?status=DRAFT&year=2031', asUser)).body.plans.map((p) => p.id);
+
+    // Own department only: lists never contain the other department's rows ...
+    expect(await assetCodes('QC-STAFF')).toContain('RBAC-SCOPE-QC');
+    expect(await assetCodes('QC-STAFF')).not.toContain('RBAC-SCOPE-LB');
+    // ... even when the filter asks for it directly
+    expect(await assetCodes('QC-STAFF', '?department=LB')).toEqual([]);
+    expect(await woCodes('QC-STAFF')).toContain(qcWo.wo_code);
+    expect(await woCodes('QC-STAFF')).not.toContain(lbWo.wo_code);
+    expect(await planIds('QC-STAFF')).toEqual([qcPlan.id]);
+
+    // ... and the detail pages of the other department are refused
+    expect((await call('GET', `/api/vcc/assets/${qcAsset.id}`, 'QC-STAFF')).status).toBe(200);
+    expect((await call('GET', `/api/vcc/assets/${lbAsset.id}`, 'QC-STAFF')).status).toBe(403);
+    expect((await call('GET', `/api/vcc/work-orders/${lbWo.id}`, 'QC-STAFF')).status).toBe(403);
+    expect((await call('GET', `/api/vcc/plans/${qcPlan.id}`, 'QC-STAFF')).status).toBe(200);
+    for (const suffix of ['', '/revisions', '/diff']) {
+      expect((await call('GET', `/api/vcc/plans/${lbPlan.id}${suffix}`, 'QC-STAFF')).status).toBe(403);
+    }
+    // a diff may not be used to read another department's plan as the comparison base
+    expect((await call('GET', `/api/vcc/plans/${qcPlan.id}/diff?compare_to=${lbPlan.id}`, 'QC-STAFF')).status).toBe(403);
+    expect((await call('GET', '/api/vcc/dashboard?department=LB', 'QC-STAFF')).status).toBe(403);
+    expect((await call('GET', '/api/vcc/notifications?department=LB', 'QC-STAFF')).status).toBe(403);
+
+    // The CSV export and the audit log are scoped the same way
+    const exportRes = await app.request('/api/vcc/export/work-orders', { headers: { Authorization: `Bearer ${tokens['QC-STAFF']}` } }, env);
+    const csv = await exportRes.text();
+    expect(csv).toContain(qcWo.wo_code);
+    expect(csv).not.toContain(lbWo.wo_code);
+    const actors = async (asUser) => (await call('GET', '/api/vcc/audit-log', asUser)).body.history.map((h) => h.actor_id);
+    expect(await actors('QC-STAFF')).not.toContain('LB-STAFF');
+    expect(await actors('LB-STAFF')).toContain('LB-STAFF');
+    expect(await actors('DCC-USER')).toEqual(expect.arrayContaining(['LB-STAFF', 'QC-STAFF']));
+
+    // MGT (even L2), DCC and L6+ read every department ...
+    for (const asUser of ['MGT-STAFF', 'DCC-USER', 'QA-MGR']) {
+      expect(await assetCodes(asUser)).toEqual(expect.arrayContaining(['RBAC-SCOPE-QC', 'RBAC-SCOPE-LB']));
+      expect(await woCodes(asUser)).toEqual(expect.arrayContaining([qcWo.wo_code, lbWo.wo_code]));
+      expect(await planIds(asUser)).toEqual(expect.arrayContaining([qcPlan.id, lbPlan.id]));
+      expect((await call('GET', `/api/vcc/work-orders/${lbWo.id}`, asUser)).status).toBe(200);
+      expect((await call('GET', `/api/vcc/plans/${lbPlan.id}`, asUser)).status).toBe(200);
+      expect((await call('GET', '/api/vcc/dashboard?department=LB', asUser)).status).toBe(200);
+    }
+    // ... but reading is not writing: MGT is still refused on another department's work order
+    const mgtWrite = await call('POST', `/api/vcc/work-orders/${lbWo.id}/submit-result`, 'MGT-STAFF', {
+      performed_at: '2026-05-10', result_status: 'PASS', certificate_no: 'CERT-MGT-001', acceptance_criteria: '± 0.5 °C'
+    });
+    expect(mgtWrite.status).toBe(403);
   });
 });

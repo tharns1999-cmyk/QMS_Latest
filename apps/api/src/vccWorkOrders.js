@@ -1,6 +1,6 @@
 import { getThresholds } from './approval.js';
 import { computeDueDateForMonth, isUserAuthorizedForPlanDept } from './vccPlans.js';
-import { requireVccAccess, requireDccOnly } from './vccAuth.js';
+import { requireVccAccess, requireDccOnly, canReadVccDepartment, vccDeptScopeSql, VCC_DEPT_FORBIDDEN } from './vccAuth.js';
 
 const NOW = "strftime('%Y-%m-%dT%H:%M:%SZ', 'now')";
 const DCC_ONLY = { error: 'เฉพาะเจ้าหน้าที่ DCC เท่านั้นที่เข้าถึงระบบ VCC ได้' };
@@ -734,6 +734,11 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
       }
     }
 
+    const scope = vccDeptScopeSql(c.get('user'), 'a.department');
+    if (scope) {
+      where.push(scope.sql);
+      params.push(...scope.args);
+    }
     if (department) {
       where.push('a.department = ?');
       params.push(department);
@@ -796,9 +801,7 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
     const id = c.req.param('id');
     const workOrder = await fetchWorkOrder(db, id);
     if (!workOrder) return c.json({ error: 'ไม่พบใบสั่งงานทวนสอบ/สอบเทียบ' }, 404);
-    // Any VCC department may read the work order itself, but certificates and amendment records follow the
-    // same department rule as their dedicated endpoints
-    const canSeeRecords = isUserAuthorizedForPlanDept(user, workOrder.department);
+    if (!canReadVccDepartment(user, workOrder.department)) return c.json(VCC_DEPT_FORBIDDEN, 403);
 
     const settings = await readWorkOrderSettings(db);
     const thresholds = await getThresholds(db, settings.approval_doc_type);
@@ -863,10 +866,10 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
       workOrder,
       thresholds,
       history,
-      certificates: canSeeRecords ? certRows : [],
-      amendments: canSeeRecords ? amendments : [],
-      amendmentRequests: canSeeRecords ? amendmentRequests : [],
-      pendingAmendmentRequest: canSeeRecords ? pendingAmendmentRequest : null
+      certificates: certRows,
+      amendments,
+      amendmentRequests,
+      pendingAmendmentRequest
     });
   });
 
@@ -877,7 +880,7 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
 
     const existing = await fetchWorkOrder(db, id);
     if (!existing) return c.json({ error: 'ไม่พบใบสั่งงานทวนสอบ/สอบเทียบ' }, 404);
-    if (!isUserAuthorizedForPlanDept(user, existing.department)) {
+    if (!canReadVccDepartment(user, existing.department)) {
       return c.json({ error: 'ไม่มีสิทธิ์เข้าถึงข้อมูลของแผนกนี้' }, 403);
     }
 
@@ -899,7 +902,7 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
 
     const existing = await fetchWorkOrder(db, id);
     if (!existing) return c.json({ error: 'ไม่พบใบสั่งงานทวนสอบ/สอบเทียบ' }, 404);
-    if (!isUserAuthorizedForPlanDept(user, existing.department)) {
+    if (!canReadVccDepartment(user, existing.department)) {
       return c.json({ error: 'ไม่มีสิทธิ์เข้าถึงข้อมูลของแผนกนี้' }, 403);
     }
 
@@ -928,7 +931,7 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
 
     const existing = await fetchWorkOrder(db, id);
     if (!existing) return c.json({ error: 'ไม่พบใบสั่งงานทวนสอบ/สอบเทียบ' }, 404);
-    if (!isUserAuthorizedForPlanDept(user, existing.department)) {
+    if (!canReadVccDepartment(user, existing.department)) {
       return c.json({ error: 'ไม่มีสิทธิ์เข้าถึงข้อมูลของแผนกนี้' }, 403);
     }
 
@@ -1788,7 +1791,7 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
 
     const existing = await fetchWorkOrder(db, id);
     if (!existing) return c.json({ error: 'ไม่พบใบสั่งงานทวนสอบ/สอบเทียบ' }, 404);
-    if (!isUserAuthorizedForPlanDept(user, existing.department)) {
+    if (!canReadVccDepartment(user, existing.department)) {
       return c.json({ error: 'ไม่มีสิทธิ์เข้าถึงไฟล์ใบรับรองของแผนกนี้' }, 403);
     }
 
