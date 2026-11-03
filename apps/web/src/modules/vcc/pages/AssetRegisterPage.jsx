@@ -340,28 +340,24 @@ const AssetRegisterPageInner = () => {
     switch (moduleView) {
       case 'DASHBOARD':
         return {
-          breadcrumb: 'ภาพรวมและแจ้งเตือน',
           title: 'ภาพรวมและแจ้งเตือน (Dashboard & Alerts)',
           description: 'สรุป KPI งานทวนสอบ/สอบเทียบ ศูนย์แจ้งเตือนตามกติกา และส่งออกรายงานประจำปี',
           Icon: BarChart3
         };
       case 'WORK_ORDERS':
         return {
-          breadcrumb: 'ใบสั่งงานและบันทึกผล',
           title: 'ใบสั่งงานและบันทึกผล (Work Orders)',
           description: 'เปิดใบสั่งงานตามแผน เลื่อนวันครบกำหนด บันทึกผลพร้อมใบรับรอง ตรวจรับปิดงาน และควบคุมการระงับใช้',
           Icon: ClipboardList
         };
       case 'TASKS':
         return {
-          breadcrumb: 'งานที่ต้องดำเนินการ',
           title: 'งานที่ต้องดำเนินการ (VCC Task Inbox)',
           description: 'ศูนย์กลางการทบทวนและอนุมัติแผนการทวนสอบเครื่องมือประจำปีตามสิทธิ์และผู้รับผิดชอบ',
           Icon: ClipboardList
         };
       case 'ANNUAL_PLAN':
         return {
-          breadcrumb: 'แผนการทวนสอบประจำปี',
           title: 'แผนการทวนสอบเครื่องมือประจำปี',
           description: 'วางรอบทวนสอบและสอบเทียบเครื่องมือตลอด 12 เดือน และส่งเข้าสู่กระบวนการทบทวน',
           Icon: Calendar
@@ -369,7 +365,6 @@ const AssetRegisterPageInner = () => {
       case 'ASSETS':
       default:
         return {
-          breadcrumb: 'ทะเบียนเครื่องมือวัด',
           title: 'ทะเบียนเครื่องมือวัด (Equipment Register)',
           description: 'จัดการทะเบียนเครื่องมือวัดและชุดเครื่องมือมาตรฐาน ตรวจสอบรหัสเครื่องมือไม่ให้ซ้ำทั้งบริษัท และบันทึกประวัติการแก้ไขทุกขั้นตอน',
           Icon: Wrench
@@ -418,20 +413,11 @@ const AssetRegisterPageInner = () => {
         </button>
       </div>
 
-      {/* Compact Page Header: breadcrumb + title + one-line description (for ASSETS, ANNUAL_PLAN, DASHBOARD) */}
+      {/* Compact Page Header: title + one-line description (for ASSETS, ANNUAL_PLAN, DASHBOARD) */}
       {moduleView !== 'WORK_ORDERS' && (
         <div className="px-1 transition-all">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
             <div className="space-y-0.5 min-w-0">
-              {/* Breadcrumb Navigation Context */}
-              <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
-                <span className="hover:text-slate-700 transition-colors">พอร์ทัลหลัก</span>
-                <span className="text-slate-300">/</span>
-                <span className="text-indigo-600 font-semibold">ศูนย์ทวนสอบและสอบเทียบ (VCC)</span>
-                <span className="text-slate-300">/</span>
-                <span className="text-slate-800 font-semibold truncate">{pageMeta.breadcrumb}</span>
-              </div>
-
               <h1 className="text-xl md:text-2xl font-bold text-slate-900 tracking-tight break-words">
                 {pageMeta.title}
               </h1>

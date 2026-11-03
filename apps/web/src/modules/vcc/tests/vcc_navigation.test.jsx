@@ -128,7 +128,7 @@ describe('VCC Enterprise Navigation & Sidebar Spoke Integration Tests', () => {
     });
   });
 
-  it('4. Renders clean Enterprise Page Header: breadcrumb context, title without redundant module prefix, and eliminates duplicate header tabs in visual UI', async () => {
+  it('4. Renders clean Enterprise Page Header: no breadcrumb trail, title without redundant module prefix, and eliminates duplicate header tabs in visual UI', async () => {
     render(
       <MemoryRouter initialEntries={['/vcc/dashboard']}>
         <AssetRegisterPage />
@@ -138,8 +138,8 @@ describe('VCC Enterprise Navigation & Sidebar Spoke Integration Tests', () => {
     await waitFor(() => {
       // Must render clean title without redundant "VCC (Verify and Calibration Center) — " prefix
       expect(screen.getByRole('heading', { level: 1, name: /ภาพรวมและแจ้งเตือน \(Dashboard & Alerts\)/i })).toBeTruthy();
-      // Must render breadcrumb context
-      expect(screen.getByText('ศูนย์ทวนสอบและสอบเทียบ (VCC)')).toBeTruthy();
+      // The breadcrumb trail was removed; the sidebar and the title carry the context
+      expect(screen.queryByText('ศูนย์ทวนสอบและสอบเทียบ (VCC)')).toBeNull();
       expect(screen.queryByText(/VCC \(Verify and Calibration Center\) —/i)).toBeNull();
     });
   });

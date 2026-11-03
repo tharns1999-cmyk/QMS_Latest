@@ -521,14 +521,6 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
       {/* 1. Page Header (Single H1 Title, One-line Description, Header Actions) */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-slate-200">
         <div className="space-y-0.5 min-w-0">
-          <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
-            <span className="hover:text-slate-700 transition-colors">พอร์ทัลหลัก</span>
-            <span className="text-slate-300">/</span>
-            <span className="text-purple-700 font-semibold">ศูนย์ทวนสอบและสอบเทียบ (VCC)</span>
-            <span className="text-slate-300">/</span>
-            <span className="text-slate-800 font-semibold truncate">ใบสั่งงานและบันทึกผล</span>
-          </div>
-
           <h1 className="text-xl md:text-2xl font-bold text-slate-900 tracking-tight">
             ใบสั่งงานและบันทึกผล (Work Orders)
           </h1>
