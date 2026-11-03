@@ -11,10 +11,14 @@ const scrollLinkIntoView = (link) => link.evaluate((el) => {
 });
 
 // A mouse click at the link's position: Playwright's own link.click() scrolls the menu first and would hide what we measure.
-const clickLikeAUser = async (page, link) => {
+const isInsideMenu = async (page, link) => {
   const box = await link.boundingBox();
   const nav = await page.locator('#app-sidebar nav').boundingBox();
-  if (box.y < nav.y || box.y + box.height > nav.y + nav.height) throw new Error('link is not inside the visible menu column; the test window is too small');
+  return box.y >= nav.y && box.y + box.height <= nav.y + nav.height;
+};
+const clickLikeAUser = async (page, link) => {
+  if (!(await isInsideMenu(page, link))) throw new Error('link is not inside the visible menu column; the test window is too small');
+  const box = await link.boundingBox();
   await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
 };
 
@@ -59,7 +63,13 @@ test('mobile drawer: scroll position survives a menu click and the drawer still 
   await page.getByRole('button', { name: 'เปิดเมนู' }).click();
   const link = page.locator('#app-sidebar nav').getByRole('link', { name: 'การทบทวนตามรอบ' });
   await expect(link).toBeVisible();
-  const before = await scrollLinkIntoView(link);
+  // The drawer slides in over 200ms and its footer can still grow, shrinking the menu column; measure until both have settled, or the click misses
+  let before;
+  await expect(async () => {
+    expect(await page.locator('#app-sidebar').evaluate((el) => el.getBoundingClientRect().x)).toBe(0);
+    before = await scrollLinkIntoView(link);
+    expect(await isInsideMenu(page, link)).toBe(true);
+  }).toPass();
   test.skip(before === 0, 'sidebar does not scroll at this size');
   await clickLikeAUser(page, link);
   await expect(page).toHaveURL(/\/dcc\/periodic-reviews/);
