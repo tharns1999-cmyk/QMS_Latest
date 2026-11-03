@@ -1,5 +1,6 @@
 import { apiGet, apiPost, apiPut, isApiMode } from '../../../api/client';
 import useStore from '../../../store/useStore';
+import { canManageVccAsset, manageableVccDepartments } from '../utils/departmentScope';
 
 const STORAGE_ASSETS_KEY = 'qms-vcc-local-assets-v1';
 const STORAGE_TYPES_KEY = 'qms-vcc-local-types-v1';
@@ -336,6 +337,15 @@ export const assertLocalDcc = () => {
   return user;
 };
 
+// Demo-mode counterpart of the API write rule: DCC any department, L4+ only their own VCC department(s).
+export const assertLocalAssetManager = (department) => {
+  const user = assertLocalVccAccess();
+  if (!canManageVccAsset(user, department)) {
+    throw new Error('จัดการได้เฉพาะเครื่องมือของแผนกตนเอง (หัวหน้าแผนกระดับ L4 ขึ้นไป) หรือ DCC เท่านั้น');
+  }
+  return user;
+};
+
 export const getDepartmentMap = () => {
   const state = useStore.getState();
   const depts = state.masterDepartments || state.departments || [];
@@ -473,12 +483,16 @@ export const createVccAsset = async (payload) => {
     const { asset } = await apiPost('/api/vcc/assets', payload);
     return asset;
   }
-  const user = assertLocalDcc();
+  const user = assertLocalVccAccess();
+  const mine = manageableVccDepartments(user);
+  let requestedDept = String(payload.department || '').trim().toUpperCase();
+  if (!requestedDept && !user.isDcc && mine.length === 1) [requestedDept] = mine;
+  assertLocalAssetManager(requestedDept);
   const all = getLocalAssets();
   const assetCode = String(payload.asset_code || '').trim().toUpperCase();
   const name = String(payload.name || '').trim();
   const assetType = String(payload.asset_type || '').trim();
-  const department = String(payload.department || '').trim().toUpperCase();
+  const department = requestedDept;
   const serialNo = String(payload.serial_no || '').trim();
   const model = String(payload.model || '').trim();
   const location = String(payload.location || '').trim();
@@ -553,11 +567,11 @@ export const updateVccAsset = async (id, payload) => {
     const { asset } = await apiPut(`/api/vcc/assets/${encodeURIComponent(id)}`, payload);
     return asset;
   }
-  const user = assertLocalDcc();
   const all = getLocalAssets();
   const index = all.findIndex((a) => a.id === id);
   if (index === -1) throw new Error('ไม่พบเครื่องมือ');
   const before = all[index];
+  const user = assertLocalAssetManager(before.department);
   if (before.status === 'RETIRED') {
     throw new Error('เครื่องมือที่ปลดออกแล้วไม่สามารถแก้ไขได้ กรุณานำกลับมาใช้งานก่อน');
   }
@@ -571,6 +585,7 @@ export const updateVccAsset = async (id, payload) => {
   const location = payload.location === undefined ? before.location : String(payload.location || '').trim();
   const compositeDetails = payload.composite_details === undefined ? (before.composite_details || '') : String(payload.composite_details || '').trim();
   const groupNature = payload.group_nature === undefined ? (before.group_nature || 'LOGICAL_GROUP') : (payload.group_nature === 'COMPOSITE_SET' ? 'COMPOSITE_SET' : 'LOGICAL_GROUP');
+  if (department !== before.department && !user.isDcc) throw new Error('การโอนเครื่องมือข้ามแผนกทำได้เฉพาะ DCC เท่านั้น');
 
   const requestedIsGroup = payload.is_group === undefined ? before.is_group : (payload.is_group ? 1 : 0);
   if (before.is_group === 0 && requestedIsGroup === 1 && groupNature !== 'COMPOSITE_SET') {
@@ -654,13 +669,13 @@ export const retireVccAsset = async (id, reason) => {
     const { asset } = await apiPost(`/api/vcc/assets/${encodeURIComponent(id)}/retire`, { reason });
     return asset;
   }
-  const user = assertLocalDcc();
   const cleanReason = String(reason || '').trim();
   if (!cleanReason) throw new Error('กรุณาระบุเหตุผลในการปลดออกเครื่องมือ');
   const all = getLocalAssets();
   const index = all.findIndex((a) => a.id === id);
   if (index === -1) throw new Error('ไม่พบเครื่องมือ');
   const before = all[index];
+  const user = assertLocalAssetManager(before.department);
   if (before.status === 'RETIRED') throw new Error('เครื่องมือนี้ถูกปลดออกไปแล้ว');
   if (all.some((c) => c.parent_id === id && c.status === 'ACTIVE')) {
     throw new Error('ไม่สามารถปลดออกกลุ่มเครื่องมือได้ เนื่องจากยังมีเครื่องมือลูกที่ใช้งานอยู่ (ACTIVE)');
@@ -694,13 +709,13 @@ export const reactivateVccAsset = async (id, reason) => {
     const { asset } = await apiPost(`/api/vcc/assets/${encodeURIComponent(id)}/reactivate`, { reason });
     return asset;
   }
-  const user = assertLocalDcc();
   const cleanReason = String(reason || '').trim();
   if (!cleanReason) throw new Error('กรุณาระบุเหตุผลในการนำเครื่องมือกลับมาใช้งาน');
   const all = getLocalAssets();
   const index = all.findIndex((a) => a.id === id);
   if (index === -1) throw new Error('ไม่พบเครื่องมือ');
   const before = all[index];
+  const user = assertLocalAssetManager(before.department);
   if (before.status !== 'RETIRED') throw new Error('เครื่องมือนี้ไม่ได้อยู่ในสถานะปลดออก');
   const now = new Date().toISOString();
   const updated = {
@@ -724,4 +739,14 @@ export const reactivateVccAsset = async (id, reason) => {
     after: { status: 'ACTIVE' }
   });
   return enrichLocalAsset(updated, next, getDepartmentMap());
+};
+
+// What retiring / reactivating touches: all of it is only shown.
+export const fetchVccAssetImpact = async (id) => {
+  if (isApiMode) {
+    const { impact } = await apiGet(`/api/vcc/assets/${encodeURIComponent(id)}/impact`);
+    return impact;
+  }
+  assertLocalVccAccess();
+  return { open_work_orders: 0, plan_items: 0, closed_work_orders: 0 };
 };
