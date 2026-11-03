@@ -511,24 +511,29 @@ describe('VCC Phase 2.5: Final Hardening & Phase 3 Readiness Gate Tests', () => 
     });
     expect(missingReasonRes.status).toBe(400);
 
-    // C. Permanent cancellation: Cancel wo1 with ASSET_RETIRED
+    // C. A person cannot drop a plan cycle for good by cancelling its work order: the permanent categories are refused
+    //    (they come only from an approved plan revision) and the cycle stays planned
+    for (const category of ['ASSET_RETIRED', 'PLAN_REVISION']) {
+      const permanent = await call('POST', `/api/vcc/work-orders/${wo1.id}/cancel`, 'GATE-QC-SUP', {
+        cancellation_category: category,
+        cancellation_reason: 'เครื่องมือชำรุดปลดระวางถาวร'
+      });
+      expect(permanent.status).toBe(400);
+    }
     const cancelWo1 = await call('POST', `/api/vcc/work-orders/${wo1.id}/cancel`, 'GATE-QC-SUP', {
-      cancellation_category: 'ASSET_RETIRED',
-      cancellation_reason: 'เครื่องมือชำรุดปลดระวางถาวร'
+      cancellation_category: 'AUTHORIZED_CANCEL',
+      cancellation_reason: 'ยกเลิกใบงานนี้ตามคำสั่งหัวหน้าแผนก'
     });
     expect(cancelWo1.status).toBe(200);
     expect(cancelWo1.body.workOrder.status).toBe('CANCELLED');
-    expect(cancelWo1.body.workOrder.cancellation_category).toBe('ASSET_RETIRED');
-
-    // Cycle in vcc_plan_cycles must also be marked CANCELLED
     const cycle1 = await env.DB.prepare('SELECT cycle_status FROM vcc_plan_cycles WHERE id = ?').bind(wo1.cycle_id).first();
-    expect(cycle1.cycle_status).toBe('CANCELLED');
+    expect(cycle1.cycle_status).not.toBe('CANCELLED');
 
-    // Call reconcile-work-orders: permanent cancellation MUST NOT be auto-recreated!
+    // Reconcile issues a fresh work order for the still-planned cycle
     const recon1 = await call('POST', `/api/vcc/plans/${planId}/reconcile-work-orders`, 'GATE-QC-SUP', {});
     expect(recon1.status).toBe(200);
     const activeWosAfterRecon = await env.DB.prepare("SELECT * FROM vcc_work_orders WHERE plan_id = ? AND status != 'CANCELLED'").bind(planId).all();
-    expect(activeWosAfterRecon.results).toHaveLength(1); // Only wo2 is active! wo1 was NOT recreated!
+    expect(activeWosAfterRecon.results.map((w) => w.planned_month).sort((a, b) => a - b)).toEqual([4, 10]);
 
     // D. Non-permanent cancellation: Cancel wo2 with MISTAKE_CREATION
     const cancelWo2 = await call('POST', `/api/vcc/work-orders/${wo2.id}/cancel`, 'GATE-QC-SUP', {
@@ -542,8 +547,7 @@ describe('VCC Phase 2.5: Final Hardening & Phase 3 Readiness Gate Tests', () => 
     const recon2 = await call('POST', `/api/vcc/plans/${planId}/reconcile-work-orders`, 'GATE-QC-SUP', {});
     expect(recon2.status).toBe(200);
     const activeWosAfterRecon2 = await env.DB.prepare("SELECT * FROM vcc_work_orders WHERE plan_id = ? AND status != 'CANCELLED'").bind(planId).all();
-    expect(activeWosAfterRecon2.results).toHaveLength(1);
-    expect(activeWosAfterRecon2.results[0].planned_month).toBe(10);
+    expect(activeWosAfterRecon2.results.map((w) => w.planned_month).sort((a, b) => a - b)).toEqual([4, 10]);
   });
 
   it('6. Ambiguous Reconciliation: Provides explicit resolution endpoint POST /api/vcc/plans/:id/reconcile-work-orders/resolve-ambiguous and audits decision', async () => {

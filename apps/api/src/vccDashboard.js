@@ -693,7 +693,11 @@ export const registerVccDashboardRoutes = (app, { requireAuth, audit }) => {
       .map((r) => {
         const auditInfo = r.wo_id ? auditMap.get(r.wo_id) : null;
         const daysOnHold = r.performed_at ? Math.max(0, -diffDays(r.performed_at, refDate)) : 0;
-        const canRelease = userLevel >= 5 && isUserAuthorizedForPlanDept(user, r.department);
+        // Mirrors POST /release-hold: L5+ of the department, on a reviewed (CLOSED) work order, by someone other than the performer
+        const isApprover = userLevel >= 5 && isUserAuthorizedForPlanDept(user, r.department);
+        const awaitingReview = Boolean(r.wo_id) && r.wo_status !== 'CLOSED';
+        const isPerformer = r.performed_by === user.id;
+        const canRelease = isApprover && !awaitingReview && !isPerformer;
 
         return {
           asset_id: r.asset_id,
@@ -718,7 +722,11 @@ export const registerVccDashboardRoutes = (app, { requireAuth, audit }) => {
           can_release_hold: canRelease,
           recommendation: canRelease
             ? 'ผู้มีอำนาจระดับ L5+ สามารถประเมินผลกระทบและกดปลดระงับการใช้งานได้'
-            : 'รอผู้มีอำนาจระดับ L5+ ของแผนกประเมินผลกระทบและอนุมัติปลดระงับ'
+            : awaitingReview
+              ? 'รอตรวจรับผลและปิดใบสั่งงานก่อน (ผลรอตรวจซ้ำต้องตรวจซ้ำให้ได้ผล PASS/FAIL) จึงจะปลดระงับได้'
+              : isApprover && isPerformer
+                ? 'ผู้บันทึกผลปลดระงับเองไม่ได้ ต้องให้ผู้มีอำนาจ L5+ คนอื่นดำเนินการ'
+                : 'รอผู้มีอำนาจระดับ L5+ ของแผนกประเมินผลกระทบและอนุมัติปลดระงับ'
         };
       });
 

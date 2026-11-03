@@ -290,6 +290,7 @@ describe('VCC Phase 3: Work Orders, Execution, Review, Close & Hold/NC Control',
     // Reviewer L4 cannot release hold (needs L5+ according to FM approval_matrix)
     expect(
       (await call('POST', `/api/vcc/work-orders/${woId}/release-hold`, 'VWO-REV4', {
+        release_reason: 'แก้ไขสาเหตุและสอบเทียบซ้ำผ่านแล้ว',
         impact_assessment: 'ปรับตั้งและสอบเทียบซ้ำผ่านแล้ว'
       })).status
     ).toBe(403);
@@ -297,12 +298,14 @@ describe('VCC Phase 3: Work Orders, Execution, Review, Close & Hold/NC Control',
     // Approver L6 without impact_assessment is rejected
     expect(
       (await call('POST', `/api/vcc/work-orders/${woId}/release-hold`, 'VWO-APP6', {
+        release_reason: 'แก้ไขสาเหตุและสอบเทียบซ้ำผ่านแล้ว',
         impact_assessment: ''
       })).status
     ).toBe(400);
 
     // Approver L6 with impact_assessment releases hold
     const released = await call('POST', `/api/vcc/work-orders/${woId}/release-hold`, 'VWO-APP6', {
+      release_reason: 'แก้ไขสาเหตุและสอบเทียบซ้ำผ่านแล้ว',
       impact_assessment: 'ตรวจสอบย้อนหลังผลิตภัณฑ์ไม่พบผลกระทบ และปรับตั้งสอบเทียบซ้ำผ่านแล้ว'
     });
     expect(released.status).toBe(200);

@@ -1340,7 +1340,7 @@ describe('VCC Phase 3.1: Plan Revision Foundation & Diff Engine Tests', () => {
       cancellation_reason: 'Cross-dept cancel attempt'
     });
     expect(cancelRes.status).toBe(403);
-    expect(cancelRes.body.error).toContain('ไม่มีสิทธิ์');
+    expect(cancelRes.body.error).toContain('ยกเลิกใบสั่งงานได้เฉพาะ');
 
     // 4. Resolve conflicts on QC Plan
     const resolveRes = await call('POST', `/api/vcc/plans/${qcPlanId}/diff/resolve-conflicts`, 'REV-QA-STAFF', {

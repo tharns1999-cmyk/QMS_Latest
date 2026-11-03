@@ -289,6 +289,7 @@ describe('VCC Multi-Department Access & Approval Workflow (RBAC & SoD)', () => {
 
     // QC Supervisor (L4) tries to release hold -> 403 (requires L5+)
     const leadRelease = await call('POST', `/api/vcc/work-orders/${woId}/release-hold`, 'QC-LEAD', {
+      release_reason: 'แก้ไขสาเหตุและสอบเทียบซ้ำผ่านแล้ว',
       impact_assessment: 'ประเมินแล้ว'
     });
     expect(leadRelease.status).toBe(403);
@@ -296,6 +297,7 @@ describe('VCC Multi-Department Access & Approval Workflow (RBAC & SoD)', () => {
 
     // QA Manager (L6) releases hold with mandatory impact assessment -> 200
     const mgrRelease = await call('POST', `/api/vcc/work-orders/${woId}/release-hold`, 'QA-MGR', {
+      release_reason: 'แก้ไขสาเหตุและสอบเทียบซ้ำผ่านแล้ว',
       impact_assessment: 'ปรับเทียบชดเชยค่าเรียบร้อย และตรวจสอบย้อนกลับชิ้นงานผลิตแล้วไม่มีผลกระทบ'
     });
     expect(mgrRelease.status).toBe(200);

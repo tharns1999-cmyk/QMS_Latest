@@ -1,8 +1,23 @@
 import { getThresholds } from './approval.js';
 import { computeDueDateForMonth, isUserAuthorizedForPlanDept } from './vccPlans.js';
-import { requireVccAccess, requireDccOnly, canReadVccDepartment, vccDeptScopeSql, VCC_DEPT_FORBIDDEN } from './vccAuth.js';
+import { requireVccAccess, requireDccOnly, canReadVccDepartment, vccDeptScopeSql, VCC_DEPT_FORBIDDEN, canManageVccAsset } from './vccAuth.js';
 
 const NOW = "strftime('%Y-%m-%dT%H:%M:%SZ', 'now')";
+
+// Goes right after a status-guarded UPDATE inside db.batch(): when that UPDATE matched no row (a double click, or another
+// request changed the state first) json() raises, D1 rolls the whole batch back, so no second or contradicting audit row is kept.
+const assertRowUpdated = (db) => db.prepare("SELECT json(CASE WHEN changes() = 0 THEN 'stale' ELSE '1' END)");
+const STATE_CHANGED = { error: 'สถานะของรายการนี้ถูกเปลี่ยนไปแล้ว (อาจกดซ้ำหรือมีผู้อื่นดำเนินการก่อน) กรุณารีเฟรชหน้าจอ' };
+// Runs a state-transition batch; returns a 409 response when the guard fired, otherwise null.
+const runTransition = async (c, db, statements) => {
+  try {
+    await db.batch(statements);
+    return null;
+  } catch (err) {
+    if (/malformed JSON/.test(String(err?.message))) return c.json(STATE_CHANGED, 409);
+    throw err;
+  }
+};
 const DCC_ONLY = { error: 'เฉพาะเจ้าหน้าที่ DCC เท่านั้นที่เข้าถึงระบบ VCC ได้' };
 
 const WORK_ORDER_SETTINGS_KEY = 'vcc_work_order_settings';
@@ -20,7 +35,12 @@ export const DEFAULT_WORK_ORDER_SETTINGS = {
 
 const VALID_WO_STATUSES = new Set(['SCHEDULED', 'OPEN', 'IN_PROGRESS', 'PENDING_REVIEW', 'REJECTED', 'CLOSED', 'CANCELLED']);
 export const VALID_CANCELLATION_CATEGORIES = new Set(['PLAN_REVISION', 'MISTAKE_CREATION', 'ASSET_RETIRED', 'AUTHORIZED_CANCEL']);
+// A person may only use these; PLAN_REVISION / ASSET_RETIRED drop the plan cycle for good and are set by plan revision itself.
+const MANUAL_CANCELLATION_CATEGORIES = new Set(['MISTAKE_CREATION', 'AUTHORIZED_CANCEL']);
 const VALID_RESULT_STATUSES = new Set(['PASS', 'FAIL', 'INCONCLUSIVE']);
+// FAIL and INCONCLUSIVE both mean the instrument is not confirmed fit: it goes ON_HOLD with an open NC until an L5+ releases it.
+const HOLDING_RESULTS = new Set(['FAIL', 'INCONCLUSIVE']);
+const AMEND_TO_INCONCLUSIVE_ERROR = 'ใบสั่งงานที่ปิดแล้วต้องมีผล PASS หรือ FAIL เท่านั้น หากต้องตรวจซ้ำให้เปิดใบสั่งงานใหม่';
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 export const getBangkokDateString = (date = new Date()) => {
@@ -1197,12 +1217,13 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
     }
     if (!reason) return c.json({ error: 'กรุณาระบุเหตุผลในการขอเลื่อนวันครบกำหนด' }, 400);
 
-    await db.batch([
+    const conflict = await runTransition(c, db, [
       db.prepare(`
         UPDATE vcc_work_orders
         SET scheduled_date = ?, due_date = ?, reschedule_reason = ?, updated_at = ${NOW}, updated_by = ?
-        WHERE id = ?
-      `).bind(newDueDate, newDueDate, reason, user.id, id),
+        WHERE id = ? AND status = ?
+      `).bind(newDueDate, newDueDate, reason, user.id, id, existing.status),
+      assertRowUpdated(db),
       audit(db, user.id, 'VCC_WO_RESCHEDULED', {
         wo_id: id,
         wo_code: existing.wo_code,
@@ -1213,6 +1234,7 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
         reason
       })
     ]);
+    if (conflict) return conflict;
 
     return c.json({ workOrder: await fetchWorkOrder(db, id) });
   });
@@ -1293,8 +1315,8 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
       }
     }
 
-    // If result is FAIL, immediately trigger ON_HOLD / NC control
-    const nextNcStatus = resultStatus === 'FAIL' ? 'OPEN' : existing.nc_status;
+    // FAIL or INCONCLUSIVE immediately triggers ON_HOLD / NC control; a later PASS retest keeps the NC open until an L5+ release
+    const nextNcStatus = HOLDING_RESULTS.has(resultStatus) ? 'OPEN' : existing.nc_status;
 
     const batchStmts = [
       db.prepare(`
@@ -1318,7 +1340,7 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
             rejected_reason = NULL,
             updated_at = ${NOW},
             updated_by = ?
-        WHERE id = ?
+        WHERE id = ? AND status IN ('OPEN', 'SCHEDULED', 'REJECTED')
       `).bind(
         resultStatus,
         performedAt,
@@ -1338,6 +1360,7 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
         user.id,
         id
       ),
+      assertRowUpdated(db),
       audit(db, user.id, 'VCC_WO_RESULT_SUBMITTED', {
         wo_id: id,
         wo_code: existing.wo_code,
@@ -1361,7 +1384,7 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
       })
     ];
 
-    if (resultStatus === 'FAIL') {
+    if (HOLDING_RESULTS.has(resultStatus)) {
       batchStmts.push(
         db.prepare(`
           UPDATE vcc_assets
@@ -1373,7 +1396,8 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
       );
     }
 
-    await db.batch(batchStmts);
+    const conflict = await runTransition(c, db, batchStmts);
+    if (conflict) return conflict;
 
     return c.json({ workOrder: await fetchWorkOrder(db, id) });
   });
@@ -1390,6 +1414,9 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
     if (!existing) return c.json({ error: 'ไม่พบใบสั่งงานทวนสอบ/สอบเทียบ' }, 404);
     if (existing.status !== 'PENDING_REVIEW') {
       return c.json({ error: 'อนุมัติปิดงานได้เฉพาะใบสั่งงานที่อยู่ในสถานะรอตรวจรับผล (PENDING_REVIEW) เท่านั้น' }, 409);
+    }
+    if (existing.result_status === 'INCONCLUSIVE') {
+      return c.json({ error: 'ผลรอตรวจซ้ำ (INCONCLUSIVE) ปิดงานไม่ได้ กรุณาส่งกลับเพื่อตรวจซ้ำและบันทึกผลใหม่' }, 409);
     }
     if (!isUserAuthorizedForPlanDept(user, existing.department)) {
       return c.json({ error: 'ไม่มีสิทธิ์ตรวจรับและอนุมัติใบสั่งงานของแผนกนี้' }, 403);
@@ -1409,7 +1436,7 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
       );
     }
 
-    await db.batch([
+    const conflict = await runTransition(c, db, [
       db.prepare(`
         UPDATE vcc_work_orders
         SET status = 'CLOSED',
@@ -1418,8 +1445,9 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
             review_comment = ?,
             updated_at = ${NOW},
             updated_by = ?
-        WHERE id = ?
+        WHERE id = ? AND status = 'PENDING_REVIEW' AND result_status IS NOT 'INCONCLUSIVE'
       `).bind(user.id, comment, user.id, id),
+      assertRowUpdated(db),
       audit(db, user.id, 'VCC_WO_APPROVED', {
         wo_id: id,
         wo_code: existing.wo_code,
@@ -1432,6 +1460,7 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
         after: { status: 'CLOSED' }
       })
     ]);
+    if (conflict) return conflict;
 
     return c.json({ workOrder: await fetchWorkOrder(db, id) });
   });
@@ -1471,36 +1500,50 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
       );
     }
 
-    await db.batch([
+    const conflict = await runTransition(c, db, [
       db.prepare(`
         UPDATE vcc_work_orders
         SET status = 'REJECTED',
             rejected_reason = ?,
             updated_at = ${NOW},
             updated_by = ?
-        WHERE id = ?
+        WHERE id = ? AND status = 'PENDING_REVIEW'
       `).bind(reason, user.id, id),
+      assertRowUpdated(db),
       audit(db, user.id, 'VCC_WO_REJECTED', {
         wo_id: id,
         wo_code: existing.wo_code,
         asset_id: existing.asset_id,
         reason,
+        // The sent-back result stays traceable here even after the performer records the retest over it
+        rejected_result: {
+          result_status: existing.result_status,
+          performed_at: existing.performed_at,
+          performed_by: existing.performed_by,
+          certificate_no: existing.certificate_no
+        },
         before: { status: 'PENDING_REVIEW' },
         after: { status: 'REJECTED' }
       })
     ]);
+    if (conflict) return conflict;
 
     return c.json({ workOrder: await fetchWorkOrder(db, id) });
   });
 
-  // Release ON_HOLD / NC -> requires L5+ (required_approver_level) and mandatory impact_assessment
+  // Release ON_HOLD / NC -> requires L5+ (required_approver_level), a reviewed (CLOSED) work order, someone other than
+  // the performer, and both a release reason and an impact assessment
   app.post('/api/vcc/work-orders/:id/release-hold', requireAuth, requireVccAccess, async (c) => {
     const db = c.env.DB;
     const user = c.get('user');
     const id = c.req.param('id');
     const body = await c.req.json().catch(() => ({}));
     const impactAssessment = String(body.impact_assessment || '').trim();
+    const releaseReason = String(body.release_reason || '').trim();
 
+    if (!releaseReason) {
+      return c.json({ error: 'กรุณาระบุเหตุผลการปลดระงับและการแก้ไขที่ทำแล้ว ก่อนปลดระงับเครื่องมือ' }, 400);
+    }
     if (!impactAssessment) {
       return c.json({ error: 'กรุณาระบุผลการประเมินผลกระทบและการแก้ไข (NC Impact Assessment) ก่อนปลดระงับเครื่องมือ' }, 400);
     }
@@ -1524,8 +1567,14 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
         403
       );
     }
+    if (user.id === existing.performed_by) {
+      return c.json({ error: 'ผู้บันทึกผลไม่สามารถปลดระงับเครื่องมือจากผลที่ตนบันทึกได้ (ต้องให้ผู้อื่นดำเนินการ)' }, 403);
+    }
+    if (existing.status !== 'CLOSED') {
+      return c.json({ error: 'ต้องตรวจรับผลและปิดใบสั่งงานก่อน จึงจะปลดระงับเครื่องมือได้' }, 409);
+    }
 
-    await db.batch([
+    const conflict = await runTransition(c, db, [
       db.prepare(`
         UPDATE vcc_work_orders
         SET nc_status = 'RELEASED',
@@ -1534,8 +1583,9 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
             hold_released_at = ${NOW},
             updated_at = ${NOW},
             updated_by = ?
-        WHERE id = ?
+        WHERE id = ? AND nc_status = 'OPEN' AND status = 'CLOSED'
       `).bind(impactAssessment, user.id, user.id, id),
+      assertRowUpdated(db),
       db.prepare(`
         UPDATE vcc_assets
         SET status = 'ACTIVE',
@@ -1552,16 +1602,22 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
         wo_code: existing.wo_code,
         asset_id: existing.asset_id,
         asset_code: existing.asset_code,
+        result_status: existing.result_status,
+        performed_by: existing.performed_by,
+        reviewed_by: existing.reviewed_by,
+        release_reason: releaseReason,
         impact_assessment: impactAssessment,
         before: { nc_status: 'OPEN' },
         after: { nc_status: 'RELEASED' }
       })
     ]);
+    if (conflict) return conflict;
 
     return c.json({ workOrder: await fetchWorkOrder(db, id) });
   });
 
-  // Cancel work order with mandatory category and reason (Permanent cancellations prevent auto-recreation)
+  // Cancel work order with mandatory category and reason. Only the work order is cancelled: the plan cycle stays, so
+  // reconcile can issue a fresh work order; dropping a cycle for good goes through an approved plan revision.
   app.post('/api/vcc/work-orders/:id/cancel', requireAuth, requireVccAccess, async (c) => {
     const db = c.env.DB;
     const user = c.get('user');
@@ -1577,15 +1633,22 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
       return c.json({ error: 'ใบสั่งงานนี้ถูกยกเลิกไปแล้ว' }, 409);
     }
 
-    if (!isUserAuthorizedForPlanDept(user, existing.department)) {
-      return c.json({ error: 'ไม่มีสิทธิ์ยกเลิกใบสั่งงานของแผนกนี้' }, 403);
+    // Same rule as managing the department's register: DCC, or L4+ of the work order's own department
+    if (!canManageVccAsset(user, existing.department)) {
+      return c.json({ error: 'ยกเลิกใบสั่งงานได้เฉพาะหัวหน้าแผนกเจ้าของงาน (L4 ขึ้นไป) หรือ DCC เท่านั้น' }, 403);
+    }
+    if (existing.nc_status === 'OPEN') {
+      return c.json({ error: 'ใบสั่งงานนี้มีผลไม่ผ่าน/รอตรวจซ้ำและเครื่องมือถูกระงับใช้อยู่ ต้องตรวจรับผลและปลดระงับตามขั้นตอนก่อน ยกเลิกไม่ได้' }, 409);
     }
 
     const category = String(body.cancellation_category || '').trim().toUpperCase();
     const reason = String(body.cancellation_reason || '').trim();
 
     if (!VALID_CANCELLATION_CATEGORIES.has(category)) {
-      return c.json({ error: 'ประเภทการยกเลิกต้องเป็น PLAN_REVISION, MISTAKE_CREATION, ASSET_RETIRED หรือ AUTHORIZED_CANCEL' }, 400);
+      return c.json({ error: 'ประเภทการยกเลิกต้องเป็น MISTAKE_CREATION หรือ AUTHORIZED_CANCEL' }, 400);
+    }
+    if (!MANUAL_CANCELLATION_CATEGORIES.has(category)) {
+      return c.json({ error: 'การตัดรอบออกจากแผน (PLAN_REVISION / ASSET_RETIRED) ต้องทำผ่านการปรับปรุงแผนที่ได้รับอนุมัติ ไม่ใช่การยกเลิกใบสั่งงาน' }, 400);
     }
     if (!reason) {
       return c.json({ error: 'กรุณาระบุเหตุผลในการขอยกเลิกใบสั่งงาน' }, 400);
@@ -1601,8 +1664,9 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
             cancelled_at = ${NOW},
             updated_at = ${NOW},
             updated_by = ?
-        WHERE id = ?
-      `).bind(category, reason, user.id, user.id, id),
+        WHERE id = ? AND status = ? AND nc_status IS NOT 'OPEN'
+      `).bind(category, reason, user.id, user.id, id, existing.status),
+      assertRowUpdated(db),
       audit(db, user.id, 'VCC_WO_CANCELLED', {
         wo_id: id,
         wo_code: existing.wo_code,
@@ -1615,19 +1679,8 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
       })
     ];
 
-    if ((category === 'ASSET_RETIRED' || category === 'PLAN_REVISION') && existing.cycle_id) {
-      batchStmts.push(
-        db.prepare(`
-          UPDATE vcc_plan_cycles
-          SET cycle_status = 'CANCELLED',
-              updated_at = ${NOW},
-              updated_by = ?
-          WHERE id = ?
-        `).bind(user.id, existing.cycle_id)
-      );
-    }
-
-    await db.batch(batchStmts);
+    const conflict = await runTransition(c, db, batchStmts);
+    if (conflict) return conflict;
 
     return c.json({ workOrder: await fetchWorkOrder(db, id) });
   });
@@ -1869,12 +1922,11 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
       return c.json({ error: `ผู้มีอำนาจขอแก้ไขใบสั่งงานที่ปิดแล้วต้องมีระดับอนุมัติ L${requiredLevel} ขึ้นไป` }, 403);
     }
 
-    // Check if an amendment request is already pending
+    // Check if an amendment request is already pending (the INSERT below re-checks atomically for concurrent requests)
     const pendingExisting = await db
-      .prepare('SELECT id FROM vcc_work_order_amendment_requests WHERE work_order_id = ? AND status = "PENDING"')
+      .prepare("SELECT id FROM vcc_work_order_amendment_requests WHERE work_order_id = ? AND status = 'PENDING'")
       .bind(id)
-      .first()
-      .catch(() => null);
+      .first();
     if (pendingExisting) {
       return c.json({ error: 'มีคำขอแก้ไข (Amendment Request) ที่รอการอนุมัติอยู่แล้ว กรุณารอการตรวจสอบคำขอเดิมก่อนสร้างคำขอใหม่' }, 409);
     }
@@ -1897,6 +1949,9 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
     const newResultStatus = body.result_status ? String(body.result_status).trim().toUpperCase() : existing.result_status;
     if (newResultStatus && !VALID_RESULT_STATUSES.has(newResultStatus)) {
       return c.json({ error: 'ผลการทวนสอบต้องเป็น PASS, FAIL หรือ INCONCLUSIVE' }, 400);
+    }
+    if (newResultStatus === 'INCONCLUSIVE') {
+      return c.json({ error: AMEND_TO_INCONCLUSIVE_ERROR }, 400);
     }
 
     let certificateIssueDate = existing.certificate_issue_date;
@@ -1938,12 +1993,15 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
     };
 
     const requestId = crypto.randomUUID();
-    const batchStmts = [
+    const conflict = await runTransition(c, db, [
       db.prepare(`
         INSERT INTO vcc_work_order_amendment_requests (
           id, work_order_id, requested_by, requested_at, amendment_reason, proposed_changes, status, created_at, updated_at
-        ) VALUES (?, ?, ?, ${NOW}, ?, ?, 'PENDING', ${NOW}, ${NOW})
-      `).bind(requestId, id, user.id, reason, JSON.stringify(proposedChanges)),
+        )
+        SELECT ?, ?, ?, ${NOW}, ?, ?, 'PENDING', ${NOW}, ${NOW}
+        WHERE NOT EXISTS (SELECT 1 FROM vcc_work_order_amendment_requests WHERE work_order_id = ? AND status = 'PENDING')
+      `).bind(requestId, id, user.id, reason, JSON.stringify(proposedChanges), id),
+      assertRowUpdated(db),
       audit(db, user.id, 'VCC_WO_AMENDMENT_REQUESTED', {
         wo_id: id,
         wo_code: existing.wo_code,
@@ -1954,9 +2012,8 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
         reason,
         proposed_changes: proposedChanges
       })
-    ];
-
-    await db.batch(batchStmts);
+    ]);
+    if (conflict) return conflict;
 
     const createdRequest = {
       id: requestId,
@@ -2001,7 +2058,7 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
         .first();
     } else {
       reqRow = await db
-        .prepare('SELECT * FROM vcc_work_order_amendment_requests WHERE work_order_id = ? AND status = "PENDING" ORDER BY created_at DESC')
+        .prepare("SELECT * FROM vcc_work_order_amendment_requests WHERE work_order_id = ? AND status = 'PENDING' ORDER BY created_at DESC")
         .bind(id)
         .first();
     }
@@ -2045,6 +2102,9 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
     const newResultStatus = proposed.result_status ? String(proposed.result_status).trim().toUpperCase() : existing.result_status;
     if (newResultStatus && !VALID_RESULT_STATUSES.has(newResultStatus)) {
       return c.json({ error: 'ผลการทวนสอบต้องเป็น PASS, FAIL หรือ INCONCLUSIVE' }, 400);
+    }
+    if (proposed.result_status && newResultStatus === 'INCONCLUSIVE') {
+      return c.json({ error: AMEND_TO_INCONCLUSIVE_ERROR }, 400);
     }
 
     // If changing to FAIL or if existing was FAIL, requires L5+ (approver level)
@@ -2096,8 +2156,9 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
             reviewed_at = ${NOW},
             review_comment = ?,
             updated_at = ${NOW}
-        WHERE id = ?
+        WHERE id = ? AND status = 'PENDING'
       `).bind(user.id, reviewComment, reqRow.id),
+      assertRowUpdated(db),
       db.prepare(`
         UPDATE vcc_work_orders
         SET result_status = ?,
@@ -2120,7 +2181,7 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
             amendment_reason = ?,
             updated_at = ${NOW},
             updated_by = ?
-        WHERE id = ?
+        WHERE id = ? AND status = 'CLOSED'
       `).bind(
         newResultStatus,
         performedAt,
@@ -2141,6 +2202,7 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
         user.id,
         id
       ),
+      assertRowUpdated(db),
       audit(db, user.id, 'VCC_WO_AMENDED', {
         wo_id: id,
         wo_code: existing.wo_code,
@@ -2191,7 +2253,8 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
     // NOTE: When amending FAIL -> PASS, vcc_assets status MUST NOT be automatically reverted to ACTIVE.
     // It remains ON_HOLD until explicit impact assessment and hold release is approved via POST /api/vcc/work-orders/:id/release-hold.
 
-    await db.batch(batchStmts);
+    const conflict = await runTransition(c, db, batchStmts);
+    if (conflict) return conflict;
 
     return c.json({ workOrder: await fetchWorkOrder(db, id), amendment_seq: nextSeq, request_id: reqRow.id });
   };
@@ -2222,7 +2285,7 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
         .first();
     } else {
       reqRow = await db
-        .prepare('SELECT * FROM vcc_work_order_amendment_requests WHERE work_order_id = ? AND status = "PENDING" ORDER BY created_at DESC')
+        .prepare("SELECT * FROM vcc_work_order_amendment_requests WHERE work_order_id = ? AND status = 'PENDING' ORDER BY created_at DESC")
         .bind(id)
         .first();
     }
@@ -2252,7 +2315,7 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
 
     const reviewComment = body.comment || body.review_comment || body.reason || null;
 
-    const batchStmts = [
+    const conflict = await runTransition(c, db, [
       db.prepare(`
         UPDATE vcc_work_order_amendment_requests
         SET status = 'REJECTED',
@@ -2260,8 +2323,9 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
             reviewed_at = ${NOW},
             review_comment = ?,
             updated_at = ${NOW}
-        WHERE id = ?
+        WHERE id = ? AND status = 'PENDING'
       `).bind(user.id, reviewComment, reqRow.id),
+      assertRowUpdated(db),
       audit(db, user.id, 'VCC_WO_AMENDMENT_REJECTED', {
         wo_id: id,
         wo_code: existing.wo_code,
@@ -2271,9 +2335,8 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
         requested_by: reqRow.requested_by,
         review_comment: reviewComment
       })
-    ];
-
-    await db.batch(batchStmts);
+    ]);
+    if (conflict) return conflict;
 
     return c.json({ message: 'ปฏิเสธคำขอแก้ไขเรียบร้อยแล้ว', request_id: reqRow.id, status: 'REJECTED' });
   };
