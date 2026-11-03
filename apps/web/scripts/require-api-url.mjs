@@ -5,3 +5,8 @@ if (!/^https:\/\/\S+$/.test(url)) {
   console.error('build:production needs VITE_API_URL set to the https URL of the API (got: "' + url + '").');
   process.exit(1);
 }
+// A build pointing at the developer's own machine would ship a site whose API nobody else can reach.
+if (/^https:\/\/(localhost|127\.|0\.0\.0\.0|\[::1\])/i.test(url)) {
+  console.error('build:production cannot use a localhost API URL (got: "' + url + '").');
+  process.exit(1);
+}

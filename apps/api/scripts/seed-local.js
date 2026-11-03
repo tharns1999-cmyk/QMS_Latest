@@ -4,6 +4,7 @@
 //   Starting from scratch: stop wrangler dev, delete apps/api/.wrangler/state/v3/d1 and .../r2, then migrate and seed.
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { hashPassword } from '../src/password.js';
+import { GUARD_SQL, MARKER_SQL } from './local-seed-guard.js';
 
 const PASSWORD = '1234';
 // Department code -> short prefix for the email. Codes are the ones migration 0014 creates.
@@ -26,6 +27,7 @@ const users = [
   ...EXTRA
 ];
 const sql = [
+  GUARD_SQL,
   ...users.map((u) => `INSERT INTO users (id, emp_id, name, email, password_hash, role, approval_level, primary_department, departments, is_dcc, is_qmr, must_change_password, position)
     VALUES (${[u.id, u.id, u.name, `${u.id}@t.co`, hash, u.dcc ? 'DCC_ADMIN' : 'GENERAL_USER', u.level, u.dept, JSON.stringify([u.dept])].map((v, i) => (i === 6 ? v : q(v))).join(', ')}, ${u.dcc}, ${u.qmr}, 0, ${q(u.position)});`),
   // Two places per department so a DAR can name where controlled copies go.
@@ -63,5 +65,6 @@ for (const a of VCC_SEED) {
 }
 
 mkdirSync('.wrangler', { recursive: true });
+writeFileSync('.wrangler/seed-marker.sql', MARKER_SQL);
 writeFileSync('.wrangler/seed-local.sql', `${sql.join('\n')}\n`);
 console.log(`Wrote ${users.length} users, ${Object.keys(DEPARTMENTS).length * 2} places and ${VCC_SEED.length} VCC test assets to .wrangler/seed-local.sql`);
