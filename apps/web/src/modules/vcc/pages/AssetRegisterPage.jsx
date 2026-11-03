@@ -374,44 +374,52 @@ const AssetRegisterPageInner = () => {
 
   return (
     <div className="w-full min-w-0 space-y-4 pb-8">
-      {/* Accessible navigation fallback for headless tests & assistive technology */}
-      <div className="sr-only" role="navigation" aria-label="เมนูย่อยระบบ VCC">
-        <button
-          type="button"
-          onClick={() => setModuleView('DASHBOARD')}
-          aria-label="ภาพรวมและรายงาน (Dashboard & Export)"
-        >
-          ภาพรวมและรายงาน (Dashboard & Export)
-        </button>
-        <button
-          type="button"
-          onClick={() => setModuleView('WORK_ORDERS')}
-          aria-label="ใบสั่งงานและบันทึกผล (Work Orders)"
-        >
-          ใบสั่งงานและบันทึกผล (Work Orders)
-        </button>
-        <button
-          type="button"
-          onClick={() => setModuleView('ANNUAL_PLAN')}
-          aria-label="แผนการทวนสอบประจำปี (FM-QC-46)"
-        >
-          แผนการทวนสอบประจำปี (FM-QC-46)
-        </button>
-        <button
-          type="button"
-          onClick={() => setModuleView('TASKS')}
-          aria-label="งานที่ต้องดำเนินการ (VCC Task Inbox)"
-        >
-          งานที่ต้องดำเนินการ (VCC Task Inbox)
-        </button>
-        <button
-          type="button"
-          onClick={() => setModuleView('ASSETS')}
-          aria-label="ทะเบียนเครื่องมือ (Asset Register)"
-        >
-          ทะเบียนเครื่องมือ (Asset Register)
-        </button>
-      </div>
+      {/* Test-only switcher: the sidebar (desktop, and the mobile drawer) is the real menu for every one of these views, so shipping
+          this clipped duplicate would only add an invisible landmark and Tab stops. Not rendered in production builds. */}
+      {import.meta.env.MODE === 'test' && (
+        <div className="sr-only" role="navigation" aria-label="เมนูย่อยระบบ VCC">
+          <button
+            type="button"
+            tabIndex={-1}
+            onClick={() => setModuleView('DASHBOARD')}
+            aria-label="ภาพรวมและรายงาน (Dashboard & Export)"
+          >
+            ภาพรวมและรายงาน (Dashboard & Export)
+          </button>
+          <button
+            type="button"
+            tabIndex={-1}
+            onClick={() => setModuleView('WORK_ORDERS')}
+            aria-label="ใบสั่งงานและบันทึกผล (Work Orders)"
+          >
+            ใบสั่งงานและบันทึกผล (Work Orders)
+          </button>
+          <button
+            type="button"
+            tabIndex={-1}
+            onClick={() => setModuleView('ANNUAL_PLAN')}
+            aria-label="แผนการทวนสอบประจำปี (FM-QC-46)"
+          >
+            แผนการทวนสอบประจำปี (FM-QC-46)
+          </button>
+          <button
+            type="button"
+            tabIndex={-1}
+            onClick={() => setModuleView('TASKS')}
+            aria-label="งานที่ต้องดำเนินการ (VCC Task Inbox)"
+          >
+            งานที่ต้องดำเนินการ (VCC Task Inbox)
+          </button>
+          <button
+            type="button"
+            tabIndex={-1}
+            onClick={() => setModuleView('ASSETS')}
+            aria-label="ทะเบียนเครื่องมือ (Asset Register)"
+          >
+            ทะเบียนเครื่องมือ (Asset Register)
+          </button>
+        </div>
+      )}
 
       {/* Compact Page Header: title + one-line description (for ASSETS, ANNUAL_PLAN, DASHBOARD) */}
       {moduleView !== 'WORK_ORDERS' && (

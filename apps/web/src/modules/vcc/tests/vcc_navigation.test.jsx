@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import useStore from '../../../store/useStore';
 import { resetVccLocalStore } from '../api/vccApi';
@@ -126,6 +126,18 @@ describe('VCC Enterprise Navigation & Sidebar Spoke Integration Tests', () => {
     await waitFor(() => {
       expect(screen.getByTestId('annual-plan-matrix')).toBeTruthy();
     });
+  });
+
+  it('3b. The hidden fallback menu is not in the Tab order (keyboard focus never lands on invisible buttons)', () => {
+    render(
+      <MemoryRouter initialEntries={['/vcc/assets']}>
+        <AssetRegisterPage />
+      </MemoryRouter>
+    );
+
+    const buttons = within(screen.getByRole('navigation', { name: 'เมนูย่อยระบบ VCC' })).getAllByRole('button');
+    expect(buttons).toHaveLength(5);
+    for (const b of buttons) expect(b).toHaveAttribute('tabindex', '-1');
   });
 
   it('4. Renders clean Enterprise Page Header: no breadcrumb trail, title without redundant module prefix, and eliminates duplicate header tabs in visual UI', async () => {

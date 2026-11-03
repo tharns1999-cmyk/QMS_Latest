@@ -52,6 +52,9 @@ describe('VCC Phase 3 — Work Orders, Execution, Review, Close & Hold/NC Contro
 
     // Switch back to OPEN tab and test Reschedule mandatory reason
     fireEvent.click(screen.getByRole('tab', { name: /เปิดงาน \/ รอบันทึกผล \(OPEN\)/i }));
+    // the action sits in the row's "more" menu: closed it is hidden from users and the keyboard, so open it first
+    expect(screen.queryByRole('button', { name: /เลื่อนวันครบกำหนด/i })).not.toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name: /การจัดการเพิ่มเติมสำหรับ WO-2026-001/ }));
     fireEvent.click(await screen.findByRole('button', { name: /เลื่อนวันครบกำหนด/i }));
 
     const confirmBtn = await screen.findByRole('button', { name: 'ยืนยันการดำเนินการ' });

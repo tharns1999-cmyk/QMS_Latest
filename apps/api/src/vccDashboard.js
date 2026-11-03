@@ -1,5 +1,7 @@
 import { requireVccAccess, requireDccOnly, canReadAllVccDepartments, canReadVccDepartment, vccDeptScopeSql } from './vccAuth.js';
 import { isUserAuthorizedForPlanDept, getUserDepartments } from './vccPlans.js';
+import { getThresholds } from './approval.js';
+import { readWorkOrderSettings } from './vccWorkOrders.js';
 
 // Same range the plan list accepts. Empty means "use the current year in Bangkok" (a plain getFullYear() lags a day behind New Year there).
 const parseYearParam = (raw) => {
@@ -684,6 +686,7 @@ export const registerVccDashboardRoutes = (app, { requireAuth, audit }) => {
     }
 
     const userLevel = Number(user.approval_level ?? 0);
+    const { required_approver_level: approverLevel } = await getThresholds(db, (await readWorkOrderSettings(db)).approval_doc_type);
 
     const items = results
       .filter((r) => {
@@ -693,8 +696,8 @@ export const registerVccDashboardRoutes = (app, { requireAuth, audit }) => {
       .map((r) => {
         const auditInfo = r.wo_id ? auditMap.get(r.wo_id) : null;
         const daysOnHold = r.performed_at ? Math.max(0, -diffDays(r.performed_at, refDate)) : 0;
-        // Mirrors POST /release-hold: L5+ of the department, on a reviewed (CLOSED) work order, by someone other than the performer
-        const isApprover = userLevel >= 5 && isUserAuthorizedForPlanDept(user, r.department);
+        // Mirrors POST /release-hold: approver level from the Approval Matrix, same department, on a reviewed (CLOSED) work order, not the performer
+        const isApprover = userLevel >= approverLevel && isUserAuthorizedForPlanDept(user, r.department);
         const awaitingReview = Boolean(r.wo_id) && r.wo_status !== 'CLOSED';
         const isPerformer = r.performed_by === user.id;
         const canRelease = isApprover && !awaitingReview && !isPerformer;
@@ -721,12 +724,12 @@ export const registerVccDashboardRoutes = (app, { requireAuth, audit }) => {
           days_on_hold: daysOnHold,
           can_release_hold: canRelease,
           recommendation: canRelease
-            ? 'ผู้มีอำนาจระดับ L5+ สามารถประเมินผลกระทบและกดปลดระงับการใช้งานได้'
+            ? `ผู้มีอำนาจระดับ L${approverLevel}+ สามารถประเมินผลกระทบและกดปลดระงับการใช้งานได้`
             : awaitingReview
               ? 'รอตรวจรับผลและปิดใบสั่งงานก่อน (ผลรอตรวจซ้ำต้องตรวจซ้ำให้ได้ผล PASS/FAIL) จึงจะปลดระงับได้'
               : isApprover && isPerformer
-                ? 'ผู้บันทึกผลปลดระงับเองไม่ได้ ต้องให้ผู้มีอำนาจ L5+ คนอื่นดำเนินการ'
-                : 'รอผู้มีอำนาจระดับ L5+ ของแผนกประเมินผลกระทบและอนุมัติปลดระงับ'
+                ? `ผู้บันทึกผลปลดระงับเองไม่ได้ ต้องให้ผู้มีอำนาจ L${approverLevel}+ คนอื่นดำเนินการ`
+                : `รอผู้มีอำนาจระดับ L${approverLevel}+ ของแผนกประเมินผลกระทบและอนุมัติปลดระงับ`
         };
       });
 

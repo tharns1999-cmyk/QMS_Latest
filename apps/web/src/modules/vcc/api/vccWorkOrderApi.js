@@ -79,6 +79,8 @@ const getLocalThresholds = (docType = 'FM') => {
   return { min_requester_level: 1, required_reviewer_level: 4, required_approver_level: 5 };
 };
 
+export const getLocalWoThresholds = () => getLocalThresholds(getLocalWoSettings().approval_doc_type);
+
 const enrichLocalWo = (wo, allAssets, deptMap, allPlans) => {
   const asset = allAssets.find((a) => a.id === wo.asset_id) || {};
   const parent = asset.parent_id ? allAssets.find((p) => p.id === asset.parent_id) : null;

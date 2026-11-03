@@ -52,7 +52,7 @@ export const getBangkokDateString = (date = new Date()) => {
   }).format(date);
 };
 
-const readWorkOrderSettings = async (db) => {
+export const readWorkOrderSettings = async (db) => {
   const row = await db
     .prepare('SELECT value FROM settings WHERE key = ?')
     .bind(WORK_ORDER_SETTINGS_KEY)
