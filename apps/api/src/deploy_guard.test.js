@@ -39,6 +39,15 @@ describe('deploy guard', () => {
     expect(checkDeployConfig(base(), 'production').warnings).toHaveLength(2);
   });
 
+  it('stops when the login rate limit is switched off in a deployed environment', () => {
+    const c = base();
+    c.env.production.vars.DISABLE_LOGIN_THROTTLE = '1';
+    expect(checkDeployConfig(c, 'production').errors.join()).toMatch(/DISABLE_LOGIN_THROTTLE/);
+    const u = base();
+    u.vars.DISABLE_LOGIN_THROTTLE = '1';
+    expect(checkDeployConfig(u, 'uat').errors.join()).toMatch(/DISABLE_LOGIN_THROTTLE/);
+  });
+
   it('rejects an unknown target and a missing production block', () => {
     expect(checkDeployConfig(base(), 'prod').errors).toHaveLength(1);
     const c = base();

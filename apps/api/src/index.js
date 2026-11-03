@@ -119,7 +119,8 @@ app.post('/api/auth/login', async (c) => {
 
   const db = c.env.DB;
   const ip = c.req.header('cf-connecting-ip');
-  if (await tooManyFailures(db, ip)) return c.json(TOO_MANY_FAILURES, 429, { 'Retry-After': String(LOGIN_WINDOW_MS / 1000) });
+  // DISABLE_LOGIN_THROTTLE comes from .dev.vars only (local testing); the deploy guard refuses it in wrangler.jsonc.
+  if (c.env.DISABLE_LOGIN_THROTTLE !== '1' && await tooManyFailures(db, ip)) return c.json(TOO_MANY_FAILURES, 429, { 'Retry-After': String(LOGIN_WINDOW_MS / 1000) });
   const user = await db.prepare('SELECT * FROM users WHERE email = ?').bind(email).first();
   const passwordOk = await verifyPassword(password, user?.password_hash);
 

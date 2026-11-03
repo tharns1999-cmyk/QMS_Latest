@@ -18,7 +18,8 @@ describe('security hardening', () => {
 
   beforeAll(async () => {
     proxy = await getPlatformProxy({ persist: { path: '.wrangler/test/v3' } });
-    env = { ...proxy.env, JWT_SECRET: 'test-secret' };
+    // .dev.vars may switch the login limit off on a developer machine; the tests need it on
+    env = { ...proxy.env, JWT_SECRET: 'test-secret', DISABLE_LOGIN_THROTTLE: '' };
     const hash = await hashPassword(PASSWORD);
     // id, dcc, qmr, must_change, status
     const users = [['S-DCC', 1, 0, 0, 'ACTIVE'], ['S-QMR', 0, 1, 0, 'ACTIVE'], ['S-USER', 0, 0, 0, 'ACTIVE'], ['S-NEW', 0, 0, 1, 'ACTIVE'], ['S-LOCK', 0, 0, 0, 'LOCKED'], ['S-PW', 0, 0, 0, 'ACTIVE']];
@@ -43,6 +44,13 @@ describe('security hardening', () => {
     expect(blocked.status).toBe(429);
     expect(blocked.headers.get('retry-after')).toBe('900');
     expect((await login('S-USER@sec.local', PASSWORD, '203.0.113.10')).status).toBe(200);
+  });
+
+  it('does not rate-limit by IP when DISABLE_LOGIN_THROTTLE=1 (local testing switch)', async () => {
+    const localEnv = { ...env, DISABLE_LOGIN_THROTTLE: '1' };
+    const attempt = (email, password) => app.request('/api/auth/login', { method: 'POST', headers: { ...json, 'cf-connecting-ip': '203.0.113.50' }, body: JSON.stringify({ email, password }) }, localEnv);
+    for (let i = 0; i < 10; i++) expect((await attempt(`nobody${i}@sec.local`, 'x')).status).toBe(401);
+    expect((await attempt('S-USER@sec.local', PASSWORD)).status).toBe(200);
   });
 
   it('forces a password change, then signs out the old token', async () => {
