@@ -22,3 +22,6 @@ apps/.wrangler/
 .claude/
 .wrangler/
 outputs/
+
+# Local browser-test scripts, screenshots and logs from manual QA runs (kept on the machine as evidence, not source)
+apps/web/.local-e2e/

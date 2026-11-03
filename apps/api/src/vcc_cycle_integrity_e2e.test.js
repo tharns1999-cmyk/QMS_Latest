@@ -129,6 +129,8 @@ describe('VCC Phase 2.5: Stable Planned Cycle Identity, Reconciliation & E2E Ver
   const cleanDb = async () => {
     await env.DB.batch([
       ...dropHistoricalTriggers.map((s) => env.DB.prepare(s)),
+      // Derived alerts point at assets and work orders; clear them first or the wipe below hits a foreign key.
+      env.DB.prepare('DELETE FROM vcc_notifications'),
       env.DB.prepare('DELETE FROM vcc_work_order_amendment_requests'),
       env.DB.prepare('DELETE FROM vcc_work_order_amendments'),
       env.DB.prepare('DELETE FROM vcc_work_order_certificates'),

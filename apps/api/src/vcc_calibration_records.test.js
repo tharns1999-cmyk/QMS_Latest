@@ -88,6 +88,8 @@ describe('VCC Phase 3.2: Calibration Execution, Digital Certificates & Controlle
   afterAll(async () => {
     try {
       await env.DB.batch([
+        // Derived alerts point at assets and work orders; clear them first or the wipe below hits a foreign key.
+        env.DB.prepare('DELETE FROM vcc_notifications'),
         env.DB.prepare('DELETE FROM vcc_work_order_amendment_requests'),
         env.DB.prepare('DELETE FROM vcc_work_order_amendments'),
         env.DB.prepare('DELETE FROM vcc_work_order_certificates'),

@@ -14,7 +14,6 @@ import {
   Eye, 
   Edit3, 
   RotateCcw, 
-  ChevronRight,
   ShieldCheck,
   X
 } from 'lucide-react';
@@ -449,20 +448,7 @@ const MyExternalRequests = () => {
       <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-2xs">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="space-y-1">
-            <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
-              <button
-                type="button"
-                onClick={() => navigate('/dcc/external-docs')}
-                className="hover:text-blue-600 inline-flex items-center gap-1 cursor-pointer transition-colors"
-              >
-                <ArrowLeft size={14} />
-                <span>คลังเอกสารภายนอก</span>
-              </button>
-              <ChevronRight size={13} className="text-slate-300" />
-              <span className="text-blue-600">คำร้องของฉัน</span>
-            </div>
-
-            <div className="flex items-center gap-3 pt-1">
+            <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold shrink-0 border border-blue-100 shadow-2xs">
                 <FileText size={20} />
               </div>
