@@ -243,7 +243,7 @@ export const LegacyGroupConversionModal = ({
 
           {retiredChildren.length > 0 && (
             <div className="p-3 rounded-xl bg-slate-100 border border-slate-200 text-slate-700 text-xs">
-              <span className="font-bold text-rose-700">ตรวจพบเครื่องมือเดิมที่ปลดออกแล้ว (RETIRED):</span>{' '}
+              <span className="font-bold text-rose-700">ตรวจพบเครื่องมือเดิมที่ปลดออกแล้ว:</span>{' '}
               {retiredChildren.map((r) => r.asset_code).join(', ')} — ระบบคัดออกอัตโนมัติเพื่อป้องกันการวางแผนกับเครื่องมือที่เลิกใช้งาน
             </div>
           )}
@@ -261,7 +261,7 @@ export const LegacyGroupConversionModal = ({
 
               {candidateAssets.length === 0 ? (
                 <div className="p-4 rounded-xl border border-dashed border-slate-300 text-center text-xs text-slate-500">
-                  ไม่พบเครื่องมือที่ใช้งานอยู่ (ACTIVE) สำหรับทดแทนรายการนี้
+                  ไม่พบเครื่องมือที่ใช้งานอยู่ สำหรับทดแทนรายการนี้
                 </div>
               ) : (
                 <div className="space-y-3">

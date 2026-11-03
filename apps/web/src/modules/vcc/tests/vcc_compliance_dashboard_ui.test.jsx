@@ -84,7 +84,7 @@ describe('VCC Phase 3.3: Calibration Monitoring & Compliance Dashboard UI Tests'
 
       // Verify Non-overlapping Due Soon breakdown (0-7, 8-15, 16-30 days)
       expect(screen.getByTestId('kpi-due-30-count').textContent).toBe('7');
-      expect(screen.getByText(/0-7วัน: 2 · 8-15วัน: 2 · 16-30วัน: 3/)).toBeInTheDocument();
+      expect(screen.getByText(/0-7 วัน: 2 · 8-15 วัน: 2 · 16-30 วัน: 3/)).toBeInTheDocument();
 
       // Verify Certificate Expiry Status (Expired alert prioritized)
       const certStatusEl = screen.getByTestId('kpi-cert-status');
@@ -235,7 +235,7 @@ describe('VCC Phase 3.3: Calibration Monitoring & Compliance Dashboard UI Tests'
       fireEvent.click(screen.getByTestId('release-hold-btn-HLD-001'));
 
       // Modal appears
-      expect(screen.getByText('ปลดระงับการใช้งานเครื่องมือ (Release ON_HOLD)')).toBeInTheDocument();
+      expect(screen.getByText('ปลดระงับการใช้งานเครื่องมือ')).toBeInTheDocument();
 
       // Enter impact assessment
       const textarea = screen.getByPlaceholderText(/ระบุผลการตรวจสอบย้อนหลัง/);

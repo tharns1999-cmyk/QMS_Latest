@@ -499,7 +499,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
     setWorkflowBannerError('');
     try {
       await submitVccPlan(planDetail.plan.id, reviewerId, approverId);
-      toast.success('ส่งแผนประจำปีเข้าสู่ขั้นตอนรอทบทวน (PENDING_REVIEW) แล้ว');
+      toast.success('ส่งแผนประจำปีเข้าสู่ขั้นตอนรอทบทวน แล้ว');
       setPlanSubmitModalOpen(false);
       setStatusTab('PENDING_REVIEW');
     } catch (err) {

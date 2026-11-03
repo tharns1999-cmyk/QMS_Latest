@@ -56,14 +56,14 @@ export const CreateWorkOrderModal = ({
                 checked={form.mode === 'PLAN'}
                 onChange={() => setForm({ ...form, mode: 'PLAN', plan_id: approvedPlans[0]?.id || '' })}
               />
-              <span>สร้างจากแผนประจำปี (APPROVED)</span>
+              <span>สร้างจากแผนประจำปีที่อนุมัติแล้ว</span>
             </label>
           </div>
 
           {form.mode === 'PLAN' ? (
             <>
               <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1.5">แผนประจำปีที่อนุมัติแล้ว (APPROVED)</label>
+                <label className="block text-sm font-semibold text-slate-700 mb-1.5">แผนประจำปีที่อนุมัติแล้ว</label>
                 <select
                   required
                   value={form.plan_id}
@@ -147,7 +147,7 @@ export const CreateWorkOrderModal = ({
             <>
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-                  เครื่องมือวัด / ชุดเครื่องมือ (ACTIVE) <span className="text-rose-600">*</span>
+                  เครื่องมือวัด / ชุดเครื่องมือที่ใช้งานปกติ <span className="text-rose-600">*</span>
                 </label>
                 <select
                   required
@@ -156,7 +156,7 @@ export const CreateWorkOrderModal = ({
                   onChange={(e) => setForm({ ...form, asset_id: e.target.value })}
                   className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium bg-white"
                 >
-                  <option value="">-- เลือกเครื่องมือหรือชุดเครื่องมือ (ACTIVE) --</option>
+                  <option value="">-- เลือกเครื่องมือหรือชุดเครื่องมือที่ใช้งานปกติ --</option>
                   {individualAssets.map((a) => (
                     <option key={a.id} value={a.id}>
                       {a.asset_code} — {a.name} {a.group_nature === 'COMPOSITE_SET' ? '(ชุดเครื่องมือ)' : ''}
@@ -237,7 +237,7 @@ export const WorkOrderActionModal = ({
             {mode === 'RESCHEDULE' && `เลื่อนวันครบกำหนด (${workOrder.wo_code})`}
             {mode === 'APPROVE' && `ตรวจรับผลและอนุมัติปิดใบงาน (${workOrder.wo_code})`}
             {mode === 'REJECT' && `ส่งกลับแก้ไขผลทวนสอบ (${workOrder.wo_code})`}
-            {mode === 'RELEASE_HOLD' && `อนุมัติปลดระงับเครื่องมือ ON_HOLD (${workOrder.asset_code})`}
+            {mode === 'RELEASE_HOLD' && `อนุมัติปลดระงับเครื่องมือ (${workOrder.asset_code})`}
             {mode === 'CANCEL' && `ยกเลิกใบสั่งงาน (${workOrder.wo_code})`}
           </h2>
           <button type="button" onClick={onClose} className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer">

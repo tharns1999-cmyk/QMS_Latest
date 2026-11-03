@@ -36,32 +36,33 @@ import {
 import WorkOrderInfoBar from './WorkOrderInfoBar';
 import WorkOrderSideDrawer from './WorkOrderSideDrawer';
 import WorkOrderTable from './WorkOrderTable';
+import { WORK_ORDER_STATUS_LABELS, RESULT_STATUS_LABELS } from '../utils/statusLabels';
 
 const WO_TABS = [
   {
     key: 'OPEN',
-    shortLabel: 'เปิดงาน (OPEN)',
-    fullLabel: 'เปิดงาน / รอบันทึกผล (OPEN)'
+    shortLabel: WORK_ORDER_STATUS_LABELS.OPEN,
+    fullLabel: 'เปิดงาน / รอบันทึกผล'
   },
   {
     key: 'PENDING_REVIEW',
-    shortLabel: 'รอตรวจรับ (PENDING_REVIEW)',
-    fullLabel: 'รอตรวจรับ (PENDING_REVIEW)'
+    shortLabel: WORK_ORDER_STATUS_LABELS.PENDING_REVIEW,
+    fullLabel: WORK_ORDER_STATUS_LABELS.PENDING_REVIEW
   },
   {
     key: 'REJECTED',
-    shortLabel: 'ส่งกลับแก้ไข (REJECTED)',
-    fullLabel: 'ส่งกลับแก้ไข (REJECTED)'
+    shortLabel: WORK_ORDER_STATUS_LABELS.REJECTED,
+    fullLabel: WORK_ORDER_STATUS_LABELS.REJECTED
   },
   {
     key: 'CLOSED',
-    shortLabel: 'ปิดงานแล้ว (CLOSED)',
-    fullLabel: 'ตรวจรับปิดงานแล้ว (CLOSED)'
+    shortLabel: WORK_ORDER_STATUS_LABELS.CLOSED,
+    fullLabel: WORK_ORDER_STATUS_LABELS.CLOSED
   },
   {
     key: 'ON_HOLD',
-    shortLabel: 'ระงับใช้ (ON_HOLD)',
-    fullLabel: 'ระงับใช้ (ON_HOLD)'
+    shortLabel: WORK_ORDER_STATUS_LABELS.ON_HOLD,
+    fullLabel: WORK_ORDER_STATUS_LABELS.ON_HOLD
   }
 ];
 
@@ -577,7 +578,7 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
           <button
             type="button"
             onClick={openCreateModal}
-            className="h-9 inline-flex items-center gap-1.5 px-3.5 rounded-lg bg-purple-700 text-white text-xs sm:text-sm font-semibold hover:bg-purple-800 transition-colors shadow-2xs cursor-pointer"
+            className="h-9 inline-flex items-center gap-1.5 px-3.5 rounded-lg bg-indigo-600 text-white text-xs sm:text-sm font-semibold hover:bg-indigo-700 transition-colors shadow-2xs cursor-pointer"
           >
             <Plus size={15} />
             <span>สร้างใบสั่งงานใหม่</span>
@@ -676,9 +677,9 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
             className="h-9 px-2.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-700 focus:outline-none focus:border-purple-600 cursor-pointer shadow-2xs"
           >
             <option value="">ทุกผลตรวจ</option>
-            <option value="PASS">PASS (ผ่านเกณฑ์)</option>
-            <option value="FAIL">FAIL (ไม่ผ่านเกณฑ์)</option>
-            <option value="PENDING">PENDING (รอบันทึกผล)</option>
+            <option value="PASS">{RESULT_STATUS_LABELS.PASS}</option>
+            <option value="FAIL">{RESULT_STATUS_LABELS.FAIL}</option>
+            <option value="PENDING">{RESULT_STATUS_LABELS.PENDING}</option>
           </select>
 
           {/* Reset Filters button */}

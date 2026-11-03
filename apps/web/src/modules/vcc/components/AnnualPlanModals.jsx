@@ -173,8 +173,8 @@ export const PlanFormModal = ({
               onChange={(e) => setForm({ ...form, due_date_rule: e.target.value })}
               className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium bg-white"
             >
-              <option value="END_OF_MONTH">วันสิ้นเดือนของเดือนที่วางแผน (END_OF_MONTH เช่น {endOfMonthPreview})</option>
-              <option value="START_OF_MONTH">วันที่ 1 ของเดือนที่วางแผน (START_OF_MONTH เช่น {startOfMonthPreview})</option>
+              <option value="END_OF_MONTH">วันสิ้นเดือนของเดือนที่วางแผน (เช่น {endOfMonthPreview})</option>
+              <option value="START_OF_MONTH">วันที่ 1 ของเดือนที่วางแผน (เช่น {startOfMonthPreview})</option>
             </select>
           </div>
 
@@ -325,7 +325,7 @@ export const PlanItemModal = ({
 
           <div>
             <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-              เครื่องมือวัด / ชุดเครื่องมือ (เฉพาะสถานะ ACTIVE) <span className="text-rose-600">*</span>
+              เครื่องมือวัด / ชุดเครื่องมือ (เฉพาะที่ใช้งานปกติ) <span className="text-rose-600">*</span>
             </label>
             <select
               required
@@ -815,7 +815,7 @@ export const GroupWorkOrderModal = ({
 
           <div>
             <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-              เลือกรหัสเครื่องมือลูก (ACTIVE) ในกลุ่ม {item.asset_code}
+              เลือกรหัสเครื่องมือลูกที่ใช้งานปกติ ในกลุ่ม {item.asset_code}
             </label>
             <select
               aria-label="เลือกรหัสเครื่องมือลูก"
@@ -904,8 +904,8 @@ export const PlanSettingsModal = ({
                 onChange={(e) => setDraftSettings({ ...draftSettings, due_date_rule: e.target.value })}
                 className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium bg-white"
               >
-                <option value="END_OF_MONTH">วันสิ้นเดือน (END_OF_MONTH)</option>
-                <option value="START_OF_MONTH">วันที่ 1 ของเดือน (START_OF_MONTH)</option>
+                <option value="END_OF_MONTH">วันสิ้นเดือน</option>
+                <option value="START_OF_MONTH">วันที่ 1 ของเดือน</option>
               </select>
             </div>
           </div>

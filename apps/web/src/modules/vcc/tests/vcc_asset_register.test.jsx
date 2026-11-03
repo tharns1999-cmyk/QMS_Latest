@@ -68,7 +68,7 @@ describe('VCC Phase 1 Frontend: Portal Access, Asset Tabs, Mandatory Reason, and
     expect(screen.queryByText('T-OLD-01')).not.toBeInTheDocument();
 
     // Switch to RETIRED tab
-    fireEvent.click(screen.getByRole('tab', { name: /ปลดออกแล้ว \(RETIRED\)/i }));
+    fireEvent.click(screen.getByRole('tab', { name: /ปลดออกแล้ว/i }));
     await waitFor(() => {
       expect(screen.getByText('T-OLD-01')).toBeInTheDocument();
     });
@@ -120,7 +120,7 @@ describe('VCC Phase 1 Frontend: Portal Access, Asset Tabs, Mandatory Reason, and
     expect(screen.queryByText('SW001')).not.toBeInTheDocument();
 
     // 2. Switch to RETIRED tab to test Reactivate
-    fireEvent.click(screen.getByRole('tab', { name: /ปลดออกแล้ว \(RETIRED\)/i }));
+    fireEvent.click(screen.getByRole('tab', { name: /ปลดออกแล้ว/i }));
     await waitFor(() => {
       expect(screen.getByText('SW001')).toBeInTheDocument();
     });
@@ -253,7 +253,7 @@ describe('VCC Phase 1 Frontend: Portal Access, Asset Tabs, Mandatory Reason, and
     expect(screen.queryByText('SC-WH-002')).not.toBeInTheDocument();
 
     // Switch to RETIRED tab -> shows SC-WH-002 and never SC-WH-001
-    fireEvent.click(screen.getByRole('tab', { name: /ปลดออกแล้ว \(RETIRED\)/i }));
+    fireEvent.click(screen.getByRole('tab', { name: /ปลดออกแล้ว/i }));
     await waitFor(() => {
       expect(screen.getByText('SC-WH-002')).toBeInTheDocument();
     });
@@ -327,7 +327,7 @@ describe('VCC asset register: buttons follow who may use them, filters, and paus
     useStore.setState({ currentUser: dcc });
     open();
     await waitFor(() => expect(screen.getByLabelText('กรองตามประเภท')).toBeInTheDocument());
-    expect(screen.getByRole('tab', { name: /ระงับใช้ \(ON_HOLD\)/ })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /ระงับใช้/ })).toBeInTheDocument();
     const type = screen.getByLabelText('กรองตามประเภท');
     const firstType = [...type.options].find((o) => o.value)?.value;
     fireEvent.change(type, { target: { value: firstType } });

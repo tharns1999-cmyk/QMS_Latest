@@ -40,6 +40,8 @@ import AnnualPlanMatrixSection from '../components/AnnualPlanMatrixSection';
 import WorkOrderSection from '../components/WorkOrderSection';
 import VccDashboardSection from '../components/VccDashboardSection';
 import VccTaskInboxSection from '../components/VccTaskInboxSection';
+import MobileCollapsible from '../components/MobileCollapsible';
+import { getAssetStatusLabel } from '../utils/statusLabels';
 
 const EMPTY_FORM = {
   asset_code: '',
@@ -430,7 +432,7 @@ const AssetRegisterPageInner = () => {
                 {pageMeta.title}
               </h1>
 
-              <p className="text-sm text-slate-500">
+              <p className="hidden md:block text-sm text-slate-500">
                 {pageMeta.description}
               </p>
             </div>
@@ -452,9 +454,11 @@ const AssetRegisterPageInner = () => {
           {hasTestData && (
             <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-center gap-3 text-amber-900 text-sm">
               <AlertTriangle size={18} className="text-amber-600 shrink-0" />
-              <div>
+              <div className="min-w-0 flex-1">
+                <MobileCollapsible summary="หมายเหตุข้อมูลจำลอง">
                 <span className="font-bold">หมายเหตุข้อมูลจำลอง:</span>{' '}
                 รายการที่มีป้าย <span className="font-semibold">[ข้อมูลทดสอบ]</span> เป็นข้อมูลตัวอย่างสำหรับทดสอบบน Localhost เท่านั้น ยังไม่ใช่ข้อมูลนำเข้าจากไฟล์ Excel จริง
+                </MobileCollapsible>
               </div>
             </div>
           )}
@@ -462,15 +466,8 @@ const AssetRegisterPageInner = () => {
           {/* Management panel: who may do what, and the add / settings buttons, in plain view instead of the page corner */}
           <section aria-label="จัดการเครื่องมือ" className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-3">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div className="space-y-1 min-w-0">
+              <div className="min-w-0">
                 <h2 className="text-base font-bold text-slate-900">จัดการเครื่องมือ</h2>
-                <p className="text-sm text-slate-600" data-testid="asset-manage-summary">
-                  {isDccUser
-                    ? 'คุณเป็น DCC: จัดการเครื่องมือได้ทุกแผนก โอนเครื่องมือข้ามแผนกได้ และตั้งค่าประเภทเครื่องมือได้'
-                    : canAddAsset
-                      ? `คุณจัดการเครื่องมือของแผนก ${manageableDepts.join(', ')} ได้ (เพิ่ม แก้ไข ปลดออก นำกลับมาใช้) เครื่องมือของแผนกอื่นดูได้อย่างเดียว`
-                      : 'คุณดูทะเบียนเครื่องมือได้อย่างเดียว'}
-                </p>
               </div>
               <div className="flex flex-wrap items-center gap-2.5 shrink-0">
                 {isDccUser && (
@@ -495,6 +492,14 @@ const AssetRegisterPageInner = () => {
                 )}
               </div>
             </div>
+            <MobileCollapsible summary="สิทธิ์ของคุณและคำอธิบาย" className="space-y-3">
+            <p className="text-sm text-slate-600" data-testid="asset-manage-summary">
+                  {isDccUser
+                    ? 'คุณเป็น DCC: จัดการเครื่องมือได้ทุกแผนก โอนเครื่องมือข้ามแผนกได้ และตั้งค่าประเภทเครื่องมือได้'
+                    : canAddAsset
+                      ? `คุณจัดการเครื่องมือของแผนก ${manageableDepts.join(', ')} ได้ (เพิ่ม แก้ไข ปลดออก นำกลับมาใช้) เครื่องมือของแผนกอื่นดูได้อย่างเดียว`
+                      : 'คุณดูทะเบียนเครื่องมือได้อย่างเดียว'}
+            </p>
             {!canAddAsset && (
               <div role="note" className="rounded-xl bg-slate-50 border border-slate-200 px-4 py-3 text-sm text-slate-700">
                 การเพิ่ม แก้ไข ปลดออก และนำกลับมาใช้ ทำโดยหัวหน้าแผนก (ระดับ L4 ขึ้นไป) ของแผนกเจ้าของเครื่องมือ หรือ DCC
@@ -505,6 +510,7 @@ const AssetRegisterPageInner = () => {
               <span className="font-semibold text-slate-700">ปลดออกจากทะเบียน</span> = เลิกใช้เครื่องมือนั้นทั้งระบบ (ไม่ลบ ประวัติอยู่ครบ นำกลับมาใช้ได้) ·{' '}
               <span className="font-semibold text-slate-700">นำออกจากแผน</span> = เอาออกจากแผนประจำปีเท่านั้น ทำที่หน้าแผนประจำปี เครื่องมือยังอยู่ในทะเบียน
             </p>
+            </MobileCollapsible>
           </section>
 
           {/* Status Tabs & Filters */}
@@ -523,7 +529,7 @@ const AssetRegisterPageInner = () => {
                   }`}
                 >
                   <CheckCircle2 size={16} />
-                  <span>ใช้งานปกติ (ACTIVE)</span>
+                  <span>ใช้งานปกติ</span>
                 </button>
 
                 <button
@@ -538,7 +544,7 @@ const AssetRegisterPageInner = () => {
                   }`}
                 >
                   <Archive size={16} />
-                  <span>ปลดออกแล้ว (RETIRED)</span>
+                  <span>ปลดออกแล้ว</span>
                 </button>
 
                 <button
@@ -552,12 +558,12 @@ const AssetRegisterPageInner = () => {
                       : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                   }`}
                 >
-                  <span>ระงับใช้ (ON_HOLD)</span>
+                  <span>ระงับใช้</span>
                 </button>
               </div>
 
               <div className="text-sm font-medium text-slate-600">
-                แสดงเฉพาะสถานะ <span className="font-bold text-slate-800">{activeTab}</span> ({displayedAssets.length} เครื่อง)
+                แสดงเฉพาะสถานะ <span className="font-bold text-slate-800">{getAssetStatusLabel(activeTab)}</span> ({displayedAssets.length} เครื่อง)
               </div>
             </div>
 
@@ -612,7 +618,7 @@ const AssetRegisterPageInner = () => {
             ) : displayedAssets.length === 0 ? (
               <div className="p-12 text-center space-y-2">
                 <div className="text-slate-700 font-bold text-base">
-                  ไม่พบรายการเครื่องมือในสถานะ {activeTab === 'ACTIVE' ? 'ใช้งานปกติ (ACTIVE)' : 'ปลดออกแล้ว (RETIRED)'}
+                  ไม่พบรายการเครื่องมือในสถานะ {activeTab === 'ACTIVE' ? 'ใช้งานปกติ' : 'ปลดออกแล้ว'}
                 </div>
                 <p className="text-slate-500 text-sm">
                   {canAddAsset ? 'ลองปรับเงื่อนไขการค้นหา หรือกดปุ่ม “เพิ่มเครื่องมือ” ด้านบน' : 'ลองปรับเงื่อนไขการค้นหา'}
@@ -696,16 +702,16 @@ const AssetRegisterPageInner = () => {
                             {asset.status === 'ACTIVE' ? (
                               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-bold">
                                 <CheckCircle2 size={13} />
-                                ใช้งานปกติ (ACTIVE)
+                                ใช้งานปกติ
                               </span>
                             ) : asset.status !== 'RETIRED' ? (
                               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 text-amber-800 border border-amber-200 text-xs font-bold">
-                                {asset.status === 'ON_HOLD' ? 'ระงับใช้ (ON_HOLD)' : 'ซ่อมบำรุง (UNDER_REPAIR)'}
+                                {asset.status === 'ON_HOLD' ? 'ระงับใช้' : 'ซ่อมบำรุง'}
                               </span>
                             ) : (
                               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-50 text-rose-800 border border-rose-200 text-xs font-bold">
                                 <XCircle size={13} />
-                                ปลดออกแล้ว (RETIRED)
+                                ปลดออกแล้ว
                               </span>
                             )}
                           </td>

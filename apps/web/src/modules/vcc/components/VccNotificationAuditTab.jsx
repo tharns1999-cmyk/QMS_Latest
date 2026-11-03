@@ -21,6 +21,7 @@ import {
 import useStore from '../../../store/useStore';
 import DepartmentBadge from '../../../shared/components/ui/DepartmentBadge';
 import VccNotificationAcknowledgementModal from './VccNotificationAcknowledgementModal';
+import { NOTIFICATION_STATUS_LABELS } from '../utils/statusLabels';
 
 const SEVERITY_BADGES = {
   CRITICAL: 'bg-rose-100 text-rose-800 border-rose-200',
@@ -251,9 +252,9 @@ export default function VccNotificationAuditTab() {
             className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-xs font-medium text-slate-800"
           >
             <option value="ALL">ทุกสถานะ</option>
-            <option value="PENDING">รอการรับทราบ (PENDING)</option>
-            <option value="ACKNOWLEDGED">รับทราบแล้ว (ACKNOWLEDGED)</option>
-            <option value="RESOLVED">ปิดจบแล้ว (RESOLVED)</option>
+            <option value="PENDING">รอการรับทราบ</option>
+            <option value="ACKNOWLEDGED">รับทราบแล้ว</option>
+            <option value="RESOLVED">ปิดจบแล้ว</option>
           </select>
         </div>
 
@@ -269,9 +270,9 @@ export default function VccNotificationAuditTab() {
             className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-xs font-medium text-slate-800"
           >
             <option value="ALL">ทุกระดับ</option>
-            <option value="CRITICAL">วิกฤต (CRITICAL)</option>
-            <option value="WARNING">เตือน (WARNING)</option>
-            <option value="INFO">แจ้งเพื่อทราบ (INFO)</option>
+            <option value="CRITICAL">วิกฤต</option>
+            <option value="WARNING">เตือน</option>
+            <option value="INFO">แจ้งเพื่อทราบ</option>
           </select>
         </div>
       </div>
@@ -363,7 +364,7 @@ export default function VccNotificationAuditTab() {
                         >
                           {isPending && <Clock size={11} />}
                           {isAck && <CheckCheck size={11} />}
-                          <span>{n.status}</span>
+                          <span>{NOTIFICATION_STATUS_LABELS[n.status] || n.status}</span>
                         </span>
                       </td>
 

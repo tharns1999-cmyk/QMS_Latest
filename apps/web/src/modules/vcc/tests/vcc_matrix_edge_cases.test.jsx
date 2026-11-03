@@ -148,7 +148,7 @@ describe('VCC FM-QC-46 Interactive Planning Board Edge Cases & Exceptions', () =
     expect(screen.getByText('NC')).toBeInTheDocument();
     fireEvent.click(screen.getByText('NC'));
     expect(screen.getByText(/WO-2026-FAIL/)).toBeInTheDocument();
-    expect(screen.getByText('FAIL')).toBeInTheDocument();
+    expect(screen.getByText('ไม่ผ่านเกณฑ์')).toBeInTheDocument();
   });
 
   it('3. Group instrument enforcement: Opens group check modal instead of direct work order creation', () => {

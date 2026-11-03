@@ -39,7 +39,7 @@ export default function VccOnHoldTrackerTab({ onNavigateToWorkOrder }) {
       });
       setTrackerData(data);
     } catch (err) {
-      setErrorMsg(err?.message || 'ไม่สามารถโหลดข้อมูลรายการระงับใช้ (ON_HOLD) ได้');
+      setErrorMsg(err?.message || 'ไม่สามารถโหลดข้อมูลรายการระงับใช้ ได้');
     } finally {
       setLoading(false);
     }
@@ -114,7 +114,7 @@ export default function VccOnHoldTrackerTab({ onNavigateToWorkOrder }) {
             <ShieldAlert size={20} className="text-rose-600 shrink-0" />
             <div>
               <h2 className="text-base font-bold text-slate-900 tracking-tight">
-                ติดตามเครื่องมือวัดระงับใช้ (ON_HOLD / NC Tracker)
+                ติดตามเครื่องมือวัดระงับใช้และ NC
               </h2>
               <p className="text-xs text-slate-500">
                 ระบบเฝ้าระวังเครื่องมือวัดที่ผลตรวจไม่ผ่านเกณฑ์ หรือเกิดข้อบกพร่องตามข้อกำหนด ISO 9001 / ISO/IEC 17025
@@ -127,7 +127,7 @@ export default function VccOnHoldTrackerTab({ onNavigateToWorkOrder }) {
           <div className="flex items-center gap-1.5 text-xs text-slate-600">
             <span className="text-slate-400 font-normal">แผนก:</span>
             <select
-              aria-label="กรองแผนก ON_HOLD"
+              aria-label="กรองแผนกเครื่องมือระงับใช้"
               value={filterDept}
               onChange={(e) => setFilterDept(e.target.value)}
               className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-800 focus:outline-hidden cursor-pointer shadow-2xs"
@@ -169,7 +169,7 @@ export default function VccOnHoldTrackerTab({ onNavigateToWorkOrder }) {
         <div className="p-4 bg-white rounded-xl border border-slate-200/80 shadow-2xs flex items-center justify-between">
           <div>
             <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-              เครื่องมือที่ถูกระงับใช้ (ON_HOLD)
+              เครื่องมือที่ถูกระงับใช้
             </span>
             <div className="text-2xl font-bold font-mono text-rose-600 mt-1" data-testid="on-hold-count">
               {totalItems}
@@ -183,7 +183,7 @@ export default function VccOnHoldTrackerTab({ onNavigateToWorkOrder }) {
         <div className="p-4 bg-white rounded-xl border border-slate-200/80 shadow-2xs flex items-center justify-between">
           <div>
             <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-              ข้อบกพร่องที่ยังเปิดอยู่ (OPEN NC)
+              ข้อบกพร่องที่ยังเปิดอยู่ (NC)
             </span>
             <div className="text-2xl font-bold font-mono text-amber-600 mt-1" data-testid="open-nc-count">
               {openNcCount}
@@ -217,7 +217,7 @@ export default function VccOnHoldTrackerTab({ onNavigateToWorkOrder }) {
           <div className="py-16 text-center space-y-2" data-testid="on-hold-empty-state">
             <CheckCircle2 size={36} className="text-emerald-500 mx-auto" />
             <div className="text-sm font-semibold text-slate-800">
-              ไม่มีเครื่องมือวัดหรือใบสั่งงานที่อยู่ในสถานะระงับใช้ (ON_HOLD)
+              ไม่มีเครื่องมือวัดหรือใบสั่งงานที่อยู่ในสถานะระงับใช้
             </div>
             <div className="text-xs text-slate-400">
               เครื่องมือวัดทั้งหมดพร้อมใช้งาน หรือได้รับการประเมินผลกระทบและปลดระงับเรียบร้อยแล้ว
@@ -352,7 +352,7 @@ export default function VccOnHoldTrackerTab({ onNavigateToWorkOrder }) {
               <div className="flex items-center gap-2">
                 <Unlock size={18} className="text-emerald-600" />
                 <h3 className="text-base font-bold text-slate-900">
-                  ปลดระงับการใช้งานเครื่องมือ (Release ON_HOLD)
+                  ปลดระงับการใช้งานเครื่องมือ
                 </h3>
               </div>
               <button

@@ -27,15 +27,16 @@ import { DigitalRecordModal } from './DigitalRecordModal';
 import DepartmentBadge from '../../../shared/components/ui/DepartmentBadge';
 import useStore from '../../../store/useStore';
 import { canReadAllVccDepartments, filterReadableDepartments } from '../utils/departmentScope';
+import { getResultStatusLabel } from '../utils/statusLabels';
 
 const VERDICT_OPTIONS = [
   { value: '', label: 'ทุกผลการประเมิน (All Verdicts)' },
-  { value: 'COMPLIANT', label: 'เป็นไปตามเกณฑ์ (COMPLIANT)' },
-  { value: 'COMPLIANT_AMENDED', label: 'เป็นไปตามเกณฑ์-แก้ไขผล (COMPLIANT_AMENDED)' },
-  { value: 'NON_COMPLIANT_OVERDUE', label: 'ไม่เป็นไปตามเกณฑ์-เลยกำหนด (OVERDUE)' },
-  { value: 'NON_COMPLIANT_HOLD', label: 'ไม่เป็นไปตามเกณฑ์-ระงับใช้ (ON_HOLD/FAIL)' },
-  { value: 'IN_PROGRESS', label: 'อยู่ระหว่างดำเนินการ (IN_PROGRESS)' },
-  { value: 'CANCELLED', label: 'ยกเลิกตามเกณฑ์ (CANCELLED)' }
+  { value: 'COMPLIANT', label: 'เป็นไปตามเกณฑ์' },
+  { value: 'COMPLIANT_AMENDED', label: 'เป็นไปตามเกณฑ์-แก้ไขผล' },
+  { value: 'NON_COMPLIANT_OVERDUE', label: 'ไม่เป็นไปตามเกณฑ์-เลยกำหนด' },
+  { value: 'NON_COMPLIANT_HOLD', label: 'ไม่เป็นไปตามเกณฑ์-ระงับใช้' },
+  { value: 'IN_PROGRESS', label: 'อยู่ระหว่างดำเนินการ' },
+  { value: 'CANCELLED', label: 'ยกเลิกตามเกณฑ์' }
 ];
 
 const triggerBlobDownload = (textOrBlob, filename, mimeType = 'text/csv;charset=utf-8;') => {
@@ -257,7 +258,7 @@ export default function VccComplianceReportTab() {
 
         <div className="p-4 bg-white rounded-xl border border-slate-200/80 shadow-2xs">
           <span className="text-[11px] font-semibold text-emerald-700 uppercase tracking-wider">
-            ผ่านเกณฑ์สมบูรณ์ (PASS)
+            ผ่านเกณฑ์สมบูรณ์
           </span>
           <div className="text-2xl font-bold font-mono text-emerald-600 mt-1" data-testid="summary-compliant-count">
             {summary.compliant_count ?? 0}
@@ -284,7 +285,7 @@ export default function VccComplianceReportTab() {
           <div className="text-2xl font-bold font-mono text-rose-600 mt-1" data-testid="summary-hold-count">
             {summary.non_compliant_hold_count ?? 0}
           </div>
-          <span className="text-[11px] text-rose-600/80 mt-1 block">สถานะ ON_HOLD หรือ FAIL</span>
+          <span className="text-[11px] text-rose-600/80 mt-1 block">ระงับใช้ หรือไม่ผ่านเกณฑ์</span>
         </div>
 
         <div className="p-4 bg-white rounded-xl border border-slate-200/80 shadow-2xs col-span-2 md:col-span-1">
@@ -491,7 +492,7 @@ export default function VccComplianceReportTab() {
                                 : 'bg-slate-100 text-slate-700'
                             }`}
                           >
-                            {r.result_status}
+                            {getResultStatusLabel(r.result_status)}
                           </span>
                           {r.is_amended && (
                             <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-700 border border-blue-200">

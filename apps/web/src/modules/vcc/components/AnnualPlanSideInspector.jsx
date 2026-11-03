@@ -16,6 +16,7 @@ import {
   Wrench,
   AlertTriangle
 } from 'lucide-react';
+import { getWorkOrderStatusLabel, getResultStatusLabel } from '../utils/statusLabels';
 
 export const THAI_MONTH_NAMES = [
   'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
@@ -186,7 +187,7 @@ export const AnnualPlanSideInspector = ({
                   {hasHoldOrNc ? (
                     <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-rose-50 border border-rose-200 text-rose-800 font-semibold text-xs">
                       <AlertTriangle size={14} className="text-rose-700" />
-                      <span>พบข้อบกพร่อง / ระงับใช้ (ON_HOLD / FAIL)</span>
+                      <span>พบข้อบกพร่อง / ระงับใช้</span>
                     </span>
                   ) : isAllPlannedCompleted ? (
                     <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-800 font-semibold text-xs">
@@ -272,7 +273,7 @@ export const AnnualPlanSideInspector = ({
                               <div className="flex items-center justify-between font-mono font-bold text-sm">
                                 <span>{w.wo_code}</span>
                                 <span className="text-xs uppercase px-2 py-0.5 rounded bg-white/80 font-bold">
-                                  {w.status}
+                                  {getWorkOrderStatusLabel(w.status)}
                                 </span>
                               </div>
 
@@ -288,7 +289,7 @@ export const AnnualPlanSideInspector = ({
                               )}
 
                               <div className="flex items-center justify-between text-xs font-medium">
-                                <span>ผลตรวจ: <strong className="font-bold">{w.result_status || 'รอดำเนินการ'}</strong></span>
+                                <span>ผลตรวจ: <strong className="font-bold">{w.result_status ? getResultStatusLabel(w.result_status) : 'รอดำเนินการ'}</strong></span>
                                 {w.certificate_no && (
                                   <span className="font-mono font-semibold">Cert: {w.certificate_no}</span>
                                 )}
@@ -317,7 +318,7 @@ export const AnnualPlanSideInspector = ({
                           </div>
                           <div className="flex items-center justify-between text-xs font-medium">
                             <span>วันที่ตรวจจริง: <strong className="font-mono font-bold">{ext.performed_at}</strong></span>
-                            <span>ผล: <strong className="font-bold">{ext.result_status}</strong></span>
+                            <span>ผล: <strong className="font-bold">{getResultStatusLabel(ext.result_status)}</strong></span>
                           </div>
                         </div>
                       ))}
@@ -343,7 +344,7 @@ export const AnnualPlanSideInspector = ({
                     onClose();
                     if (onOpenGroupWorkOrderCheck) onOpenGroupWorkOrderCheck(item);
                   }}
-                  className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold shadow-2xs transition-colors cursor-pointer"
+                  className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold shadow-2xs transition-colors cursor-pointer"
                 >
                   <FolderTree size={15} />
                   <span>ตรวจรหัสลูกก่อนออกใบงาน</span>

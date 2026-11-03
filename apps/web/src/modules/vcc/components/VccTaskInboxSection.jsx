@@ -234,7 +234,7 @@ export const VccTaskInboxSection = () => {
       if (plan.status === 'APPROVED') {
         ineligibleReason = 'แผนประจำปีฉบับนี้ได้รับการอนุมัติเสร็จสมบูรณ์แล้ว ไม่สามารถดำเนินการซ้ำได้';
       } else if (plan.status === 'DRAFT') {
-        ineligibleReason = 'แผนยังอยู่ในสถานะร่าง (DRAFT) ผู้จัดทำยังไม่ได้ส่งทบทวน';
+        ineligibleReason = 'แผนยังอยู่ในสถานะร่าง ผู้จัดทำยังไม่ได้ส่งทบทวน';
       } else if (plan.status === 'REJECTED') {
         ineligibleReason = canRevise
           ? 'แผนถูกส่งกลับแก้ไข กรุณาเข้าไปแก้ไขในหน้าตารางแผนประจำปีแล้วกดส่งทบทวนอีกครั้ง'

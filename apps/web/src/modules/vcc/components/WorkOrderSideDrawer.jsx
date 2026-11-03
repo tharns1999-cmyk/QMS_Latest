@@ -23,6 +23,7 @@ import { fetchVccWorkOrderDetail } from '../api/vccWorkOrderApi';
 import { WorkOrderAmendmentRequests } from './WorkOrderAmendmentRequests';
 import useStore from '../../../store/useStore';
 import { canReviewWorkOrder, canReleaseWorkOrderHold, canCancelWorkOrder } from '../utils/workOrderPermissions';
+import { WORK_ORDER_STATUS_LABELS, getWorkOrderStatusLabel } from '../utils/statusLabels';
 
 export const WorkOrderSideDrawer = ({
   workOrder,
@@ -101,21 +102,21 @@ export const WorkOrderSideDrawer = ({
       return (
         <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-100 text-rose-800 border border-rose-300">
           <ShieldAlert size={13} />
-          <span>ON_HOLD (ระงับใช้)</span>
+          <span>{WORK_ORDER_STATUS_LABELS.ON_HOLD}</span>
         </span>
       );
     }
     switch (status) {
       case 'OPEN':
-        return <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">OPEN (เปิดงาน)</span>;
+        return <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">{WORK_ORDER_STATUS_LABELS.OPEN}</span>;
       case 'PENDING_REVIEW':
-        return <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-800 border border-amber-300">PENDING_REVIEW (รอตรวจรับ)</span>;
+        return <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-800 border border-amber-300">{WORK_ORDER_STATUS_LABELS.PENDING_REVIEW}</span>;
       case 'REJECTED':
-        return <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200">REJECTED (ส่งกลับแก้ไข)</span>;
+        return <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200">{WORK_ORDER_STATUS_LABELS.REJECTED}</span>;
       case 'CLOSED':
-        return <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-300">CLOSED (ปิดงานแล้ว)</span>;
+        return <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-300">{WORK_ORDER_STATUS_LABELS.CLOSED}</span>;
       default:
-        return <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-700 border border-slate-200">{status}</span>;
+        return <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-700 border border-slate-200">{getWorkOrderStatusLabel(status)}</span>;
     }
   };
 
@@ -123,20 +124,20 @@ export const WorkOrderSideDrawer = ({
     if (resultStatus === 'PASS') {
       return (
         <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
-          <CheckCircle2 size={13} /> ผ่านเกณฑ์ (PASS)
+          <CheckCircle2 size={13} /> ผ่านเกณฑ์
         </span>
       );
     }
     if (resultStatus === 'FAIL') {
       return (
         <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-bold bg-rose-100 text-rose-800 border border-rose-200">
-          <XCircle size={13} /> ไม่ผ่าน (FAIL)
+          <XCircle size={13} /> ไม่ผ่านเกณฑ์
         </span>
       );
     }
     return (
       <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-medium bg-slate-100 text-slate-600 border border-slate-200">
-        <Clock size={13} /> รอบันทึกผล (PENDING)
+        <Clock size={13} /> รอบันทึกผล
       </span>
     );
   };
@@ -446,10 +447,10 @@ export const WorkOrderSideDrawer = ({
               <div className="bg-rose-50 border border-rose-200 rounded-xl p-4 space-y-2 text-xs sm:text-sm text-rose-950">
                 <div className="font-bold flex items-center gap-2 text-rose-900">
                   <ShieldAlert size={16} className="text-rose-600" />
-                  <span>เครื่องมืออยู่ในสถานะระงับใช้ (ON_HOLD)</span>
+                  <span>เครื่องมืออยู่ในสถานะระงับใช้</span>
                 </div>
                 <p className="text-xs text-rose-800 leading-relaxed font-medium">
-                  เนื่องจากผลการสอบเทียบไม่ผ่านเกณฑ์ (FAIL) เครื่องมือต้องได้รับการตรวจสอบย้อนหลัง
+                  เนื่องจากผลการสอบเทียบไม่ผ่านเกณฑ์ เครื่องมือต้องได้รับการตรวจสอบย้อนหลัง
                   และต้องให้ผู้อนุมัติระดับ L{reqApproverLevel}+ บันทึกการประเมินผลกระทบก่อนปลดระงับการใช้งาน
                 </p>
               </div>
@@ -585,10 +586,10 @@ export const WorkOrderSideDrawer = ({
                   onClose();
                   onReleaseHold(currentWo);
                 }}
-                className="h-9 inline-flex items-center gap-1.5 px-3.5 rounded-xl bg-purple-700 text-white text-xs font-semibold hover:bg-purple-800 transition-colors cursor-pointer shadow-2xs"
+                className="h-9 inline-flex items-center gap-1.5 px-3.5 rounded-xl bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700 transition-colors cursor-pointer shadow-2xs"
               >
                 <ShieldAlert size={14} />
-                <span>ปลดระงับ ON_HOLD (L{reqApproverLevel}+)</span>
+                <span>ปลดระงับใช้ (L{reqApproverLevel}+)</span>
               </button>
             )}
 

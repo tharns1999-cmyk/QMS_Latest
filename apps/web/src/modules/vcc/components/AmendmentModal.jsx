@@ -121,8 +121,8 @@ export const AmendmentModal = ({
                     onChange={(e) => setForm({ ...form, result_status: e.target.value })}
                     className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-bold bg-white focus:outline-none focus:border-amber-600 shadow-2xs"
                   >
-                    <option value="PASS">ผ่านเกณฑ์ (PASS)</option>
-                    <option value="FAIL">ไม่ผ่านเกณฑ์ (FAIL — ต้องใช้สิทธิ์ L5+)</option>
+                    <option value="PASS">ผ่านเกณฑ์</option>
+                    <option value="FAIL">ไม่ผ่านเกณฑ์ (ต้องใช้สิทธิ์ L5+)</option>
                   </select>
                 </div>
 
@@ -143,10 +143,10 @@ export const AmendmentModal = ({
                 <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-900 space-y-1">
                   <div className="font-bold flex items-center gap-1.5 text-rose-700">
                     <ShieldAlert size={15} />
-                    <span>แจ้งเตือนผลการแก้ไขเป็น FAIL:</span>
+                    <span>แจ้งเตือนผลการแก้ไขเป็นไม่ผ่านเกณฑ์:</span>
                   </div>
                   <p className="leading-relaxed">
-                    การแก้ไขผลที่ปิดไปแล้วเป็น <span className="font-bold">FAIL</span> ต้องได้รับการอนุมัติโดยผู้มีอำนาจระดับ L5 ขึ้นไป และระบบจะนำเครื่องมือเข้าสู่สถานะ <span className="font-bold font-mono">ON_HOLD</span> โดยทันที
+                    การแก้ไขผลที่ปิดไปแล้วเป็น <span className="font-bold">ไม่ผ่านเกณฑ์</span> ต้องได้รับการอนุมัติโดยผู้มีอำนาจระดับ L5 ขึ้นไป และระบบจะนำเครื่องมือเข้าสู่สถานะ ระงับใช้ โดยทันที
                   </p>
                 </div>
               )}

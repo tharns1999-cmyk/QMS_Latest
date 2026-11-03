@@ -33,7 +33,7 @@ export const WorkOrderInfoBar = ({ thresholds = {}, woSettings = {} }) => {
             : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:text-slate-900'
         }`}
         aria-expanded={isExpanded}
-        aria-label="กติกาใบสั่งงานทวนสอบ/สอบเทียบ การตรวจรับผล และการระงับใช้ (ON_HOLD)"
+        aria-label="กติกาใบสั่งงานทวนสอบ/สอบเทียบ การตรวจรับผล และการระงับใช้"
       >
         <HelpCircle size={14} className={isExpanded ? 'text-purple-700' : 'text-slate-500'} />
         <span>กติกา QMS</span>
@@ -73,12 +73,11 @@ export const WorkOrderInfoBar = ({ thresholds = {}, woSettings = {} }) => {
             </li>
             <li>
               ผู้ตรวจรับผล (<span className="font-mono font-bold text-slate-900">L{reqReviewerLevel}+</span> คนละคนกับผู้บันทึกผล)
-              ต้องอนุมัติจึงจะปิดงาน (<span className="font-mono font-bold text-slate-900">CLOSED</span>) และอัปเดตแถว{' '}
+              ต้องอนุมัติจึงจะปิดงาน และอัปเดตแถว{' '}
               <span className="font-mono font-bold text-slate-900">Act.</span> ในตารางแผน
             </li>
             <li>
-              เมื่อผลเป็น <span className="font-bold text-rose-700">FAIL</span> เครื่องมือจะถูกระงับใช้ (
-              <span className="font-mono font-bold text-rose-700">ON_HOLD</span>) ทันที และต้องให้ผู้อนุมัติระดับ{' '}
+              เมื่อผลเป็น <span className="font-bold text-rose-700">ไม่ผ่านเกณฑ์</span> เครื่องมือจะถูกระงับใช้ทันที และต้องให้ผู้อนุมัติระดับ{' '}
               <span className="font-mono font-bold text-slate-900">L{reqApproverLevel}+</span> บันทึกการประเมินผลกระทบก่อนปลดระงับ •
               อายุเก็บประวัติใบรับรองปัจจุบัน: <span className="font-bold text-slate-900">{retentionYears} ปี</span>
             </li>

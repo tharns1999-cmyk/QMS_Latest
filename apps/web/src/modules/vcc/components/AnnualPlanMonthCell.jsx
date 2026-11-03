@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { computeDueDateForMonth } from '../api/vccPlanApi';
 import { FloatingOverlay } from '../../../shared/components/ui/FloatingOverlay';
+import { getWorkOrderStatusLabel, getResultStatusLabel } from '../utils/statusLabels';
 
 export const THAI_MONTH_NAMES = [
   'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
@@ -366,7 +367,7 @@ export const AnnualPlanMonthCell = ({
                     <div className="flex items-center justify-between font-mono font-bold text-xs sm:text-sm">
                       <span>{cycleWo.wo_code}</span>
                       <span className="text-xs uppercase px-1.5 py-0.5 rounded bg-white/80 font-bold">
-                        {cycleWo.status}
+                        {getWorkOrderStatusLabel(cycleWo.status)}
                       </span>
                     </div>
 
@@ -382,7 +383,7 @@ export const AnnualPlanMonthCell = ({
                     )}
 
                     <div className="flex items-center justify-between text-xs font-medium">
-                      <span>ผล: <strong className="font-bold">{cycleWo.result_status || 'รอดำเนินการ'}</strong></span>
+                      <span>ผล: <strong className="font-bold">{cycleWo.result_status ? getResultStatusLabel(cycleWo.result_status) : 'รอดำเนินการ'}</strong></span>
                       {cycleWo.certificate_no && (
                         <span className="font-mono font-semibold">Cert: {cycleWo.certificate_no}</span>
                       )}
@@ -424,7 +425,7 @@ export const AnnualPlanMonthCell = ({
 
                     <div className="text-xs font-medium flex items-center justify-between">
                       <span>วันที่ตรวจจริง: <strong className="font-mono font-bold">{extWo.performed_at}</strong></span>
-                      <span>ผล: <strong className="font-bold">{extWo.result_status}</strong></span>
+                      <span>ผล: <strong className="font-bold">{getResultStatusLabel(extWo.result_status)}</strong></span>
                     </div>
 
                     {extWo.certificate_no && (
@@ -519,7 +520,7 @@ export const AnnualPlanMonthCell = ({
                   <button
                     type="button"
                     onClick={handleCreateWo}
-                    className="w-full inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs sm:text-sm font-semibold shadow-2xs transition-colors cursor-pointer"
+                    className="w-full inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs sm:text-sm font-semibold shadow-2xs transition-colors cursor-pointer"
                   >
                     <ShieldAlert size={14} />
                     <span>ตรวจรหัสลูกก่อนออกใบงาน</span>

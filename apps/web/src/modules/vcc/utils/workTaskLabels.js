@@ -24,7 +24,7 @@ export const WORK_TASK_KINDS = {
   },
   RELEASE_HOLD: {
     tab: 'PENDING_APPROVAL',
-    label: 'ปลดระงับเครื่องมือ (ON_HOLD)',
+    label: 'ปลดระงับเครื่องมือ',
     next: 'ประเมินผลกระทบ ระบุเหตุผลและการแก้ไข แล้วปลดระงับ',
     button: 'เปิดใบสั่งงานเพื่อปลดระงับ',
     tone: 'bg-indigo-50 text-indigo-800 border-indigo-200'
