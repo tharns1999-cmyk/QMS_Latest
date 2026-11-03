@@ -91,7 +91,7 @@ export const fetchVccWorkTasks = async () => {
   if (isApiMode) return (await apiGet('/api/vcc/work-tasks')).tasks || [];
   const user = assertLocalVccAccess();
   const thresholds = getLocalWoThresholds();
-  const horizon = new Date(Date.now() + WORK_TASK_LEAD_DAYS * 86400000).toISOString().slice(0, 10);
+  const horizon = new Date(Date.now() + WORK_TASK_LEAD_DAYS * 86400000).toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' }); // YYYY-MM-DD, Thai date like the API
   const allAssets = getLocalAssets();
   const deptMap = getDepartmentMap();
   const allPlans = getLocalPlans();
