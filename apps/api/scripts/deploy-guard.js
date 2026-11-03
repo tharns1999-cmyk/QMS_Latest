@@ -29,6 +29,9 @@ export function checkDeployConfig(config, target) {
   const others = isProd ? dbIds(config) : Object.values(config.env || {}).flatMap(dbIds);
   for (const id of mine) if (id && others.includes(id)) errors.push(`database_id ${id} is shared with another environment`);
 
+  // Turns the login rate limit off: for .dev.vars on a developer machine, never for a deployed environment.
+  if (block.vars && 'DISABLE_LOGIN_THROTTLE' in block.vars) errors.push('vars.DISABLE_LOGIN_THROTTLE must not be set in a deployed environment (it is for .dev.vars only)');
+
   const origin = block.vars?.ALLOWED_ORIGIN || '';
   if (!origin || PLACEHOLDER.test(origin)) errors.push(`ALLOWED_ORIGIN "${origin}" is not set`);
   else if (LOCAL_ORIGIN.test(origin)) errors.push(`ALLOWED_ORIGIN "${origin}" points at localhost`);
