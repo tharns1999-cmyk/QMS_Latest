@@ -1,10 +1,10 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, beforeEach } from 'vitest';
 import useStore from '../../../store/useStore';
 import AssetRegisterPage from '../pages/AssetRegisterPage';
 import { resetVccLocalStore } from '../api/vccApi';
-import { approveVccWorkOrder, getLocalWos } from '../api/vccWorkOrderApi';
+import { approveVccWorkOrder, getLocalWos, releaseVccWorkOrderHold } from '../api/vccWorkOrderApi';
 
 describe('VCC Phase 3 — Work Orders, Execution, Review, Close & Hold/NC Control', () => {
   beforeEach(() => {
@@ -129,20 +129,12 @@ describe('VCC Phase 3 — Work Orders, Execution, Review, Close & Hold/NC Contro
     // Immediately shows ON_HOLD badge
     expect(await screen.findByText(/ON_HOLD \(ระงับใช้ชั่วคราว\)/i)).toBeInTheDocument();
 
-    // Reviewer L4 (dc4 is L4) tries to release hold -> must show API error alert (requires L5+)
-    fireEvent.click(screen.getByRole('button', { name: /ปลดระงับ ON_HOLD/i }));
-    const confirmReleaseBtn = await screen.findByRole('button', { name: 'ยืนยันการดำเนินการ' });
-    expect(confirmReleaseBtn).toBeDisabled();
+    // Not reviewed yet (and dc4 is the L4 performer): no release is offered, and the rule refuses it anyway
+    expect(screen.queryByRole('button', { name: /ปลดระงับ ON_HOLD/i })).not.toBeInTheDocument();
+    const heldWo = getLocalWos().find((w) => w.nc_status === 'OPEN');
+    await expect(releaseVccWorkOrderHold(heldWo.id, 'ประเมินแล้ว', 'สอบเทียบซ้ำผ่าน')).rejects.toThrow(/L5 ขึ้นไป/);
 
-    fireEvent.change(screen.getByPlaceholderText(/ระบุรายละเอียด/i), {
-      target: { value: 'ตรวจสอบย้อนหลังแล้วไม่กระทบสินค้า และซ่อมบำรุงสอบเทียบซ้ำผ่านแล้ว' }
-    });
-    fireEvent.click(confirmReleaseBtn);
-
-    const levelAlert = await screen.findByRole('alert');
-    expect(levelAlert).toHaveTextContent(/ต้องมีระดับอนุมัติ L5 ขึ้นไปตาม Approval Matrix/i);
-
-    // Switch to Approver L5 (qc5) and release hold
+    // An L5 reviewer (qc5) closes the FAIL result first ...
     useStore.setState({
       currentUser: {
         id: 'qc5',
@@ -154,10 +146,80 @@ describe('VCC Phase 3 — Work Orders, Execution, Review, Close & Hold/NC Contro
         isDcc: true
       }
     });
+    fireEvent.click(await screen.findByRole('button', { name: /ตรวจรับปิดงาน/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'ยืนยันการดำเนินการ' }));
 
+    // ... then releases the hold with both a reason and an impact assessment
+    fireEvent.click(await screen.findByRole('button', { name: /ปลดระงับ ON_HOLD/i }));
+    const confirmReleaseBtn = await screen.findByRole('button', { name: 'ยืนยันการดำเนินการ' });
+    fireEvent.change(screen.getByPlaceholderText(/ระบุรายละเอียด/i), {
+      target: { value: 'ตรวจสอบย้อนหลังแล้วไม่กระทบสินค้า' }
+    });
+    expect(confirmReleaseBtn).toBeDisabled();
+    fireEvent.change(screen.getByLabelText(/เหตุผลการปลดระงับ/i), { target: { value: 'ซ่อมบำรุงและสอบเทียบซ้ำผ่านแล้ว' } });
+    expect(confirmReleaseBtn).not.toBeDisabled();
     fireEvent.click(confirmReleaseBtn);
+
     await screen.findByText('WO-2026-001');
     expect(screen.queryByText(/ON_HOLD \(ระงับใช้ชั่วคราว\)/i)).not.toBeInTheDocument();
+    expect(getLocalWos().find((w) => w.id === heldWo.id).nc_status).toBe('RELEASED');
+  });
+
+  it('4. ผลรอตรวจซ้ำ (INCONCLUSIVE) ระงับใช้ทันที ผู้ตรวจรับปิดงานไม่ได้ มีปุ่มเดียวคือส่งกลับตรวจซ้ำ', async () => {
+    render(<AssetRegisterPage />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /ใบสั่งงานและบันทึกผล \(Work Orders\)/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /บันทึกผลและใบรับรอง/i }));
+    fireEvent.change(screen.getByLabelText(/ผลการทวนสอบ/i), { target: { value: 'INCONCLUSIVE' } });
+    expect(screen.getByText(/ผลรอตรวจซ้ำปิดงานไม่ได้/)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/เลขที่ใบรับรอง/i), { target: { value: 'CERT-INC-01' } });
+    fireEvent.click(screen.getByRole('button', { name: /ส่งผลให้ผู้ตรวจรับพิจารณา/i }));
+    expect(await screen.findByText(/ON_HOLD \(ระงับใช้ชั่วคราว\)/i)).toBeInTheDocument();
+
+    useStore.setState({
+      currentUser: { id: 'qc4', name: 'QC หัวหน้า (L4)', role: 'STAFF', department: 'QC', approval_level: 4, approvalLevel: 4, isDcc: true }
+    });
+    expect(await screen.findByRole('button', { name: /ส่งกลับตรวจซ้ำ/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /ตรวจรับปิดงาน/i })).not.toBeInTheDocument();
+    const pendingWo = getLocalWos().find((w) => w.status === 'PENDING_REVIEW');
+    await expect(approveVccWorkOrder(pendingWo.id, 'ปิดงาน')).rejects.toThrow(/INCONCLUSIVE/);
+
+    fireEvent.click(screen.getByRole('button', { name: /ส่งกลับตรวจซ้ำ/ }));
+    expect(await screen.findByText('สิ่งที่ต้องตรวจซ้ำ')).toBeInTheDocument();
+    fireEvent.change(screen.getByPlaceholderText(/ระบุรายละเอียด/i), { target: { value: 'วัดซ้ำที่ 3 จุด' } });
+    fireEvent.click(screen.getByRole('button', { name: 'ยืนยันการดำเนินการ' }));
+    await screen.findByText('WO-2026-001');
+    expect(getLocalWos().find((w) => w.id === pendingWo.id).status).toBe('REJECTED');
+  });
+
+  it('5. ปุ่มยกเลิกใบสั่งงานแสดงเฉพาะ DCC หรือหัวหน้าแผนกเจ้าของงาน L4+ และต้องระบุเหตุผล', async () => {
+    useStore.setState({
+      currentUser: { id: 'qc2', name: 'QC พนักงาน (L2)', role: 'STAFF', department: 'QC', approval_level: 2, approvalLevel: 2, isDcc: false }
+    });
+    const { unmount } = render(<AssetRegisterPage />);
+    fireEvent.click(await screen.findByRole('button', { name: /ใบสั่งงานและบันทึกผล \(Work Orders\)/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /การจัดการเพิ่มเติมสำหรับ WO-2026-001/ }));
+    expect(screen.queryByRole('button', { name: /ยกเลิกใบสั่งงาน/ })).not.toBeInTheDocument();
+    unmount();
+
+    useStore.setState({
+      currentUser: { id: 'qc4', name: 'QC หัวหน้า (L4)', role: 'STAFF', department: 'QC', approval_level: 4, approvalLevel: 4, isDcc: false }
+    });
+    render(<AssetRegisterPage />);
+    fireEvent.click(await screen.findByRole('button', { name: /ใบสั่งงานและบันทึกผล \(Work Orders\)/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /การจัดการเพิ่มเติมสำหรับ WO-2026-001/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /ยกเลิกใบสั่งงาน/ }));
+
+    const confirmBtn = await screen.findByRole('button', { name: 'ยืนยันการดำเนินการ' });
+    expect(screen.getByText(/รอบในแผนประจำปียังอยู่/)).toBeInTheDocument();
+    expect(confirmBtn).toBeDisabled();
+    fireEvent.change(screen.getByLabelText(/ประเภทการยกเลิก/), { target: { value: 'AUTHORIZED_CANCEL' } });
+    fireEvent.change(screen.getByPlaceholderText(/ระบุรายละเอียด/i), { target: { value: 'ออกใบงานซ้ำกับรอบเดิม' } });
+    fireEvent.click(confirmBtn);
+
+    await waitFor(() => expect(screen.queryByText('WO-2026-001')).not.toBeInTheDocument());
+    const cancelled = getLocalWos().find((w) => w.wo_code === 'WO-2026-001');
+    expect(cancelled).toMatchObject({ status: 'CANCELLED', cancellation_category: 'AUTHORIZED_CANCEL', cancellation_reason: 'ออกใบงานซ้ำกับรอบเดิม' });
   });
 });
 

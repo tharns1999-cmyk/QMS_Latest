@@ -12,11 +12,12 @@ import {
   FilterX,
   MoreHorizontal,
   History,
-  Printer
+  Printer,
+  Ban
 } from 'lucide-react';
 import { FloatingOverlay } from '../../../shared/components/ui/FloatingOverlay';
 import useStore from '../../../store/useStore';
-import { canReviewWorkOrder } from '../utils/workOrderPermissions';
+import { canReviewWorkOrder, canReleaseWorkOrderHold, canCancelWorkOrder } from '../utils/workOrderPermissions';
 
 /**
  * WorkOrderRowActions - Renders primary action and floating overflow menu for each row
@@ -33,6 +34,7 @@ const WorkOrderRowActions = ({
   onReject,
   onRowClick,
   onAmend,
+  onCancel,
   onViewDigitalRecord
 }) => {
   const [isMenuOpen, setIsMenuOpen] = React.useState(false);
@@ -60,7 +62,7 @@ const WorkOrderRowActions = ({
         <span className="text-xs font-medium text-slate-500 whitespace-nowrap">รอผู้ตรวจรับ</span>
       )}
 
-      {wo.status === 'PENDING_REVIEW' && canReview && (
+      {wo.status === 'PENDING_REVIEW' && canReview && wo.result_status !== 'INCONCLUSIVE' && (
         <button
           type="button"
           onClick={() => onApprove(wo)}
@@ -71,7 +73,19 @@ const WorkOrderRowActions = ({
         </button>
       )}
 
-      {wo.nc_status === 'OPEN' && (
+      {/* An INCONCLUSIVE result cannot be closed: the reviewer's one action is to send it back for a retest */}
+      {wo.status === 'PENDING_REVIEW' && canReview && wo.result_status === 'INCONCLUSIVE' && (
+        <button
+          type="button"
+          onClick={() => onReject(wo)}
+          className="h-8 inline-flex items-center gap-1.5 px-3 rounded-lg bg-rose-700 text-white font-medium hover:bg-rose-800 transition-colors cursor-pointer text-xs shadow-2xs whitespace-nowrap"
+        >
+          <XCircle size={13} />
+          <span>ส่งกลับตรวจซ้ำ</span>
+        </button>
+      )}
+
+      {canReleaseWorkOrderHold(currentUser, wo, thresholds) && (
         <button
           type="button"
           onClick={() => onReleaseHold(wo)}
@@ -126,7 +140,7 @@ const WorkOrderRowActions = ({
           </button>
         )}
 
-        {wo.status === 'PENDING_REVIEW' && canReview && (
+        {wo.status === 'PENDING_REVIEW' && canReview && wo.result_status !== 'INCONCLUSIVE' && (
           <button
             type="button"
             onClick={() => {
@@ -151,6 +165,20 @@ const WorkOrderRowActions = ({
           >
             <History size={13} className="text-amber-600" />
             <span>ขอแก้ไขผล (Amendment)</span>
+          </button>
+        )}
+
+        {onCancel && canCancelWorkOrder(currentUser, wo) && (
+          <button
+            type="button"
+            onClick={() => {
+              handleClose();
+              onCancel(wo);
+            }}
+            className="w-full text-left px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-50 flex items-center gap-2 transition-colors cursor-pointer"
+          >
+            <Ban size={13} className="text-rose-500" />
+            <span>ยกเลิกใบสั่งงาน</span>
           </button>
         )}
 
@@ -201,6 +229,7 @@ export const WorkOrderTable = ({
   onResetFilters,
   onOpenCreate,
   onAmend,
+  onCancel,
   onViewDigitalRecord
 }) => {
   const reqApproverLevel = thresholds.required_approver_level ?? 5;
@@ -475,6 +504,7 @@ export const WorkOrderTable = ({
                     onReject={onReject}
                     onRowClick={onRowClick}
                     onAmend={onAmend}
+                    onCancel={onCancel}
                     onViewDigitalRecord={onViewDigitalRecord}
                   />
                 </td>

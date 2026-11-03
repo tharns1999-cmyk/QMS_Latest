@@ -26,6 +26,7 @@ export default function VccOnHoldTrackerTab({ onNavigateToWorkOrder }) {
   // Release Hold Modal State
   const [selectedItem, setSelectedItem] = useState(null);
   const [impactAssessment, setImpactAssessment] = useState('');
+  const [releaseReason, setReleaseReason] = useState('');
   const [submittingHold, setSubmittingHold] = useState(false);
   const [modalError, setModalError] = useState('');
 
@@ -57,6 +58,7 @@ export default function VccOnHoldTrackerTab({ onNavigateToWorkOrder }) {
   const handleCloseReleaseModal = () => {
     setSelectedItem(null);
     setImpactAssessment('');
+    setReleaseReason('');
     setModalError('');
   };
 
@@ -67,6 +69,11 @@ export default function VccOnHoldTrackerTab({ onNavigateToWorkOrder }) {
       return;
     }
     const trimmed = String(impactAssessment || '').trim();
+    const reason = releaseReason.trim();
+    if (!reason) {
+      setModalError('กรุณากรอกเหตุผลการปลดระงับและการแก้ไขที่ทำแล้ว');
+      return;
+    }
     if (!trimmed) {
       setModalError('กรุณากรอกผลการประเมินผลกระทบย้อนหลัง (NC Impact Assessment) ก่อนปลดระงับ');
       return;
@@ -75,7 +82,7 @@ export default function VccOnHoldTrackerTab({ onNavigateToWorkOrder }) {
     setSubmittingHold(true);
     setModalError('');
     try {
-      await releaseVccWorkOrderHold(selectedItem.wo_id, trimmed);
+      await releaseVccWorkOrderHold(selectedItem.wo_id, trimmed, reason);
       handleCloseReleaseModal();
       setSuccessMsg(`ปลดระงับการใช้งานเครื่องมือ ${selectedItem.asset_code} เรียบร้อยแล้ว`);
       await loadData();
@@ -382,6 +389,21 @@ export default function VccOnHoldTrackerTab({ onNavigateToWorkOrder }) {
                   <span className="text-slate-500">แผนก:</span>
                   <span className="font-semibold text-slate-800">{selectedItem.department}</span>
                 </div>
+              </div>
+
+              <div>
+                <label htmlFor="hold-release-reason" className="block text-xs font-bold text-slate-800 mb-1.5">
+                  เหตุผลการปลดระงับและการแก้ไขที่ทำแล้ว <span className="text-rose-500">*</span>
+                </label>
+                <textarea
+                  id="hold-release-reason"
+                  required
+                  rows={2}
+                  value={releaseReason}
+                  onChange={(e) => setReleaseReason(e.target.value)}
+                  placeholder="เช่น ซ่อมและสอบเทียบซ้ำผ่าน ใบรับรองเลขที่..."
+                  className="w-full rounded-xl border border-slate-300 p-3 text-xs text-slate-900 focus:outline-hidden focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 leading-relaxed"
+                />
               </div>
 
               <div>

@@ -189,19 +189,20 @@ export const RecordResultModal = ({
                   >
                     <option value="PASS">ผ่านเกณฑ์ (PASS)</option>
                     <option value="FAIL">ไม่ผ่านเกณฑ์ (FAIL — ระงับใช้ ON_HOLD ทันที)</option>
-                    <option value="INCONCLUSIVE">รอผลตรวจซ้ำ (INCONCLUSIVE)</option>
+                    <option value="INCONCLUSIVE">รอผลตรวจซ้ำ (INCONCLUSIVE — ระงับใช้จนตรวจซ้ำและปลดระงับ)</option>
                   </select>
                 </div>
               </div>
 
-              {form.result_status === 'FAIL' && (
+              {(form.result_status === 'FAIL' || form.result_status === 'INCONCLUSIVE') && (
                 <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-900 space-y-1">
                   <div className="font-bold flex items-center gap-1.5 text-rose-700">
                     <ShieldAlert size={15} />
                     <span>แจ้งเตือนการควบคุมเครื่องมือ (Equipment Hold Policy):</span>
                   </div>
                   <p className="leading-relaxed">
-                    เมื่อบันทึกผลเป็น <span className="font-bold">FAIL</span> เครื่องมือจะถูกเปลี่ยนสถานะเป็น <span className="font-bold font-mono">ON_HOLD</span> โดยอัตโนมัติ เพื่อป้องกันการนำไปใช้ในสายการผลิต จนกว่าผู้อนุมัติระดับ L5+ จะทำการประเมินผลกระทบย้อนหลัง
+                    เมื่อบันทึกผลเป็น <span className="font-bold">{form.result_status}</span> เครื่องมือจะถูกเปลี่ยนสถานะเป็น <span className="font-bold font-mono">ON_HOLD</span> โดยอัตโนมัติ เพื่อป้องกันการนำไปใช้ในสายการผลิต จนกว่าผู้อนุมัติระดับ L5+ จะทำการประเมินผลกระทบย้อนหลัง
+                    {form.result_status === 'INCONCLUSIVE' && ' ผลรอตรวจซ้ำปิดงานไม่ได้ ผู้ตรวจรับจะส่งกลับให้ตรวจซ้ำและบันทึกผลใหม่ในใบสั่งงานนี้'}
                   </p>
                 </div>
               )}

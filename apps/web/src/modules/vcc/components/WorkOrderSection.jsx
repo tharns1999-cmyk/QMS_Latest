@@ -19,6 +19,7 @@ import {
   approveVccWorkOrder,
   rejectVccWorkOrder,
   releaseVccWorkOrderHold,
+  cancelVccWorkOrder,
   uploadVccWorkOrderCertificate,
   downloadVccWorkOrderCertificate,
   amendVccWorkOrder
@@ -433,7 +434,9 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
     setActionError('');
     setActionForm({
       new_due_date: workOrder.due_date,
-      text: ''
+      text: '',
+      reason: '',
+      category: 'MISTAKE_CREATION'
     });
   };
 
@@ -471,8 +474,16 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
         setActiveTab('REJECTED');
         await loadData();
       } else if (mode === 'RELEASE_HOLD') {
-        await releaseVccWorkOrderHold(workOrder.id, actionForm.text);
+        await releaseVccWorkOrderHold(workOrder.id, actionForm.text, actionForm.reason);
         toast.success(`ปลดระงับเครื่องมือ ${workOrder.asset_code} แล้ว`);
+        setActionModal(null);
+        if (selectedDrawerWo?.id === workOrder.id) {
+          setSelectedDrawerWo(null);
+        }
+        await loadData();
+      } else if (mode === 'CANCEL') {
+        await cancelVccWorkOrder(workOrder.id, { cancellation_category: actionForm.category, cancellation_reason: actionForm.text });
+        toast.success(`ยกเลิกใบสั่งงาน ${workOrder.wo_code} แล้ว`);
         setActionModal(null);
         if (selectedDrawerWo?.id === workOrder.id) {
           setSelectedDrawerWo(null);
@@ -685,6 +696,7 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
         onApprove={(wo) => openAction('APPROVE', wo)}
         onReject={(wo) => openAction('REJECT', wo)}
         onReleaseHold={(wo) => openAction('RELEASE_HOLD', wo)}
+        onCancel={(wo) => openAction('CANCEL', wo)}
         onResetFilters={handleResetFilters}
         onOpenCreate={openCreateModal}
         onAmend={openAmendModal}
@@ -701,6 +713,7 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
         onApprove={(wo) => openAction('APPROVE', wo)}
         onReject={(wo) => openAction('REJECT', wo)}
         onReleaseHold={(wo) => openAction('RELEASE_HOLD', wo)}
+        onCancel={(wo) => openAction('CANCEL', wo)}
         onAmend={openAmendModal}
         onDownloadCert={handleDownloadCert}
         onViewDigitalRecord={(wo) => setDigitalRecordWo(wo)}

@@ -5,7 +5,7 @@ import * as api from '../api/vccWorkOrderApi';
 import useStore from '../../../store/useStore';
 import { WorkOrderSideDrawer } from '../components/WorkOrderSideDrawer';
 import { WorkOrderTable } from '../components/WorkOrderTable';
-import { canReviewWorkOrder } from '../utils/workOrderPermissions';
+import { canReviewWorkOrder, canReleaseWorkOrderHold, canCancelWorkOrder } from '../utils/workOrderPermissions';
 
 const thresholds = { required_reviewer_level: 4, required_approver_level: 5 };
 const wo = {
@@ -36,6 +36,26 @@ describe('canReviewWorkOrder mirrors the server rule for closing / sending back 
   it('refuses a missing user or work order', () => {
     expect(canReviewWorkOrder(null, wo, thresholds)).toBe(false);
     expect(canReviewWorkOrder(user(), null, thresholds)).toBe(false);
+  });
+});
+
+describe('canReleaseWorkOrderHold and canCancelWorkOrder mirror the server rules', () => {
+  const held = { ...wo, status: 'CLOSED', result_status: 'FAIL', nc_status: 'OPEN' };
+  it('releases only a reviewed (CLOSED) hold, at approver level, by someone other than the performer', () => {
+    expect(canReleaseWorkOrderHold(user({ id: 'qc5', approval_level: 5 }), held, thresholds)).toBe(true);
+    expect(canReleaseWorkOrderHold(user({ id: 'qc5', approval_level: 5 }), { ...held, status: 'PENDING_REVIEW' }, thresholds)).toBe(false);
+    expect(canReleaseWorkOrderHold(user({ id: 'qc2', approval_level: 5 }), held, thresholds)).toBe(false);
+    expect(canReleaseWorkOrderHold(user({ approval_level: 4 }), held, thresholds)).toBe(false);
+    expect(canReleaseWorkOrderHold(user({ id: 'qc5', approval_level: 5 }), { ...held, nc_status: 'RELEASED' }, thresholds)).toBe(false);
+  });
+  it('cancels only as DCC or L4+ of the owning department, while open and without an open NC', () => {
+    const open = { ...wo, status: 'OPEN', nc_status: null };
+    expect(canCancelWorkOrder(user(), open)).toBe(true);
+    expect(canCancelWorkOrder(user({ approval_level: 2 }), open)).toBe(false);
+    expect(canCancelWorkOrder(user({ department: 'LB', depts: ['LB'], approval_level: 6 }), open)).toBe(false);
+    expect(canCancelWorkOrder(user({ department: 'DC', depts: ['DC'], approval_level: 2, isDcc: true }), open)).toBe(true);
+    expect(canCancelWorkOrder(user(), { ...open, nc_status: 'OPEN' })).toBe(false);
+    expect(canCancelWorkOrder(user(), { ...open, status: 'CLOSED' })).toBe(false);
   });
 });
 

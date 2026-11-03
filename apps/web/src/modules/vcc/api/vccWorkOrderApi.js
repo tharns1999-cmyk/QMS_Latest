@@ -11,6 +11,7 @@ import {
   appendLocalAudit
 } from './vccApi';
 import { computeDueDateForMonth, getLocalPlans, getLocalPlanItems, syncVccTasks } from './vccPlanApi';
+import { canManageVccAsset } from '../utils/departmentScope';
 
 const STORAGE_WO_KEY = 'qms-vcc-local-work-orders-v1';
 const STORAGE_WO_SETTINGS_KEY = 'qms-vcc-local-wo-settings-v1';
@@ -366,7 +367,7 @@ export const submitVccWorkOrderResult = async (id, payload) => {
     throw new Error('กรุณาระบุเกณฑ์ยอมรับ (Acceptance Criteria) ที่ใช้ตรวจเทียบก่อนส่งตรวจรับ');
   }
 
-  const nextNcStatus = resultStatus === 'FAIL' ? 'OPEN' : existing.nc_status;
+  const nextNcStatus = resultStatus === 'FAIL' || resultStatus === 'INCONCLUSIVE' ? 'OPEN' : existing.nc_status;
   const updated = {
     ...existing,
     status: 'PENDING_REVIEW',
@@ -418,6 +419,9 @@ export const approveVccWorkOrder = async (id, comment = '') => {
   const existing = allWos[idx];
   if (existing.status !== 'PENDING_REVIEW') {
     throw new Error('อนุมัติปิดงานได้เฉพาะใบสั่งงานที่อยู่ในสถานะรอตรวจรับผล (PENDING_REVIEW) เท่านั้น');
+  }
+  if (existing.result_status === 'INCONCLUSIVE') {
+    throw new Error('ผลรอตรวจซ้ำ (INCONCLUSIVE) ปิดงานไม่ได้ กรุณาส่งกลับเพื่อตรวจซ้ำและบันทึกผลใหม่');
   }
 
   const settings = getLocalWoSettings();
@@ -494,13 +498,17 @@ export const rejectVccWorkOrder = async (id, reason = '') => {
   return enrichLocalWo(updated, getLocalAssets(), getDepartmentMap(), getLocalPlans());
 };
 
-export const releaseVccWorkOrderHold = async (id, impact_assessment = '') => {
+export const releaseVccWorkOrderHold = async (id, impact_assessment = '', release_reason = '') => {
   if (isApiMode) {
-    const { workOrder } = await apiPost(`/api/vcc/work-orders/${encodeURIComponent(id)}/release-hold`, { impact_assessment });
+    const { workOrder } = await apiPost(`/api/vcc/work-orders/${encodeURIComponent(id)}/release-hold`, { impact_assessment, release_reason });
     return workOrder;
   }
   const user = assertLocalVccAccess();
   const trimmedImpact = String(impact_assessment || '').trim();
+  const trimmedReason = String(release_reason || '').trim();
+  if (!trimmedReason) {
+    throw new Error('กรุณาระบุเหตุผลการปลดระงับและการแก้ไขที่ทำแล้ว ก่อนปลดระงับเครื่องมือ');
+  }
   if (!trimmedImpact) {
     throw new Error('กรุณาระบุผลการประเมินผลกระทบและการแก้ไข (NC Impact Assessment) ก่อนปลดระงับเครื่องมือ');
   }
@@ -518,6 +526,12 @@ export const releaseVccWorkOrderHold = async (id, impact_assessment = '') => {
   const userLevel = Number(user.approval_level ?? user.approvalLevel ?? 4);
   if (userLevel < thresholds.required_approver_level) {
     throw new Error(`ผู้สั่งปลดระงับเครื่องมือ (ON_HOLD) ต้องมีระดับอนุมัติ L${thresholds.required_approver_level} ขึ้นไปตาม Approval Matrix`);
+  }
+  if (user.id === existing.performed_by) {
+    throw new Error('ผู้บันทึกผลไม่สามารถปลดระงับเครื่องมือจากผลที่ตนบันทึกได้ (ต้องให้ผู้อื่นดำเนินการ)');
+  }
+  if (existing.status !== 'CLOSED') {
+    throw new Error('ต้องตรวจรับผลและปิดใบสั่งงานก่อน จึงจะปลดระงับเครื่องมือได้');
   }
 
   const now = new Date().toISOString();
@@ -537,8 +551,52 @@ export const releaseVccWorkOrderHold = async (id, impact_assessment = '') => {
   appendLocalAudit('VCC_WO_HOLD_RELEASED', {
     wo_id: id,
     wo_code: existing.wo_code,
+    release_reason: trimmedReason,
     impact_assessment: trimmedImpact
   });
+  return enrichLocalWo(updated, getLocalAssets(), getDepartmentMap(), getLocalPlans());
+};
+
+export const cancelVccWorkOrder = async (id, { cancellation_category, cancellation_reason } = {}) => {
+  if (isApiMode) {
+    const { workOrder } = await apiPost(`/api/vcc/work-orders/${encodeURIComponent(id)}/cancel`, { cancellation_category, cancellation_reason });
+    await syncVccTasks().catch(() => {});
+    return workOrder;
+  }
+  const user = assertLocalVccAccess();
+  const reason = String(cancellation_reason || '').trim();
+  if (!['MISTAKE_CREATION', 'AUTHORIZED_CANCEL'].includes(cancellation_category)) {
+    throw new Error('ประเภทการยกเลิกต้องเป็น MISTAKE_CREATION หรือ AUTHORIZED_CANCEL');
+  }
+  if (!reason) throw new Error('กรุณาระบุเหตุผลในการขอยกเลิกใบสั่งงาน');
+  const allWos = getLocalWos();
+  const idx = allWos.findIndex((w) => w.id === id);
+  if (idx === -1) throw new Error('ไม่พบใบสั่งงานทวนสอบ/สอบเทียบ');
+  const existing = allWos[idx];
+  if (['CLOSED', 'CANCELLED'].includes(existing.status)) throw new Error('ยกเลิกได้เฉพาะใบสั่งงานที่ยังไม่ปิดหรือยกเลิก');
+  const department = existing.department || getLocalAssets().find((a) => a.id === existing.asset_id)?.department;
+  if (!canManageVccAsset(user, department)) {
+    throw new Error('ยกเลิกใบสั่งงานได้เฉพาะหัวหน้าแผนกเจ้าของงาน (L4 ขึ้นไป) หรือ DCC เท่านั้น');
+  }
+  if (existing.nc_status === 'OPEN') {
+    throw new Error('ใบสั่งงานนี้มีผลไม่ผ่าน/รอตรวจซ้ำและเครื่องมือถูกระงับใช้อยู่ ต้องตรวจรับผลและปลดระงับตามขั้นตอนก่อน ยกเลิกไม่ได้');
+  }
+  const now = new Date().toISOString();
+  const updated = {
+    ...existing,
+    status: 'CANCELLED',
+    cancellation_category,
+    cancellation_reason: reason,
+    cancelled_by: user.id,
+    cancelled_at: now,
+    updated_at: now,
+    updated_by: user.id
+  };
+  const next = [...allWos];
+  next[idx] = updated;
+  setLocalWos(next);
+  appendLocalAudit('VCC_WO_CANCELLED', { wo_id: id, wo_code: existing.wo_code, cancellation_category, cancellation_reason: reason });
+  await syncVccTasks(user).catch(() => {});
   return enrichLocalWo(updated, getLocalAssets(), getDepartmentMap(), getLocalPlans());
 };
 

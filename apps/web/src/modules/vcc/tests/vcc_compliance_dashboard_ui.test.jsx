@@ -241,13 +241,19 @@ describe('VCC Phase 3.3: Calibration Monitoring & Compliance Dashboard UI Tests'
       const textarea = screen.getByPlaceholderText(/ระบุผลการตรวจสอบย้อนหลัง/);
       fireEvent.change(textarea, { target: { value: 'ตรวจสอบผลทดสอบ Batch #9988 ไม่พบผลกระทบต่อสเปกผลิตภัณฑ์' } });
 
+      // The release reason is a required field as well
+      const reasonField = screen.getByLabelText(/เหตุผลการปลดระงับ/);
+      expect(reasonField).toBeRequired();
+      fireEvent.change(reasonField, { target: { value: 'เปลี่ยนเกจใหม่และสอบเทียบผ่าน' } });
+
       // Click Confirm release
       fireEvent.click(screen.getByTestId('confirm-release-hold-btn'));
 
       await waitFor(() => {
         expect(workOrderApi.releaseVccWorkOrderHold).toHaveBeenCalledWith(
           'wo-hld-1',
-          'ตรวจสอบผลทดสอบ Batch #9988 ไม่พบผลกระทบต่อสเปกผลิตภัณฑ์'
+          'ตรวจสอบผลทดสอบ Batch #9988 ไม่พบผลกระทบต่อสเปกผลิตภัณฑ์',
+          'เปลี่ยนเกจใหม่และสอบเทียบผ่าน'
         );
       });
     });
