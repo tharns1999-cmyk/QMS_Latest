@@ -6,14 +6,14 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
+    "deploy": "node scripts/deploy-guard.js uat && wrangler deploy",
     "db:migrate:local": "node scripts/vcc-migrate-safe.js --local",
     "db:migrate:remote": "node scripts/vcc-migrate-safe.js --remote",
     "db:migrate:production": "node scripts/vcc-migrate-safe.js --remote --env production",
     "db:migrate:raw": "node scripts/vcc-migrate-raw.js",
     "db:preflight": "node scripts/vcc-preflight.js",
-    "deploy:production": "wrangler deploy --env production",
-    "db:seed:local": "node scripts/seed-local.js && wrangler d1 execute DB --local --file .wrangler/seed-local.sql",
+    "deploy:production": "node scripts/deploy-guard.js production && wrangler deploy --env production",
+    "db:seed:local": "node scripts/seed-local.js && wrangler d1 execute DB --local --file .wrangler/seed-marker.sql && wrangler d1 execute DB --local --file .wrangler/seed-local.sql",
     "test": "vitest run"
   },
   "dependencies": {
