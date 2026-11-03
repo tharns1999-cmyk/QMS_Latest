@@ -1179,7 +1179,13 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
       JOIN vcc_assets a ON a.id = i.asset_id
       WHERE i.id = ? AND i.plan_id = ?
     `).bind(itemId, planId).first();
-    if (!existingItem) return c.json({ error: 'ไม่พบรายการเครื่องมือในแผนนี้' }, 404);
+    if (!existingItem) {
+      return c.json({
+        error: String(itemId).startsWith('virtual-')
+          ? 'รายการนี้ยังไม่ได้บันทึกเข้าแผน (เครื่องมืออยู่ในทะเบียนอยู่แล้ว) จึงไม่มีรายการให้นำออก'
+          : 'ไม่พบรายการเครื่องมือในแผนนี้'
+      }, 404);
+    }
 
     await db.batch([
       db.prepare('DELETE FROM vcc_plan_cycles WHERE plan_item_id = ? AND plan_id = ?').bind(itemId, planId),

@@ -483,5 +483,52 @@ describe('VCC Phase 2: Calibration Schedule Rules, Annual Plan Matrix & Plan App
     expect((await item(held.id, { planned_months: [], remarks: '' })).status).toBe(400);
     expect((await item(retired.id, { planned_months: [], remarks: 'เลิกใช้' })).status).toBe(400);
   });
+
+  it('removing from a plan: an unsaved (virtual) row gets a clear message, a saved row is removed with an audit entry, others are refused', async () => {
+    const plan = (await call('POST', '/api/vcc/plans', 'VP-DCC', {
+      plan_year: 2036, department: 'VPQC', document_code: 'FM-QC-46', revision: '01', title: '[ข้อมูลทดสอบ] แผน 2036'
+    })).body.plan;
+    const detail = await call('GET', `/api/vcc/plans/${plan.id}`, 'VP-DCC');
+    const v1 = detail.body.items.find((i) => i.asset_code === 'V001');
+    expect(v1.is_persisted).toBe(0);
+
+    // nothing saved yet: clear message, nothing changes
+    const virtualRemove = await call('DELETE', `/api/vcc/plans/${plan.id}/items/${v1.id}`, 'VP-DCC');
+    expect(virtualRemove.status).toBe(404);
+    expect(virtualRemove.body.error).toMatch(/ยังไม่ได้บันทึกเข้าแผน/);
+
+    const savedItem = await call('POST', `/api/vcc/plans/${plan.id}/items`, 'VP-DCC', {
+      asset_id: v1.asset_id, provider_name: 'ภายใน', planned_months: [4], responsible_dept: 'VPQC'
+    });
+    expect(savedItem.status).toBe(201);
+    const saved = (await call('GET', `/api/vcc/plans/${plan.id}`, 'VP-DCC')).body.items.find((i) => i.asset_code === 'V001');
+    expect(saved.is_persisted).toBe(1);
+
+    // a user outside DCC cannot remove it
+    expect((await call('DELETE', `/api/vcc/plans/${plan.id}/items/${saved.id}`, 'VP-L2')).status).toBe(403);
+
+    // DCC removes it: the asset stays in the register and returns to the scope as an unsaved row; the removal is audited
+    expect((await call('DELETE', `/api/vcc/plans/${plan.id}/items/${saved.id}`, 'VP-DCC')).status).toBe(200);
+    const after = (await call('GET', `/api/vcc/plans/${plan.id}`, 'VP-DCC')).body.items.find((i) => i.asset_code === 'V001');
+    expect(after.is_persisted).toBe(0);
+    expect(after.planned_months).toEqual([]);
+    const reg = await call('GET', '/api/vcc/assets?status=ACTIVE&q=V001', 'VP-DCC');
+    expect(reg.body.assets.some((a) => a.asset_code === 'V001')).toBe(true);
+    const logged = await env.DB.prepare("SELECT actor_id FROM audit_log WHERE action = 'VCC_PLAN_ITEM_REMOVED' AND json_extract(details, '$.item_id') = ?").bind(saved.id).first();
+    expect(logged.actor_id).toBe('VP-DCC');
+  });
+
+  it('the register can be listed by ON_HOLD, so a paused asset is not invisible, and still only inside the viewer\'s scope', async () => {
+    const mk = (await call('POST', '/api/vcc/assets', 'VP-DCC', {
+      asset_code: 'HOLD-VP-77', name: '[ข้อมูลทดสอบ] ระงับใช้', asset_type: 'เทอร์โมมิเตอร์', department: 'VPQC', is_group: false
+    })).body.asset;
+    await env.DB.prepare("UPDATE vcc_assets SET status = 'ON_HOLD' WHERE id = ?").bind(mk.id).run();
+    const held = await call('GET', '/api/vcc/assets?status=ON_HOLD', 'VP-DCC');
+    expect(held.status).toBe(200);
+    expect(held.body.assets.map((a) => a.asset_code)).toContain('HOLD-VP-77');
+    expect(held.body.assets.every((a) => a.status === 'ON_HOLD')).toBe(true);
+    expect((await call('GET', '/api/vcc/assets?status=ACTIVE&q=HOLD-VP-77', 'VP-DCC')).body.assets).toEqual([]);
+    expect((await call('GET', '/api/vcc/assets?status=BOGUS', 'VP-DCC')).status).toBe(400);
+  });
 });
 

@@ -317,16 +317,16 @@ describe('VCC FM-QC-46 Interactive Planning Board Edge Cases & Exceptions', () =
     expect(screen.queryByRole('button', { name: /ตรวจรหัสลูกก่อนออกใบงาน/i })).toBeNull();
 
     // Delete button has Thai tooltip, accessible label, and requires inline confirmation
-    const deleteBtns = screen.getAllByRole('button', { name: /ลบรายการออกจากแผน/i });
+    const deleteBtns = screen.getAllByRole('button', { name: /นำออกจากแผน/i });
     expect(deleteBtns.length).toBe(2);
-    expect(deleteBtns[0]).toHaveAttribute('title', 'ลบรายการออกจากแผน');
+    expect(deleteBtns[0]).toHaveAttribute('title', 'นำออกจากแผน (เครื่องมือยังอยู่ในทะเบียน)');
 
     // Initial click on delete enters confirmation state without invoking onDeleteItem
     fireEvent.click(deleteBtns[0]);
     expect(onDeleteItem).not.toHaveBeenCalled();
 
     // Confirm button appears
-    const confirmBtn = screen.getByRole('button', { name: 'ยืนยันลบ' });
+    const confirmBtn = screen.getByRole('button', { name: 'ยืนยันนำออกจากแผน' });
     const cancelBtn = screen.getByRole('button', { name: 'ยกเลิก' });
     expect(confirmBtn).toBeInTheDocument();
     expect(cancelBtn).toBeInTheDocument();
@@ -334,12 +334,12 @@ describe('VCC FM-QC-46 Interactive Planning Board Edge Cases & Exceptions', () =
     // Cancel aborts delete
     fireEvent.click(cancelBtn);
     expect(onDeleteItem).not.toHaveBeenCalled();
-    expect(screen.queryByRole('button', { name: 'ยืนยันลบ' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'ยืนยันนำออกจากแผน' })).toBeNull();
 
     // Click delete again and confirm
-    const reDeleteBtns = screen.getAllByRole('button', { name: /ลบรายการออกจากแผน/i });
+    const reDeleteBtns = screen.getAllByRole('button', { name: /นำออกจากแผน/i });
     fireEvent.click(reDeleteBtns[0]);
-    const reConfirmBtn = screen.getByRole('button', { name: 'ยืนยันลบ' });
+    const reConfirmBtn = screen.getByRole('button', { name: 'ยืนยันนำออกจากแผน' });
     fireEvent.click(reConfirmBtn);
     expect(onDeleteItem).toHaveBeenCalledWith(sampleItem);
 
@@ -354,7 +354,7 @@ describe('VCC FM-QC-46 Interactive Planning Board Edge Cases & Exceptions', () =
       />
     );
     expect(screen.queryByRole('button', { name: /แก้ไขข้อมูลในแผน/i })).toBeNull();
-    expect(screen.queryByRole('button', { name: /ลบรายการออกจากแผน/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /นำออกจากแผน/i })).toBeNull();
 
     const groupCheckBtn = screen.getByRole('button', { name: /ตรวจรหัสลูกก่อนออกใบงาน/i });
     expect(groupCheckBtn).toBeInTheDocument();

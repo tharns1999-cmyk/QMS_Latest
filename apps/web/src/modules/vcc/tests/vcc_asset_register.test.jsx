@@ -94,7 +94,7 @@ describe('VCC Phase 1 Frontend: Portal Access, Asset Tabs, Mandatory Reason, and
 
     // 1. Open Retire Modal for SW001
     const sw001Row = screen.getByText('SW001').closest('tr');
-    const retireBtn = within(sw001Row).getByRole('button', { name: /ปลดออก$/i });
+    const retireBtn = within(sw001Row).getByRole('button', { name: /ปลดออกจากทะเบียน$/i });
     fireEvent.click(retireBtn);
 
     const submitRetireBtn = screen.getByRole('button', { name: /ยืนยันการปลดออก/i });
@@ -292,5 +292,48 @@ describe('VCC Phase 1 Frontend: Portal Access, Asset Tabs, Mandatory Reason, and
 
     const saveBtn = screen.getByRole('button', { name: /บันทึกข้อมูล/i });
     expect(saveBtn).toBeDisabled();
+  });
+});
+
+describe('VCC asset register: buttons follow who may use them, filters, and paused assets', () => {
+  const dcc = { id: 'dc4', name: 'เจ้าหน้าที่ DCC', department: 'DC', isDcc: true };
+  const qc = { id: 'qc2', name: 'QC เจ้าหน้าที่', department: 'QC', isDcc: false };
+  beforeEach(() => {
+    resetVccLocalStore();
+    useStore.setState({ departments: SAMPLE_MASTER_DEPTS, masterDepartments: SAMPLE_MASTER_DEPTS });
+  });
+  const open = () => render(<MemoryRouter><AssetRegisterPage /></MemoryRouter>);
+
+  it('a non-DCC user sees the list but no add, edit or retire buttons (the server refuses them)', async () => {
+    useStore.setState({ currentUser: qc });
+    open();
+    await waitFor(() => expect(screen.getAllByRole('button', { name: /ประวัติ/ }).length).toBeGreaterThan(0));
+    expect(screen.queryByRole('button', { name: /เพิ่มเครื่องมือ/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^แก้ไข$/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /ปลดออกจากทะเบียน/ })).toBeNull();
+  });
+
+  it('DCC sees the edit and "ปลดออกจากทะเบียน" buttons, and the dialog explains it is different from removing from a plan', async () => {
+    useStore.setState({ currentUser: dcc });
+    open();
+    await waitFor(() => expect(screen.getAllByRole('button', { name: /ปลดออกจากทะเบียน/ }).length).toBeGreaterThan(0));
+    expect(screen.getAllByRole('button', { name: /^แก้ไข$/ }).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getAllByRole('button', { name: /ปลดออกจากทะเบียน/ })[0]);
+    expect(screen.getByText(/ไม่ถูกลบ/)).toBeInTheDocument();
+    expect(screen.getByText(/นำออกจากแผน/)).toBeInTheDocument();
+  });
+
+  it('has a type filter and a tab for paused (ON_HOLD) assets', async () => {
+    useStore.setState({ currentUser: dcc });
+    open();
+    await waitFor(() => expect(screen.getByLabelText('กรองตามประเภท')).toBeInTheDocument());
+    expect(screen.getByRole('tab', { name: /ระงับใช้ \(ON_HOLD\)/ })).toBeInTheDocument();
+    const type = screen.getByLabelText('กรองตามประเภท');
+    const firstType = [...type.options].find((o) => o.value)?.value;
+    fireEvent.change(type, { target: { value: firstType } });
+    await waitFor(() => {
+      const rows = screen.queryAllByRole('row').slice(1);
+      rows.forEach((r) => expect(within(r).getByText(firstType)).toBeInTheDocument());
+    });
   });
 });

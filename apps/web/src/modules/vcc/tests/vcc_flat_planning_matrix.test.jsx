@@ -196,7 +196,7 @@ describe('VCC Category-Based Overview & Flat Instrument Planning Matrix', () => 
 
     // In approved mode, Edit and Delete buttons are hidden
     expect(screen.queryByRole('button', { name: /แก้ไขข้อมูลในแผน/i })).toBeNull();
-    expect(screen.queryByRole('button', { name: /ลบรายการออกจากแผน/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /นำออกจากแผน/i })).toBeNull();
   });
 
   it('4. Draft Group Conversion Modal: Never auto-inherits months, detects duplicates, requires manual scheduling, and previews before confirm', async () => {

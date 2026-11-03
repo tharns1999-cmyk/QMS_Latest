@@ -7,7 +7,8 @@ import { requireVccAccess, requireDccOnly, canReadVccDepartment, vccDeptScopeSql
 
 const DCC_ONLY = { error: 'เฉพาะ DCC เท่านั้นที่ใช้งานส่วนนี้ได้' };
 const NOW = `strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`;
-const PHASE1_STATUSES = ['ACTIVE', 'RETIRED'];
+// Statuses the register can be listed by. ON_HOLD / UNDER_REPAIR are read-only here (set by the work-order flow), but must be listable so such assets are not invisible.
+const PHASE1_STATUSES = ['ACTIVE', 'ON_HOLD', 'UNDER_REPAIR', 'RETIRED'];
 const ASSET_CODE_RE = /^[A-Z0-9._/-]{1,50}$/;
 
 const clean = (v, max) => (typeof v === 'string' && v.trim() && v.trim().length <= max ? v.trim() : null);

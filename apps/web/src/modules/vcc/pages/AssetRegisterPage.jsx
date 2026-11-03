@@ -108,6 +108,9 @@ const AssetRegisterPageInner = () => {
   // Search & Department filter (Flat Instrument Register — no category navigation)
   const [searchQuery, setSearchQuery] = useState('');
   const [filterDept, setFilterDept] = useState('');
+  const [filterType, setFilterType] = useState('');
+  // Only DCC may add, edit, retire or reactivate (the server refuses everyone else), so the other buttons are not shown to others
+  const canManageAssets = Boolean(currentUser?.isDcc);
 
   // Add / Edit Modal
   const [formOpen, setFormOpen] = useState(false);
@@ -140,6 +143,7 @@ const AssetRegisterPageInner = () => {
         fetchVccAssets({
           status: activeTab,
           department: filterDept,
+          asset_type: filterType,
           calibratable_only: true,
           q: searchQuery
         }),
@@ -152,7 +156,7 @@ const AssetRegisterPageInner = () => {
     } finally {
       setLoading(false);
     }
-  }, [activeTab, filterDept, searchQuery]);
+  }, [activeTab, filterDept, filterType, searchQuery]);
 
   const displayedAssets = assets;
 
@@ -245,7 +249,7 @@ const AssetRegisterPageInner = () => {
     try {
       if (statusModal.mode === 'RETIRE') {
         await retireVccAsset(statusModal.asset.id, statusReason);
-        toast.success(`ปลดออกเครื่องมือ ${statusModal.asset.asset_code} แล้ว`);
+        toast.success(`ปลดออก ${statusModal.asset.asset_code} จากทะเบียนแล้ว (ยังดูประวัติได้ในแท็บ "ปลดออกแล้ว")`);
       } else {
         await reactivateVccAsset(statusModal.asset.id, statusReason);
         toast.success(`นำเครื่องมือ ${statusModal.asset.asset_code} กลับมาใช้งานแล้ว`);
@@ -510,6 +514,20 @@ const AssetRegisterPageInner = () => {
                   <Archive size={16} />
                   <span>ปลดออกแล้ว (RETIRED)</span>
                 </button>
+
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={activeTab === 'ON_HOLD'}
+                  onClick={() => setActiveTab('ON_HOLD')}
+                  className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-colors cursor-pointer ${
+                    activeTab === 'ON_HOLD'
+                      ? 'bg-amber-700 text-white shadow-xs'
+                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  }`}
+                >
+                  <span>ระงับใช้ (ON_HOLD)</span>
+                </button>
               </div>
 
               <div className="text-sm font-medium text-slate-600">
@@ -517,7 +535,7 @@ const AssetRegisterPageInner = () => {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
               <div className="relative md:col-span-2">
                 <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
                 <input
@@ -539,6 +557,20 @@ const AssetRegisterPageInner = () => {
                 {activeDepartments.map((d) => (
                   <option key={d.code} value={d.code}>
                     {d.code} — {d.nameTh}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                value={filterType}
+                onChange={(e) => setFilterType(e.target.value)}
+                aria-label="กรองตามประเภท"
+                className="w-full h-10 px-3 rounded-xl border border-slate-300 text-sm bg-white focus:outline-none focus:border-indigo-600"
+              >
+                <option value="">ทุกประเภท</option>
+                {assetTypes.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
                   </option>
                 ))}
               </select>
@@ -626,6 +658,10 @@ const AssetRegisterPageInner = () => {
                                 <CheckCircle2 size={13} />
                                 ใช้งานปกติ (ACTIVE)
                               </span>
+                            ) : asset.status !== 'RETIRED' ? (
+                              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 text-amber-800 border border-amber-200 text-xs font-bold">
+                                {asset.status === 'ON_HOLD' ? 'ระงับใช้ (ON_HOLD)' : 'ซ่อมบำรุง (UNDER_REPAIR)'}
+                              </span>
                             ) : (
                               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-50 text-rose-800 border border-rose-200 text-xs font-bold">
                                 <XCircle size={13} />
@@ -645,7 +681,7 @@ const AssetRegisterPageInner = () => {
                                 <span>ประวัติ</span>
                               </button>
 
-                              {asset.status === 'ACTIVE' ? (
+                              {asset.status === 'ACTIVE' && canManageAssets ? (
                                 <>
                                   <button
                                     type="button"
@@ -661,10 +697,10 @@ const AssetRegisterPageInner = () => {
                                     className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-rose-200 bg-rose-50 text-rose-700 text-xs sm:text-sm font-semibold hover:bg-rose-100 cursor-pointer"
                                   >
                                     <Archive size={13} />
-                                    <span>ปลดออก</span>
+                                    <span>ปลดออกจากทะเบียน</span>
                                   </button>
                                 </>
-                              ) : (
+                              ) : asset.status === 'RETIRED' && canManageAssets ? (
                                 <button
                                   type="button"
                                   onClick={() => openReactivateModal(asset)}
@@ -673,7 +709,9 @@ const AssetRegisterPageInner = () => {
                                   <RotateCcw size={13} />
                                   <span>นำกลับมาใช้ (Reactivate)</span>
                                 </button>
-                              )}
+                              ) : asset.status === 'ON_HOLD' || asset.status === 'UNDER_REPAIR' ? (
+                                <span className="text-xs text-slate-500 max-w-[11rem] text-right">ปลดระงับที่หน้า “ใบสั่งงาน” เมื่อประเมินผลแล้ว</span>
+                              ) : null}
                             </div>
                           </td>
                         </tr>

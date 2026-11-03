@@ -279,7 +279,7 @@ export const AssetStatusModal = ({
         <div className="px-6 py-4.5 border-b border-slate-200 flex items-center justify-between">
           <h2 className="text-xl font-bold text-slate-900 tracking-tight">
             {statusModal.mode === 'RETIRE'
-              ? `ปลดออกเครื่องมือ (${statusModal.asset.asset_code})`
+              ? `ปลดออกจากทะเบียน (${statusModal.asset.asset_code})`
               : `นำเครื่องมือกลับมาใช้งาน (${statusModal.asset.asset_code})`}
           </h2>
           <button
@@ -297,6 +297,12 @@ export const AssetStatusModal = ({
               <AlertTriangle size={17} className="text-rose-600 shrink-0" />
               <span>{statusError}</span>
             </div>
+          )}
+
+          {statusModal.mode === 'RETIRE' && (
+            <p className="text-sm text-slate-600 font-medium">
+              เครื่องมือจะไม่อยู่ในแผนประจำปีฉบับใหม่ แต่ไม่ถูกลบ ประวัติทั้งหมดยังอยู่และนำกลับมาใช้ได้ ถ้าต้องการแค่เอาออกจากแผนปีนี้ ให้ไปที่หน้าแผนประจำปีแล้วเลือก “นำออกจากแผน”
+            </p>
           )}
 
           <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-sm">

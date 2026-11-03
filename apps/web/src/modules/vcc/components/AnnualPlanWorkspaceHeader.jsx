@@ -597,6 +597,9 @@ export const AnnualPlanWorkspaceHeader = ({
               ) : summaryMetrics.unplannedCount > 0 ? (
                 <span className="text-emerald-600 font-medium">(ระบุครบแล้ว)</span>
               ) : null}
+              {summaryMetrics.unplannedCount - summaryMetrics.unplannedWithoutReasonCount > 0 && (
+                <span className="text-slate-500">· ไม่วางแผนพร้อมเหตุผล {summaryMetrics.unplannedCount - summaryMetrics.unplannedWithoutReasonCount}</span>
+              )}
             </div>
 
             <span className="text-slate-300">·</span>

@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { isSavedPlanItem } from '../utils/planLabels';
 import {
   X,
   Clock,
@@ -366,6 +367,7 @@ export const AnnualPlanSideInspector = ({
                   <Edit2 size={14} />
                   <span>แก้ไข</span>
                 </button>
+                {isSavedPlanItem(item) && (
                 <button
                   type="button"
                   onClick={() => {
@@ -375,8 +377,9 @@ export const AnnualPlanSideInspector = ({
                   className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 text-sm font-semibold shadow-2xs transition-colors cursor-pointer"
                 >
                   <Trash2 size={14} />
-                  <span>นำออกจากแผน</span>
+                  <span>นำออกจากแผน (ยังอยู่ในทะเบียน)</span>
                 </button>
+                )}
               </div>
             ) : (
               <div />
