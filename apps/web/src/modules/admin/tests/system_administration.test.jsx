@@ -33,6 +33,10 @@ describe('System Administration: who is an admin', () => {
     expect(isSystemAdmin(null)).toBe(false);
   });
 
+  it('DCC staff stay non-admin even if the store gave them the DCC_ADMIN permission', () => {
+    expect(isSystemAdmin({ ...DCC_STAFF, permissions: ['DAR_CREATE', 'DCC_ADMIN'] })).toBe(false);
+  });
+
   it('isAdminPath matches /admin and its children only', () => {
     expect(isAdminPath('/admin')).toBe(true);
     expect(isAdminPath('/admin/audit-log')).toBe(true);
