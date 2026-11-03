@@ -548,6 +548,20 @@ describe('VCC Phase 2.5: Final Hardening & Phase 3 Readiness Gate Tests', () => 
     expect(recon2.status).toBe(200);
     const activeWosAfterRecon2 = await env.DB.prepare("SELECT * FROM vcc_work_orders WHERE plan_id = ? AND status != 'CANCELLED'").bind(planId).all();
     expect(activeWosAfterRecon2.results.map((w) => w.planned_month).sort((a, b) => a - b)).toEqual([4, 10]);
+
+    // E. Once the instrument is retired, cancelling its open work order does not bring a new one back on reconcile
+    expect((await call('POST', `/api/vcc/assets/${assetId}/retire`, 'GATE-QC-STAFF', { reason: 'ชำรุดถาวร' })).status).toBe(200);
+    for (const w of activeWosAfterRecon2.results) {
+      const res = await call('POST', `/api/vcc/work-orders/${w.id}/cancel`, 'GATE-QC-SUP', {
+        cancellation_category: 'AUTHORIZED_CANCEL',
+        cancellation_reason: 'เครื่องมือปลดออกแล้ว'
+      });
+      expect(res.status).toBe(200);
+    }
+    const recon3 = await call('POST', `/api/vcc/plans/${planId}/reconcile-work-orders`, 'GATE-QC-SUP', {});
+    expect(recon3.status).toBe(200);
+    const activeAfterRetire = await env.DB.prepare("SELECT id FROM vcc_work_orders WHERE plan_id = ? AND status != 'CANCELLED'").bind(planId).all();
+    expect(activeAfterRetire.results).toHaveLength(0);
   });
 
   it('6. Ambiguous Reconciliation: Provides explicit resolution endpoint POST /api/vcc/plans/:id/reconcile-work-orders/resolve-ambiguous and audits decision', async () => {

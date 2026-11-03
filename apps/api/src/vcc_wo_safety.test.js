@@ -156,8 +156,13 @@ describe('VCC work-order safety (atomic transitions, INCONCLUSIVE, cancellation,
     // D3: the performer (even at L5) cannot release; another L5 can, with reason and impact assessment
     expect((await call('POST', `/api/vcc/work-orders/${woId}/release-hold`, 'SF-PERF5', release)).status).toBe(403);
     expect((await call('POST', `/api/vcc/work-orders/${woId}/release-hold`, 'SF-APP5', { impact_assessment: 'ประเมินแล้ว' })).status).toBe(400);
-    const released = await call('POST', `/api/vcc/work-orders/${woId}/release-hold`, 'SF-APP5', release);
-    expect(released.status).toBe(200);
+    // Two approvers release at the same moment: one wins, one audit row
+    const [r1, r2] = await Promise.all([
+      call('POST', `/api/vcc/work-orders/${woId}/release-hold`, 'SF-APP5', release),
+      call('POST', `/api/vcc/work-orders/${woId}/release-hold`, 'SF-LB6', release)
+    ]);
+    expect([r1.status, r2.status].sort()).toEqual([200, 409]);
+    expect(await auditCount('VCC_WO_HOLD_RELEASED', woId)).toBe(1);
     expect(await assetStatus(assetId)).toBe('ACTIVE');
     const releaseAudit = await env.DB.prepare("SELECT details FROM audit_log WHERE action = 'VCC_WO_HOLD_RELEASED' AND json_extract(details, '$.wo_id') = ?").bind(woId).first('details');
     expect(JSON.parse(releaseAudit)).toMatchObject({ release_reason: release.release_reason, impact_assessment: release.impact_assessment, performed_by: 'SF-PERF5' });

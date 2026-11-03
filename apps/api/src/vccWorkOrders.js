@@ -521,6 +521,14 @@ export const buildWorkOrderReconciliationStatements = async (db, planId, actorId
         candidates: candidateWos.map((w) => ({ id: w.id, wo_code: w.wo_code, status: w.status, due_date: w.due_date })),
         reason: 'พบใบสั่งงานเดิมที่อาจตรงกับรอบนี้มากกว่า 1 รายการ ต้องให้ผู้ดูแลระบบตรวจสอบยืนยันก่อนจับคู่'
       });
+    } else if (item.asset_status === 'RETIRED') {
+      // Same rule as opening a work order by hand: a retired instrument gets no new work order (the cycle and its history stay)
+      skipped.push({
+        cycle_id: cycleId,
+        asset_id: item.asset_id,
+        planned_month: month,
+        reason: 'เครื่องมือถูกปลดออกจากทะเบียนแล้ว (RETIRED) จึงไม่ออกใบสั่งงานใหม่'
+      });
     } else {
       // Unmatched by cycle_id -> Generate new work order
       unmatched.push({ cycle_id: cycleId, asset_id: item.asset_id, planned_month: month });
