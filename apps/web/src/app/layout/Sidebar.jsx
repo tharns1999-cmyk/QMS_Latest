@@ -37,6 +37,7 @@ import { logout } from '../../api/session';
 import { createPortal } from 'react-dom';
 import ChangePasswordForm from '../auth/ChangePasswordForm';
 import { syncVccTasks } from '../../modules/vcc/api/vccPlanApi';
+import { syncVccWorkTasks } from '../../modules/vcc/api/vccWorkOrderApi';
 
 // Defined at module level so React keeps the same component type between renders: nested definitions remount the whole menu on every update, which resets the scroll position.
 const SectionHeader = ({ title }) => (
@@ -124,7 +125,7 @@ const Sidebar = ({ isOpen = false, onClose = () => {} }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const { 
-    currentUser, requestUsers, reviewUsers, approveUsers, tasks, controlledCopyInstances, documents, 
+    currentUser, requestUsers, reviewUsers, approveUsers, tasks, vccWorkTasks, controlledCopyInstances, documents, 
     externalDocuments, periodicReviewSchedules,
     masterUsers, setCurrentUser, switchUser, notifications,
     resetTransactionDataToCleanSlate, manualSeedData, externalRequests,
@@ -182,23 +183,23 @@ const Sidebar = ({ isOpen = false, onClose = () => {} }) => {
   // Sync VCC workflow tasks on mount and when currentUser changes
   useEffect(() => {
     syncVccTasks(currentUser).catch(() => {});
+    syncVccWorkTasks();
   }, [currentUser]);
 
   // Task Counts Calculations
   const userTasks = (tasks || []).filter(t => isActionableTask(t, currentUser, allDocs, effectiveToday) && !isAssignedToSomeoneElse(t, currentUser));
   const myTaskCount = userTasks.filter(t => t.actionRequired !== false && !t.is_completed && t.status !== 'COMPLETED').length;
 
+  // Same number as the VCC task inbox's "my tasks": plan steps from the task list plus work-order steps from /work-tasks.
+  // VCC alert/notification tasks are not workflow steps (the bell counts them) and the work-order review/revise tasks in `tasks`
+  // are already inside /work-tasks, so both are left out here to avoid counting anything twice.
   const vccTaskCount = useMemo(() => {
-    return userTasks.filter(t => {
+    const planTasks = userTasks.filter(t => {
       const normType = String(t.type || t.taskType || '').toUpperCase();
-      return (
-        t.referenceType === 'VCC_PLAN' ||
-        normType.startsWith('VCC_PLAN_') ||
-        Boolean(t.planId) ||
-        normType.startsWith('VCC_')
-      );
+      return t.referenceType === 'VCC_PLAN' || normType.startsWith('VCC_PLAN_') || Boolean(t.planId);
     }).length;
-  }, [userTasks]);
+    return planTasks + (vccWorkTasks || []).length;
+  }, [userTasks, vccWorkTasks]);
 
   const ccTaskCount = (controlledCopyInstances || []).filter(inst => {
     const doc = (documents || []).find(d => d.id === (inst.doc_id || inst.docId));

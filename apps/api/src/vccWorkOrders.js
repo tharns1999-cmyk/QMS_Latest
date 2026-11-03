@@ -42,6 +42,8 @@ const VALID_RESULT_STATUSES = new Set(['PASS', 'FAIL', 'INCONCLUSIVE']);
 const HOLDING_RESULTS = new Set(['FAIL', 'INCONCLUSIVE']);
 const AMEND_TO_INCONCLUSIVE_ERROR = 'ใบสั่งงานที่ปิดแล้วต้องมีผล PASS หรือ FAIL เท่านั้น หากต้องตรวจซ้ำให้เปิดใบสั่งงานใหม่';
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+// A SCHEDULED work order becomes a "record the result" task this many days before its due date.
+const WORK_TASK_LEAD_DAYS = 30;
 
 export const getBangkokDateString = (date = new Date()) => {
   return new Intl.DateTimeFormat('en-CA', {
@@ -1627,6 +1629,77 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
     if (conflict) return conflict;
 
     return c.json({ workOrder: await fetchWorkOrder(db, id) });
+  });
+
+  // The VCC task inbox: every work-order step this user can act on right now. Each rule below mirrors the matching POST
+  // endpoint (same department, level and Separation-of-Duties checks), so a listed task never ends in a 403 for permissions.
+  app.get('/api/vcc/work-tasks', requireAuth, requireVccAccess, async (c) => {
+    const db = c.env.DB;
+    const user = c.get('user');
+    const settings = await readWorkOrderSettings(db);
+    const thresholds = await getThresholds(db, settings.approval_doc_type);
+    const userLevel = Number(user.approval_level ?? 0);
+    const horizon = getBangkokDateString(new Date(Date.now() + WORK_TASK_LEAD_DAYS * 86400000));
+
+    const { results: wos } = await db.prepare(`
+      SELECT w.id, w.wo_code, w.status, w.result_status, w.nc_status, w.due_date, w.performed_by, w.performed_at,
+        w.rejected_reason, w.created_at, a.asset_code, a.name AS asset_name, a.department
+      FROM vcc_work_orders w
+      JOIN vcc_assets a ON a.id = w.asset_id
+      WHERE w.status IN ('OPEN', 'SCHEDULED', 'PENDING_REVIEW', 'REJECTED')
+         OR (w.status = 'CLOSED' AND w.nc_status = 'OPEN')
+    `).all();
+    const { results: requests } = await db.prepare(`
+      SELECT r.id, r.work_order_id, r.requested_by, r.proposed_changes, r.created_at,
+        w.wo_code, w.result_status, w.performed_by, w.due_date, a.asset_code, a.name AS asset_name, a.department
+      FROM vcc_work_order_amendment_requests r
+      JOIN vcc_work_orders w ON w.id = r.work_order_id
+      JOIN vcc_assets a ON a.id = w.asset_id
+      WHERE r.status = 'PENDING' AND w.status = 'CLOSED'
+    `).all();
+
+    const tasks = [];
+    const add = (kind, wo, extra = {}) => tasks.push({
+      id: `${kind}:${extra.request_id || wo.id}`,
+      kind,
+      wo_id: wo.work_order_id || wo.id,
+      wo_code: wo.wo_code,
+      asset_code: wo.asset_code,
+      asset_name: wo.asset_name,
+      department: wo.department,
+      due_date: wo.due_date,
+      result_status: wo.result_status,
+      link: `/vcc/work-orders?wo=${encodeURIComponent(wo.work_order_id || wo.id)}`,
+      ...extra
+    });
+
+    for (const wo of wos || []) {
+      if (!isUserAuthorizedForPlanDept(user, wo.department)) continue;
+      const isPerformer = user.id === wo.performed_by;
+      if (wo.status === 'OPEN' || wo.status === 'SCHEDULED') {
+        // a SCHEDULED order is not work yet until its month is near
+        if (wo.status === 'OPEN' || (wo.due_date && wo.due_date <= horizon)) add('RECORD_RESULT', wo, { created_at: wo.created_at });
+      } else if (wo.status === 'REJECTED') {
+        if (isPerformer || user.isDcc || user.isQmr) add('REVISE_RESULT', wo, { reason: wo.rejected_reason, created_at: wo.performed_at || wo.created_at });
+      } else if (wo.status === 'PENDING_REVIEW') {
+        if (!isPerformer && userLevel >= thresholds.required_reviewer_level) add('REVIEW_RESULT', wo, { created_at: wo.performed_at || wo.created_at });
+      } else if (wo.status === 'CLOSED' && wo.nc_status === 'OPEN') {
+        if (!isPerformer && userLevel >= thresholds.required_approver_level) add('RELEASE_HOLD', wo, { created_at: wo.performed_at || wo.created_at });
+      }
+    }
+
+    for (const r of requests || []) {
+      if (!isUserAuthorizedForPlanDept(user, r.department)) continue;
+      if (user.id === r.performed_by || user.id === r.requested_by) continue;
+      if (userLevel < Math.max(4, thresholds.required_reviewer_level || 4)) continue;
+      let proposed = {};
+      try { proposed = JSON.parse(r.proposed_changes || '{}'); } catch { proposed = {}; }
+      const nextResult = proposed.result_status ? String(proposed.result_status).trim().toUpperCase() : r.result_status;
+      if ((r.result_status === 'FAIL' || nextResult === 'FAIL') && userLevel < thresholds.required_approver_level) continue;
+      add('APPROVE_AMENDMENT', r, { request_id: r.id, created_at: r.created_at });
+    }
+
+    return c.json({ tasks });
   });
 
   // Cancel work order with mandatory category and reason. Only the work order is cancelled: the plan cycle stays, so
