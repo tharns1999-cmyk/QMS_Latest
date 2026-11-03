@@ -452,5 +452,36 @@ describe('VCC Phase 2: Calibration Schedule Rules, Annual Plan Matrix & Plan App
     const detail2028 = await call('GET', `/api/vcc/plans/${plan2028.id}`, 'VP-DCC');
     expect(detail2028.body.items.some((i) => i.asset_code === 'NEW-QC-999')).toBe(true);
   });
+
+  it('a paused (ON_HOLD) asset in the plan scope can be given a reason without months, so the plan can still be submitted', async () => {
+    const mk = async (code) => (await call('POST', '/api/vcc/assets', 'VP-DCC', {
+      asset_code: code, name: '[ข้อมูลทดสอบ] เครื่องมือระงับใช้', asset_type: 'เทอร์โมมิเตอร์', department: 'VPQC', is_group: false
+    })).body.asset;
+    const held = await mk('HOLD-VP-01');
+    const retired = await mk('RET-VP-02');
+    await env.DB.batch([
+      env.DB.prepare("UPDATE vcc_assets SET status = 'ON_HOLD' WHERE id = ?").bind(held.id),
+      env.DB.prepare("UPDATE vcc_assets SET status = 'RETIRED' WHERE id = ?").bind(retired.id)
+    ]);
+    const plan = (await call('POST', '/api/vcc/plans', 'VP-DCC', {
+      plan_year: 2035, department: 'VPQC', document_code: 'FM-QC-46', revision: '01', title: '[ข้อมูลทดสอบ] แผน 2035'
+    })).body.plan;
+    const item = (assetId, extra) => call('POST', `/api/vcc/plans/${plan.id}/items`, 'VP-DCC', {
+      asset_id: assetId, provider_name: 'ภายใน', responsible_dept: 'VPQC', ...extra
+    });
+
+    // listed in the scope, so the submit gate asks for a reason for it
+    const detail = await call('GET', `/api/vcc/plans/${plan.id}`, 'VP-DCC');
+    expect(detail.body.items.map((i) => i.asset_code)).toContain('HOLD-VP-01');
+
+    expect((await item(held.id, { planned_months: [], remarks: 'ระงับใช้อยู่ รอผลประเมิน' })).status).toBe(201);
+    const after = await call('GET', `/api/vcc/plans/${plan.id}`, 'VP-DCC');
+    expect(after.body.items.find((i) => i.asset_code === 'HOLD-VP-01').remarks).toBe('ระงับใช้อยู่ รอผลประเมิน');
+
+    // still refused: months for a paused asset, an empty entry, and anything for a retired asset
+    expect((await item(held.id, { planned_months: [3], remarks: '' })).status).toBe(400);
+    expect((await item(held.id, { planned_months: [], remarks: '' })).status).toBe(400);
+    expect((await item(retired.id, { planned_months: [], remarks: 'เลิกใช้' })).status).toBe(400);
+  });
 });
 

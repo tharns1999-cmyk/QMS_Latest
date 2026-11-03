@@ -856,7 +856,9 @@ export const saveVccPlanItem = async (planId, payload) => {
   if (Number(asset.is_group) === 1 && asset.group_nature !== 'COMPOSITE_SET') {
     throw new Error('ยกเลิกการเพิ่มกลุ่มเครื่องมือแม่เข้าแผนประจำปีแล้ว กรุณาเลือกเครื่องมือวัดรายตัวหรือชุดเครื่องมือจริง');
   }
-  if (asset.status !== 'ACTIVE') {
+  // Same rule as the server: a reason with no months is allowed for a paused asset that the plan scope lists
+  const reasonOnlyForPausedAsset = (payload.planned_months || []).length === 0 && ['ON_HOLD', 'UNDER_REPAIR'].includes(asset.status);
+  if (asset.status !== 'ACTIVE' && !reasonOnlyForPausedAsset) {
     throw new Error('ไม่สามารถเพิ่มเครื่องมือที่ไม่ได้ใช้งานปกติ (ACTIVE) เข้าแผนประจำปีได้');
   }
 
