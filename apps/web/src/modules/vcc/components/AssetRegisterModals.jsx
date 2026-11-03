@@ -274,13 +274,9 @@ export const AssetStatusModal = ({
   statusError,
   statusImpact,
   savingStatus,
-  handleConfirmStatusChange,
-  isDcc = false
+  handleConfirmStatusChange
 }) => {
   if (!statusModal) return null;
-  const inFlight = Number(statusImpact?.in_flight_work_orders) || 0;
-  // Work being performed or reviewed blocks a department head's retire (the server refuses it); DCC is only warned.
-  const blockedByWorkOrders = statusModal.mode === 'RETIRE' && inFlight > 0 && !isDcc;
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
@@ -326,18 +322,14 @@ export const AssetStatusModal = ({
           {statusImpact && (
             <div
               data-testid="asset-impact"
-              className={`p-3.5 rounded-xl border text-sm ${blockedByWorkOrders ? 'bg-rose-50 border-rose-200 text-rose-800' : 'bg-slate-50 border-slate-200 text-slate-700'}`}
+              className={`p-3.5 rounded-xl border text-sm bg-slate-50 border-slate-200 text-slate-700`}
             >
               <div className="font-bold mb-1">ผลกระทบที่ตรวจพบ</div>
               <ul className="list-disc pl-5 space-y-0.5">
-                <li>ใบสั่งงานสอบเทียบที่ยังไม่ปิด: {statusImpact.open_work_orders} (กำลังดำเนินการ/รอตรวจ {inFlight})</li>
+                <li>ใบสั่งงานสอบเทียบที่ยังไม่ปิด: {statusImpact.open_work_orders}</li>
                 <li>อยู่ในแผนประจำปีฉบับปัจจุบัน: {statusImpact.plan_items} รายการ</li>
                 <li>ใบสั่งงานที่ปิดแล้ว (ประวัติ ไม่ถูกแก้ไข): {statusImpact.closed_work_orders}</li>
               </ul>
-              {blockedByWorkOrders && <p className="mt-1.5 font-semibold">มีใบสั่งงานที่กำลังดำเนินการหรือรอตรวจ ต้องให้ปิดงานก่อน หรือติดต่อ DCC จึงจะปลดออกได้</p>}
-              {!blockedByWorkOrders && statusModal.mode === 'RETIRE' && inFlight > 0 && (
-                <p className="mt-1.5 font-semibold text-amber-800">มีใบสั่งงานที่กำลังดำเนินการหรือรอตรวจ — ตรวจสอบก่อนยืนยัน</p>
-              )}
             </div>
           )}
 
@@ -370,7 +362,7 @@ export const AssetStatusModal = ({
             </button>
             <button
               type="submit"
-              disabled={savingStatus || !statusReason.trim() || blockedByWorkOrders}
+              disabled={savingStatus || !statusReason.trim()}
               className={`h-10 px-5 rounded-xl text-white text-sm font-semibold disabled:opacity-50 transition-colors cursor-pointer shadow-2xs ${
                 statusModal.mode === 'RETIRE'
                   ? 'bg-rose-600 hover:bg-rose-700'
