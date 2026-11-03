@@ -38,6 +38,87 @@ import { createPortal } from 'react-dom';
 import ChangePasswordForm from '../auth/ChangePasswordForm';
 import { syncVccTasks } from '../../modules/vcc/api/vccPlanApi';
 
+// Defined at module level so React keeps the same component type between renders: nested definitions remount the whole menu on every update, which resets the scroll position.
+const SectionHeader = ({ title }) => (
+  <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider px-3 pt-4 pb-1 select-none">
+    {title}
+  </div>
+);
+
+const NavItem = ({ 
+  to, 
+  icon: IconComponent, 
+  label, 
+  badgeCount, 
+  badgeColor = 'blue', 
+  pulsePing = false,
+  end = false 
+}) => (
+  <NavLink 
+    to={to} 
+    end={end}
+    className={({ isActive }) => 
+      `group relative flex items-center justify-between px-3 py-2 text-xs rounded-xl font-medium gap-2.5 transition-all duration-150 outline-none focus-visible:ring-2 focus-visible:ring-blue-500/20 ${
+        isActive 
+          ? 'bg-blue-50 text-blue-700 font-semibold shadow-2xs' 
+          : 'text-slate-600 hover:text-slate-900 bg-transparent hover:bg-slate-50'
+      }`
+    }
+  >
+    {({ isActive }) => (
+      <>
+        {/* Subtle Active Indicator Bar */}
+        {isActive && (
+          <span 
+            aria-hidden="true"
+            className="absolute left-0 top-1.5 bottom-1.5 w-1 rounded-r-full bg-blue-600 transition-all" 
+          />
+        )}
+
+        <div className="flex items-center gap-2.5 min-w-0 flex-1 pl-0.5">
+          <IconComponent 
+            className={`w-4 h-4 shrink-0 transition-colors duration-150 ${
+              isActive 
+                ? 'text-blue-600' 
+                : 'text-slate-400 group-hover:text-slate-600'
+            }`} 
+            strokeWidth={1.5} 
+          />
+          <span className="truncate leading-normal tracking-tight text-[13px]">{label}</span>
+        </div>
+
+        {badgeCount > 0 && (
+          <div className="relative shrink-0 flex items-center justify-center">
+            {/* Layer 1: Sonar Ping Aura for attention-grabbing when pulsePing is active */}
+            {pulsePing && (
+              <span 
+                aria-hidden="true"
+                className="absolute inset-0 rounded-full bg-amber-400 opacity-60 animate-ping pointer-events-none"
+              />
+            )}
+            {/* Layer 2: Interactive Core Badge */}
+            <span 
+              className={`relative text-[10px] font-mono font-bold px-1.5 py-0.2 rounded-full shrink-0 transition-all duration-200 group-hover:scale-110 ${
+                badgeColor === 'red'
+                  ? 'bg-rose-500 text-white shadow-2xs'
+                  : badgeColor === 'amber'
+                    ? pulsePing
+                      ? 'bg-amber-500 text-white shadow-sm shadow-amber-500/50 ring-1 ring-amber-400/40 animate-pulse'
+                      : 'bg-amber-500 text-white shadow-2xs'
+                    : isActive 
+                      ? 'bg-blue-600 text-white' 
+                      : 'bg-blue-100 text-blue-700 border border-blue-200'
+              }`}
+            >
+              {badgeCount > 99 ? '99+' : badgeCount}
+            </span>
+          </div>
+        )}
+      </>
+    )}
+  </NavLink>
+);
+
 // isOpen/onClose drive the off-canvas drawer below lg (1024px); on desktop the sidebar is a static column and ignores them.
 const Sidebar = ({ isOpen = false, onClose = () => {} }) => {
   const navigate = useNavigate();
@@ -235,86 +316,6 @@ const Sidebar = ({ isOpen = false, onClose = () => {} }) => {
       .filter(n => isNotificationVisibleToUser(n, currentUser))
       .filter(n => !isNotificationReadByUser(n, currentUser?.id)).length;
   }, [notifications, currentUser]);
-
-  const SectionHeader = ({ title }) => (
-    <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider px-3 pt-4 pb-1 select-none">
-      {title}
-    </div>
-  );
-
-  const NavItem = ({ 
-    to, 
-    icon: IconComponent, 
-    label, 
-    badgeCount, 
-    badgeColor = 'blue', 
-    pulsePing = false,
-    end = false 
-  }) => (
-    <NavLink 
-      to={to} 
-      end={end}
-      className={({ isActive }) => 
-        `group relative flex items-center justify-between px-3 py-2 text-xs rounded-xl font-medium gap-2.5 transition-all duration-150 outline-none focus-visible:ring-2 focus-visible:ring-blue-500/20 ${
-          isActive 
-            ? 'bg-blue-50 text-blue-700 font-semibold shadow-2xs' 
-            : 'text-slate-600 hover:text-slate-900 bg-transparent hover:bg-slate-50'
-        }`
-      }
-    >
-      {({ isActive }) => (
-        <>
-          {/* Subtle Active Indicator Bar */}
-          {isActive && (
-            <span 
-              aria-hidden="true"
-              className="absolute left-0 top-1.5 bottom-1.5 w-1 rounded-r-full bg-blue-600 transition-all" 
-            />
-          )}
-
-          <div className="flex items-center gap-2.5 min-w-0 flex-1 pl-0.5">
-            <IconComponent 
-              className={`w-4 h-4 shrink-0 transition-colors duration-150 ${
-                isActive 
-                  ? 'text-blue-600' 
-                  : 'text-slate-400 group-hover:text-slate-600'
-              }`} 
-              strokeWidth={1.5} 
-            />
-            <span className="truncate leading-normal tracking-tight text-[13px]">{label}</span>
-          </div>
-
-          {badgeCount > 0 && (
-            <div className="relative shrink-0 flex items-center justify-center">
-              {/* Layer 1: Sonar Ping Aura for attention-grabbing when pulsePing is active */}
-              {pulsePing && (
-                <span 
-                  aria-hidden="true"
-                  className="absolute inset-0 rounded-full bg-amber-400 opacity-60 animate-ping pointer-events-none"
-                />
-              )}
-              {/* Layer 2: Interactive Core Badge */}
-              <span 
-                className={`relative text-[10px] font-mono font-bold px-1.5 py-0.2 rounded-full shrink-0 transition-all duration-200 group-hover:scale-110 ${
-                  badgeColor === 'red'
-                    ? 'bg-rose-500 text-white shadow-2xs'
-                    : badgeColor === 'amber'
-                      ? pulsePing
-                        ? 'bg-amber-500 text-white shadow-sm shadow-amber-500/50 ring-1 ring-amber-400/40 animate-pulse'
-                        : 'bg-amber-500 text-white shadow-2xs'
-                      : isActive 
-                        ? 'bg-blue-600 text-white' 
-                        : 'bg-blue-100 text-blue-700 border border-blue-200'
-                }`}
-              >
-                {badgeCount > 99 ? '99+' : badgeCount}
-              </span>
-            </div>
-          )}
-        </>
-      )}
-    </NavLink>
-  );
 
   return (
     <aside
