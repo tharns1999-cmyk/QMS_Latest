@@ -76,6 +76,8 @@ export const FloatingOverlay = ({
         left: isVisible ? `${coords.left}px` : '-9999px',
         zIndex,
         opacity: isVisible ? 1 : 0,
+        // a closed (keepMounted) menu must not stay in the Tab order or the accessibility tree
+        visibility: isVisible ? 'visible' : 'hidden',
         pointerEvents: 'auto'
       }}
       className={className}

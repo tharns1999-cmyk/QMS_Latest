@@ -48,6 +48,12 @@ describe('canReleaseWorkOrderHold and canCancelWorkOrder mirror the server rules
     expect(canReleaseWorkOrderHold(user({ approval_level: 4 }), held, thresholds)).toBe(false);
     expect(canReleaseWorkOrderHold(user({ id: 'qc5', approval_level: 5 }), { ...held, nc_status: 'RELEASED' }, thresholds)).toBe(false);
   });
+  it('follows the approver level from the Approval Matrix (nothing hardcoded to L5)', () => {
+    const l5 = user({ id: 'qc5', approval_level: 5 });
+    expect(canReleaseWorkOrderHold(l5, held, { required_approver_level: 6 })).toBe(false);
+    expect(canReleaseWorkOrderHold(user({ id: 'qc6', approval_level: 6 }), held, { required_approver_level: 6 })).toBe(true);
+    expect(canReleaseWorkOrderHold(l5, held, { required_approver_level: 4 })).toBe(true);
+  });
   it('cancels only as DCC or L4+ of the owning department, while open and without an open NC', () => {
     const open = { ...wo, status: 'OPEN', nc_status: null };
     expect(canCancelWorkOrder(user(), open)).toBe(true);

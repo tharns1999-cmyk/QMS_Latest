@@ -281,6 +281,26 @@ describe('VCC Phase 3.3: Calibration Monitoring & Compliance Dashboard Tests', (
     expect(itemForL5.can_release_hold).toBe(true);
   });
 
+  it('4b. ON_HOLD tracker follows the Approval Matrix approver level, and agrees with POST /release-hold', async () => {
+    const before = await env.DB.prepare("SELECT required_approver_level FROM approval_matrix WHERE doc_type = 'FM'").first();
+    await env.DB.prepare("UPDATE approval_matrix SET required_approver_level = 6 WHERE doc_type = 'FM'").run();
+    try {
+      const res = await call('GET', '/api/vcc/on-hold-tracker', 'QA-L5-M3');
+      const item = res.body.items.find((i) => i.asset_id === 'AST-M3-HLD1');
+      expect(item.can_release_hold).toBe(false);
+      expect(item.recommendation).toContain('L6+');
+
+      const release = await call('POST', '/api/vcc/work-orders/WO-M3-HLD1/release-hold', 'QA-L5-M3', {
+        release_reason: 'แก้ไขแล้ว', impact_assessment: 'ไม่กระทบ'
+      });
+      expect(release.status).toBe(403);
+    } finally {
+      await env.DB.prepare("UPDATE approval_matrix SET required_approver_level = ? WHERE doc_type = 'FM'").bind(before.required_approver_level).run();
+    }
+    const restored = await call('GET', '/api/vcc/on-hold-tracker', 'QA-L5-M3');
+    expect(restored.body.items.find((i) => i.asset_id === 'AST-M3-HLD1').can_release_hold).toBe(true);
+  });
+
   it('5. Compliance Report: filters by year, department, and verdict with full traceability', async () => {
     // Insert an amended pass work order
     await env.DB.prepare(`

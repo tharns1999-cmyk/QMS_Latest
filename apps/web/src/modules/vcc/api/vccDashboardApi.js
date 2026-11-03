@@ -10,7 +10,8 @@ import {
   appendLocalAudit
 } from './vccApi';
 import { getLocalPlans, getLocalPlanItems } from './vccPlanApi';
-import { getLocalWos } from './vccWorkOrderApi';
+import { getLocalWos, getLocalWoThresholds } from './vccWorkOrderApi';
+import { canReleaseWorkOrderHold } from '../utils/workOrderPermissions';
 
 const STORAGE_NOTIFICATION_SETTINGS_KEY = 'qms-vcc-local-notification-settings-v1';
 
@@ -461,7 +462,8 @@ export const fetchVccOnHoldTracker = async ({ department, reference_date } = {})
   const refDate = reference_date || new Date().toISOString().slice(0, 10);
   const allAssets = getLocalAssets();
   const allWos = getLocalWos();
-  const userLevel = Number(user?.approval_level ?? user?.approvalLevel ?? 0);
+  const thresholds = getLocalWoThresholds();
+  const approverLevel = thresholds.required_approver_level;
 
   const items = [];
 
@@ -470,7 +472,7 @@ export const fetchVccOnHoldTracker = async ({ department, reference_date } = {})
     const wo = allWos.find((w) => w.asset_id === a.id && (w.nc_status === 'OPEN' || w.result_status === 'FAIL'));
     if (a.status === 'ON_HOLD' || wo?.nc_status === 'OPEN') {
       const daysOnHold = wo?.performed_at ? Math.max(0, -diffDays(wo.performed_at, refDate)) : 0;
-      const canRelease = userLevel >= 5 || Boolean(user?.is_dcc);
+      const canRelease = canReleaseWorkOrderHold(user, { ...wo, department: a.department }, thresholds);
       items.push({
         asset_id: a.id,
         asset_code: a.asset_code,
@@ -493,8 +495,10 @@ export const fetchVccOnHoldTracker = async ({ department, reference_date } = {})
         days_on_hold: daysOnHold,
         can_release_hold: canRelease,
         recommendation: canRelease
-          ? 'ผู้มีอำนาจระดับ L5+ สามารถประเมินผลกระทบและกดปลดระงับการใช้งานได้'
-          : 'รอผู้มีอำนาจระดับ L5+ ของแผนกประเมินผลกระทบและอนุมัติปลดระงับ'
+          ? `ผู้มีอำนาจระดับ L${approverLevel}+ สามารถประเมินผลกระทบและกดปลดระงับการใช้งานได้`
+          : wo && wo.status !== 'CLOSED'
+            ? 'รอตรวจรับผลและปิดใบสั่งงานก่อน จึงจะปลดระงับได้'
+            : `รอผู้มีอำนาจระดับ L${approverLevel}+ ของแผนกประเมินผลกระทบและอนุมัติปลดระงับ`
       });
     }
   }

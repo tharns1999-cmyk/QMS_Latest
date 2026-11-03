@@ -127,10 +127,13 @@ describe('System-Wide Floating Overlay & Layout Stability Verification', () => {
     expect(menu.style.left).toBe('-9999px');
     expect(menu.style.top).toBe('-9999px');
     expect(menu.style.opacity).toBe('0');
+    // ...and out of the Tab order / accessibility tree, so Tab can never land on a button the user cannot see
+    expect(menu.style.visibility).toBe('hidden');
 
     // Open menu
     fireEvent.click(screen.getByTestId('trigger-btn'));
     expect(menu.style.opacity).toBe('1');
+    expect(menu.style.visibility).toBe('visible');
     expect(menu.style.left).not.toBe('-9999px');
   });
 
