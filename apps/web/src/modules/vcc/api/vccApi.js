@@ -314,17 +314,17 @@ export const appendLocalAudit = (action, details) => {
 
 export const isVccAuthorized = (user) => {
   if (!user) return false;
-  if (user.isDcc || user.isQmr) return true;
+  if (user.isDcc || user.isQmr || Number(user.approval_level || user.approvalLevel || 0) >= 6) return true;
   const userDepts = [user.department, ...(user.depts || [])]
     .filter(Boolean)
     .map((d) => String(d).toUpperCase());
-  return userDepts.some((d) => ['DC', 'QC', 'QA'].includes(d));
+  return userDepts.some((d) => ['DC', 'QC', 'QA', 'MGT', 'LB'].includes(d));
 };
 
 export const assertLocalVccAccess = () => {
   const user = useStore.getState().currentUser;
   if (!isVccAuthorized(user)) {
-    throw new Error('เฉพาะผู้ใช้งานแผนก DCC, QC และ QA เท่านั้นที่สามารถเข้าใช้งานส่วนนี้ได้');
+    throw new Error('เฉพาะผู้ใช้งานแผนก DCC, QC, QA, MGT และ LB เท่านั้นที่สามารถเข้าใช้งานส่วนนี้ได้');
   }
   return user;
 };

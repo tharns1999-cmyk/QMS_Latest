@@ -21,7 +21,9 @@ export const SESSION_EXPIRED_EVENT = 'qms:session-expired';
 
 const request = async (path, { method = 'GET', body, headers = {} } = {}) => {
   const token = getToken();
-  const res = await fetch(`${API_URL}${path}`, { method, body, headers: { ...headers, ...(token && { Authorization: `Bearer ${token}` }) } });
+  // fetch rejects with a bare TypeError("Failed to fetch") when the server is down or the network drops
+  const res = await fetch(`${API_URL}${path}`, { method, body, headers: { ...headers, ...(token && { Authorization: `Bearer ${token}` }) } })
+    .catch(() => { throw new Error('ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้ กรุณาตรวจสอบเครือข่ายหรือว่าเซิร์ฟเวอร์ API ทำงานอยู่ แล้วลองใหม่'); });
   if (res.status === 401 && token) {
     setToken(null);
     window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));

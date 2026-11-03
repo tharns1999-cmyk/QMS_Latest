@@ -129,7 +129,7 @@ export const acknowledgeVccNotification = async (id, note = '') => {
  */
 export const triggerVccNotificationSweep = async (nowDate = null) => {
   if (isApiMode) {
-    return await apiPost('/api/vcc/notifications/sweep', { nowDate });
+    return await apiPost('/api/vcc/notifications/sweep', { now_date: nowDate });
   }
 
   assertLocalVccAccess();

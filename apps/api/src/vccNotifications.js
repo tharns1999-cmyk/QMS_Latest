@@ -1,4 +1,4 @@
-import { requireVccAccess, requireDccOnly } from './vccAuth.js';
+import { requireVccAccess, requireDccOnly, canReadAllVccDepartments } from './vccAuth.js';
 import { isUserAuthorizedForPlanDept, getUserDepartments } from './vccPlans.js';
 import { DEFAULT_NOTIFICATION_SETTINGS } from './vccDashboard.js';
 
@@ -542,7 +542,7 @@ export const registerVccNotificationRoutes = (app, { requireAuth, audit }) => {
   app.get('/api/vcc/notifications', requireAuth, requireVccAccess, async (c) => {
     const db = c.env.DB;
     const user = c.get('user');
-    const hasGlobalAccess = Boolean(user.isDcc || user.isQmr || Number(user.approval_level || 0) >= 6);
+    const hasGlobalAccess = canReadAllVccDepartments(user);
     const userDepts = getUserDepartments(user);
 
     const requestedDept = c.req.query('department');
@@ -706,7 +706,7 @@ export const registerVccNotificationRoutes = (app, { requireAuth, audit }) => {
   app.get('/api/vcc/export/notifications-audit', requireAuth, requireVccAccess, async (c) => {
     const db = c.env.DB;
     const user = c.get('user');
-    const hasGlobalAccess = Boolean(user.isDcc || user.isQmr || Number(user.approval_level || 0) >= 6);
+    const hasGlobalAccess = canReadAllVccDepartments(user);
     const userDepts = getUserDepartments(user);
 
     const requestedDept = c.req.query('department');

@@ -403,7 +403,11 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
       }
       const { certificate_file: _cf, ...payload } = amendForm;
       const updated = await amendVccWorkOrder(amendWo.id, payload);
-      toast.success(`บันทึกการแก้ไขผลของใบสั่งงาน ${updated.wo_code} แล้ว (ฉบับแก้ไข)`);
+      toast.success(
+        updated?.request
+          ? 'ส่งคำขอแก้ไขผลแล้ว รอผู้อนุมัติที่ไม่ใช่ผู้ขอตรวจสอบและอนุมัติ'
+          : `บันทึกการแก้ไขผลของใบสั่งงาน ${updated.wo_code} แล้ว (ฉบับแก้ไข)`
+      );
       setAmendWo(null);
       if (selectedDrawerWo?.id === amendWo.id) {
         setSelectedDrawerWo(null);
@@ -561,7 +565,7 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
       {/* 2. Status Navigation - Minimal Underline Tabs */}
       <div className="border-b border-slate-200">
         <nav
-          className="flex items-center gap-2 sm:gap-3.5 xl:gap-6 overflow-x-auto scrollbar-none"
+          className="flex flex-wrap gap-x-4 gap-y-1 xl:flex-nowrap xl:items-center xl:gap-6 xl:overflow-x-auto xl:scrollbar-none"
           role="tablist"
           aria-label="สถานะใบสั่งงาน"
         >
@@ -708,6 +712,7 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
         onAmend={openAmendModal}
         onDownloadCert={handleDownloadCert}
         onViewDigitalRecord={(wo) => setDigitalRecordWo(wo)}
+        onAmendmentResolved={loadData}
       />
 
       {/* 6. Modals */}

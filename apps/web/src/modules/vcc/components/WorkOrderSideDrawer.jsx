@@ -19,6 +19,9 @@ import {
   Printer
 } from 'lucide-react';
 import { fetchVccWorkOrderDetail } from '../api/vccWorkOrderApi';
+import { WorkOrderAmendmentRequests } from './WorkOrderAmendmentRequests';
+import useStore from '../../../store/useStore';
+import { canReviewWorkOrder } from '../utils/workOrderPermissions';
 
 export const WorkOrderSideDrawer = ({
   workOrder,
@@ -31,10 +34,12 @@ export const WorkOrderSideDrawer = ({
   onReleaseHold,
   onAmend,
   onDownloadCert,
-  onViewDigitalRecord
+  onViewDigitalRecord,
+  onAmendmentResolved
 }) => {
   const [detail, setDetail] = useState(null);
   const [loading, setLoading] = useState(false);
+  const currentUser = useStore((s) => s.currentUser);
 
   useEffect(() => {
     if (!workOrder?.id) {
@@ -427,6 +432,10 @@ export const WorkOrderSideDrawer = ({
                     )}
                   </div>
                 )}
+
+                {currentWo.status === 'CLOSED' && (
+                  <WorkOrderAmendmentRequests workOrderId={currentWo.id} onResolved={onAmendmentResolved} />
+                )}
               </div>
             </div>
 
@@ -520,7 +529,11 @@ export const WorkOrderSideDrawer = ({
               </>
             )}
 
-            {currentWo.status === 'PENDING_REVIEW' && (
+            {currentWo.status === 'PENDING_REVIEW' && !canReviewWorkOrder(currentUser, currentWo, thresholds) && (
+              <span className="text-xs font-medium text-slate-500">รอผู้ตรวจรับ</span>
+            )}
+
+            {currentWo.status === 'PENDING_REVIEW' && canReviewWorkOrder(currentUser, currentWo, thresholds) && (
               <>
                 <button
                   type="button"

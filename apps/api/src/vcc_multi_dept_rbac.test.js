@@ -37,6 +37,9 @@ describe('VCC Multi-Department Access & Approval Workflow (RBAC & SoD)', () => {
       env.DB.prepare("INSERT OR IGNORE INTO departments (code, name_th, status) VALUES ('QC', 'ฝ่ายควบคุมคุณภาพ', 'ACTIVE')"),
       env.DB.prepare("INSERT OR IGNORE INTO departments (code, name_th, status) VALUES ('QA', 'ฝ่ายประกันคุณภาพ', 'ACTIVE')"),
       env.DB.prepare("INSERT OR IGNORE INTO departments (code, name_th, status) VALUES ('PD', 'ฝ่ายผลิต', 'ACTIVE')"),
+      env.DB.prepare("INSERT OR IGNORE INTO departments (code, name_th, status) VALUES ('MGT', 'ฝ่ายบริหาร', 'ACTIVE')"),
+      env.DB.prepare("INSERT OR IGNORE INTO departments (code, name_th, status) VALUES ('LB', 'ฝ่ายห้องปฏิบัติการ', 'ACTIVE')"),
+      env.DB.prepare("INSERT OR IGNORE INTO departments (code, name_th, status) VALUES ('WH', 'ฝ่ายคลังสินค้า', 'ACTIVE')"),
 
       // Test users:
       // DCC-USER: DC Head (L4, is_dcc = 1)
@@ -58,7 +61,10 @@ describe('VCC Multi-Department Access & Approval Workflow (RBAC & SoD)', () => {
         ['PD-QC-L5-REV',  'PD', ['PD', 'QC'], 5, 0, 'GENERAL_USER'],
         ['PD-ONLY-L5',   'PD', ['PD'], 5, 0, 'GENERAL_USER'],
         ['QC-HOD-L5',    'QC', ['QC'], 5, 0, 'GENERAL_USER'],
-        ['QA-L4-STAFF',  'QA', ['QA'], 4, 0, 'GENERAL_USER']
+        ['QA-L4-STAFF',  'QA', ['QA'], 4, 0, 'GENERAL_USER'],
+        ['MGT-STAFF',    'MGT', ['MGT'], 2, 0, 'GENERAL_USER'],
+        ['LB-STAFF',     'LB', ['LB'], 2, 0, 'GENERAL_USER'],
+        ['WH-USER',      'WH', ['WH'], 2, 0, 'GENERAL_USER']
       ].map(([id, dept, depts, level, dcc, role]) =>
         env.DB.prepare(
           `INSERT OR REPLACE INTO users (id, name, email, password_hash, role, approval_level, primary_department, departments, is_dcc, status)
@@ -67,7 +73,7 @@ describe('VCC Multi-Department Access & Approval Workflow (RBAC & SoD)', () => {
       )
     ]);
 
-    for (const id of ['DCC-USER', 'QC-STAFF', 'QC-LEAD', 'QA-MGR', 'PD-USER', 'QC-L4-CREATOR', 'PD-QC-L5-REV', 'PD-ONLY-L5', 'QC-HOD-L5', 'QA-L4-STAFF']) {
+    for (const id of ['DCC-USER', 'QC-STAFF', 'QC-LEAD', 'QA-MGR', 'PD-USER', 'QC-L4-CREATOR', 'PD-QC-L5-REV', 'PD-ONLY-L5', 'QC-HOD-L5', 'QA-L4-STAFF', 'MGT-STAFF', 'LB-STAFF', 'WH-USER']) {
       const res = await app.request(
         '/api/auth/login',
         {
@@ -90,15 +96,18 @@ describe('VCC Multi-Department Access & Approval Workflow (RBAC & SoD)', () => {
     await proxy?.dispose();
   });
 
-  it('1. Blocks unauthorized department (PD) from accessing VCC endpoints with HTTP 403', async () => {
+  it('1. Blocks unauthorized department (PD, WH) from accessing VCC endpoints with HTTP 403', async () => {
     expect((await call('GET', '/api/vcc/assets', 'PD-USER')).status).toBe(403);
     expect((await call('GET', '/api/vcc/plans', 'PD-USER')).status).toBe(403);
     expect((await call('GET', '/api/vcc/work-orders', 'PD-USER')).status).toBe(403);
     expect((await call('GET', '/api/vcc/dashboard', 'PD-USER')).status).toBe(403);
     expect((await call('GET', '/api/vcc/audit-log', 'PD-USER')).status).toBe(403);
+
+    // WH also blocked
+    expect((await call('GET', '/api/vcc/assets', 'WH-USER')).status).toBe(403);
   });
 
-  it('2. Grants Read access to DCC, QC, and QA users across VCC resources', async () => {
+  it('2. Grants Read access to DCC, QC, QA, MGT, and LB users across VCC resources', async () => {
     // QC Staff can read assets, plans, work orders, dashboard
     expect((await call('GET', '/api/vcc/assets', 'QC-STAFF')).status).toBe(200);
     expect((await call('GET', '/api/vcc/plans', 'QC-STAFF')).status).toBe(200);
@@ -112,6 +121,11 @@ describe('VCC Multi-Department Access & Approval Workflow (RBAC & SoD)', () => {
 
     // DCC can read
     expect((await call('GET', '/api/vcc/assets', 'DCC-USER')).status).toBe(200);
+
+    // MGT and LB can read
+    expect((await call('GET', '/api/vcc/assets', 'MGT-STAFF')).status).toBe(200);
+    expect((await call('GET', '/api/vcc/assets', 'LB-STAFF')).status).toBe(200);
+    expect((await call('GET', '/api/vcc/dashboard', 'LB-STAFF')).status).toBe(200);
   });
 
   it('3. Restricts master data and settings updates to DCC only (QC/QA get 403)', async () => {
@@ -341,7 +355,7 @@ describe('VCC Multi-Department Access & Approval Workflow (RBAC & SoD)', () => {
     // PD-ONLY-L5 attempts to review -> BLOCKED with 403 Forbidden!
     const pdOnlyReview = await call('POST', `/api/vcc/plans/${planId}/review`, 'PD-ONLY-L5', { comment: 'พยายามทบทวนข้ามแผนก' });
     expect(pdOnlyReview.status).toBe(403);
-    expect(pdOnlyReview.body.error).toMatch(/เฉพาะผู้ใช้งานแผนก DCC, QC และ QA เท่านั้น/);
+    expect(pdOnlyReview.body.error).toMatch(/เฉพาะผู้ใช้งานแผนก DCC, QC, QA, MGT และ LB เท่านั้น/);
 
     // QA-L4-STAFF (has VCC access, but belongs only to QA, not QC, and level < 6) attempts to review QC plan -> BLOCKED with 403!
     const qaCrossReview = await call('POST', `/api/vcc/plans/${planId}/review`, 'QA-L4-STAFF', { comment: 'พยายามทบทวนข้ามแผนก' });
@@ -379,5 +393,119 @@ describe('VCC Multi-Department Access & Approval Workflow (RBAC & SoD)', () => {
     // 8. Completed plan produces no pending review/approve tasks
     const postApproveTasks = await call('GET', '/api/vcc/tasks', 'QC-HOD-L5');
     expect(postApproveTasks.body.tasks.some(t => t.planId === planId)).toBe(false);
+  });
+
+  it('7. Work-order detail and its certificate/amendment records are refused to other departments, but open to the owning department, MGT, DCC and L6+', async () => {
+    const assetRes = await call('POST', '/api/vcc/assets', 'DCC-USER', {
+      asset_code: 'RBAC-DETAIL-01', name: 'เครื่องมือทดสอบสิทธิ์รายละเอียด', asset_type: 'เทอร์โมมิเตอร์', department: 'QC', is_group: 0
+    });
+    const woRes = await call('POST', '/api/vcc/work-orders', 'QC-STAFF', {
+      mode: 'ADHOC', asset_id: assetRes.body.asset.id, provider_name: 'ทวนสอบภายใน', due_date: '2026-04-30'
+    });
+    const woId = woRes.body.workOrder.id;
+    await call('POST', `/api/vcc/work-orders/${woId}/submit-result`, 'QC-STAFF', {
+      performed_at: '2026-04-10', result_status: 'PASS', certificate_no: 'CERT-DETAIL-001', acceptance_criteria: '± 0.5 °C'
+    });
+    await call('POST', `/api/vcc/work-orders/${woId}/approve`, 'QC-LEAD', { comment: 'ตรวจรับ' });
+    const req = await call('POST', `/api/vcc/work-orders/${woId}/amendment-requests`, 'QC-LEAD', { amendment_reason: 'แก้เลขใบรับรอง' });
+    expect(req.status).toBe(201);
+
+    const own = await call('GET', `/api/vcc/work-orders/${woId}`, 'QC-LEAD');
+    expect(own.status).toBe(200);
+    expect(own.body.amendmentRequests).toHaveLength(1);
+    expect(own.body.pendingAmendmentRequest).not.toBeNull();
+
+    // Another VCC department gets nothing: not the detail, and not the dedicated record endpoints either
+    for (const suffix of ['', '/certificates', '/amendments', '/amendment-requests']) {
+      expect((await call('GET', `/api/vcc/work-orders/${woId}${suffix}`, 'LB-STAFF')).status).toBe(403);
+    }
+
+    // L6+ managers, DCC and MGT see every department
+    expect((await call('GET', `/api/vcc/work-orders/${woId}`, 'QA-MGR')).body.amendmentRequests).toHaveLength(1);
+    expect((await call('GET', `/api/vcc/work-orders/${woId}`, 'DCC-USER')).body.amendmentRequests).toHaveLength(1);
+    expect((await call('GET', `/api/vcc/work-orders/${woId}`, 'MGT-STAFF')).body.amendmentRequests).toHaveLength(1);
+  });
+
+  it('8. Reads are limited to the user\'s own department; MGT, DCC and L6+ see every department, and MGT still cannot write elsewhere', async () => {
+    const mkAsset = async (code, dept) => {
+      const res = await call('POST', '/api/vcc/assets', 'DCC-USER', {
+        asset_code: code, name: `[ข้อมูลทดสอบ] ${code}`, asset_type: 'เทอร์โมมิเตอร์', department: dept, is_group: 0
+      });
+      expect(res.status).toBe(201);
+      return res.body.asset;
+    };
+    const mkWo = async (asUser, asset) => {
+      const res = await call('POST', '/api/vcc/work-orders', asUser, {
+        mode: 'ADHOC', asset_id: asset.id, provider_name: 'ทวนสอบภายใน', due_date: '2026-05-30'
+      });
+      expect(res.status).toBe(201);
+      return res.body.workOrder;
+    };
+    const mkPlan = async (asUser, dept) => {
+      const res = await call('POST', '/api/vcc/plans', asUser, { plan_year: 2031, department: dept, title: `แผน ${dept} 2031` });
+      expect(res.status).toBe(201);
+      return res.body.plan;
+    };
+
+    const qcAsset = await mkAsset('RBAC-SCOPE-QC', 'QC');
+    const lbAsset = await mkAsset('RBAC-SCOPE-LB', 'LB');
+    const qcWo = await mkWo('QC-STAFF', qcAsset);
+    const lbWo = await mkWo('LB-STAFF', lbAsset);
+    const qcPlan = await mkPlan('QC-STAFF', 'QC');
+    const lbPlan = await mkPlan('LB-STAFF', 'LB');
+
+    const assetCodes = async (asUser, query = '') =>
+      (await call('GET', `/api/vcc/assets${query}`, asUser)).body.assets.map((a) => a.asset_code);
+    const woCodes = async (asUser) =>
+      (await call('GET', '/api/vcc/work-orders?status=OPEN', asUser)).body.workOrders.map((w) => w.wo_code);
+    const planIds = async (asUser) =>
+      (await call('GET', '/api/vcc/plans?status=DRAFT&year=2031', asUser)).body.plans.map((p) => p.id);
+
+    // Own department only: lists never contain the other department's rows ...
+    expect(await assetCodes('QC-STAFF')).toContain('RBAC-SCOPE-QC');
+    expect(await assetCodes('QC-STAFF')).not.toContain('RBAC-SCOPE-LB');
+    // ... even when the filter asks for it directly
+    expect(await assetCodes('QC-STAFF', '?department=LB')).toEqual([]);
+    expect(await woCodes('QC-STAFF')).toContain(qcWo.wo_code);
+    expect(await woCodes('QC-STAFF')).not.toContain(lbWo.wo_code);
+    expect(await planIds('QC-STAFF')).toEqual([qcPlan.id]);
+
+    // ... and the detail pages of the other department are refused
+    expect((await call('GET', `/api/vcc/assets/${qcAsset.id}`, 'QC-STAFF')).status).toBe(200);
+    expect((await call('GET', `/api/vcc/assets/${lbAsset.id}`, 'QC-STAFF')).status).toBe(403);
+    expect((await call('GET', `/api/vcc/work-orders/${lbWo.id}`, 'QC-STAFF')).status).toBe(403);
+    expect((await call('GET', `/api/vcc/plans/${qcPlan.id}`, 'QC-STAFF')).status).toBe(200);
+    for (const suffix of ['', '/revisions', '/diff']) {
+      expect((await call('GET', `/api/vcc/plans/${lbPlan.id}${suffix}`, 'QC-STAFF')).status).toBe(403);
+    }
+    // a diff may not be used to read another department's plan as the comparison base
+    expect((await call('GET', `/api/vcc/plans/${qcPlan.id}/diff?compare_to=${lbPlan.id}`, 'QC-STAFF')).status).toBe(403);
+    expect((await call('GET', '/api/vcc/dashboard?department=LB', 'QC-STAFF')).status).toBe(403);
+    expect((await call('GET', '/api/vcc/notifications?department=LB', 'QC-STAFF')).status).toBe(403);
+
+    // The CSV export and the audit log are scoped the same way
+    const exportRes = await app.request('/api/vcc/export/work-orders', { headers: { Authorization: `Bearer ${tokens['QC-STAFF']}` } }, env);
+    const csv = await exportRes.text();
+    expect(csv).toContain(qcWo.wo_code);
+    expect(csv).not.toContain(lbWo.wo_code);
+    const actors = async (asUser) => (await call('GET', '/api/vcc/audit-log', asUser)).body.history.map((h) => h.actor_id);
+    expect(await actors('QC-STAFF')).not.toContain('LB-STAFF');
+    expect(await actors('LB-STAFF')).toContain('LB-STAFF');
+    expect(await actors('DCC-USER')).toEqual(expect.arrayContaining(['LB-STAFF', 'QC-STAFF']));
+
+    // MGT (even L2), DCC and L6+ read every department ...
+    for (const asUser of ['MGT-STAFF', 'DCC-USER', 'QA-MGR']) {
+      expect(await assetCodes(asUser)).toEqual(expect.arrayContaining(['RBAC-SCOPE-QC', 'RBAC-SCOPE-LB']));
+      expect(await woCodes(asUser)).toEqual(expect.arrayContaining([qcWo.wo_code, lbWo.wo_code]));
+      expect(await planIds(asUser)).toEqual(expect.arrayContaining([qcPlan.id, lbPlan.id]));
+      expect((await call('GET', `/api/vcc/work-orders/${lbWo.id}`, asUser)).status).toBe(200);
+      expect((await call('GET', `/api/vcc/plans/${lbPlan.id}`, asUser)).status).toBe(200);
+      expect((await call('GET', '/api/vcc/dashboard?department=LB', asUser)).status).toBe(200);
+    }
+    // ... but reading is not writing: MGT is still refused on another department's work order
+    const mgtWrite = await call('POST', `/api/vcc/work-orders/${lbWo.id}/submit-result`, 'MGT-STAFF', {
+      performed_at: '2026-05-10', result_status: 'PASS', certificate_no: 'CERT-MGT-001', acceptance_criteria: '± 0.5 °C'
+    });
+    expect(mgtWrite.status).toBe(403);
   });
 });

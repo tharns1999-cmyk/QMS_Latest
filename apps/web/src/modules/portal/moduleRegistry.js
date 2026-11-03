@@ -40,7 +40,7 @@ export const moduleRegistry = [
     status: MODULE_STATUS.ACTIVE,
     route: '/vcc',
     icon: Wrench,
-    allowedDepartments: ['DC', 'QC', 'QA'],
+    allowedDepartments: ['DC', 'QC', 'QA', 'MGT', 'LB'],
     order: 2
   }
 ];

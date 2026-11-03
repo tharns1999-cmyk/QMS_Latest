@@ -34,6 +34,7 @@ import {
   AssetDetailHistoryModal,
   AssetTypesModal
 } from '../components/AssetRegisterModals';
+import { filterReadableDepartments } from '../utils/departmentScope';
 import AnnualPlanMatrixSection from '../components/AnnualPlanMatrixSection';
 import WorkOrderSection from '../components/WorkOrderSection';
 import VccDashboardSection from '../components/VccDashboardSection';
@@ -52,18 +53,19 @@ const EMPTY_FORM = {
 };
 
 const AssetRegisterPageInner = () => {
-  const { departments: storeDepts, masterDepartments } = useStore();
+  const { departments: storeDepts, masterDepartments, currentUser } = useStore();
 
   const activeDepartments = useMemo(() => {
     const raw = masterDepartments?.length ? masterDepartments : storeDepts || [];
-    return raw
+    const all = raw
       .map((d) => ({
         code: d.code || d.deptCode || d.id,
         nameTh: d.name_th || d.nameTh || d.name || d.code,
         status: d.status || 'ACTIVE'
       }))
       .filter((d) => d.code && d.status === 'ACTIVE');
-  }, [masterDepartments, storeDepts]);
+    return filterReadableDepartments(currentUser, all, (d) => d.code);
+  }, [masterDepartments, storeDepts, currentUser]);
 
   const location = useLocation();
   const navigate = useNavigate();
@@ -419,8 +421,8 @@ const AssetRegisterPageInner = () => {
                 <span className="text-slate-800 font-semibold truncate">{pageMeta.breadcrumb}</span>
               </div>
 
-              <h1 className="text-xl md:text-2xl font-bold text-slate-900 tracking-tight">
-                <span className="truncate">{pageMeta.title}</span>
+              <h1 className="text-xl md:text-2xl font-bold text-slate-900 tracking-tight break-words">
+                {pageMeta.title}
               </h1>
 
               <p className="text-sm text-slate-500">
@@ -429,7 +431,8 @@ const AssetRegisterPageInner = () => {
             </div>
 
             {/* Contextual Actions (for ASSETS page) */}
-            {moduleView === 'ASSETS' && (
+            {/* Both actions are DCC-only on the API; other VCC users would just get a 403 */}
+            {moduleView === 'ASSETS' && currentUser?.isDcc && (
               <div className="flex flex-wrap items-center gap-2.5 shrink-0">
                 <button
                   type="button"

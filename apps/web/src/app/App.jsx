@@ -135,7 +135,7 @@ function App() {
               <ProtectedRoute
                 requireVcc
                 redirectPath="/portal"
-                deniedToastMessage="เฉพาะผู้ใช้งานแผนก DCC, QC และ QA เท่านั้นที่สามารถเข้าใช้งาน VCC ได้"
+                deniedToastMessage="เฉพาะผู้ใช้งานแผนก DCC, QC, QA, MGT และ LB เท่านั้นที่สามารถเข้าใช้งาน VCC ได้"
               >
                 {withSuspense(VccAssetRegisterPage)}
               </ProtectedRoute>
@@ -147,7 +147,7 @@ function App() {
               <ProtectedRoute
                 requireVcc
                 redirectPath="/portal"
-                deniedToastMessage="เฉพาะผู้ใช้งานแผนก DCC, QC และ QA เท่านั้นที่สามารถเข้าใช้งาน VCC ได้"
+                deniedToastMessage="เฉพาะผู้ใช้งานแผนก DCC, QC, QA, MGT และ LB เท่านั้นที่สามารถเข้าใช้งาน VCC ได้"
               >
                 {withSuspense(VccAssetRegisterPage)}
               </ProtectedRoute>
@@ -159,7 +159,7 @@ function App() {
               <ProtectedRoute
                 requireVcc
                 redirectPath="/portal"
-                deniedToastMessage="เฉพาะผู้ใช้งานแผนก DCC, QC และ QA เท่านั้นที่สามารถเข้าใช้งาน VCC ได้"
+                deniedToastMessage="เฉพาะผู้ใช้งานแผนก DCC, QC, QA, MGT และ LB เท่านั้นที่สามารถเข้าใช้งาน VCC ได้"
               >
                 {withSuspense(VccAssetRegisterPage)}
               </ProtectedRoute>
@@ -171,7 +171,7 @@ function App() {
               <ProtectedRoute
                 requireVcc
                 redirectPath="/portal"
-                deniedToastMessage="เฉพาะผู้ใช้งานแผนก DCC, QC และ QA เท่านั้นที่สามารถเข้าใช้งาน VCC ได้"
+                deniedToastMessage="เฉพาะผู้ใช้งานแผนก DCC, QC, QA, MGT และ LB เท่านั้นที่สามารถเข้าใช้งาน VCC ได้"
               >
                 {withSuspense(VccAssetRegisterPage)}
               </ProtectedRoute>
@@ -183,7 +183,7 @@ function App() {
               <ProtectedRoute
                 requireVcc
                 redirectPath="/portal"
-                deniedToastMessage="เฉพาะผู้ใช้งานแผนก DCC, QC และ QA เท่านั้นที่สามารถเข้าใช้งาน VCC ได้"
+                deniedToastMessage="เฉพาะผู้ใช้งานแผนก DCC, QC, QA, MGT และ LB เท่านั้นที่สามารถเข้าใช้งาน VCC ได้"
               >
                 {withSuspense(VccAssetRegisterPage)}
               </ProtectedRoute>
@@ -195,7 +195,7 @@ function App() {
               <ProtectedRoute
                 requireVcc
                 redirectPath="/portal"
-                deniedToastMessage="เฉพาะผู้ใช้งานแผนก DCC, QC และ QA เท่านั้นที่สามารถเข้าใช้งาน VCC ได้"
+                deniedToastMessage="เฉพาะผู้ใช้งานแผนก DCC, QC, QA, MGT และ LB เท่านั้นที่สามารถเข้าใช้งาน VCC ได้"
               >
                 {withSuspense(VccAssetRegisterPage)}
               </ProtectedRoute>

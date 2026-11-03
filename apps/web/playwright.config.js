@@ -6,6 +6,8 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   workers: process.env.CI ? 1 : undefined,
+  // A cold Vite dev server compiles each lazy page on first visit, which can exceed the default 5s wait
+  expect: { timeout: 15 * 1000 },
   reporter: [['html'], ['list']],
   use: {
     baseURL: 'http://localhost:5176',

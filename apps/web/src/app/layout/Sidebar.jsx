@@ -36,7 +36,8 @@ import { createPortal } from 'react-dom';
 import ChangePasswordForm from '../auth/ChangePasswordForm';
 import { syncVccTasks } from '../../modules/vcc/api/vccPlanApi';
 
-const Sidebar = () => {
+// isOpen/onClose drive the off-canvas drawer below lg (1024px); on desktop the sidebar is a static column and ignores them.
+const Sidebar = ({ isOpen = false, onClose = () => {} }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const { 
@@ -312,9 +313,20 @@ const Sidebar = () => {
   );
 
   return (
-    <aside className="w-64 sm:w-[264px] h-screen flex flex-col justify-between overflow-hidden bg-white border-r border-slate-200/80 select-none shrink-0 z-30 shadow-none">
+    <aside
+      id="app-sidebar"
+      className={`fixed inset-y-0 left-0 z-40 w-64 max-w-[85vw] sm:w-[264px] h-dvh lg:static lg:z-30 lg:h-screen lg:translate-x-0 lg:visible flex flex-col justify-between overflow-hidden bg-white border-r border-slate-200/80 select-none shrink-0 shadow-none transition-transform duration-200 ${isOpen ? 'translate-x-0 shadow-xl' : '-translate-x-full invisible'}`}
+    >
       {/* ================= TOP BRAND HEADER & NOTIFICATION WIDGET ================= */}
       <div className="p-3.5 pb-2 shrink-0 border-b border-slate-100 space-y-1">
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="ปิดเมนูด้านข้าง"
+          className="lg:hidden ml-auto flex items-center justify-center w-9 h-9 rounded-lg text-slate-500 hover:bg-slate-100 cursor-pointer"
+        >
+          <X size={18} />
+        </button>
         <div 
           onClick={() => navigate('/portal')}
           className="flex items-center gap-3 p-1.5 rounded-xl hover:bg-slate-50 transition-all duration-150 cursor-pointer group outline-none focus-visible:ring-2 focus-visible:ring-blue-300"

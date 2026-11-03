@@ -70,12 +70,19 @@ const triggerCsvDownload = (csvText, filename) => {
  */
 export default function VccDashboardSection({ onNavigateToWorkOrders }) {
   const [mainTab, setMainTab] = useState('OVERVIEW');
-  const [year, setYear] = useState(2026);
+  const currentYear = useMemo(() => new Date().getFullYear(), []);
+  const [year, setYear] = useState(currentYear);
   const [dashboard, setDashboard] = useState(null);
   const [alertTab, setAlertTab] = useState('OVERDUE');
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
   const [exportMsg, setExportMsg] = useState('');
+
+  const availableYears = useMemo(() => {
+    const list = [currentYear - 2, currentYear - 1, currentYear, currentYear + 1, currentYear + 2];
+    if (!list.includes(year)) list.push(year);
+    return Array.from(new Set(list)).sort((a, b) => a - b);
+  }, [currentYear, year]);
 
   // Settings Modal State
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -109,6 +116,7 @@ export default function VccDashboardSection({ onNavigateToWorkOrders }) {
         setGracePeriodDays(s.acknowledgement_grace_period_days ?? 3);
       }
     } catch (err) {
+      setDashboard(null);
       setErrorMsg(err?.message || 'ไม่สามารถโหลดข้อมูลสรุปภาพรวมได้');
     } finally {
       setLoading(false);
@@ -170,6 +178,8 @@ export default function VccDashboardSection({ onNavigateToWorkOrders }) {
     }
   };
 
+  // The dashboard failed to load (server down, error): show that, not KPI cards full of zeros
+  const loadFailed = !loading && !dashboard && Boolean(errorMsg);
   const eq = dashboard?.equipment_kpi || {};
   const wo = dashboard?.work_order_kpi || {};
   const certKpi = dashboard?.certificate_kpi || {};
@@ -194,7 +204,7 @@ export default function VccDashboardSection({ onNavigateToWorkOrders }) {
     <div className="space-y-6 text-slate-800" data-testid="vcc-dashboard-section">
       {/* 0. Top-Level Main Dashboard Navigation Tabs (Approach A) */}
       <div className="flex border-b border-slate-200">
-        <nav className="-mb-px flex space-x-6" aria-label="Dashboard Tabs">
+        <nav className="-mb-px w-full grid grid-cols-2 gap-x-3 sm:w-auto sm:flex sm:space-x-6" aria-label="Dashboard Tabs">
           {MAIN_TABS.map((tab) => {
             const Icon = tab.icon;
             const isActive = mainTab === tab.id;
@@ -204,13 +214,13 @@ export default function VccDashboardSection({ onNavigateToWorkOrders }) {
                 type="button"
                 onClick={() => setMainTab(tab.id)}
                 data-testid={`main-tab-${tab.id}`}
-                className={`py-3 px-1 inline-flex items-center gap-2 border-b-2 text-sm font-semibold transition-colors cursor-pointer ${
+                className={`py-3 px-1 inline-flex items-center justify-start gap-2 text-left leading-tight border-b-2 text-sm font-semibold transition-colors cursor-pointer ${
                   isActive
                     ? 'border-indigo-600 text-indigo-600'
                     : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
                 }`}
               >
-                <Icon size={16} />
+                <Icon size={16} className="shrink-0" />
                 <span>{tab.label}</span>
                 {tab.id === 'ON_HOLD' && (eq.on_hold_assets ?? 0) > 0 && (
                   <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-rose-100 text-rose-700">
@@ -252,8 +262,11 @@ export default function VccDashboardSection({ onNavigateToWorkOrders }) {
                   onChange={(e) => setYear(Number(e.target.value))}
                   className="h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-sm font-semibold text-slate-900 focus:outline-hidden focus:border-slate-400 cursor-pointer shadow-2xs"
                 >
-                  <option value={2026}>2026 (พ.ศ. 2569)</option>
-                  <option value={2027}>2027 (พ.ศ. 2570)</option>
+                  {availableYears.map((y) => (
+                    <option key={y} value={y}>
+                      {y} (พ.ศ. {y + 543})
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -305,7 +318,7 @@ export default function VccDashboardSection({ onNavigateToWorkOrders }) {
             </div>
           </div>
 
-          {errorMsg && (
+          {errorMsg && !loadFailed && (
             <div role="alert" className="rounded-xl bg-rose-50 border border-rose-200 px-4 py-3 text-sm font-medium text-rose-700">
               {errorMsg}
             </div>
@@ -317,6 +330,25 @@ export default function VccDashboardSection({ onNavigateToWorkOrders }) {
             </div>
           )}
 
+          {loadFailed ? (
+            <div
+              role="alert"
+              data-testid="dashboard-load-failed"
+              className="rounded-2xl bg-rose-50 border border-rose-200 px-6 py-10 text-center space-y-3"
+            >
+              <p className="text-base font-bold text-rose-800">โหลดข้อมูลภาพรวมไม่สำเร็จ</p>
+              <p className="text-sm text-rose-700">{errorMsg}</p>
+              <p className="text-xs text-rose-600">ตัวเลขบนหน้านี้ยังไม่ใช่ข้อมูลจริง กรุณาลองใหม่อีกครั้ง</p>
+              <button
+                type="button"
+                onClick={loadData}
+                className="h-9 px-4 rounded-xl bg-rose-600 text-white text-sm font-semibold hover:bg-rose-700 transition-colors cursor-pointer"
+              >
+                ลองใหม่อีกครั้ง
+              </button>
+            </div>
+          ) : (
+          <>
           {/* 2. Executive Metrics Strip (with Certificate & Overdue Invariance KPI) */}
           <VccMetricsStrip
             eq={eq}
@@ -442,6 +474,9 @@ export default function VccDashboardSection({ onNavigateToWorkOrders }) {
               departmentBreakdown={dashboard?.department_breakdown || []}
             />
           </div>
+
+          </>
+          )}
 
           {/* 5. Notification Settings Modal */}
           <VccNotificationSettingsModal

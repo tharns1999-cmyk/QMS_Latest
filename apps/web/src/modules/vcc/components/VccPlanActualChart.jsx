@@ -8,7 +8,7 @@ const MONTH_LABELS = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ
  * 12-Month Comparative Progress Visualization (Plan vs Actual Closed)
  * Eliminates horizontal scrollbar on Desktop screens while providing high data density.
  */
-export default function VccPlanActualChart({ monthlyComparison = [], year = 2026 }) {
+export default function VccPlanActualChart({ monthlyComparison = [], year = new Date().getFullYear() }) {
   const [viewMode, setViewMode] = useState('chart'); // 'chart' | 'table'
 
   const { totalPlanned, totalActual, maxVal, completionRate } = useMemo(() => {
