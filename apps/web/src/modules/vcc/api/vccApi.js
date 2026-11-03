@@ -741,12 +741,12 @@ export const reactivateVccAsset = async (id, reason) => {
   return enrichLocalAsset(updated, next, getDepartmentMap());
 };
 
-// What retiring / reactivating touches: open work orders block a retire; plan items and closed work orders are only shown.
+// What retiring / reactivating touches: work being performed or reviewed blocks a department head's retire; the rest is only shown.
 export const fetchVccAssetImpact = async (id) => {
   if (isApiMode) {
     const { impact } = await apiGet(`/api/vcc/assets/${encodeURIComponent(id)}/impact`);
     return impact;
   }
   assertLocalVccAccess();
-  return { open_work_orders: 0, plan_items: 0, closed_work_orders: 0 };
+  return { open_work_orders: 0, in_flight_work_orders: 0, plan_items: 0, closed_work_orders: 0 };
 };

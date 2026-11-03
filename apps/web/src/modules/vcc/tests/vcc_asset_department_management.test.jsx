@@ -4,6 +4,7 @@ import { render, screen, fireEvent, waitFor, within } from '@testing-library/rea
 import { MemoryRouter } from 'react-router-dom';
 import useStore from '../../../store/useStore';
 import AssetRegisterPage from '../pages/AssetRegisterPage';
+import { AssetStatusModal } from '../components/AssetRegisterModals';
 import { resetVccLocalStore, createVccAsset, updateVccAsset, retireVccAsset, reactivateVccAsset } from '../api/vccApi';
 import { canManageVccAsset, manageableVccDepartments } from '../utils/departmentScope';
 
@@ -126,5 +127,29 @@ describe('VCC asset register (demo mode): the same rule is enforced by the data 
     await expect(createVccAsset({ asset_code: 'QC-T7', name: 'x', asset_type: 'เครื่องชั่ง', department: 'QC' })).rejects.toThrow(/แผนกตนเอง/);
     useStore.setState({ currentUser: qc6 });
     await expect(updateVccAsset(lb.id, { name: 'senior' })).rejects.toThrow(/แผนกตนเอง/);
+  });
+});
+
+describe('retire dialog: impact', () => {
+  const asset = { id: 'a1', asset_code: 'QC-1', name: 'x', department: 'QC', asset_type: 't' };
+  const renderModal = (statusImpact, isDcc) => render(
+    <AssetStatusModal
+      statusModal={{ mode: 'RETIRE', asset }} setStatusModal={() => {}} statusReason="เหตุผล" setStatusReason={() => {}}
+      statusError="" statusImpact={statusImpact} savingStatus={false} handleConfirmStatusChange={() => {}} isDcc={isDcc}
+    />
+  );
+  const impact = { open_work_orders: 2, in_flight_work_orders: 1, plan_items: 1, closed_work_orders: 3 };
+
+  it('in-flight work blocks a department head but only warns DCC; scheduled-only work does not block', () => {
+    const { unmount } = renderModal(impact, false);
+    expect(screen.getByRole('button', { name: 'ยืนยันการปลดออก' })).toBeDisabled();
+    expect(screen.getByTestId('asset-impact')).toHaveTextContent(/ติดต่อ DCC/);
+    unmount();
+    const second = renderModal(impact, true);
+    expect(screen.getByRole('button', { name: 'ยืนยันการปลดออก' })).not.toBeDisabled();
+    expect(screen.getByTestId('asset-impact')).toHaveTextContent(/ตรวจสอบก่อนยืนยัน/);
+    second.unmount();
+    renderModal({ ...impact, in_flight_work_orders: 0 }, false);
+    expect(screen.getByRole('button', { name: 'ยืนยันการปลดออก' })).not.toBeDisabled();
   });
 });

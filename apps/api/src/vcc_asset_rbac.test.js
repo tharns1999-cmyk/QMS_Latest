@@ -174,26 +174,46 @@ describe('VCC asset register — department-based management (RBAC)', () => {
     expect((await call('PUT', '/api/vcc/asset-types', 'AR-DCC', { assetTypes: [TYPE] })).status).toBe(200);
   });
 
-  it('retire is refused while the asset has an open work order; impact is reported; closed history is untouched', async () => {
+  it('retire: scheduled work orders are reported but do not block; in-flight ones block non-DCC; DCC keeps the old behaviour', async () => {
     const created = await call('POST', '/api/vcc/assets', 'AR-QC4', newAsset('QC', 'WO1'));
     const id = created.body.asset.id;
-    await env.DB.prepare(
+    const insertWo = (suffix, status) => env.DB.prepare(
       `INSERT INTO vcc_work_orders (id, wo_code, asset_id, provider_name, due_date, original_due_date, status)
-       VALUES (?, ?, ?, 'ผู้ให้บริการ', '2099-01-31', '2099-01-31', 'OPEN')`
-    ).bind(`rb-wo-${RUN}`, `RB-${RUN}-WO`, id).run();
+       VALUES (?, ?, ?, 'ผู้ให้บริการ', '2099-01-31', '2099-01-31', ?)`
+    ).bind(`rb-wo-${RUN}-${suffix}`, `RB-${RUN}-WO${suffix}`, id, status).run();
 
+    await insertWo('S', 'SCHEDULED');
+    await insertWo('P', 'IN_PROGRESS');
     const impact = await call('GET', `/api/vcc/assets/${id}/impact`, 'AR-QC4');
-    expect(impact.body.impact.open_work_orders).toBe(1);
+    expect(impact.body.impact).toMatchObject({ open_work_orders: 2, in_flight_work_orders: 1, closed_work_orders: 0 });
 
     const blocked = await call('POST', `/api/vcc/assets/${id}/retire`, 'AR-QC4', { reason: 'x' });
     expect(blocked.status).toBe(409);
     expect(blocked.body.error).toContain('ใบสั่งงาน');
     expect((await call('GET', `/api/vcc/assets/${id}`, 'AR-QC4')).body.asset.status).toBe('ACTIVE');
 
-    await env.DB.prepare("UPDATE vcc_work_orders SET status = 'CANCELLED' WHERE id = ?").bind(`rb-wo-${RUN}`).run();
+    await env.DB.prepare("UPDATE vcc_work_orders SET status = 'CANCELLED' WHERE id = ?").bind(`rb-wo-${RUN}-P`).run();
+    // Only the scheduled one is left: reported, not blocking.
     expect((await call('POST', `/api/vcc/assets/${id}/retire`, 'AR-QC4', { reason: 'x' })).status).toBe(200);
     // The other department cannot even read the impact of an asset it cannot see.
     expect((await call('GET', `/api/vcc/assets/${id}/impact`, 'AR-LB4')).status).toBe(403);
+
+    // DCC is never blocked by in-flight work (unchanged behaviour).
+    const second = (await call('POST', '/api/vcc/assets', 'AR-DCC', newAsset('QC', 'WO2'))).body.asset.id;
+    await env.DB.prepare(
+      `INSERT INTO vcc_work_orders (id, wo_code, asset_id, provider_name, due_date, original_due_date, status)
+       VALUES (?, ?, ?, 'ผู้ให้บริการ', '2099-01-31', '2099-01-31', 'PENDING_REVIEW')`
+    ).bind(`rb-wo-${RUN}-D`, `RB-${RUN}-WOD`, second).run();
+    expect((await call('POST', `/api/vcc/assets/${second}/retire`, 'AR-DCC', { reason: 'x' })).status).toBe(200);
+  });
+
+  it('paused assets (ON_HOLD / UNDER_REPAIR) cannot be edited or retired by a department head; DCC can', async () => {
+    const id = (await call('POST', '/api/vcc/assets', 'AR-QC4', newAsset('QC', 'HOLD'))).body.asset.id;
+    await env.DB.prepare("UPDATE vcc_assets SET status = 'ON_HOLD' WHERE id = ?").bind(id).run();
+    expect((await call('PUT', `/api/vcc/assets/${id}`, 'AR-QC4', { name: 'x' })).status).toBe(409);
+    expect((await call('POST', `/api/vcc/assets/${id}/retire`, 'AR-QC4', { reason: 'x' })).status).toBe(409);
+    expect((await call('PUT', `/api/vcc/assets/${id}`, 'AR-DCC', { name: 'dcc edit' })).status).toBe(200);
+    expect((await call('GET', `/api/vcc/assets/${id}`, 'AR-QC4')).body.asset.status).toBe('ON_HOLD');
   });
 
   it('concurrent creates with the same code: exactly one wins', async () => {

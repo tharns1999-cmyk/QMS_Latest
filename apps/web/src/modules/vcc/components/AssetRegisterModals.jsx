@@ -274,10 +274,13 @@ export const AssetStatusModal = ({
   statusError,
   statusImpact,
   savingStatus,
-  handleConfirmStatusChange
+  handleConfirmStatusChange,
+  isDcc = false
 }) => {
   if (!statusModal) return null;
-  const blockedByWorkOrders = statusModal.mode === 'RETIRE' && Number(statusImpact?.open_work_orders) > 0;
+  const inFlight = Number(statusImpact?.in_flight_work_orders) || 0;
+  // Work being performed or reviewed blocks a department head's retire (the server refuses it); DCC is only warned.
+  const blockedByWorkOrders = statusModal.mode === 'RETIRE' && inFlight > 0 && !isDcc;
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
@@ -327,11 +330,14 @@ export const AssetStatusModal = ({
             >
               <div className="font-bold mb-1">ผลกระทบที่ตรวจพบ</div>
               <ul className="list-disc pl-5 space-y-0.5">
-                <li>ใบสั่งงานสอบเทียบที่ยังไม่ปิด: {statusImpact.open_work_orders}</li>
+                <li>ใบสั่งงานสอบเทียบที่ยังไม่ปิด: {statusImpact.open_work_orders} (กำลังดำเนินการ/รอตรวจ {inFlight})</li>
                 <li>อยู่ในแผนประจำปีฉบับปัจจุบัน: {statusImpact.plan_items} รายการ</li>
                 <li>ใบสั่งงานที่ปิดแล้ว (ประวัติ ไม่ถูกแก้ไข): {statusImpact.closed_work_orders}</li>
               </ul>
-              {blockedByWorkOrders && <p className="mt-1.5 font-semibold">ต้องปิดหรือยกเลิกใบสั่งงานที่ค้างอยู่ก่อน จึงจะปลดออกได้</p>}
+              {blockedByWorkOrders && <p className="mt-1.5 font-semibold">มีใบสั่งงานที่กำลังดำเนินการหรือรอตรวจ ต้องให้ปิดงานก่อน หรือติดต่อ DCC จึงจะปลดออกได้</p>}
+              {!blockedByWorkOrders && statusModal.mode === 'RETIRE' && inFlight > 0 && (
+                <p className="mt-1.5 font-semibold text-amber-800">มีใบสั่งงานที่กำลังดำเนินการหรือรอตรวจ — ตรวจสอบก่อนยืนยัน</p>
+              )}
             </div>
           )}
 

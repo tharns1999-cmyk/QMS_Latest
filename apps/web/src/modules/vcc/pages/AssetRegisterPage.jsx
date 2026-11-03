@@ -797,6 +797,7 @@ const AssetRegisterPageInner = () => {
         setStatusReason={setStatusReason}
         statusError={statusError}
         statusImpact={statusImpact}
+        isDcc={isDccUser}
         savingStatus={savingStatus}
         handleConfirmStatusChange={handleConfirmStatusChange}
       />

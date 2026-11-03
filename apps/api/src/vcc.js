@@ -12,6 +12,7 @@ const DCC_ONLY = { error: 'เฉพาะ DCC เท่านั้นที่
 const NOW = `strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`;
 // Statuses the register can be listed by. ON_HOLD / UNDER_REPAIR are read-only here (set by the work-order flow), but must be listable so such assets are not invisible.
 const PHASE1_STATUSES = ['ACTIVE', 'ON_HOLD', 'UNDER_REPAIR', 'RETIRED'];
+const PAUSED_DCC_ONLY = { error: 'เครื่องมือนี้ถูกระงับใช้/อยู่ระหว่างซ่อม ให้ปลดระงับผ่านหน้าใบสั่งงาน หรือให้ DCC ดำเนินการ' };
 const ASSET_CODE_RE = /^[A-Z0-9._/-]{1,50}$/;
 
 const clean = (v, max) => (typeof v === 'string' && v.trim() && v.trim().length <= max ? v.trim() : null);
@@ -43,15 +44,19 @@ const ASSET_SELECT = `
   LEFT JOIN vcc_assets p ON p.id = a.parent_id
 `;
 
-// What retiring / reactivating an asset touches. Calibration history is never changed; only open work orders block a retire.
+// What retiring / reactivating an asset touches. Calibration history is never changed. Scheduled / not-yet-started work orders are only
+// reported (as before, retiring did not touch them); work that is being performed or reviewed blocks a non-DCC retire so it is not left hanging.
+const IN_FLIGHT_WO_STATUSES = ['IN_PROGRESS', 'PENDING_REVIEW'];
+const PAUSED_STATUSES = ['ON_HOLD', 'UNDER_REPAIR'];
 const loadAssetImpact = async (db, id) => {
-  const [wo, plan, done] = await Promise.all([
+  const [wo, flying, plan, done] = await Promise.all([
     db.prepare("SELECT COUNT(*) AS n FROM vcc_work_orders WHERE asset_id = ? AND status NOT IN ('CLOSED', 'CANCELLED')").bind(id).first(),
+    db.prepare(`SELECT COUNT(*) AS n FROM vcc_work_orders WHERE asset_id = ? AND status IN (${IN_FLIGHT_WO_STATUSES.map((x) => `'${x}'`).join(',')})`).bind(id).first(),
     db.prepare(`SELECT COUNT(*) AS n FROM vcc_annual_plan_items i JOIN vcc_annual_plans p ON p.id = i.plan_id
       WHERE i.asset_id = ? AND p.is_current = 1 AND p.status IN ('DRAFT', 'PENDING_REVIEW', 'PENDING_APPROVAL', 'APPROVED')`).bind(id).first(),
     db.prepare("SELECT COUNT(*) AS n FROM vcc_work_orders WHERE asset_id = ? AND status = 'CLOSED'").bind(id).first()
   ]);
-  return { open_work_orders: wo.n, plan_items: plan.n, closed_work_orders: done.n };
+  return { open_work_orders: wo.n, in_flight_work_orders: flying.n, plan_items: plan.n, closed_work_orders: done.n };
 };
 
 const fetchAsset = (db, id) =>
@@ -261,6 +266,7 @@ export const registerVccRoutes = (app, { requireAuth, audit }) => {
     const before = await db.prepare('SELECT * FROM vcc_assets WHERE id = ?').bind(id).first();
     if (!before) return c.json({ error: 'ไม่พบเครื่องมือ' }, 404);
     if (!canManageVccAsset(user, before.department)) return c.json(VCC_ASSET_MANAGE_FORBIDDEN, 403);
+    if (!user.isDcc && PAUSED_STATUSES.includes(before.status)) return c.json(PAUSED_DCC_ONLY, 409);
     if (before.status === 'RETIRED') {
       return c.json({ error: 'เครื่องมือที่ปลดออกแล้วไม่สามารถแก้ไขได้ กรุณานำกลับมาใช้งานก่อน' }, 409);
     }
@@ -388,10 +394,12 @@ export const registerVccRoutes = (app, { requireAuth, audit }) => {
     if (!canManageVccAsset(user, before.department)) return c.json(VCC_ASSET_MANAGE_FORBIDDEN, 403);
     if (before.status === 'RETIRED') return c.json({ error: 'เครื่องมือนี้ถูกปลดออกไปแล้ว' }, 409);
 
+    // Paused assets leave through the work-order / non-conformance release flow; only DCC may still retire them directly (as before).
+    if (!user.isDcc && PAUSED_STATUSES.includes(before.status)) return c.json(PAUSED_DCC_ONLY, 409);
     const impact = await loadAssetImpact(db, id);
-    if (impact.open_work_orders > 0) {
+    if (!user.isDcc && impact.in_flight_work_orders > 0) {
       return c.json({
-        error: `ไม่สามารถปลดออกได้ เนื่องจากยังมีใบสั่งงานสอบเทียบที่ยังไม่ปิด ${impact.open_work_orders} รายการ กรุณาปิดหรือยกเลิกใบสั่งงานก่อน`,
+        error: `ไม่สามารถปลดออกได้ เนื่องจากมีใบสั่งงานที่กำลังดำเนินการหรือรอตรวจ ${impact.in_flight_work_orders} รายการ กรุณาให้ปิดงานก่อน หรือติดต่อ DCC`,
         impact
       }, 409);
     }
