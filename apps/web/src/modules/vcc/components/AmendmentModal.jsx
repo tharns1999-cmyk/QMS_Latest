@@ -123,7 +123,6 @@ export const AmendmentModal = ({
                   >
                     <option value="PASS">ผ่านเกณฑ์ (PASS)</option>
                     <option value="FAIL">ไม่ผ่านเกณฑ์ (FAIL — ต้องใช้สิทธิ์ L5+)</option>
-                    <option value="INCONCLUSIVE">รอผลตรวจซ้ำ (INCONCLUSIVE)</option>
                   </select>
                 </div>
 

@@ -372,7 +372,7 @@ export const runVccNotificationSweep = async (db, options = {}) => {
     SELECT a.id AS asset_id, a.asset_code, a.name AS asset_name, a.department, a.status AS asset_status, a.hold_started_at,
            wo.id AS wo_id, wo.wo_code, wo.nc_status, wo.performed_at, wo.updated_at
     FROM vcc_assets a
-    LEFT JOIN vcc_work_orders wo ON wo.asset_id = a.id AND wo.result_status = 'FAIL' AND wo.nc_status != 'RELEASED'
+    LEFT JOIN vcc_work_orders wo ON wo.asset_id = a.id AND wo.nc_status = 'OPEN'
     WHERE a.status = 'ON_HOLD' OR (wo.id IS NOT NULL AND wo.nc_status = 'OPEN')
   `).all();
 
@@ -453,7 +453,7 @@ export const runVccNotificationSweep = async (db, options = {}) => {
         WHERE a.status = 'ACTIVE'
           AND NOT EXISTS (
             SELECT 1 FROM vcc_work_orders w
-            WHERE w.asset_id = a.id AND w.result_status = 'FAIL' AND w.nc_status = 'OPEN'
+            WHERE w.asset_id = a.id AND w.nc_status = 'OPEN'
           )
       )
   `).run();

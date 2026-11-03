@@ -224,18 +224,29 @@ describe('VCC Phase 3.2: Calibration Execution, Digital Certificates & Controlle
     // 4. Release Hold authorization checks
     // Non-L5 (L4) cannot release hold
     const unauthorizedRelease = await call('POST', `/api/vcc/work-orders/${woId}/release-hold`, 'M1-REV4', {
+      release_reason: 'แก้ไขสาเหตุและสอบเทียบซ้ำผ่านแล้ว',
       impact_assessment: 'ทดสอบการปลดระงับโดย L4'
     });
     expect(unauthorizedRelease.status).toBe(403);
 
     // Missing impact assessment rejected
     const missingAssessment = await call('POST', `/api/vcc/work-orders/${woId}/release-hold`, 'M1-APP5', {
+      release_reason: 'แก้ไขสาเหตุและสอบเทียบซ้ำผ่านแล้ว',
       impact_assessment: ''
     });
     expect(missingAssessment.status).toBe(400);
 
+    // The FAIL result has not been reviewed yet, so even an L5 cannot release the hold
+    const unreviewedRelease = await call('POST', `/api/vcc/work-orders/${woId}/release-hold`, 'M1-APP5', {
+      release_reason: 'แก้ไขสาเหตุและสอบเทียบซ้ำผ่านแล้ว',
+      impact_assessment: 'ประเมินแล้ว'
+    });
+    expect(unreviewedRelease.status).toBe(409);
+    expect((await call('POST', `/api/vcc/work-orders/${woId}/approve`, 'M1-REV4', { comment: 'รับทราบผลไม่ผ่าน' })).status).toBe(200);
+
     // L5 authorized release with mandatory impact assessment
     const validRelease = await call('POST', `/api/vcc/work-orders/${woId}/release-hold`, 'M1-APP5', {
+      release_reason: 'แก้ไขสาเหตุและสอบเทียบซ้ำผ่านแล้ว',
       impact_assessment: 'ตรวจสอบย้อนหลังผลิตภัณฑ์รุ่น Batch 2026-01 แล้ว พบว่าไม่มีผลกระทบต่อความปลอดภัยอาหาร ทำการปรับแต่ง Temperature Controller และสอบเทียบซ้ำผ่านเรียบร้อย'
     });
     expect(validRelease.status).toBe(200);
@@ -524,6 +535,7 @@ describe('VCC Phase 3.2: Calibration Execution, Digital Certificates & Controlle
 
     // 11. Hold Release Workflow: To release ON_HOLD, authorized L5+ must submit impact assessment
     const releaseRes = await call('POST', `/api/vcc/work-orders/${woId}/release-hold`, 'M1-APP5', {
+      release_reason: 'แก้ไขสาเหตุและสอบเทียบซ้ำผ่านแล้ว',
       impact_assessment: 'ประเมินผลกระทบย้อนหลังต่อผลิตภัณฑ์ล็อตที่ใช้เครื่องมือนี้แล้ว ไม่พบความเสี่ยงเนื่องจากค่าเบี่ยงเบนอยู่ในขอบเขตปลอดภัย'
     });
     expect(releaseRes.status).toBe(200);

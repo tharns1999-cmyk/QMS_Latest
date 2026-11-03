@@ -16,12 +16,13 @@ import {
   Download,
   ExternalLink,
   Layers,
-  Printer
+  Printer,
+  Ban
 } from 'lucide-react';
 import { fetchVccWorkOrderDetail } from '../api/vccWorkOrderApi';
 import { WorkOrderAmendmentRequests } from './WorkOrderAmendmentRequests';
 import useStore from '../../../store/useStore';
-import { canReviewWorkOrder } from '../utils/workOrderPermissions';
+import { canReviewWorkOrder, canReleaseWorkOrderHold, canCancelWorkOrder } from '../utils/workOrderPermissions';
 
 export const WorkOrderSideDrawer = ({
   workOrder,
@@ -32,6 +33,7 @@ export const WorkOrderSideDrawer = ({
   onApprove,
   onReject,
   onReleaseHold,
+  onCancel,
   onAmend,
   onDownloadCert,
   onViewDigitalRecord,
@@ -535,17 +537,19 @@ export const WorkOrderSideDrawer = ({
 
             {currentWo.status === 'PENDING_REVIEW' && canReviewWorkOrder(currentUser, currentWo, thresholds) && (
               <>
-                <button
-                  type="button"
-                  onClick={() => {
-                    onClose();
-                    onApprove(currentWo);
-                  }}
-                  className="h-9 inline-flex items-center gap-1.5 px-3.5 rounded-xl bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 transition-colors cursor-pointer shadow-2xs"
-                >
-                  <CheckCircle2 size={14} />
-                  <span>ตรวจรับปิดงาน</span>
-                </button>
+                {currentWo.result_status !== 'INCONCLUSIVE' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      onApprove(currentWo);
+                    }}
+                    className="h-9 inline-flex items-center gap-1.5 px-3.5 rounded-xl bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 transition-colors cursor-pointer shadow-2xs"
+                  >
+                    <CheckCircle2 size={14} />
+                    <span>ตรวจรับปิดงาน</span>
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => {
@@ -555,12 +559,26 @@ export const WorkOrderSideDrawer = ({
                   className="h-9 inline-flex items-center gap-1.5 px-3.5 rounded-xl bg-rose-600 text-white text-xs font-semibold hover:bg-rose-700 transition-colors cursor-pointer shadow-2xs"
                 >
                   <XCircle size={14} />
-                  <span>ส่งกลับแก้ไข</span>
+                  <span>{currentWo.result_status === 'INCONCLUSIVE' ? 'ส่งกลับตรวจซ้ำ' : 'ส่งกลับแก้ไข'}</span>
                 </button>
               </>
             )}
 
-            {currentWo.nc_status === 'OPEN' && (
+            {canCancelWorkOrder(currentUser, currentWo) && onCancel && (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onCancel(currentWo);
+                }}
+                className="h-9 inline-flex items-center gap-1.5 px-3.5 rounded-xl border border-rose-200 text-rose-700 text-xs font-semibold hover:bg-rose-50 transition-colors cursor-pointer"
+              >
+                <Ban size={14} />
+                <span>ยกเลิกใบสั่งงาน</span>
+              </button>
+            )}
+
+            {canReleaseWorkOrderHold(currentUser, currentWo, thresholds) && (
               <button
                 type="button"
                 onClick={() => {

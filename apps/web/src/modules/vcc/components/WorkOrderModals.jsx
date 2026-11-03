@@ -225,8 +225,9 @@ export const WorkOrderActionModal = ({
   onConfirm
 }) => {
   if (!modal) return null;
-  const { mode, workOrder } = modal; // RESCHEDULE | APPROVE | REJECT | RELEASE_HOLD
-  const requiresText = mode === 'RESCHEDULE' || mode === 'REJECT' || mode === 'RELEASE_HOLD';
+  const { mode, workOrder } = modal; // RESCHEDULE | APPROVE | REJECT | RELEASE_HOLD | CANCEL
+  const requiresText = mode !== 'APPROVE';
+  const missingReason = mode === 'RELEASE_HOLD' && !form.reason?.trim();
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
@@ -237,6 +238,7 @@ export const WorkOrderActionModal = ({
             {mode === 'APPROVE' && `ตรวจรับผลและอนุมัติปิดใบงาน (${workOrder.wo_code})`}
             {mode === 'REJECT' && `ส่งกลับแก้ไขผลทวนสอบ (${workOrder.wo_code})`}
             {mode === 'RELEASE_HOLD' && `อนุมัติปลดระงับเครื่องมือ ON_HOLD (${workOrder.asset_code})`}
+            {mode === 'CANCEL' && `ยกเลิกใบสั่งงาน (${workOrder.wo_code})`}
           </h2>
           <button type="button" onClick={onClose} className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer">
             <X size={20} />
@@ -268,15 +270,52 @@ export const WorkOrderActionModal = ({
             </div>
           )}
 
+          {mode === 'CANCEL' && (
+            <div>
+              <p className="text-xs sm:text-sm text-slate-600 mb-3">
+                ยกเลิกเฉพาะใบสั่งงานนี้ รอบในแผนประจำปียังอยู่ และออกใบสั่งงานใหม่ได้ หากต้องตัดรอบออกจากแผนให้ทำผ่านการปรับปรุงแผน
+              </p>
+              <label htmlFor="wo-cancel-category" className="block text-sm font-semibold text-slate-700 mb-1.5">ประเภทการยกเลิก <span className="text-rose-600">*</span></label>
+              <select
+                id="wo-cancel-category"
+                value={form.category || 'MISTAKE_CREATION'}
+                onChange={(e) => setForm({ ...form, category: e.target.value })}
+                className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium bg-white"
+              >
+                <option value="MISTAKE_CREATION">ออกใบสั่งงานผิดพลาด</option>
+                <option value="AUTHORIZED_CANCEL">ยกเลิกตามการอนุมัติของหัวหน้า</option>
+              </select>
+            </div>
+          )}
+
+          {mode === 'RELEASE_HOLD' && (
+            <div>
+              <label htmlFor="wo-release-reason" className="block text-sm font-semibold text-slate-700 mb-1.5">
+                เหตุผลการปลดระงับและการแก้ไขที่ทำแล้ว <span className="text-rose-600">*</span>
+              </label>
+              <textarea
+                id="wo-release-reason"
+                rows={2}
+                required
+                value={form.reason || ''}
+                onChange={(e) => setForm({ ...form, reason: e.target.value })}
+                placeholder="เช่น ซ่อมและสอบเทียบซ้ำผ่าน ใบรับรองเลขที่..."
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-medium"
+              />
+            </div>
+          )}
+
           <div>
-            <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+            <label htmlFor="wo-action-text" className="block text-sm font-semibold text-slate-700 mb-1.5">
               {mode === 'RESCHEDULE' && 'เหตุผลในการขอเลื่อนวันครบกำหนด'}
               {mode === 'APPROVE' && 'ความเห็นผู้ตรวจรับผล (ถ้ามี)'}
-              {mode === 'REJECT' && 'เหตุผลในการส่งกลับแก้ไขผล'}
+              {mode === 'REJECT' && (workOrder.result_status === 'INCONCLUSIVE' ? 'สิ่งที่ต้องตรวจซ้ำ' : 'เหตุผลในการส่งกลับแก้ไขผล')}
               {mode === 'RELEASE_HOLD' && 'ผลการประเมินผลกระทบและการแก้ไข (NC Impact Assessment)'}
+              {mode === 'CANCEL' && 'เหตุผลในการยกเลิก'}
               {requiresText && <span className="text-rose-600"> *</span>}
             </label>
             <textarea
+              id="wo-action-text"
               rows={3}
               required={requiresText}
               value={form.text}
@@ -288,11 +327,11 @@ export const WorkOrderActionModal = ({
 
           <div className="pt-2 flex justify-end gap-2.5">
             <button type="button" onClick={onClose} className="h-10 px-4 rounded-xl border border-slate-300 text-sm font-semibold hover:bg-slate-50 transition-colors cursor-pointer">
-              ยกเลิก
+              ปิด
             </button>
             <button
               type="submit"
-              disabled={saving || (requiresText && !form.text.trim())}
+              disabled={saving || (requiresText && !form.text.trim()) || missingReason}
               className="h-10 px-5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 transition-colors cursor-pointer shadow-2xs"
             >
               {saving ? 'กำลังบันทึก...' : 'ยืนยันการดำเนินการ'}
