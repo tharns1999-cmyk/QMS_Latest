@@ -2,6 +2,7 @@ import React, { useMemo, useState, useId } from 'react';
 import { AlertTriangle, Trash2, X } from 'lucide-react';
 import { formatVccDueDate } from '../utils/vccDateUtils';
 import { useVccModalAccessibility } from '../hooks/useVccModalAccessibility';
+import { useVccMobileViewport } from '../hooks/useVccMobileViewport';
 import { VccDiscardConfirmDialog } from './VccDiscardConfirmDialog';
 
 const serializeCreateForm = (f) => JSON.stringify({
@@ -58,6 +59,19 @@ export const CreateWorkOrderModal = ({
     discardMessage: 'คุณมีข้อมูลใบสั่งงานที่กำลังจัดทำ ต้องการยกเลิกและปิดหน้าต่างใช่หรือไม่?'
   });
 
+  const {
+    isMobile,
+    dragOffset,
+    handleTouchStart,
+    handleTouchMove,
+    handleTouchEnd
+  } = useVccMobileViewport({
+    containerRef: dialogRef,
+    isOpen: open,
+    onDismiss: requestClose,
+    isDirty
+  });
+
   if (!open) return null;
 
   const selectedPlanItem = planItems.find((i) => i.id === form.plan_item_id);
@@ -70,7 +84,7 @@ export const CreateWorkOrderModal = ({
   return (
     <>
       <div
-        className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-150"
+        className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-y-auto animate-in fade-in duration-150"
         onClick={handleBackdropClick}
       >
         <div
@@ -79,21 +93,34 @@ export const CreateWorkOrderModal = ({
           aria-modal="true"
           aria-labelledby={titleId}
           tabIndex="-1"
-          className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-lg w-full overflow-hidden my-auto outline-none"
+          style={isMobile && dragOffset > 0 ? { transform: `translateY(${dragOffset}px)` } : undefined}
+          className="bg-white rounded-t-3xl sm:rounded-2xl border border-slate-200 shadow-xl max-w-lg w-full max-h-[92dvh] sm:max-h-[90vh] flex flex-col overflow-hidden outline-none animate-in slide-in-from-bottom-6 sm:slide-in-from-bottom-0 duration-200 transition-transform duration-100 ease-out"
         >
-          <div className="px-6 py-4.5 border-b border-slate-200 flex items-center justify-between">
-            <h2 id={titleId} className="text-xl font-bold text-slate-900 tracking-tight">สร้างใบสั่งงานทวนสอบ/สอบเทียบ (Work Order)</h2>
+          {/* Mobile Drag Handle Bar */}
+          <div
+            data-testid="vcc-drag-handle"
+            className="sm:hidden pt-3 pb-1.5 flex justify-center cursor-grab active:cursor-grabbing select-none shrink-0 bg-slate-50 border-b border-slate-100"
+            aria-hidden="true"
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+          >
+            <div className="w-12 h-1.5 rounded-full bg-slate-300 active:bg-slate-400 transition-colors" />
+          </div>
+
+          <div className="px-5 sm:px-6 py-3.5 sm:py-4.5 border-b border-slate-200 flex items-center justify-between shrink-0">
+            <h2 id={titleId} className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">สร้างใบสั่งงานทวนสอบ/สอบเทียบ (Work Order)</h2>
             <button
               type="button"
               onClick={requestClose}
               aria-label="ปิดหน้าต่าง"
-              className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
+              className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer motion-safe:active:scale-[0.96] select-none"
             >
               <X size={20} />
             </button>
           </div>
 
-        <form onSubmit={onSubmit} className="p-6 space-y-4">
+        <form onSubmit={onSubmit} className="p-5 sm:p-6 space-y-4 overflow-y-auto flex-1 overscroll-y-contain">
           {error && (
             <div role="alert" className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-sm font-semibold flex items-center gap-2">
               <AlertTriangle size={17} className="text-rose-600 shrink-0" />
@@ -240,10 +267,12 @@ export const CreateWorkOrderModal = ({
                 </div>
 
                 <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">วันครบกำหนด (YYYY-MM-DD)</label>
+                  <label htmlFor="create-wo-due-date" className="block text-sm font-semibold text-slate-700 mb-1.5">วันครบกำหนด (YYYY-MM-DD)</label>
                   <input
+                    id="create-wo-due-date"
                     type="date"
                     required
+                    aria-label="วันครบกำหนด"
                     value={form.due_date}
                     onChange={(e) => setForm({ ...form, due_date: e.target.value })}
                     className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium"
@@ -253,18 +282,18 @@ export const CreateWorkOrderModal = ({
             </>
           )}
 
-          <div className="pt-2 flex justify-end gap-2.5">
+          <div className="pt-3 sm:pt-2 flex flex-col sm:flex-row justify-end gap-2.5 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] sm:pb-0">
             <button
               type="button"
               onClick={requestClose}
-              className="h-10 px-4 rounded-xl border border-slate-300 text-sm font-semibold hover:bg-slate-50 transition-colors cursor-pointer"
+              className="order-1 sm:order-1 w-full sm:w-auto min-h-[44px] h-11 sm:h-10 px-4 rounded-xl border border-slate-300 text-sm font-semibold hover:bg-slate-50 transition-colors cursor-pointer motion-safe:active:scale-[0.98] select-none"
             >
               ยกเลิก
             </button>
             <button
               type="submit"
               disabled={saving}
-              className="h-10 px-5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 transition-colors cursor-pointer shadow-2xs"
+              className="order-2 sm:order-2 w-full sm:w-auto min-h-[44px] h-11 sm:h-10 px-5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 transition-colors cursor-pointer shadow-2xs motion-safe:active:scale-[0.98] select-none"
             >
               {saving ? 'กำลังสร้าง...' : 'ยืนยันสร้างใบสั่งงาน'}
             </button>
@@ -320,6 +349,19 @@ export const WorkOrderActionModal = ({
     discardMessage: 'คุณมีข้อมูลเหตุผลหรือรายละเอียดที่กำลังกรอก ต้องการยกเลิกและปิดหน้าต่างใช่หรือไม่?'
   });
 
+  const {
+    isMobile,
+    dragOffset,
+    handleTouchStart,
+    handleTouchMove,
+    handleTouchEnd
+  } = useVccMobileViewport({
+    containerRef: dialogRef,
+    isOpen: Boolean(modal),
+    onDismiss: requestClose,
+    isDirty
+  });
+
   if (!modal) return null;
   const requiresText = mode !== 'APPROVE';
   const missingReason = mode === 'RELEASE_HOLD' && !form.reason?.trim();
@@ -327,7 +369,7 @@ export const WorkOrderActionModal = ({
   return (
     <>
       <div
-        className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-150"
+        className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-y-auto animate-in fade-in duration-150"
         onClick={handleBackdropClick}
       >
         <div
@@ -336,10 +378,23 @@ export const WorkOrderActionModal = ({
           aria-modal="true"
           aria-labelledby="wo-action-modal-title"
           tabIndex="-1"
-          className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-md w-full overflow-hidden my-auto outline-none"
+          style={isMobile && dragOffset > 0 ? { transform: `translateY(${dragOffset}px)` } : undefined}
+          className="bg-white rounded-t-3xl sm:rounded-2xl border border-slate-200 shadow-xl max-w-md w-full max-h-[92dvh] sm:max-h-[90vh] flex flex-col overflow-hidden outline-none animate-in slide-in-from-bottom-6 sm:slide-in-from-bottom-0 duration-200 transition-transform duration-100 ease-out"
         >
-          <div className="px-6 py-4.5 border-b border-slate-200 flex items-center justify-between">
-            <h2 id="wo-action-modal-title" className="text-xl font-bold text-slate-900 tracking-tight">
+          {/* Mobile Drag Handle Bar */}
+          <div
+            data-testid="vcc-drag-handle"
+            className="sm:hidden pt-3 pb-1.5 flex justify-center cursor-grab active:cursor-grabbing select-none shrink-0 bg-slate-50 border-b border-slate-100"
+            aria-hidden="true"
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+          >
+            <div className="w-12 h-1.5 rounded-full bg-slate-300 active:bg-slate-400 transition-colors" />
+          </div>
+
+          <div className="px-5 sm:px-6 py-3.5 sm:py-4.5 border-b border-slate-200 flex items-center justify-between shrink-0">
+            <h2 id="wo-action-modal-title" className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">
               {mode === 'RESCHEDULE' && `เลื่อนวันครบกำหนด (${workOrder?.wo_code})`}
               {mode === 'APPROVE' && `ตรวจรับผลและอนุมัติปิดใบงาน (${workOrder?.wo_code})`}
               {mode === 'REJECT' && `ส่งกลับแก้ไขผลทวนสอบ (${workOrder?.wo_code})`}
@@ -350,13 +405,13 @@ export const WorkOrderActionModal = ({
               type="button"
               onClick={requestClose}
               aria-label="ปิดหน้าต่าง"
-              className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
+              className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer motion-safe:active:scale-[0.96] select-none"
             >
               <X size={20} />
             </button>
           </div>
 
-          <form onSubmit={onConfirm} className="p-6 space-y-4">
+          <form onSubmit={onConfirm} className="p-5 sm:p-6 space-y-4 overflow-y-auto flex-1 overscroll-y-contain">
             {error && (
               <div role="alert" className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-sm font-semibold flex items-center gap-2">
                 <AlertTriangle size={17} className="text-rose-600 shrink-0" />
@@ -436,18 +491,18 @@ export const WorkOrderActionModal = ({
               />
             </div>
 
-            <div className="pt-2 flex justify-end gap-2.5">
+            <div className="pt-3 sm:pt-2 flex flex-col sm:flex-row justify-end gap-2.5 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] sm:pb-0">
               <button
                 type="button"
                 onClick={requestClose}
-                className="h-10 px-4 rounded-xl border border-slate-300 text-sm font-semibold hover:bg-slate-50 transition-colors cursor-pointer"
+                className="order-1 sm:order-1 w-full sm:w-auto min-h-[44px] h-11 sm:h-10 px-4 rounded-xl border border-slate-300 text-sm font-semibold hover:bg-slate-50 transition-colors cursor-pointer motion-safe:active:scale-[0.98] select-none"
               >
                 ปิด
               </button>
               <button
                 type="submit"
                 disabled={saving || (requiresText && !form.text.trim()) || missingReason}
-                className="h-10 px-5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 transition-colors cursor-pointer shadow-2xs"
+                className="order-2 sm:order-2 w-full sm:w-auto min-h-[44px] h-11 sm:h-10 px-5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 transition-colors cursor-pointer shadow-2xs motion-safe:active:scale-[0.98] select-none"
               >
                 {saving ? 'กำลังบันทึก...' : 'ยืนยันการดำเนินการ'}
               </button>
@@ -487,6 +542,18 @@ export const WorkOrderSettingsModal = ({
     isDirty: false
   });
 
+  const {
+    isMobile,
+    dragOffset,
+    handleTouchStart,
+    handleTouchMove,
+    handleTouchEnd
+  } = useVccMobileViewport({
+    containerRef: dialogRef,
+    isOpen: open,
+    onDismiss: requestClose
+  });
+
   if (!open) return null;
 
   const addCriteria = () => {
@@ -501,7 +568,7 @@ export const WorkOrderSettingsModal = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-150"
+      className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-y-auto animate-in fade-in duration-150"
       onClick={handleBackdropClick}
     >
       <div
@@ -510,21 +577,34 @@ export const WorkOrderSettingsModal = ({
         aria-modal="true"
         aria-labelledby="wo-settings-title"
         tabIndex="-1"
-        className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-lg w-full overflow-hidden my-auto outline-none"
+        style={isMobile && dragOffset > 0 ? { transform: `translateY(${dragOffset}px)` } : undefined}
+        className="bg-white rounded-t-3xl sm:rounded-2xl border border-slate-200 shadow-xl max-w-lg w-full max-h-[92dvh] sm:max-h-[90vh] flex flex-col overflow-hidden outline-none animate-in slide-in-from-bottom-6 sm:slide-in-from-bottom-0 duration-200 transition-transform duration-100 ease-out"
       >
-        <div className="px-6 py-4.5 border-b border-slate-200 flex items-center justify-between">
-          <h2 id="wo-settings-title" className="text-xl font-bold text-slate-900 tracking-tight">ตั้งค่าเกณฑ์ยอมรับและระยะเวลาเก็บเอกสาร (DCC)</h2>
+        {/* Mobile Drag Handle Bar */}
+        <div
+          data-testid="vcc-drag-handle"
+          className="sm:hidden pt-3 pb-1.5 flex justify-center cursor-grab active:cursor-grabbing select-none shrink-0 bg-slate-50 border-b border-slate-100"
+          aria-hidden="true"
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+        >
+          <div className="w-12 h-1.5 rounded-full bg-slate-300 active:bg-slate-400 transition-colors" />
+        </div>
+
+        <div className="px-5 sm:px-6 py-3.5 sm:py-4.5 border-b border-slate-200 flex items-center justify-between shrink-0">
+          <h2 id="wo-settings-title" className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">ตั้งค่าเกณฑ์ยอมรับและระยะเวลาเก็บเอกสาร (DCC)</h2>
           <button
             type="button"
             onClick={requestClose}
             aria-label="ปิดหน้าต่าง"
-            className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
+            className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer motion-safe:active:scale-[0.96] select-none"
           >
             <X size={20} />
           </button>
         </div>
 
-        <div className="p-6 space-y-4">
+        <div className="p-5 sm:p-6 space-y-4 overflow-y-auto flex-1 overscroll-y-contain">
           <div>
             <label className="block text-sm font-semibold text-slate-700 mb-1.5">ระยะเวลาเก็บประวัติใบรับรอง (ปี)</label>
             <input
@@ -545,9 +625,13 @@ export const WorkOrderSettingsModal = ({
                 value={newCriteria}
                 onChange={(e) => setNewCriteria(e.target.value)}
                 placeholder="เพิ่มเกณฑ์ยอมรับใหม่..."
-                className="flex-1 h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium"
+                className="flex-1 min-h-[44px] h-11 sm:h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium"
               />
-              <button type="button" onClick={addCriteria} className="h-10 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold transition-colors cursor-pointer">
+              <button
+                type="button"
+                onClick={addCriteria}
+                className="min-h-[44px] h-11 sm:h-10 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold transition-colors cursor-pointer motion-safe:active:scale-[0.98] select-none"
+              >
                 เพิ่ม
               </button>
             </div>
@@ -564,7 +648,8 @@ export const WorkOrderSettingsModal = ({
                           default_acceptance_criteria: draftSettings.default_acceptance_criteria.filter((x) => x !== c)
                         })
                       }
-                      className="text-rose-600 p-1.5 rounded-lg hover:bg-rose-50 cursor-pointer"
+                      aria-label={`ลบเกณฑ์ ${c}`}
+                      className="text-rose-600 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg hover:bg-rose-50 cursor-pointer motion-safe:active:scale-[0.96] select-none"
                     >
                       <Trash2 size={16} />
                     </button>
@@ -574,11 +659,11 @@ export const WorkOrderSettingsModal = ({
             </div>
           </div>
 
-          <div className="pt-2 flex justify-end gap-2.5">
+          <div className="pt-3 sm:pt-2 flex flex-col sm:flex-row justify-end gap-2.5 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] sm:pb-0">
             <button
               type="button"
               onClick={requestClose}
-              className="h-10 px-4 rounded-xl border border-slate-300 text-sm font-semibold hover:bg-slate-50 transition-colors cursor-pointer"
+              className="order-1 sm:order-1 w-full sm:w-auto min-h-[44px] h-11 sm:h-10 px-4 rounded-xl border border-slate-300 text-sm font-semibold hover:bg-slate-50 transition-colors cursor-pointer motion-safe:active:scale-[0.98] select-none"
             >
               ยกเลิก
             </button>
@@ -586,7 +671,7 @@ export const WorkOrderSettingsModal = ({
               type="button"
               disabled={saving}
               onClick={onSave}
-              className="h-10 px-5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 transition-colors cursor-pointer shadow-2xs"
+              className="order-2 sm:order-2 w-full sm:w-auto min-h-[44px] h-11 sm:h-10 px-5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 transition-colors cursor-pointer shadow-2xs motion-safe:active:scale-[0.98] select-none"
             >
               {saving ? 'กำลังบันทึก...' : 'บันทึกการตั้งค่า'}
             </button>

@@ -2,6 +2,7 @@ import React, { useId } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { useVccModalAccessibility } from '../hooks/useVccModalAccessibility';
+import { useVccMobileViewport } from '../hooks/useVccMobileViewport';
 import { VccDiscardConfirmDialog } from './VccDiscardConfirmDialog';
 
 /**
@@ -54,6 +55,19 @@ export const VccModalShell = ({
     discardMessage
   });
 
+  const {
+    isMobile,
+    dragOffset,
+    handleTouchStart,
+    handleTouchMove,
+    handleTouchEnd
+  } = useVccMobileViewport({
+    containerRef: dialogRef,
+    isOpen,
+    onDismiss: requestClose,
+    isDirty
+  });
+
   if (!isOpen) return null;
   if (typeof document === 'undefined') return null;
 
@@ -71,7 +85,7 @@ export const VccModalShell = ({
   return createPortal(
     <>
       <div
-        className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-150"
+        className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-y-auto animate-in fade-in duration-150"
         onClick={handleBackdropClick}
       >
         <div
@@ -81,21 +95,34 @@ export const VccModalShell = ({
           aria-labelledby={titleId}
           aria-describedby={descId}
           tabIndex="-1"
-          className={`bg-white rounded-2xl border border-slate-200 shadow-2xl ${maxWidthClass} w-full overflow-hidden flex flex-col my-auto outline-none ${className}`}
+          style={isMobile && dragOffset > 0 ? { transform: `translateY(${dragOffset}px)` } : undefined}
+          className={`bg-white rounded-t-3xl sm:rounded-2xl border-t sm:border border-slate-200 shadow-2xl ${maxWidthClass} w-full overflow-hidden flex flex-col max-h-[92dvh] sm:max-h-[90vh] my-0 sm:my-auto outline-none transition-transform duration-100 ease-out ${className}`}
         >
+          {/* Mobile Drag Handle Bar */}
+          <div
+            data-testid="vcc-drag-handle"
+            className="sm:hidden pt-3 pb-1.5 flex justify-center cursor-grab active:cursor-grabbing select-none shrink-0 bg-slate-50 border-b border-slate-100"
+            aria-hidden="true"
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+          >
+            <div className="w-12 h-1.5 rounded-full bg-slate-300 active:bg-slate-400 transition-colors" />
+          </div>
+
           {/* Header */}
-          <div className="px-6 py-4.5 border-b border-slate-200 flex items-center justify-between shrink-0 bg-slate-50/50">
-            <div className="space-y-1 pr-4 min-w-0">
+          <div className="px-5 sm:px-6 py-4 sm:py-4.5 border-b border-slate-200 flex items-center justify-between shrink-0 bg-slate-50/50">
+            <div className="space-y-1 pr-3 min-w-0">
               {headerBadge && <div className="flex items-center gap-2">{headerBadge}</div>}
               {typeof title === 'string' ? (
-                <h2 id={titleId} className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight truncate">
+                <h2 id={titleId} className="text-base sm:text-xl font-bold text-slate-900 tracking-tight truncate">
                   {title}
                 </h2>
               ) : (
                 <div id={titleId}>{title}</div>
               )}
               {subtitle && (
-                <p id={descId} className="text-xs text-slate-500 font-medium">
+                <p id={descId} className="text-xs text-slate-500 font-medium truncate">
                   {subtitle}
                 </p>
               )}
@@ -104,14 +131,14 @@ export const VccModalShell = ({
               type="button"
               onClick={requestClose}
               aria-label="ปิดหน้าต่าง"
-              className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 cursor-pointer transition-colors shrink-0"
+              className="min-w-[44px] min-h-[44px] flex items-center justify-center p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 motion-safe:active:bg-slate-300 cursor-pointer transition-colors shrink-0 select-none"
             >
               <X size={20} />
             </button>
           </div>
 
           {/* Modal Content */}
-          <div className="flex-1 overflow-y-auto">{children}</div>
+          <div className="flex-1 overflow-y-auto overscroll-contain pb-[env(safe-area-inset-bottom,0px)]">{children}</div>
         </div>
       </div>
 

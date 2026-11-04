@@ -25,7 +25,7 @@ import { formatVccDueDate } from '../utils/vccDateUtils';
  * WorkOrderRowActions - Renders primary action and floating overflow menu for each row
  * Uses FloatingOverlay (React Portal) to completely eliminate table overflow clipping and layout shift.
  */
-const WorkOrderRowActions = ({
+export const WorkOrderRowActions = ({
   wo,
   reqApproverLevel,
   thresholds,
@@ -53,7 +53,7 @@ const WorkOrderRowActions = ({
         <button
           type="button"
           onClick={() => onRecordResult(wo)}
-          className="h-8 inline-flex items-center gap-1.5 px-3 rounded-lg bg-indigo-600 text-white font-medium hover:bg-indigo-700 transition-colors cursor-pointer text-xs shadow-2xs whitespace-nowrap"
+          className="min-h-[44px] sm:min-h-[32px] h-10 sm:h-8 inline-flex items-center gap-1.5 px-3.5 sm:px-3 rounded-lg bg-indigo-600 text-white font-medium hover:bg-indigo-700 transition-colors cursor-pointer text-xs shadow-2xs whitespace-nowrap motion-safe:active:scale-[0.98] select-none"
         >
           <FileCheck2 size={13} />
           <span>บันทึกผลและใบรับรอง</span>
@@ -68,7 +68,7 @@ const WorkOrderRowActions = ({
         <button
           type="button"
           onClick={() => onApprove(wo)}
-          className="h-8 inline-flex items-center gap-1.5 px-3 rounded-lg bg-emerald-700 text-white font-medium hover:bg-emerald-800 transition-colors cursor-pointer text-xs shadow-2xs whitespace-nowrap"
+          className="min-h-[44px] sm:min-h-[32px] h-10 sm:h-8 inline-flex items-center gap-1.5 px-3.5 sm:px-3 rounded-lg bg-emerald-700 text-white font-medium hover:bg-emerald-800 transition-colors cursor-pointer text-xs shadow-2xs whitespace-nowrap motion-safe:active:scale-[0.98] select-none"
         >
           <CheckCircle2 size={13} />
           <span>ตรวจรับปิดงาน</span>
@@ -80,7 +80,7 @@ const WorkOrderRowActions = ({
         <button
           type="button"
           onClick={() => onReject(wo)}
-          className="h-8 inline-flex items-center gap-1.5 px-3 rounded-lg bg-rose-700 text-white font-medium hover:bg-rose-800 transition-colors cursor-pointer text-xs shadow-2xs whitespace-nowrap"
+          className="min-h-[44px] sm:min-h-[32px] h-10 sm:h-8 inline-flex items-center gap-1.5 px-3.5 sm:px-3 rounded-lg bg-rose-700 text-white font-medium hover:bg-rose-800 transition-colors cursor-pointer text-xs shadow-2xs whitespace-nowrap motion-safe:active:scale-[0.98] select-none"
         >
           <XCircle size={13} />
           <span>ส่งกลับตรวจซ้ำ</span>
@@ -91,14 +91,14 @@ const WorkOrderRowActions = ({
         <button
           type="button"
           onClick={() => onReleaseHold(wo)}
-          className="h-8 inline-flex items-center gap-1.5 px-3 rounded-lg bg-indigo-600 text-white font-medium hover:bg-indigo-700 transition-colors cursor-pointer text-xs shadow-2xs whitespace-nowrap"
+          className="min-h-[44px] sm:min-h-[32px] h-10 sm:h-8 inline-flex items-center gap-1.5 px-3.5 sm:px-3 rounded-lg bg-indigo-600 text-white font-medium hover:bg-indigo-700 transition-colors cursor-pointer text-xs shadow-2xs whitespace-nowrap motion-safe:active:scale-[0.98] select-none"
         >
           <ShieldAlert size={13} />
           <span>ปลดระงับใช้ (L{reqApproverLevel}+)</span>
         </button>
       )}
 
-      {/* Secondary Actions Trigger (More Menu Icon) */}
+      {/* Secondary Actions Trigger (More Menu Icon with 44px min touch target on mobile) */}
       <button
         ref={triggerRef}
         type="button"
@@ -107,7 +107,7 @@ const WorkOrderRowActions = ({
         aria-haspopup="menu"
         aria-expanded={isMenuOpen}
         title="ตัวเลือกเพิ่มเติม"
-        className={`h-8 w-8 rounded-lg border text-slate-500 hover:text-slate-800 hover:bg-slate-100 flex items-center justify-center cursor-pointer transition-colors ${
+        className={`min-w-[44px] min-h-[44px] h-11 w-11 sm:h-8 sm:w-8 sm:min-w-0 sm:min-h-0 rounded-lg border text-slate-500 hover:text-slate-800 hover:bg-slate-100 flex items-center justify-center cursor-pointer transition-colors motion-safe:active:scale-[0.96] select-none ${
           isMenuOpen ? 'border-indigo-300 bg-indigo-50 text-indigo-700' : 'border-slate-200'
         }`}
       >
@@ -135,7 +135,7 @@ const WorkOrderRowActions = ({
               handleClose();
               onReschedule(wo);
             }}
-            className="w-full text-left px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 flex items-center gap-2 transition-colors cursor-pointer"
+            className="w-full text-left px-3.5 sm:px-3 py-3 sm:py-2 min-h-[44px] sm:min-h-[36px] text-xs font-semibold text-slate-700 hover:bg-slate-50 flex items-center gap-2 transition-colors cursor-pointer motion-safe:active:bg-slate-100 select-none"
           >
             <CalendarClock size={13} className="text-slate-500" />
             <span>เลื่อนวันครบกำหนด</span>
@@ -149,7 +149,7 @@ const WorkOrderRowActions = ({
               handleClose();
               onReject(wo);
             }}
-            className="w-full text-left px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-50 flex items-center gap-2 transition-colors cursor-pointer"
+            className="w-full text-left px-3.5 sm:px-3 py-3 sm:py-2 min-h-[44px] sm:min-h-[36px] text-xs font-semibold text-rose-700 hover:bg-rose-50 flex items-center gap-2 transition-colors cursor-pointer motion-safe:active:bg-rose-100 select-none"
           >
             <XCircle size={13} className="text-rose-500" />
             <span>ส่งกลับแก้ไข</span>
@@ -163,7 +163,7 @@ const WorkOrderRowActions = ({
               handleClose();
               onAmend(wo);
             }}
-            className="w-full text-left px-3 py-2 text-xs font-semibold text-amber-700 hover:bg-amber-50 flex items-center gap-2 transition-colors cursor-pointer"
+            className="w-full text-left px-3.5 sm:px-3 py-3 sm:py-2 min-h-[44px] sm:min-h-[36px] text-xs font-semibold text-amber-700 hover:bg-amber-50 flex items-center gap-2 transition-colors cursor-pointer motion-safe:active:bg-amber-100 select-none"
           >
             <History size={13} className="text-amber-600" />
             <span>ขอแก้ไขผล (Amendment)</span>
@@ -177,7 +177,7 @@ const WorkOrderRowActions = ({
               handleClose();
               onCancel(wo);
             }}
-            className="w-full text-left px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-50 flex items-center gap-2 transition-colors cursor-pointer"
+            className="w-full text-left px-3.5 sm:px-3 py-3 sm:py-2 min-h-[44px] sm:min-h-[36px] text-xs font-semibold text-rose-700 hover:bg-rose-50 flex items-center gap-2 transition-colors cursor-pointer motion-safe:active:bg-rose-100 select-none"
           >
             <Ban size={13} className="text-rose-500" />
             <span>ยกเลิกใบสั่งงาน</span>
@@ -191,7 +191,7 @@ const WorkOrderRowActions = ({
               handleClose();
               onViewDigitalRecord(wo);
             }}
-            className="w-full text-left px-3 py-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-50 flex items-center gap-2 transition-colors cursor-pointer"
+            className="w-full text-left px-3.5 sm:px-3 py-3 sm:py-2 min-h-[44px] sm:min-h-[36px] text-xs font-semibold text-indigo-700 hover:bg-indigo-50 flex items-center gap-2 transition-colors cursor-pointer motion-safe:active:bg-indigo-100 select-none"
           >
             <Printer size={13} className="text-indigo-600" />
             <span>พิมพ์/ดูเอกสารดิจิทัล</span>
@@ -204,7 +204,7 @@ const WorkOrderRowActions = ({
             handleClose();
             onRowClick(wo);
           }}
-          className="w-full text-left px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 flex items-center gap-2 border-t border-slate-100 transition-colors cursor-pointer"
+          className="w-full text-left px-3.5 sm:px-3 py-3 sm:py-2 min-h-[44px] sm:min-h-[36px] text-xs font-semibold text-slate-700 hover:bg-slate-50 flex items-center gap-2 border-t border-slate-100 transition-colors cursor-pointer motion-safe:active:bg-slate-100 select-none"
         >
           <Eye size={13} className="text-slate-500" />
           <span>ดูรายละเอียดใบสั่งงาน</span>

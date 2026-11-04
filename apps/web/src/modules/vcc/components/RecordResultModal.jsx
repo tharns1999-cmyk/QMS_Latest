@@ -15,6 +15,7 @@ import {
 import { getResultStatusLabel } from '../utils/statusLabels';
 import { formatVccDate } from '../utils/vccDateUtils';
 import { useVccModalAccessibility } from '../hooks/useVccModalAccessibility';
+import { useVccMobileViewport } from '../hooks/useVccMobileViewport';
 import { VccDiscardConfirmDialog } from './VccDiscardConfirmDialog';
 
 const MAX_PDF_BYTES = 25 * 1024 * 1024; // 25 MB
@@ -128,6 +129,19 @@ export const RecordResultModal = ({
     discardMessage: 'คุณมีข้อมูลผลการสอบเทียบที่กำลังบันทึก ต้องการยกเลิกและปิดหน้าต่างใช่หรือไม่?'
   });
 
+  const {
+    isMobile,
+    dragOffset,
+    handleTouchStart,
+    handleTouchMove,
+    handleTouchEnd
+  } = useVccMobileViewport({
+    containerRef: dialogRef,
+    isOpen: Boolean(activeWorkOrder),
+    onDismiss: requestClose,
+    isDirty
+  });
+
   if (!activeWorkOrder) return null;
 
   const handleFileChange = async (e) => {
@@ -192,7 +206,7 @@ export const RecordResultModal = ({
   return (
     <>
       <div
-        className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-150"
+        className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-y-auto animate-in fade-in duration-150"
         onClick={handleBackdropClick}
       >
         <div
@@ -201,18 +215,31 @@ export const RecordResultModal = ({
           aria-modal="true"
           aria-labelledby={titleId}
           tabIndex="-1"
-          className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden my-auto outline-none"
+          style={isMobile && dragOffset > 0 ? { transform: `translateY(${dragOffset}px)` } : undefined}
+          className="bg-white rounded-t-3xl sm:rounded-2xl border-t sm:border border-slate-200 shadow-2xl max-w-2xl w-full max-h-[92dvh] sm:max-h-[90vh] flex flex-col overflow-hidden my-0 sm:my-auto outline-none transition-transform duration-100 ease-out"
         >
+          {/* Mobile Drag Handle Bar */}
+          <div
+            data-testid="vcc-drag-handle"
+            className="sm:hidden pt-3 pb-1.5 flex justify-center cursor-grab active:cursor-grabbing select-none shrink-0 bg-slate-50 border-b border-slate-100"
+            aria-hidden="true"
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+          >
+            <div className="w-12 h-1.5 rounded-full bg-slate-300 active:bg-slate-400 transition-colors" />
+          </div>
+
           {/* Header */}
-          <div className="px-6 py-4.5 border-b border-slate-200 flex items-center justify-between shrink-0 bg-slate-50/50">
-            <div>
+          <div className="px-5 sm:px-6 py-4 sm:py-4.5 border-b border-slate-200 flex items-center justify-between shrink-0 bg-slate-50/50">
+            <div className="pr-2 min-w-0">
               <div className="flex items-center gap-2">
                 <span className="font-mono text-xs font-bold px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-700">
                   {activeWorkOrder.wo_code}
                 </span>
-                <span className="text-xs text-slate-500 font-medium">({activeWorkOrder.asset_code} — {activeWorkOrder.asset_name})</span>
+                <span className="text-xs text-slate-500 font-medium truncate">({activeWorkOrder.asset_code} — {activeWorkOrder.asset_name})</span>
               </div>
-              <h2 id={titleId} className="text-lg font-bold text-slate-900 tracking-tight mt-1">
+              <h2 id={titleId} className="text-base sm:text-lg font-bold text-slate-900 tracking-tight mt-1 truncate">
                 บันทึกผลการสอบเทียบและหลักฐานดิจิทัล (Digital Record)
               </h2>
             </div>
@@ -220,18 +247,18 @@ export const RecordResultModal = ({
               type="button"
               onClick={requestClose}
               aria-label="ปิดหน้าต่าง"
-              className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 cursor-pointer transition-colors"
+              className="min-w-[44px] min-h-[44px] flex items-center justify-center p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 motion-safe:active:bg-slate-300 transition-colors cursor-pointer select-none shrink-0"
             >
               <X size={20} />
             </button>
           </div>
 
         {/* Tab Selector */}
-        <div className="flex border-b border-slate-200 px-6 bg-white shrink-0">
+        <div className="flex border-b border-slate-200 px-4 sm:px-6 bg-white shrink-0">
           <button
             type="button"
             onClick={() => setActiveTab('MAIN')}
-            className={`py-3 px-3 text-xs sm:text-sm font-bold border-b-2 transition-colors flex items-center gap-2 cursor-pointer ${
+            className={`min-h-[44px] py-2.5 px-3 text-xs sm:text-sm font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer select-none motion-safe:active:scale-[0.98] ${
               activeTab === 'MAIN'
                 ? 'border-indigo-600 text-indigo-600'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -243,19 +270,20 @@ export const RecordResultModal = ({
           <button
             type="button"
             onClick={() => setActiveTab('TRACEABILITY')}
-            className={`py-3 px-3 text-xs sm:text-sm font-bold border-b-2 transition-colors flex items-center gap-2 cursor-pointer ${
+            className={`min-h-[44px] py-2.5 px-3 text-xs sm:text-sm font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer select-none motion-safe:active:scale-[0.98] ${
               activeTab === 'TRACEABILITY'
                 ? 'border-indigo-600 text-indigo-600'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
             <Layers size={16} />
-            <span>การสอบกลับได้และสภาวะแวดล้อม (ISO/IEC 17025)</span>
+            <span className="hidden sm:inline">การสอบกลับได้และสภาวะแวดล้อม (ISO/IEC 17025)</span>
+            <span className="inline sm:hidden">ความสอบกลับได้</span>
           </button>
         </div>
 
         {/* Scrollable Form Body */}
-        <form onSubmit={handleFormSubmit} className="p-6 space-y-4.5 overflow-y-auto flex-1">
+        <form onSubmit={handleFormSubmit} className="p-6 space-y-4.5 overflow-y-auto flex-1 overscroll-y-contain">
           {error && (
             <div role="alert" className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-sm font-semibold flex items-center gap-2">
               <AlertTriangle size={17} className="text-rose-600 shrink-0" />
@@ -613,22 +641,22 @@ export const RecordResultModal = ({
           )}
 
           {/* Actions */}
-          <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
-            <span className="text-xs text-slate-400">
+          <div className="pt-4 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] border-t border-slate-200 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 shrink-0">
+            <span className="text-xs text-slate-400 text-center sm:text-left">
               * ข้อมูลจะถูกจัดเก็บเข้าสู่คิวรอตรวจรับ (PENDING_REVIEW)
             </span>
-            <div className="flex gap-2.5">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full sm:w-auto">
               <button
                 type="button"
                 onClick={requestClose}
-                className="h-10 px-4 rounded-xl border border-slate-300 text-sm font-semibold hover:bg-slate-50 transition-colors cursor-pointer"
+                className="w-full sm:w-auto min-h-[44px] sm:min-h-[40px] px-4 rounded-xl border border-slate-300 text-sm font-semibold hover:bg-slate-50 motion-safe:active:scale-[0.98] transition-all cursor-pointer select-none order-1 sm:order-1"
               >
                 ยกเลิก
               </button>
               <button
                 type="submit"
                 disabled={saving || !form.certificate_no?.trim() || !form.acceptance_criteria?.trim()}
-                className="h-10 px-5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 transition-colors cursor-pointer shadow-2xs flex items-center gap-2"
+                className="w-full sm:w-auto min-h-[44px] sm:min-h-[40px] px-5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 motion-safe:active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none transition-all cursor-pointer shadow-2xs flex items-center justify-center gap-2 select-none order-2 sm:order-2"
               >
                 {saving && <span className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" />}
                 <span>{saving ? 'กำลังส่งข้อมูล...' : 'ส่งผลให้ผู้ตรวจรับพิจารณา'}</span>
