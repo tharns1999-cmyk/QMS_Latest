@@ -20,6 +20,62 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 
 // Module-level stack of open dialogs
 export const vccDialogStack = [];
+export const vccDialogElements = new Map();
+
+export const syncInertState = () => {
+  if (typeof document === 'undefined') return;
+
+  const topmostId = vccDialogStack[vccDialogStack.length - 1];
+
+  // 1. App background container(s)
+  const root = document.getElementById('root') || document.querySelector('[data-vcc-app-root]');
+  const appContainers = root ? [root] : [];
+
+  if (vccDialogStack.length > 0) {
+    appContainers.forEach((el) => {
+      try {
+        el.inert = true;
+        el.setAttribute('inert', '');
+        el.setAttribute('aria-hidden', 'true');
+      } catch {
+        // Safe fallback
+      }
+    });
+  } else {
+    appContainers.forEach((el) => {
+      try {
+        el.inert = false;
+        el.removeAttribute('inert');
+        el.removeAttribute('aria-hidden');
+      } catch {
+        // Safe fallback
+      }
+    });
+  }
+
+  // 2. Multi-layer modal stacking (Nested dialogs)
+  // Ensure any dialog in the stack below the topmost dialog is inert
+  for (const [id, dialogEl] of vccDialogElements.entries()) {
+    if (!dialogEl) continue;
+    if (id === topmostId) {
+      try {
+        dialogEl.inert = false;
+        dialogEl.removeAttribute('inert');
+        dialogEl.removeAttribute('aria-hidden');
+      } catch {
+        // Safe fallback
+      }
+    } else {
+      try {
+        dialogEl.inert = true;
+        dialogEl.setAttribute('inert', '');
+        dialogEl.setAttribute('aria-hidden', 'true');
+      } catch {
+        // Safe fallback
+      }
+    }
+  }
+};
 
 export const FOCUSABLE_SELECTOR = [
   'button:not([disabled])',
@@ -94,21 +150,27 @@ export const useVccModalAccessibility = ({
   const previousActiveElement = useRef(null);
   const [showConfirmDiscard, setShowConfirmDiscard] = useState(false);
 
-  // 1. Stack Registration & Scroll Lock
+  // 1. Stack Registration, Scroll Lock & Background Inertness
   useEffect(() => {
     if (!isOpen) return;
 
     const dialogId = idRef.current;
     previousActiveElement.current = returnFocusRef?.current || (typeof document !== 'undefined' ? document.activeElement : null);
     vccDialogStack.push(dialogId);
+    if (dialogRef.current) {
+      vccDialogElements.set(dialogId, dialogRef.current);
+    }
     lockBodyScroll();
+    syncInertState();
 
     return () => {
       const idx = vccDialogStack.indexOf(dialogId);
       if (idx !== -1) {
         vccDialogStack.splice(idx, 1);
       }
+      vccDialogElements.delete(dialogId);
       unlockBodyScroll();
+      syncInertState();
 
       // Focus Restoration: Only restore if focus is in document and not stolen by another active modal
       const elementToFocus = previousActiveElement.current;
@@ -125,6 +187,14 @@ export const useVccModalAccessibility = ({
       }
     };
   }, [isOpen, returnFocusRef]);
+
+  // Synchronize element registration once ref is attached
+  useEffect(() => {
+    if (isOpen && dialogRef.current) {
+      vccDialogElements.set(idRef.current, dialogRef.current);
+      syncInertState();
+    }
+  });
 
   // 2. Initial Focus on Open
   useEffect(() => {
@@ -249,7 +319,19 @@ export const useVccModalAccessibility = ({
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [isOpen, isDirty]);
 
-  // 6. Backdrop click helper
+  // 6. SPA History & Back Button Guard
+  useEffect(() => {
+    if (!isOpen || !isDirty) return;
+
+    const handlePopState = () => {
+      requestClose();
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [isOpen, isDirty, requestClose]);
+
+  // 7. Backdrop click helper
   const handleBackdropClick = useCallback(
     (e) => {
       if (e.target === e.currentTarget && closeOnBackdrop) {

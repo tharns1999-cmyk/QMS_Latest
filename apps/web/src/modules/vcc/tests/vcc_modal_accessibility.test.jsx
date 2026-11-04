@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { vccDialogStack } from '../hooks/useVccModalAccessibility';
+import { vccDialogStack, vccDialogElements, syncInertState } from '../hooks/useVccModalAccessibility';
 import { VccModalShell } from '../components/VccModalShell';
 import { RecordResultModal } from '../components/RecordResultModal';
 import { CreateWorkOrderModal } from '../components/WorkOrderModals';
@@ -91,9 +91,16 @@ const RealRecordResultHarness = ({ initialWorkOrder, onClose }) => {
       >
         Switch WO
       </button>
+      <button
+        data-testid="parent-close-btn"
+        onClick={() => setWorkOrder(null)}
+      >
+        Parent Close
+      </button>
       <RecordResultModal
         workOrder={workOrder}
         onClose={onClose}
+        onCancelSwitch={(activeWo) => setWorkOrder(activeWo)}
         form={form}
         setForm={setForm}
         onSubmit={(e) => { e.preventDefault(); }}
@@ -157,8 +164,10 @@ const RealNotificationSettingsHarness = ({ onClose }) => {
 
 describe('VCC UX/UI Round D2 — Enterprise Modal Accessibility Tests', () => {
   beforeEach(() => {
-    // Reset any lingering dialog stack
+    // Reset any lingering dialog stack and inert states
     vccDialogStack.length = 0;
+    vccDialogElements.clear();
+    syncInertState();
     document.body.style.overflow = '';
     document.body.style.paddingRight = '';
   });
@@ -419,7 +428,7 @@ describe('VCC UX/UI Round D2 — Enterprise Modal Accessibility Tests', () => {
     expect(handleClose).toHaveBeenCalledTimes(1);
   });
 
-  it('15. RealForm_RecordResultModal: Switching workOrder resets dirty state snapshot', async () => {
+  it('15. RealForm_RecordResultModal: Switching workOrder while dirty prompts confirmation; user can cancel or confirm', async () => {
     const handleClose = vi.fn();
     const wo1 = { id: 'wo-1', wo_code: 'WO-2026-0001', asset_code: 'ASSET-1', asset_name: 'Caliper' };
     render(<RealRecordResultHarness initialWorkOrder={wo1} onClose={handleClose} />);
@@ -428,17 +437,116 @@ describe('VCC UX/UI Round D2 — Enterprise Modal Accessibility Tests', () => {
     const certInput = screen.getByLabelText('เลขที่ใบรับรอง');
     fireEvent.change(certInput, { target: { value: 'CERT-MODIFIED' } });
 
-    // Switch to WO 2 and reset form as done in real page
+    // Try switching to WO 2 while dirty
     fireEvent.click(screen.getByTestId('switch-wo-btn'));
 
-    // Should now show WO-2026-0002 header and snapshot is fresh for WO 2
+    // Confirmation prompt must appear immediately
+    expect(screen.getByRole('alertdialog')).toBeTruthy();
+    expect(screen.getByText('คุณมีข้อมูลผลการสอบเทียบที่กำลังจัดทำ ต้องการยกเลิกและเปลี่ยนไปทำใบสั่งงานอื่นใช่หรือไม่?')).toBeTruthy();
+    // Modal still displays WO 1 underneath
+    expect(screen.getByText('WO-2026-0001')).toBeTruthy();
+
+    // Cancel switch ("แก้ไขต่อ") -> remains on WO 1 with un-saved edit
+    fireEvent.click(screen.getByRole('button', { name: /แก้ไขต่อ/i }));
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(screen.getByText('WO-2026-0001')).toBeTruthy();
+    expect(certInput.value).toBe('CERT-MODIFIED');
+
+    // Click switch again and this time confirm discard
+    fireEvent.click(screen.getByTestId('switch-wo-btn'));
+    expect(screen.getByRole('alertdialog')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /ละทิ้งข้อมูลและปิด/i }));
+
+    // Now switches to WO 2
     await waitFor(() => {
       expect(screen.getByText('WO-2026-0002')).toBeTruthy();
     });
-
-    // Escape should now close without prompt because snapshot re-initialized for WO 2
-    fireEvent.keyDown(window, { key: 'Escape' });
-    expect(handleClose).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole('alertdialog')).toBeNull();
+  });
+
+  it('16. RealForm_RecordResultModal: Parent-driven close while dirty prompts confirmation; prevents unannounced close', () => {
+    const handleClose = vi.fn();
+    const wo1 = { id: 'wo-1', wo_code: 'WO-2026-0001', asset_code: 'ASSET-1', asset_name: 'Caliper' };
+    render(<RealRecordResultHarness initialWorkOrder={wo1} onClose={handleClose} />);
+
+    // Modify form
+    const certInput = screen.getByLabelText('เลขที่ใบรับรอง');
+    fireEvent.change(certInput, { target: { value: 'CERT-DIRTY-WO1' } });
+
+    // Parent attempts to close modal by setting workOrder = null
+    fireEvent.click(screen.getByTestId('parent-close-btn'));
+
+    // Modal does NOT vanish; alertdialog appears to prevent data loss (dialog is inert while alertdialog is active)
+    expect(screen.getByRole('alertdialog')).toBeTruthy();
+    expect(screen.getByRole('dialog', { hidden: true })).toBeTruthy();
+    expect(handleClose).not.toHaveBeenCalled();
+
+    // Clicking "แก้ไขต่อ" keeps modal open
+    fireEvent.click(screen.getByRole('button', { name: /แก้ไขต่อ/i }));
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(screen.getByRole('dialog')).toBeTruthy();
+    expect(handleClose).not.toHaveBeenCalled();
+
+    // Clicking parent close again and confirming discard
+    fireEvent.click(screen.getByTestId('parent-close-btn'));
+    fireEvent.click(screen.getByRole('button', { name: /ละทิ้งข้อมูลและปิด/i }));
+    expect(handleClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('17. Background_Inertness: App background is inert when modal opens; lower modal is inert when nested alertdialog opens', async () => {
+    // Create an app container simulating #root
+    const rootEl = document.createElement('div');
+    rootEl.id = 'root';
+    const bgButton = document.createElement('button');
+    bgButton.textContent = 'Background Action';
+    rootEl.appendChild(bgButton);
+    document.body.appendChild(rootEl);
+
+    const { unmount } = render(<TestFormModal isOpen={true} onClose={vi.fn()} isDirty={true} />);
+
+    // App root is marked inert and aria-hidden
+    expect(rootEl.hasAttribute('inert')).toBe(true);
+    expect(rootEl.getAttribute('aria-hidden')).toBe('true');
+
+    const modalDialog = screen.getByRole('dialog');
+    // Topmost modal is NOT inert
+    expect(modalDialog.hasAttribute('inert')).toBe(false);
+
+    // Open nested alertdialog
+    fireEvent.click(screen.getByLabelText('ปิดหน้าต่าง'));
+    expect(screen.getByRole('alertdialog')).toBeTruthy();
+
+    // Lower-layer modal is now inert while alertdialog is active
+    expect(modalDialog.hasAttribute('inert')).toBe(true);
+    expect(modalDialog.getAttribute('aria-hidden')).toBe('true');
+
+    // Dismiss alertdialog ("แก้ไขต่อ")
+    fireEvent.click(screen.getByRole('button', { name: /แก้ไขต่อ/i }));
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+
+    // Modal is topmost again -> inert removed
+    expect(modalDialog.hasAttribute('inert')).toBe(false);
+    expect(modalDialog.hasAttribute('aria-hidden')).toBe(false);
+
+    // Unmount modal -> app root inert cleanly removed
+    unmount();
+    expect(rootEl.hasAttribute('inert')).toBe(false);
+    expect(rootEl.hasAttribute('aria-hidden')).toBe(false);
+
+    document.body.removeChild(rootEl);
+  });
+
+  it('18. SPA_History_Navigation: PopState (browser back button) triggers dirty form discard confirmation', () => {
+    const handleClose = vi.fn();
+    render(<TestFormModal isOpen={true} onClose={handleClose} isDirty={true} />);
+
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+
+    // User presses browser back button (fires popstate)
+    fireEvent(window, new PopStateEvent('popstate'));
+
+    // Discard confirmation alertdialog opens; close does not bypass protection
+    expect(screen.getByRole('alertdialog')).toBeTruthy();
+    expect(handleClose).not.toHaveBeenCalled();
   });
 });

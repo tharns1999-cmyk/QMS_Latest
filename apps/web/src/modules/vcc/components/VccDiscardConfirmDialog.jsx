@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { AlertTriangle } from 'lucide-react';
-import { vccDialogStack, FOCUSABLE_SELECTOR } from '../hooks/useVccModalAccessibility';
+import { vccDialogStack, vccDialogElements, syncInertState, FOCUSABLE_SELECTOR } from '../hooks/useVccModalAccessibility';
 
 /**
  * VccDiscardConfirmDialog
@@ -31,6 +31,10 @@ export const VccDiscardConfirmDialog = ({
 
     const dialogId = idRef.current;
     vccDialogStack.push(dialogId);
+    if (dialogRef.current) {
+      vccDialogElements.set(dialogId, dialogRef.current);
+    }
+    syncInertState();
 
     // Initial focus on safe action (Cancel Discard / Edit More)
     const timer = setTimeout(() => {
@@ -84,10 +88,19 @@ export const VccDiscardConfirmDialog = ({
       if (idx !== -1) {
         vccDialogStack.splice(idx, 1);
       }
+      vccDialogElements.delete(dialogId);
+      syncInertState();
       clearTimeout(timer);
       window.removeEventListener('keydown', handleKeyDown, true);
     };
   }, [isOpen, onCancel]);
+
+  useEffect(() => {
+    if (isOpen && dialogRef.current) {
+      vccDialogElements.set(idRef.current, dialogRef.current);
+      syncInertState();
+    }
+  });
 
   if (!isOpen) return null;
   if (typeof document === 'undefined') return null;
