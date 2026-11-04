@@ -189,7 +189,7 @@ export const AnnualPlanMonthCell = ({
                     : 'รอบตามแผนประจำปี'
                 }`}
                 className={`inline-flex items-center justify-center gap-0.5 rounded font-mono font-bold transition-transform cursor-pointer shadow-2xs hover:scale-105 active:scale-95 ${
-                  isCompact ? 'px-1 py-0.5 text-[10px]' : 'px-1.5 py-0.5 text-xs'
+                  isCompact ? 'px-1 py-0.5 text-xs' : 'px-1.5 py-0.5 text-xs'
                 } ${
                   cycleWo?.nc_status === 'OPEN' || cycleWo?.result_status === 'FAIL'
                     ? 'bg-rose-600 text-white ring-1 ring-rose-400'
@@ -252,7 +252,7 @@ export const AnnualPlanMonthCell = ({
                   }}
                   title={`ทำจริง ${extWo.performed_at} (${pMonth ? `จากรอบแผนเดือน ${pMonth}` : 'นอกแผน'})`}
                   className={`inline-flex items-center justify-center gap-0.5 rounded font-mono font-bold transition-transform cursor-pointer shadow-2xs hover:scale-105 active:scale-95 ${
-                    isCompact ? 'px-1 py-0.5 text-[10px]' : 'px-1.5 py-0.5 text-xs'
+                    isCompact ? 'px-1 py-0.5 text-xs' : 'px-1.5 py-0.5 text-xs'
                   } ${
                     isNc
                       ? 'bg-rose-700 text-white ring-1 ring-rose-400'

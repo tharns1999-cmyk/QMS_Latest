@@ -31,7 +31,7 @@ export default function VccDepartmentSummary({ departmentBreakdown = [] }) {
           </div>
 
           <div className="flex items-center gap-2 self-start sm:self-auto">
-            <span className="text-[11px] font-medium text-slate-400">
+            <span className="text-xs font-medium text-slate-400">
               {departmentBreakdown.length} แผนก · รวม {totalAssets} เครื่องมือ
             </span>
 
@@ -98,7 +98,7 @@ export default function VccDepartmentSummary({ departmentBreakdown = [] }) {
                       <span className="text-xs font-mono font-bold text-slate-900">
                         {closed} <span className="font-normal text-slate-400 font-sans">/ {total} งาน</span>
                       </span>
-                      <span className="text-[11px] font-semibold text-emerald-700 ml-1.5 font-sans">
+                      <span className="text-xs font-semibold text-emerald-700 ml-1.5 font-sans">
                         ({completionPct}%)
                       </span>
                     </div>
@@ -119,7 +119,7 @@ export default function VccDepartmentSummary({ departmentBreakdown = [] }) {
                   </div>
 
                   {/* Bottom Operational Badges */}
-                  <div className="flex items-center justify-between text-[11px] pt-0.5">
+                  <div className="flex items-center justify-between text-xs pt-0.5">
                     <div className="flex items-center gap-2 flex-wrap">
                       {overdue > 0 ? (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-semibold bg-amber-100 text-amber-800">
@@ -143,7 +143,7 @@ export default function VccDepartmentSummary({ departmentBreakdown = [] }) {
                       )}
                     </div>
 
-                    <span className="text-slate-400 font-mono text-[10px]">
+                    <span className="text-slate-400 font-mono text-xs">
                       คิดเป็น {totalWos > 0 ? Math.round((total / totalWos) * 100) : 0}% ของงานทั้งระบบ
                     </span>
                   </div>
@@ -156,7 +156,7 @@ export default function VccDepartmentSummary({ departmentBreakdown = [] }) {
           <div className="overflow-x-auto rounded-xl border border-slate-200/70">
             <table className="w-full text-xs border-collapse">
               <thead>
-                <tr className="bg-slate-50/80 text-slate-600 border-b border-slate-200/70 font-semibold text-[11px]">
+                <tr className="bg-slate-50/80 text-slate-600 border-b border-slate-200/70 font-semibold text-xs">
                   <th className="py-2.5 px-3 text-left">แผนก</th>
                   <th className="py-2.5 px-2 text-right">เครื่องมือ</th>
                   <th className="py-2.5 px-2 text-right">ใบงานทั้งหมด</th>

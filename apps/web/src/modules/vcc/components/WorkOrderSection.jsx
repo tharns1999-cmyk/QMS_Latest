@@ -604,9 +604,9 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
                 aria-selected={isActive}
                 aria-label={t.fullLabel}
                 onClick={() => setActiveTab(t.key)}
-                className={`flex items-center gap-1.5 sm:gap-2 pb-3 pt-1 text-xs sm:text-[13px] 2xl:text-sm font-medium border-b-2 transition-all cursor-pointer whitespace-nowrap select-none ${
+                className={`flex items-center gap-1.5 sm:gap-2 pb-3 pt-1 text-xs sm:text-sm font-medium border-b-2 transition-all cursor-pointer whitespace-nowrap select-none ${
                   isActive
-                    ? 'border-purple-600 text-purple-700 font-semibold'
+                    ? 'border-indigo-600 text-indigo-700 font-semibold'
                     : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
                 }`}
               >
@@ -614,7 +614,7 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
                 <span className="inline 2xl:hidden">{t.shortLabel}</span>
                 <span
                   className={`px-2 py-0.5 rounded-full text-xs font-mono font-bold transition-colors ${
-                    isActive ? 'bg-purple-100 text-purple-800' : 'bg-slate-100 text-slate-600'
+                    isActive ? 'bg-indigo-50 text-indigo-800' : 'bg-slate-100 text-slate-600'
                   }`}
                 >
                   {count}
@@ -628,7 +628,7 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
       {/* 3. Search & Filters Toolbar */}
       <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
         {/* Search Input (Primary) */}
-        <div className="relative flex-1 min-w-[240px] max-w-sm">
+        <div className="relative flex-1 min-w-[180px] max-w-sm sm:max-w-md">
           <Search
             size={14}
             className="text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
@@ -638,7 +638,7 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder="ค้นหาเลขที่ใบงาน, เครื่องมือ, ใบรับรอง..."
-            className="w-full pl-8.5 pr-8 py-1.5 h-9 bg-white border border-slate-200 rounded-lg text-xs sm:text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-purple-600 focus:ring-1 focus:ring-purple-600 transition-colors shadow-2xs"
+            className="w-full pl-8.5 pr-8 py-1.5 h-9 bg-white border border-slate-200 rounded-lg text-xs sm:text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600 transition-colors shadow-2xs"
           />
           {searchTerm && (
             <button
@@ -659,7 +659,7 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
             aria-label="กรองใบสั่งงานตามแผนก"
             value={filterDept}
             onChange={(e) => setFilterDept(e.target.value)}
-            className="h-9 px-3 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-700 focus:outline-none focus:border-purple-600 cursor-pointer shadow-2xs truncate max-w-[180px]"
+            className="h-9 px-3 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-700 focus:outline-none focus:border-indigo-600 cursor-pointer shadow-2xs truncate max-w-[180px]"
           >
             <option value="">ทุกแผนก (Master Data)</option>
             {activeDepartments.map((d) => (
@@ -674,7 +674,7 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
             aria-label="กรองตามผลการตรวจ"
             value={filterResult}
             onChange={(e) => setFilterResult(e.target.value)}
-            className="h-9 px-2.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-700 focus:outline-none focus:border-purple-600 cursor-pointer shadow-2xs"
+            className="h-9 px-2.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-700 focus:outline-none focus:border-indigo-600 cursor-pointer shadow-2xs"
           >
             <option value="">ทุกผลตรวจ</option>
             <option value="PASS">{RESULT_STATUS_LABELS.PASS}</option>

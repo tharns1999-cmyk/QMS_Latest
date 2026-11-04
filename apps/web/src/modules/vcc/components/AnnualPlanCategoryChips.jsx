@@ -127,7 +127,7 @@ export const AnnualPlanCategoryChips = ({
         </div>
 
         {/* Cycle Count Distinction */}
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-[11px] text-slate-500">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs text-slate-500">
           <span className="px-2 py-0.5 rounded-md bg-slate-100 font-medium">
             รอบตามแผน: <strong className="text-slate-800">{overallTotals.totalPlannedCycles}</strong> รอบ
           </span>
@@ -157,7 +157,7 @@ export const AnnualPlanCategoryChips = ({
           <Layers size={13} className={!selectedCategory ? 'text-indigo-600' : 'text-slate-400'} />
           <span>ทุกประเภท</span>
           <span
-            className={`px-1.5 py-0.2 rounded-md text-[11px] font-mono ${
+            className={`px-1.5 py-0.2 rounded-md text-xs font-mono ${
               !selectedCategory ? 'bg-indigo-200/60 text-indigo-900' : 'bg-slate-100 text-slate-600'
             }`}
           >
@@ -181,7 +181,7 @@ export const AnnualPlanCategoryChips = ({
             >
               <span>{st.name}</span>
               <span
-                className={`px-1.5 py-0.2 rounded-md text-[11px] font-mono ${
+                className={`px-1.5 py-0.2 rounded-md text-xs font-mono ${
                   isSelected ? 'bg-indigo-200/60 text-indigo-900' : 'bg-slate-100 text-slate-600'
                 }`}
                 title={`เครื่องมือ ${st.totalInstruments} · มีแผน ${st.plannedInstruments} · ตรวจเสร็จ ${st.completedInstruments}`}
@@ -189,7 +189,7 @@ export const AnnualPlanCategoryChips = ({
                 {st.totalInstruments}
               </span>
               {st.completedInstruments > 0 && (
-                <span className="text-[10px] text-emerald-600 font-bold">
+                <span className="text-xs text-emerald-600 font-bold">
                   ✓{st.completedInstruments}
                 </span>
               )}

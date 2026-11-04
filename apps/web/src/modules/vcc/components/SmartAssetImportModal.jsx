@@ -310,7 +310,7 @@ export const SmartAssetImportModal = ({
                             ) : asset.department !== plan.department ? (
                               <span className="inline-flex flex-col items-end gap-0.5 text-xs text-amber-800 font-semibold bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200">
                                 <span>สังกัดแผนก {asset.department} (นอกแผน {plan.department})</span>
-                                <span className="text-[10px] text-indigo-700">เลือกเพื่อเพิ่มเข้าแผนได้</span>
+                                <span className="text-xs text-indigo-700">เลือกเพื่อเพิ่มเข้าแผนได้</span>
                               </span>
                             ) : (
                               <span className="text-xs text-indigo-700 font-semibold bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-200">

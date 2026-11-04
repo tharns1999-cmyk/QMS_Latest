@@ -135,7 +135,7 @@ export default function VccNotificationSettingsModal({
             </h4>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                <label className="block text-xs font-semibold text-slate-600 mb-1">
                   Overdue L1 (วัน)
                 </label>
                 <input
@@ -149,7 +149,7 @@ export default function VccNotificationSettingsModal({
                 />
               </div>
               <div>
-                <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                <label className="block text-xs font-semibold text-slate-600 mb-1">
                   Overdue L2 (วัน)
                 </label>
                 <input
@@ -163,7 +163,7 @@ export default function VccNotificationSettingsModal({
                 />
               </div>
               <div>
-                <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                <label className="block text-xs font-semibold text-slate-600 mb-1">
                   Overdue L3 วิกฤต (วัน)
                 </label>
                 <input
@@ -177,7 +177,7 @@ export default function VccNotificationSettingsModal({
                 />
               </div>
               <div>
-                <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                <label className="block text-xs font-semibold text-slate-600 mb-1">
                   ระยะผ่อนผันหลังรับทราบ (วัน)
                 </label>
                 <input

@@ -29,9 +29,9 @@ const StepRow = ({ label, name, at, done, current }) => (
       />
     )}
     <div className="min-w-0">
-      <span className="text-slate-500 text-[11px] block sm:inline sm:mr-1">{label}: </span>
+      <span className="text-slate-500 text-xs block sm:inline sm:mr-1">{label}: </span>
       <span className={`font-semibold ${done || current ? 'text-slate-900' : 'text-slate-500'}`}>{name}</span>
-      {at && <span className="text-slate-400 text-[11px] font-mono"> · {at}</span>}
+      {at && <span className="text-slate-400 text-xs font-mono"> · {at}</span>}
     </div>
   </div>
 );

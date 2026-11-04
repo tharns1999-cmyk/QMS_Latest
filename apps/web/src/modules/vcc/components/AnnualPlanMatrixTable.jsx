@@ -75,8 +75,13 @@ export const AnnualPlanMatrixTable = ({
   onQuickRemoveMonth,
   onCreateWorkOrder
 }) => {
-  const [viewMode, setViewMode] = useState('12_MONTHS'); // '12_MONTHS' | 'QUARTERLY'
-  const [density, setDensity] = useState('comfortable'); // 'comfortable' | 'compact'
+  const [viewMode, setViewMode] = useState(() => {
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      return 'QUARTERLY';
+    }
+    return '12_MONTHS';
+  });
+  const [density, setDensity] = useState('compact'); // default to compact per UX Round C
   const [tableSearch, setTableSearch] = useState('');
   const [inspectorItem, setInspectorItem] = useState(null);
   const [savingCellKey, setSavingCellKey] = useState('');
@@ -327,7 +332,7 @@ export const AnnualPlanMatrixTable = ({
           <thead className="sticky top-0 z-20 bg-slate-50/95 backdrop-blur-xs shadow-2xs">
             <tr className="border-b border-slate-200 text-slate-700 text-xs font-bold tracking-wider uppercase">
               {/* Sticky Column: Asset Code & Name (absorbs excess space to keep instrument identification readable) */}
-              <th className="py-3 px-3.5 sticky left-0 z-30 bg-slate-50 shadow-[1px_0_0_0_#e2e8f0] min-w-[260px] w-full">
+              <th className="py-2.5 sm:py-3 px-2 sm:px-3.5 sticky left-0 z-30 bg-slate-50 shadow-[1px_0_0_0_#e2e8f0] w-[140px] min-w-[140px] max-w-[150px] sm:w-[220px] sm:min-w-[220px] md:min-w-[260px] md:w-auto">
                 รายการเครื่องมือวัด
               </th>
 
@@ -343,7 +348,7 @@ export const AnnualPlanMatrixTable = ({
                       key={m}
                       className="py-2.5 px-1.5 text-center min-w-[56px] w-[56px] border-l border-slate-200/70 text-slate-800 font-mono whitespace-nowrap"
                     >
-                      <div className="text-[11px] text-slate-500 font-medium">{MONTH_LABELS[m - 1]}</div>
+                      <div className="text-xs text-slate-500 font-medium">{MONTH_LABELS[m - 1]}</div>
                       <div className="text-xs font-bold">ด.{m}</div>
                     </th>
                   ))
@@ -425,23 +430,23 @@ export const AnnualPlanMatrixTable = ({
                     }`}
                   >
                     {/* Sticky Left: Asset Code & Operation Context (Flat Row, Zero Indentation) */}
-                    <td className={`py-2.5 px-3.5 align-middle sticky left-0 z-10 shadow-[1px_0_0_0_#e2e8f0] min-w-[240px] ${
-                      isLogicalGroup ? 'bg-slate-50/95' : 'bg-white'
+                    <td className={`py-2 sm:py-2.5 px-2 sm:px-3.5 align-middle sticky left-0 z-10 shadow-[1px_0_0_0_#e2e8f0] w-[140px] min-w-[140px] max-w-[150px] sm:w-[220px] sm:min-w-[220px] md:min-w-[260px] md:w-auto ${
+                      isLogicalGroup ? 'bg-slate-50' : 'bg-white'
                     }`}>
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="space-y-1">
+                      <div className="flex items-start justify-between gap-1.5 sm:gap-2">
+                        <div className="space-y-1 min-w-0">
                           <div className="flex items-center gap-1.5 flex-wrap">
                             <button
                               type="button"
                               onClick={() => setInspectorItem(item)}
                               title="คลิกเพื่อดูรายละเอียดและสเปกเครื่องมือ"
-                              className="text-left font-mono font-bold text-indigo-700 hover:text-indigo-900 hover:underline text-sm tracking-tight cursor-pointer"
+                              className="text-left font-mono font-bold text-indigo-700 hover:text-indigo-900 hover:underline text-xs sm:text-sm tracking-tight cursor-pointer truncate max-w-full"
                             >
                               {item.asset_code}
                             </button>
 
                             {item.asset_status === 'ON_HOLD' && (
-                              <span className="px-1.5 py-0.5 rounded bg-rose-100 text-rose-800 text-[11px] font-bold border border-rose-200">
+                              <span className="px-1.5 py-0.5 rounded bg-rose-100 text-rose-800 text-xs font-bold border border-rose-200">
                                 ระงับใช้งาน
                               </span>
                             )}
@@ -459,18 +464,18 @@ export const AnnualPlanMatrixTable = ({
                             ) : null}
                           </div>
 
-                          <div className="text-sm font-semibold text-slate-900 leading-snug">
+                          <div className="text-xs sm:text-sm font-semibold text-slate-900 leading-snug line-clamp-2 break-words">
                             {item.asset_name}
                           </div>
                           {isCompositeSet && item.composite_details && (
-                            <div className="text-xs text-teal-800 leading-snug">
+                            <div className="text-xs text-teal-800 leading-snug line-clamp-2">
                               อุปกรณ์ในชุด: {item.composite_details}
                             </div>
                           )}
-                          <div className="text-xs text-slate-500 flex flex-wrap items-center gap-1.5 pt-0.5">
+                          <div className="text-xs text-slate-500 flex flex-wrap items-center gap-1 sm:gap-1.5 pt-0.5">
                             <span className="font-semibold text-slate-700">{item.frequency_label || 'รายปี'}</span>
                             <span>•</span>
-                            <span>{item.provider_name || 'ทวนสอบภายใน'}</span>
+                            <span className="truncate max-w-[100px] sm:max-w-none">{item.provider_name || 'ทวนสอบภายใน'}</span>
                             <span>•</span>
                             <span className="text-slate-600">แผนก {item.responsible_dept || item.asset_department}</span>
                             {item.asset_type && (
@@ -720,7 +725,7 @@ export const AnnualPlanMatrixTable = ({
             <span className="text-slate-700 font-medium">✓: ปิดงานตรวจรับเสร็จสิ้นแล้ว</span>
           </span>
           <span className="inline-flex items-center gap-1.5">
-            <span className="px-1.5 py-0.5 rounded bg-teal-100 text-teal-800 text-[10px] font-bold">ชุดเครื่องมือ</span>
+            <span className="px-1.5 py-0.5 rounded bg-teal-100 text-teal-800 text-xs font-bold">ชุดเครื่องมือ</span>
             <span className="text-slate-700 font-medium">Composite Set (1 ใบรับรอง)</span>
           </span>
         </div>

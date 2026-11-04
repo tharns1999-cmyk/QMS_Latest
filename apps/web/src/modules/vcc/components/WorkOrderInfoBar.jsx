@@ -29,16 +29,16 @@ export const WorkOrderInfoBar = ({ thresholds = {}, woSettings = {} }) => {
         onClick={() => setIsExpanded((prev) => !prev)}
         className={`h-9 inline-flex items-center gap-1.5 px-3 rounded-lg border text-xs sm:text-sm font-medium transition-colors cursor-pointer select-none ${
           isExpanded
-            ? 'bg-purple-50 border-purple-300 text-purple-900 shadow-2xs'
+            ? 'bg-indigo-50 border-indigo-300 text-indigo-900 shadow-2xs'
             : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:text-slate-900'
         }`}
         aria-expanded={isExpanded}
         aria-label="กติกาใบสั่งงานทวนสอบ/สอบเทียบ การตรวจรับผล และการระงับใช้"
       >
-        <HelpCircle size={14} className={isExpanded ? 'text-purple-700' : 'text-slate-500'} />
+        <HelpCircle size={14} className={isExpanded ? 'text-indigo-700' : 'text-slate-500'} />
         <span>กติกา QMS</span>
         {isExpanded ? (
-          <ChevronUp size={13} className="text-purple-700" />
+          <ChevronUp size={13} className="text-indigo-700" />
         ) : (
           <ChevronDown size={13} className="text-slate-400" />
         )}
@@ -53,7 +53,7 @@ export const WorkOrderInfoBar = ({ thresholds = {}, woSettings = {} }) => {
         >
           <div className="flex items-center justify-between pb-2 border-b border-slate-100">
             <div className="flex items-center gap-2 font-bold text-slate-900 text-xs sm:text-sm">
-              <ShieldCheck size={16} className="text-purple-700" />
+              <ShieldCheck size={16} className="text-indigo-700" />
               <span>กติกาและข้อกำหนด QMS (3 ข้อ)</span>
             </div>
             <button

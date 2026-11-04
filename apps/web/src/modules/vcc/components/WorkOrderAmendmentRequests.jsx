@@ -63,7 +63,7 @@ export const WorkOrderAmendmentRequests = ({ workOrderId, onResolved }) => {
           <div key={req.id} className="bg-white/80 p-2 rounded-lg border border-amber-200/60 space-y-2">
             <div>ผู้ขอ: <span className="font-bold">{req.requester_name || req.requested_by}</span></div>
             <div>
-              <span className="font-semibold block text-[11px] text-amber-900">เหตุผล:</span>
+              <span className="font-semibold block text-xs text-amber-900">เหตุผล:</span>
               <span>{req.amendment_reason}</span>
             </div>
             {isRequester ? (

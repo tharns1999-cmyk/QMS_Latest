@@ -226,7 +226,7 @@ export default function VccOnHoldTrackerTab({ onNavigateToWorkOrder }) {
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs text-slate-700">
-              <thead className="bg-slate-50/75 border-b border-slate-200 text-slate-600 font-semibold uppercase tracking-wider text-[11px]">
+              <thead className="bg-slate-50/75 border-b border-slate-200 text-slate-600 font-semibold uppercase tracking-wider text-xs">
                 <tr>
                   <th className="py-3 px-4">เครื่องมือวัด</th>
                   <th className="py-3 px-3">แผนก / ตำแหน่ง</th>
@@ -251,13 +251,13 @@ export default function VccOnHoldTrackerTab({ onNavigateToWorkOrder }) {
                       <td className="py-3.5 px-4 align-top">
                         <div className="font-mono font-bold text-slate-900 text-sm">{item.asset_code}</div>
                         <div className="font-medium text-slate-800 text-xs mt-0.5">{item.asset_name}</div>
-                        <div className="text-[11px] text-slate-400 mt-0.5">{item.asset_type}</div>
+                        <div className="text-xs text-slate-400 mt-0.5">{item.asset_type}</div>
                       </td>
 
                       <td className="py-3.5 px-3 align-top whitespace-nowrap">
                         <div className="flex flex-col gap-1">
                           <DepartmentBadge department={item.department} />
-                          <span className="text-[11px] text-slate-500 inline-flex items-center gap-1">
+                          <span className="text-xs text-slate-500 inline-flex items-center gap-1">
                             <MapPin size={11} className="text-slate-400 shrink-0" />
                             {item.location || '-'}
                           </span>
@@ -269,15 +269,15 @@ export default function VccOnHoldTrackerTab({ onNavigateToWorkOrder }) {
                           <div>
                             <span className="font-mono font-bold text-slate-900 text-xs">{item.wo_code}</span>
                             <div className="mt-1 flex items-center gap-1.5 flex-wrap">
-                              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-700">
+                              <span className="px-1.5 py-0.5 rounded text-xs font-bold bg-rose-100 text-rose-700">
                                 {item.result_status || 'FAIL'}
                               </span>
-                              <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-rose-50 text-rose-800 border border-rose-200">
+                              <span className="px-1.5 py-0.5 rounded text-xs font-semibold bg-rose-50 text-rose-800 border border-rose-200">
                                 NC: {item.nc_status}
                               </span>
                             </div>
                             {item.result_remarks && (
-                              <div className="text-[11px] text-slate-600 mt-1 italic line-clamp-2">
+                              <div className="text-xs text-slate-600 mt-1 italic line-clamp-2">
                                 &ldquo;{item.result_remarks}&rdquo;
                               </div>
                             )}
@@ -292,7 +292,7 @@ export default function VccOnHoldTrackerTab({ onNavigateToWorkOrder }) {
                           {days} วัน
                         </span>
                         {item.performed_at && (
-                          <div className="text-[11px] text-slate-400 mt-1">
+                          <div className="text-xs text-slate-400 mt-1">
                             บันทึกผล: {item.performed_at}
                           </div>
                         )}
@@ -301,12 +301,12 @@ export default function VccOnHoldTrackerTab({ onNavigateToWorkOrder }) {
                       <td className="py-3.5 px-4 align-top">
                         {item.impact_assessment ? (
                           <div className="p-2.5 rounded-lg bg-emerald-50/60 border border-emerald-200 text-xs text-emerald-900 leading-relaxed">
-                            <div className="font-semibold text-emerald-800 text-[11px] mb-0.5">ผลการประเมิน:</div>
+                            <div className="font-semibold text-emerald-800 text-xs mb-0.5">ผลการประเมิน:</div>
                             {item.impact_assessment}
                           </div>
                         ) : (
                           <div className="p-2.5 rounded-lg bg-amber-50/60 border border-amber-200 text-xs text-amber-900 leading-relaxed">
-                            <div className="font-semibold text-amber-800 text-[11px] mb-0.5">รอการประเมิน:</div>
+                            <div className="font-semibold text-amber-800 text-xs mb-0.5">รอการประเมิน:</div>
                             {item.recommendation}
                           </div>
                         )}
@@ -418,7 +418,7 @@ export default function VccOnHoldTrackerTab({ onNavigateToWorkOrder }) {
                   placeholder="ระบุผลการตรวจสอบย้อนหลัง เช่น ตรวจสอบชิ้นงานหรือผลการผลิตย้อนหลังนับจากการสอบเทียบครั้งก่อน พบว่าไม่มีผลกระทบต่อคุณภาพผลิตภัณฑ์..."
                   className="w-full rounded-xl border border-slate-300 p-3 text-xs text-slate-900 focus:outline-hidden focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 leading-relaxed"
                 />
-                <p className="text-[11px] text-slate-400 mt-1">
+                <p className="text-xs text-slate-400 mt-1">
                   ข้อกำหนด ISO 9001:2015 ข้อ 7.1.5.2 บังคับให้ประเมินความถูกต้องของผลการวัดที่ผ่านมาเมื่อพบว่าเครื่องมือไม่เป็นไปตามเกณฑ์
                 </p>
               </div>

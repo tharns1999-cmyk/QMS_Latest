@@ -314,7 +314,7 @@ export default function VccNotificationAuditTab() {
                     <tr key={n.id} className="hover:bg-slate-50/80 transition-colors">
                       <td className="py-3 px-3.5 whitespace-nowrap">
                         <span
-                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold border ${
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold border ${
                             SEVERITY_BADGES[n.severity] || 'bg-slate-100 text-slate-700'
                           }`}
                         >
@@ -333,7 +333,7 @@ export default function VccNotificationAuditTab() {
                         <span className="font-semibold text-slate-800 block">
                           Level {n.escalation_level}
                         </span>
-                        <span className="text-[10px] text-slate-500">
+                        <span className="text-xs text-slate-500">
                           {ESCALATION_LABELS[n.escalation_level] || 'ทั่วไป'}
                         </span>
                       </td>
@@ -345,20 +345,20 @@ export default function VccNotificationAuditTab() {
                       <td className="py-3 px-3.5 whitespace-nowrap font-mono">
                         <div className="font-bold text-slate-900">{n.asset_code || n.asset_id}</div>
                         {n.wo_code && (
-                          <div className="text-[11px] text-slate-500">{n.wo_code}</div>
+                          <div className="text-xs text-slate-500">{n.wo_code}</div>
                         )}
                       </td>
 
                       <td className="py-3 px-3.5 max-w-sm">
                         <div className="font-semibold text-slate-900">{n.title}</div>
-                        <div className="text-slate-600 text-[11px] mt-0.5 leading-relaxed line-clamp-2">
+                        <div className="text-slate-600 text-xs mt-0.5 leading-relaxed line-clamp-2">
                           {n.message}
                         </div>
                       </td>
 
                       <td className="py-3 px-3.5 whitespace-nowrap">
                         <span
-                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold border ${
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold border ${
                             STATUS_BADGES[n.status] || 'bg-slate-100 text-slate-700'
                           }`}
                         >
@@ -368,17 +368,17 @@ export default function VccNotificationAuditTab() {
                         </span>
                       </td>
 
-                      <td className="py-3 px-3.5 text-[11px] whitespace-nowrap text-slate-600">
+                      <td className="py-3 px-3.5 text-xs whitespace-nowrap text-slate-600">
                         {isAck ? (
                           <div>
                             <span className="font-medium text-emerald-800 block">
                               รับทราบโดย: {n.acknowledged_by_name || n.acknowledged_by}
                             </span>
-                            <span className="text-[10px] text-slate-400">
+                            <span className="text-xs text-slate-400">
                               {n.acknowledged_at ? new Date(n.acknowledged_at).toLocaleString('th-TH') : ''}
                             </span>
                             {n.acknowledgement_note && (
-                              <div className="text-[10px] text-slate-500 italic mt-0.5 max-w-xs truncate" title={n.acknowledgement_note}>
+                              <div className="text-xs text-slate-500 italic mt-0.5 max-w-xs truncate" title={n.acknowledgement_note}>
                                 "{n.acknowledgement_note}"
                               </div>
                             )}
@@ -388,7 +388,7 @@ export default function VccNotificationAuditTab() {
                             <span className="text-slate-500 block">
                               เหตุผล: {n.resolved_reason || 'งานเสร็จสิ้น'}
                             </span>
-                            <span className="text-[10px] text-slate-400">
+                            <span className="text-xs text-slate-400">
                               {n.resolved_at ? new Date(n.resolved_at).toLocaleString('th-TH') : ''}
                             </span>
                           </div>

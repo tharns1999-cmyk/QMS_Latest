@@ -575,7 +575,7 @@ export const VccTaskInboxSection = () => {
                     {activePlan.prepared_by_name || activePlan.prepared_by || '-'}
                   </div>
                   {activePlan.prepared_at && (
-                    <div className="text-[11px] text-slate-500 font-mono">
+                    <div className="text-xs text-slate-500 font-mono">
                       ส่งเมื่อ {formatThaiDateTime(activePlan.prepared_at)}
                     </div>
                   )}
@@ -603,7 +603,7 @@ export const VccTaskInboxSection = () => {
                       activePlan.assigned_reviewer_id ||
                       'ผู้ทบทวนตามสิทธิ์แผนก'}
                   </div>
-                  <div className="text-[11px] text-slate-500">
+                  <div className="text-xs text-slate-500">
                     {activePlan.reviewed_at
                       ? `ทบทวนเมื่อ ${formatThaiDateTime(activePlan.reviewed_at)}`
                       : activePlan.status === 'PENDING_REVIEW'
@@ -611,7 +611,7 @@ export const VccTaskInboxSection = () => {
                         : 'รอดำเนินการ'}
                   </div>
                   {activePlan.review_comment && (
-                    <div className="text-[11px] text-slate-700 bg-white/80 px-2 py-1 rounded border border-slate-200 mt-1">
+                    <div className="text-xs text-slate-700 bg-white/80 px-2 py-1 rounded border border-slate-200 mt-1">
                       ความเห็น: {activePlan.review_comment}
                     </div>
                   )}
@@ -641,7 +641,7 @@ export const VccTaskInboxSection = () => {
                       activePlan.assigned_approver_id ||
                       'ผู้อนุมัติตามสิทธิ์แผนก'}
                   </div>
-                  <div className="text-[11px] text-slate-500">
+                  <div className="text-xs text-slate-500">
                     {activePlan.approved_at
                       ? `อนุมัติเมื่อ ${formatThaiDateTime(activePlan.approved_at)}`
                       : activePlan.status === 'PENDING_APPROVAL'
@@ -649,7 +649,7 @@ export const VccTaskInboxSection = () => {
                         : 'รอดำเนินการ'}
                   </div>
                   {activePlan.approval_comment && (
-                    <div className="text-[11px] text-slate-700 bg-white/80 px-2 py-1 rounded border border-slate-200 mt-1">
+                    <div className="text-xs text-slate-700 bg-white/80 px-2 py-1 rounded border border-slate-200 mt-1">
                       ความเห็น: {activePlan.approval_comment}
                     </div>
                   )}
@@ -752,7 +752,7 @@ export const VccTaskInboxSection = () => {
                                 {isPlanned ? (
                                   <span
                                     title={`วางแผนเดือน ${m}`}
-                                    className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-indigo-100 text-indigo-800 font-bold text-[11px]"
+                                    className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-indigo-100 text-indigo-800 font-bold text-xs"
                                   >
                                     P
                                   </span>
@@ -796,7 +796,7 @@ export const VccTaskInboxSection = () => {
                           </div>
                         )}
                       </div>
-                      <div className="text-slate-400 font-mono text-[11px] shrink-0">
+                      <div className="text-slate-400 font-mono text-xs shrink-0">
                         {formatThaiDateTime(h.at)}
                       </div>
                     </div>
@@ -845,7 +845,7 @@ export const VccTaskInboxSection = () => {
             >
               <span>{tab.label}</span>
               <span
-                className={`px-1.5 py-0.2 rounded-full text-[11px] font-mono font-bold ${
+                className={`px-1.5 py-0.2 rounded-full text-xs font-mono font-bold ${
                   isActive ? 'bg-indigo-700 text-white' : 'bg-slate-200/80 text-slate-700'
                 }`}
               >
