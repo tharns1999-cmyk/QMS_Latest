@@ -7,6 +7,8 @@ import {
   FileCheck2,
   Layers
 } from 'lucide-react';
+import { useVccModalAccessibility } from '../hooks/useVccModalAccessibility';
+import { VccDiscardConfirmDialog } from './VccDiscardConfirmDialog';
 
 export const AmendmentModal = ({
   workOrder,
@@ -20,32 +22,61 @@ export const AmendmentModal = ({
 }) => {
   const [activeTab, setActiveTab] = useState('MAIN');
 
+  const isDirty = Boolean((form?.amendment_reason || '').trim());
+
+  const {
+    dialogRef,
+    requestClose,
+    handleBackdropClick,
+    showConfirmDiscard,
+    confirmDiscard,
+    cancelDiscard
+  } = useVccModalAccessibility({
+    isOpen: !!workOrder,
+    onClose,
+    isDirty,
+    discardTitle: 'ยกเลิกการขอแก้ไขผล?',
+    discardMessage: 'คุณมีข้อความเหตุผลการขอแก้ไขที่ยังไม่ได้ส่งคำขอ ต้องการยกเลิกและปิดหน้าต่างหรือไม่?'
+  });
+
   if (!workOrder) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden">
-        {/* Header */}
-        <div className="px-6 py-4.5 border-b border-amber-200 bg-amber-50/70 flex items-center justify-between shrink-0">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="font-mono text-xs font-bold px-2 py-0.5 rounded-md bg-amber-200 text-amber-900">
-                AMENDMENT: {workOrder.wo_code}
-              </span>
-              <span className="text-xs text-amber-800 font-medium">({workOrder.asset_code} — {workOrder.asset_name})</span>
+    <>
+      <div
+        className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4"
+        onClick={handleBackdropClick}
+      >
+        <div
+          ref={dialogRef}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="amendment-dialog-title"
+          tabIndex="-1"
+          className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden outline-none"
+        >
+          {/* Header */}
+          <div className="px-6 py-4.5 border-b border-amber-200 bg-amber-50/70 flex items-center justify-between shrink-0">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-xs font-bold px-2 py-0.5 rounded-md bg-amber-200 text-amber-900">
+                  AMENDMENT: {workOrder.wo_code}
+                </span>
+                <span className="text-xs text-amber-800 font-medium">({workOrder.asset_code} — {workOrder.asset_name})</span>
+              </div>
+              <h2 id="amendment-dialog-title" className="text-lg font-bold text-slate-900 tracking-tight mt-1">
+                ขอแก้ไขผลการสอบเทียบที่ปิดงานแล้ว (Controlled Amendment)
+              </h2>
             </div>
-            <h2 className="text-lg font-bold text-slate-900 tracking-tight mt-1">
-              ขอแก้ไขผลการสอบเทียบที่ปิดงานแล้ว (Controlled Amendment)
-            </h2>
+            <button
+              type="button"
+              onClick={requestClose}
+              aria-label="ปิดหน้าต่าง"
+              className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 cursor-pointer transition-colors"
+            >
+              <X size={20} />
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 cursor-pointer transition-colors"
-          >
-            <X size={20} />
-          </button>
-        </div>
 
         {/* Compliance Notice */}
         <div className="bg-amber-100/60 px-6 py-2.5 border-b border-amber-200/60 text-xs text-amber-950 flex items-center gap-2 shrink-0">
@@ -280,7 +311,7 @@ export const AmendmentModal = ({
             <div className="flex gap-2.5">
               <button
                 type="button"
-                onClick={onClose}
+                onClick={requestClose}
                 className="h-10 px-4 rounded-xl border border-slate-300 text-sm font-semibold hover:bg-slate-50 transition-colors cursor-pointer"
               >
                 ยกเลิก
@@ -298,7 +329,16 @@ export const AmendmentModal = ({
         </form>
       </div>
     </div>
-  );
+
+    <VccDiscardConfirmDialog
+      isOpen={showConfirmDiscard}
+      onConfirm={confirmDiscard}
+      onCancel={cancelDiscard}
+      title="ยกเลิกการขอแก้ไขผล?"
+      message="คุณมีข้อความเหตุผลการขอแก้ไขที่ยังไม่ได้ส่งคำขอ ต้องการยกเลิกและปิดหน้าต่างหรือไม่?"
+    />
+  </>
+);
 };
 
 export default AmendmentModal;

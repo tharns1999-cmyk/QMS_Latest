@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { X, CheckCircle, AlertTriangle, ShieldAlert, Info } from 'lucide-react';
 import { acknowledgeVccNotification } from '../api/vccNotificationApi';
+import { useVccModalAccessibility } from '../hooks/useVccModalAccessibility';
+import { VccDiscardConfirmDialog } from './VccDiscardConfirmDialog';
 
 /**
  * VccNotificationAcknowledgementModal
@@ -15,6 +17,21 @@ export default function VccNotificationAcknowledgementModal({
   const [note, setNote] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+
+  const isDirty = Boolean(note?.trim());
+
+  const {
+    dialogRef,
+    requestClose,
+    handleBackdropClick,
+    showConfirmDiscard,
+    confirmDiscard,
+    cancelDiscard
+  } = useVccModalAccessibility({
+    isOpen: Boolean(isOpen && notification),
+    onClose,
+    isDirty
+  });
 
   if (!isOpen || !notification) return null;
 
@@ -39,38 +56,50 @@ export default function VccNotificationAcknowledgementModal({
   const isWarning = notification.severity === 'WARNING';
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl space-y-4 border border-slate-200/80 animate-in fade-in zoom-in-95 duration-150">
-        <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-          <div className="flex items-center gap-2.5">
-            <div
-              className={`w-9 h-9 rounded-xl flex items-center justify-center border font-bold ${
-                isCritical
-                  ? 'bg-rose-50 text-rose-700 border-rose-200'
-                  : isWarning
-                  ? 'bg-amber-50 text-amber-700 border-amber-200'
-                  : 'bg-blue-50 text-blue-700 border-blue-200'
-              }`}
+    <>
+      <div
+        className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4"
+        onClick={handleBackdropClick}
+      >
+        <div
+          ref={dialogRef}
+          role={isCritical ? 'alertdialog' : 'dialog'}
+          aria-modal="true"
+          aria-labelledby="ack-modal-title"
+          tabIndex="-1"
+          className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl space-y-4 border border-slate-200/80 animate-in fade-in zoom-in-95 duration-150 outline-none"
+        >
+          <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+            <div className="flex items-center gap-2.5">
+              <div
+                className={`w-9 h-9 rounded-xl flex items-center justify-center border font-bold ${
+                  isCritical
+                    ? 'bg-rose-50 text-rose-700 border-rose-200'
+                    : isWarning
+                    ? 'bg-amber-50 text-amber-700 border-amber-200'
+                    : 'bg-blue-50 text-blue-700 border-blue-200'
+                }`}
+              >
+                {isCritical ? <ShieldAlert size={18} /> : isWarning ? <AlertTriangle size={18} /> : <Info size={18} />}
+              </div>
+              <div>
+                <h3 id="ack-modal-title" className="text-base font-bold text-slate-900">
+                  รับทราบการแจ้งเตือน (Acknowledge)
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5 font-mono">
+                  รหัสอ้างอิง: {notification.id}
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={requestClose}
+              aria-label="ปิดหน้าต่าง"
+              className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
             >
-              {isCritical ? <ShieldAlert size={18} /> : isWarning ? <AlertTriangle size={18} /> : <Info size={18} />}
-            </div>
-            <div>
-              <h3 className="text-base font-bold text-slate-900">
-                รับทราบการแจ้งเตือน (Acknowledge)
-              </h3>
-              <p className="text-xs text-slate-500 mt-0.5 font-mono">
-                รหัสอ้างอิง: {notification.id}
-              </p>
-            </div>
+              <X size={18} />
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
-          >
-            <X size={18} />
-          </button>
-        </div>
 
         {errorMsg && (
           <div className="rounded-xl bg-rose-50 border border-rose-200 px-3.5 py-2.5 text-xs font-medium text-rose-700">
@@ -121,7 +150,7 @@ export default function VccNotificationAcknowledgementModal({
           <div className="flex justify-end gap-2.5 pt-2 border-t border-slate-100">
             <button
               type="button"
-              onClick={onClose}
+              onClick={requestClose}
               className="h-9 px-4 rounded-xl border border-slate-200 text-slate-700 text-xs sm:text-sm font-medium hover:bg-slate-50 cursor-pointer"
             >
               ยกเลิก
@@ -139,5 +168,12 @@ export default function VccNotificationAcknowledgementModal({
         </form>
       </div>
     </div>
-  );
+
+    <VccDiscardConfirmDialog
+      isOpen={showConfirmDiscard}
+      onConfirm={confirmDiscard}
+      onCancel={cancelDiscard}
+    />
+  </>
+);
 }

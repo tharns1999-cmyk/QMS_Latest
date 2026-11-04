@@ -11,6 +11,8 @@ import {
   ArrowRight
 } from 'lucide-react';
 import { computeDueDates, saveVccPlanItem, fetchVccPlanDetail } from '../api/vccPlanApi';
+import { useVccModalAccessibility } from '../hooks/useVccModalAccessibility';
+import { VccDiscardConfirmDialog } from './VccDiscardConfirmDialog';
 
 const MONTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
 
@@ -70,6 +72,23 @@ export const SmartAssetImportModal = ({
       return true;
     });
   }, [activeAssets, deptFilter, searchTerm]);
+
+  const isDirty = selectedAssetIds.length > 0;
+
+  const {
+    dialogRef,
+    requestClose,
+    handleBackdropClick,
+    showConfirmDiscard,
+    confirmDiscard,
+    cancelDiscard
+  } = useVccModalAccessibility({
+    isOpen: open,
+    onClose,
+    isDirty,
+    discardTitle: 'ยกเลิกการเลือกเครื่องมือ?',
+    discardMessage: `คุณได้เลือกเครื่องมือไว้ ${selectedAssetIds.length} รายการ ต้องการยกเลิกและปิดหน้าต่างหรือไม่?`
+  });
 
   if (!open || !plan) return null;
 
@@ -154,31 +173,43 @@ export const SmartAssetImportModal = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden">
-        {/* Header */}
-        <div className="px-5 py-4 border-b border-slate-200/80 flex items-center justify-between bg-slate-50/70">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-700">
-              <Sparkles size={18} />
+    <>
+      <div
+        className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4"
+        onClick={handleBackdropClick}
+      >
+        <div
+          ref={dialogRef}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="smart-import-title"
+          tabIndex="-1"
+          className="bg-white rounded-2xl border border-slate-200/90 shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden outline-none"
+        >
+          {/* Header */}
+          <div className="px-5 py-4 border-b border-slate-200/80 flex items-center justify-between bg-slate-50/70">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-700">
+                <Sparkles size={18} />
+              </div>
+              <div>
+                <h2 id="smart-import-title" className="text-xl font-bold text-slate-900 tracking-tight">
+                  เลือกเครื่องมือจากทะเบียนเข้าสู่แผนปี {plan.plan_year} (FM-QC-46)
+                </h2>
+                <p className="text-sm text-slate-500 font-medium mt-0.5">
+                  เชื่อมโยงข้อมูลเครื่องมือจริงจาก Asset Register เพื่อกำหนดรอบการทวนสอบและวันครบกำหนดอัตโนมัติ
+                </p>
+              </div>
             </div>
-            <div>
-              <h2 className="text-xl font-bold text-slate-900 tracking-tight">
-                เลือกเครื่องมือจากทะเบียนเข้าสู่แผนปี {plan.plan_year} (FM-QC-46)
-              </h2>
-              <p className="text-sm text-slate-500 font-medium mt-0.5">
-                เชื่อมโยงข้อมูลเครื่องมือจริงจาก Asset Register เพื่อกำหนดรอบการทวนสอบและวันครบกำหนดอัตโนมัติ
-              </p>
-            </div>
+            <button
+              type="button"
+              onClick={requestClose}
+              aria-label="ปิดหน้าต่าง"
+              className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+            >
+              <X size={20} />
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
-          >
-            <X size={20} />
-          </button>
-        </div>
 
         {/* Content Body */}
         <form onSubmit={handleImport} className="flex-1 overflow-y-auto p-5 space-y-4">
@@ -465,7 +496,7 @@ export const SmartAssetImportModal = ({
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={onClose}
+                onClick={requestClose}
                 className="h-10 px-4 rounded-xl border border-slate-300 text-sm font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
               >
                 ยกเลิก
@@ -487,7 +518,16 @@ export const SmartAssetImportModal = ({
         </form>
       </div>
     </div>
-  );
+
+    <VccDiscardConfirmDialog
+      isOpen={showConfirmDiscard}
+      onConfirm={confirmDiscard}
+      onCancel={cancelDiscard}
+      title="ยกเลิกการเลือกเครื่องมือ?"
+      message={`คุณได้เลือกเครื่องมือไว้ ${selectedAssetIds.length} รายการ ต้องการยกเลิกและปิดหน้าต่างหรือไม่?`}
+    />
+  </>
+);
 };
 
 export default SmartAssetImportModal;

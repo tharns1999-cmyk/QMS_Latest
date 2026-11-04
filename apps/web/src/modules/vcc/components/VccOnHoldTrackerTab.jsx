@@ -5,9 +5,7 @@ import {
   RefreshCw,
   CheckCircle2,
   Clock,
-  Building2,
   MapPin,
-  FileText,
   Unlock,
   AlertTriangle,
   X
@@ -16,6 +14,8 @@ import { fetchVccOnHoldTracker } from '../api/vccDashboardApi';
 import { releaseVccWorkOrderHold } from '../api/vccWorkOrderApi';
 import DepartmentBadge from '../../../shared/components/ui/DepartmentBadge';
 import { formatVccDate } from '../utils/vccDateUtils';
+import { useVccModalAccessibility } from '../hooks/useVccModalAccessibility';
+import { VccDiscardConfirmDialog } from './VccDiscardConfirmDialog';
 
 export default function VccOnHoldTrackerTab({ onNavigateToWorkOrder }) {
   const [trackerData, setTrackerData] = useState(null);
@@ -62,6 +62,21 @@ export default function VccOnHoldTrackerTab({ onNavigateToWorkOrder }) {
     setReleaseReason('');
     setModalError('');
   };
+
+  const isDirty = Boolean(releaseReason?.trim() || impactAssessment?.trim());
+
+  const {
+    dialogRef,
+    requestClose,
+    handleBackdropClick,
+    showConfirmDiscard,
+    confirmDiscard,
+    cancelDiscard
+  } = useVccModalAccessibility({
+    isOpen: !!selectedItem,
+    onClose: handleCloseReleaseModal,
+    isDirty
+  });
 
   const handleConfirmReleaseHold = async (e) => {
     e.preventDefault();
@@ -347,105 +362,124 @@ export default function VccOnHoldTrackerTab({ onNavigateToWorkOrder }) {
 
       {/* 4. Release Hold Confirmation Modal */}
       {selectedItem && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-lg w-full overflow-hidden">
-            <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
-              <div className="flex items-center gap-2">
-                <Unlock size={18} className="text-emerald-600" />
-                <h3 className="text-base font-bold text-slate-900">
-                  ปลดระงับการใช้งานเครื่องมือ
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={handleCloseReleaseModal}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <form onSubmit={handleConfirmReleaseHold} className="p-6 space-y-4">
-              {modalError && (
-                <div role="alert" className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold flex items-center gap-2">
-                  <AlertTriangle size={15} className="shrink-0" />
-                  <span>{modalError}</span>
+        <>
+          <div
+            className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
+            onClick={handleBackdropClick}
+          >
+            <div
+              ref={dialogRef}
+              role="alertdialog"
+              aria-modal="true"
+              aria-labelledby="hold-release-title"
+              tabIndex="-1"
+              className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-lg w-full overflow-hidden outline-none"
+            >
+              <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+                <div className="flex items-center gap-2">
+                  <Unlock size={18} className="text-emerald-600" />
+                  <h3 id="hold-release-title" className="text-base font-bold text-slate-900">
+                    ปลดระงับการใช้งานเครื่องมือ
+                  </h3>
                 </div>
-              )}
-
-              <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-xs space-y-1.5">
-                <div className="flex justify-between">
-                  <span className="text-slate-500">รหัสเครื่องมือ:</span>
-                  <span className="font-mono font-bold text-slate-900">{selectedItem.asset_code}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-500">ชื่อเครื่องมือ:</span>
-                  <span className="font-semibold text-slate-800">{selectedItem.asset_name}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-500">ใบสั่งงาน:</span>
-                  <span className="font-mono font-semibold text-slate-800">{selectedItem.wo_code}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-500">แผนก:</span>
-                  <span className="font-semibold text-slate-800">{selectedItem.department}</span>
-                </div>
-              </div>
-
-              <div>
-                <label htmlFor="hold-release-reason" className="block text-xs font-bold text-slate-800 mb-1.5">
-                  เหตุผลการปลดระงับและการแก้ไขที่ทำแล้ว <span className="text-rose-500">*</span>
-                </label>
-                <textarea
-                  id="hold-release-reason"
-                  required
-                  rows={2}
-                  value={releaseReason}
-                  onChange={(e) => setReleaseReason(e.target.value)}
-                  placeholder="เช่น ซ่อมและสอบเทียบซ้ำผ่าน ใบรับรองเลขที่..."
-                  className="w-full rounded-xl border border-slate-300 p-3 text-xs text-slate-900 focus:outline-hidden focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 leading-relaxed"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-800 mb-1.5">
-                  ผลการประเมินผลกระทบย้อนหลัง (NC Impact Assessment) <span className="text-rose-500">*</span>
-                </label>
-                <textarea
-                  required
-                  rows={4}
-                  value={impactAssessment}
-                  onChange={(e) => setImpactAssessment(e.target.value)}
-                  placeholder="ระบุผลการตรวจสอบย้อนหลัง เช่น ตรวจสอบชิ้นงานหรือผลการผลิตย้อนหลังนับจากการสอบเทียบครั้งก่อน พบว่าไม่มีผลกระทบต่อคุณภาพผลิตภัณฑ์..."
-                  className="w-full rounded-xl border border-slate-300 p-3 text-xs text-slate-900 focus:outline-hidden focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 leading-relaxed"
-                />
-                <p className="text-xs text-slate-400 mt-1">
-                  ข้อกำหนด ISO 9001:2015 ข้อ 7.1.5.2 บังคับให้ประเมินความถูกต้องของผลการวัดที่ผ่านมาเมื่อพบว่าเครื่องมือไม่เป็นไปตามเกณฑ์
-                </p>
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-2">
                 <button
                   type="button"
-                  onClick={handleCloseReleaseModal}
-                  disabled={submittingHold}
-                  className="px-4 py-2 rounded-lg border border-slate-300 text-slate-700 text-xs font-semibold hover:bg-slate-50 cursor-pointer"
+                  onClick={requestClose}
+                  aria-label="ปิดหน้าต่าง"
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
                 >
-                  ยกเลิก
-                </button>
-                <button
-                  type="submit"
-                  disabled={submittingHold}
-                  data-testid="confirm-release-hold-btn"
-                  className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-xs cursor-pointer inline-flex items-center gap-1.5"
-                >
-                  <Unlock size={14} />
-                  <span>{submittingHold ? 'กำลังปลดระงับ...' : 'ยืนยันปลดระงับการใช้งาน'}</span>
+                  <X size={18} />
                 </button>
               </div>
-            </form>
+
+              <form onSubmit={handleConfirmReleaseHold} className="p-6 space-y-4">
+                {modalError && (
+                  <div role="alert" className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold flex items-center gap-2">
+                    <AlertTriangle size={15} className="shrink-0" />
+                    <span>{modalError}</span>
+                  </div>
+                )}
+
+                <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-xs space-y-1.5">
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">รหัสเครื่องมือ:</span>
+                    <span className="font-mono font-bold text-slate-900">{selectedItem.asset_code}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">ชื่อเครื่องมือ:</span>
+                    <span className="font-semibold text-slate-800">{selectedItem.asset_name}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">ใบสั่งงาน:</span>
+                    <span className="font-mono font-semibold text-slate-800">{selectedItem.wo_code}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">แผนก:</span>
+                    <span className="font-semibold text-slate-800">{selectedItem.department}</span>
+                  </div>
+                </div>
+
+                <div>
+                  <label htmlFor="hold-release-reason" className="block text-xs font-bold text-slate-800 mb-1.5">
+                    เหตุผลการปลดระงับและการแก้ไขที่ทำแล้ว <span className="text-rose-500">*</span>
+                  </label>
+                  <textarea
+                    id="hold-release-reason"
+                    required
+                    rows={2}
+                    value={releaseReason}
+                    onChange={(e) => setReleaseReason(e.target.value)}
+                    placeholder="เช่น ซ่อมและสอบเทียบซ้ำผ่าน ใบรับรองเลขที่..."
+                    className="w-full rounded-xl border border-slate-300 p-3 text-xs text-slate-900 focus:outline-hidden focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 leading-relaxed"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                    ผลการประเมินผลกระทบย้อนหลัง (NC Impact Assessment) <span className="text-rose-500">*</span>
+                  </label>
+                  <textarea
+                    required
+                    rows={4}
+                    value={impactAssessment}
+                    onChange={(e) => setImpactAssessment(e.target.value)}
+                    placeholder="ระบุผลการตรวจสอบย้อนหลัง เช่น ตรวจสอบชิ้นงานหรือผลการผลิตย้อนหลังนับจากการสอบเทียบครั้งก่อน พบว่าไม่มีผลกระทบต่อคุณภาพผลิตภัณฑ์..."
+                    className="w-full rounded-xl border border-slate-300 p-3 text-xs text-slate-900 focus:outline-hidden focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 leading-relaxed"
+                  />
+                  <p className="text-xs text-slate-400 mt-1">
+                    ข้อกำหนด ISO 9001:2015 ข้อ 7.1.5.2 บังคับให้ประเมินความถูกต้องของผลการวัดที่ผ่านมาเมื่อพบว่าเครื่องมือไม่เป็นไปตามเกณฑ์
+                  </p>
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={requestClose}
+                    disabled={submittingHold}
+                    className="px-4 py-2 rounded-lg border border-slate-300 text-slate-700 text-xs font-semibold hover:bg-slate-50 cursor-pointer"
+                  >
+                    ยกเลิก
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={submittingHold}
+                    data-testid="confirm-release-hold-btn"
+                    className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-xs cursor-pointer inline-flex items-center gap-1.5"
+                  >
+                    <Unlock size={14} />
+                    <span>{submittingHold ? 'กำลังปลดระงับ...' : 'ยืนยันปลดระงับการใช้งาน'}</span>
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
-        </div>
+
+          <VccDiscardConfirmDialog
+            isOpen={showConfirmDiscard}
+            onConfirm={confirmDiscard}
+            onCancel={cancelDiscard}
+          />
+        </>
       )}
     </div>
   );

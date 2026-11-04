@@ -13,12 +13,23 @@ import {
   Building2
 } from 'lucide-react';
 import { formatVccDate, formatVccDateTime } from '../utils/vccDateUtils';
+import { useVccModalAccessibility } from '../hooks/useVccModalAccessibility';
 
 export const DigitalRecordModal = ({
   workOrder,
   onClose,
   onDownloadCert
 }) => {
+  const {
+    dialogRef,
+    requestClose,
+    handleBackdropClick
+  } = useVccModalAccessibility({
+    isOpen: !!workOrder,
+    onClose,
+    isDirty: false
+  });
+
   if (!workOrder) return null;
 
   const handlePrint = () => {
@@ -29,8 +40,18 @@ export const DigitalRecordModal = ({
   const isPass = workOrder.result_status === 'PASS';
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-3xl w-full my-8 flex flex-col overflow-hidden print:m-0 print:border-none print:shadow-none print:max-w-none">
+    <div
+      className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto"
+      onClick={handleBackdropClick}
+    >
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="digital-record-title"
+        tabIndex="-1"
+        className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-3xl w-full my-8 flex flex-col overflow-hidden outline-none print:m-0 print:border-none print:shadow-none print:max-w-none"
+      >
         
         {/* Modal Header (Hidden during browser printing) */}
         <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between shrink-0 bg-slate-50/70 print:hidden">
@@ -53,8 +74,10 @@ export const DigitalRecordModal = ({
             </button>
             <button
               type="button"
-              onClick={onClose}
+              onClick={requestClose}
+              aria-label="ปิด"
               className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 cursor-pointer transition-colors"
+              title="ปิด"
             >
               <X size={18} />
             </button>
@@ -69,7 +92,7 @@ export const DigitalRecordModal = ({
               <div className="text-xs font-mono font-bold tracking-wider text-slate-500 uppercase">
                 ศูนย์ทวนสอบและสอบเทียบเครื่องมือวัด (VCC) • ระบบบริหารคุณภาพ QMS
               </div>
-              <h1 className="text-xl font-black text-slate-900 tracking-tight mt-1">
+              <h1 id="digital-record-title" className="text-xl font-black text-slate-900 tracking-tight mt-1">
                 ใบบันทึกผลการทวนสอบ / สอบเทียบดิจิทัล (Digital Calibration Record)
               </h1>
               <div className="text-xs text-slate-500 mt-0.5">
@@ -282,7 +305,7 @@ export const DigitalRecordModal = ({
           <span>* เอกสารนี้จัดทำขึ้นโดยระบบดิจิทัล 100% สามารถตรวจสอบย้อนหลังได้ในระบบ Audit Trail</span>
           <button
             type="button"
-            onClick={onClose}
+            onClick={requestClose}
             className="h-8 px-4 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 font-semibold cursor-pointer"
           >
             ปิดหน้าต่าง

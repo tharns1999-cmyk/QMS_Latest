@@ -1,6 +1,19 @@
-import React from 'react';
+import React, { useMemo, useState, useId } from 'react';
 import { AlertTriangle, Trash2, X } from 'lucide-react';
 import { formatVccDueDate } from '../utils/vccDateUtils';
+import { useVccModalAccessibility } from '../hooks/useVccModalAccessibility';
+import { VccDiscardConfirmDialog } from './VccDiscardConfirmDialog';
+
+const serializeCreateForm = (f) => JSON.stringify({
+  mode: f?.mode || 'ADHOC',
+  plan_id: f?.plan_id || '',
+  plan_item_id: f?.plan_item_id || '',
+  planned_month: f?.planned_month || '',
+  child_asset_id: f?.child_asset_id || '',
+  asset_id: f?.asset_id || '',
+  provider_name: f?.provider_name || '',
+  due_date: f?.due_date || ''
+});
 
 export const CreateWorkOrderModal = ({
   open,
@@ -15,6 +28,36 @@ export const CreateWorkOrderModal = ({
   individualAssets,
   providers
 }) => {
+  const titleId = useId();
+  const isCurrentlyOpen = Boolean(open);
+  const [prevOpen, setPrevOpen] = useState(isCurrentlyOpen);
+  const [initialSnapshot, setInitialSnapshot] = useState(() => (isCurrentlyOpen && form ? serializeCreateForm(form) : null));
+
+  if (isCurrentlyOpen !== prevOpen) {
+    setPrevOpen(isCurrentlyOpen);
+    setInitialSnapshot(isCurrentlyOpen && form ? serializeCreateForm(form) : null);
+  }
+
+  const isDirty = useMemo(() => {
+    if (!isCurrentlyOpen || !initialSnapshot || !form) return false;
+    return serializeCreateForm(form) !== initialSnapshot;
+  }, [isCurrentlyOpen, form, initialSnapshot]);
+
+  const {
+    dialogRef,
+    requestClose,
+    handleBackdropClick,
+    showConfirmDiscard,
+    confirmDiscard,
+    cancelDiscard
+  } = useVccModalAccessibility({
+    isOpen: open,
+    onClose,
+    isDirty,
+    discardTitle: 'ข้อมูลใบสั่งงานยังไม่ได้บันทึก',
+    discardMessage: 'คุณมีข้อมูลใบสั่งงานที่กำลังจัดทำ ต้องการยกเลิกและปิดหน้าต่างใช่หรือไม่?'
+  });
+
   if (!open) return null;
 
   const selectedPlanItem = planItems.find((i) => i.id === form.plan_item_id);
@@ -25,14 +68,30 @@ export const CreateWorkOrderModal = ({
     : [];
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-lg w-full overflow-hidden">
-        <div className="px-6 py-4.5 border-b border-slate-200 flex items-center justify-between">
-          <h2 className="text-xl font-bold text-slate-900 tracking-tight">สร้างใบสั่งงานทวนสอบ/สอบเทียบ (Work Order)</h2>
-          <button type="button" onClick={onClose} className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer">
-            <X size={20} />
-          </button>
-        </div>
+    <>
+      <div
+        className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-150"
+        onClick={handleBackdropClick}
+      >
+        <div
+          ref={dialogRef}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={titleId}
+          tabIndex="-1"
+          className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-lg w-full overflow-hidden my-auto outline-none"
+        >
+          <div className="px-6 py-4.5 border-b border-slate-200 flex items-center justify-between">
+            <h2 id={titleId} className="text-xl font-bold text-slate-900 tracking-tight">สร้างใบสั่งงานทวนสอบ/สอบเทียบ (Work Order)</h2>
+            <button
+              type="button"
+              onClick={requestClose}
+              aria-label="ปิดหน้าต่าง"
+              className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
+            >
+              <X size={20} />
+            </button>
+          </div>
 
         <form onSubmit={onSubmit} className="p-6 space-y-4">
           {error && (
@@ -195,7 +254,11 @@ export const CreateWorkOrderModal = ({
           )}
 
           <div className="pt-2 flex justify-end gap-2.5">
-            <button type="button" onClick={onClose} className="h-10 px-4 rounded-xl border border-slate-300 text-sm font-semibold hover:bg-slate-50 transition-colors cursor-pointer">
+            <button
+              type="button"
+              onClick={requestClose}
+              className="h-10 px-4 rounded-xl border border-slate-300 text-sm font-semibold hover:bg-slate-50 transition-colors cursor-pointer"
+            >
               ยกเลิก
             </button>
             <button
@@ -209,6 +272,15 @@ export const CreateWorkOrderModal = ({
         </form>
       </div>
     </div>
+
+    <VccDiscardConfirmDialog
+      isOpen={showConfirmDiscard}
+      onConfirm={confirmDiscard}
+      onCancel={cancelDiscard}
+      title="ข้อมูลใบสั่งงานยังไม่ได้บันทึก"
+      message="คุณมีข้อมูลใบสั่งงานที่กำลังจัดทำ ต้องการยกเลิกและปิดหน้าต่างใช่หรือไม่?"
+    />
+  </>
   );
 };
 
@@ -225,122 +297,173 @@ export const WorkOrderActionModal = ({
   saving,
   onConfirm
 }) => {
+  const mode = modal?.mode;
+  const workOrder = modal?.workOrder;
+  const isAlertDialog = mode === 'REJECT' || mode === 'CANCEL';
+
+  const isDirty = useMemo(() => {
+    return Boolean(form?.text?.trim() || form?.reason?.trim() || (mode === 'RESCHEDULE' && form?.new_due_date && form?.new_due_date !== workOrder?.due_date));
+  }, [form, mode, workOrder]);
+
+  const {
+    dialogRef,
+    requestClose,
+    handleBackdropClick,
+    showConfirmDiscard,
+    confirmDiscard,
+    cancelDiscard
+  } = useVccModalAccessibility({
+    isOpen: Boolean(modal),
+    onClose,
+    isDirty,
+    discardTitle: 'ข้อมูลเหตุผลยังไม่ได้บันทึก',
+    discardMessage: 'คุณมีข้อมูลเหตุผลหรือรายละเอียดที่กำลังกรอก ต้องการยกเลิกและปิดหน้าต่างใช่หรือไม่?'
+  });
+
   if (!modal) return null;
-  const { mode, workOrder } = modal; // RESCHEDULE | APPROVE | REJECT | RELEASE_HOLD | CANCEL
   const requiresText = mode !== 'APPROVE';
   const missingReason = mode === 'RELEASE_HOLD' && !form.reason?.trim();
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-md w-full overflow-hidden">
-        <div className="px-6 py-4.5 border-b border-slate-200 flex items-center justify-between">
-          <h2 className="text-xl font-bold text-slate-900 tracking-tight">
-            {mode === 'RESCHEDULE' && `เลื่อนวันครบกำหนด (${workOrder.wo_code})`}
-            {mode === 'APPROVE' && `ตรวจรับผลและอนุมัติปิดใบงาน (${workOrder.wo_code})`}
-            {mode === 'REJECT' && `ส่งกลับแก้ไขผลทวนสอบ (${workOrder.wo_code})`}
-            {mode === 'RELEASE_HOLD' && `อนุมัติปลดระงับเครื่องมือ (${workOrder.asset_code})`}
-            {mode === 'CANCEL' && `ยกเลิกใบสั่งงาน (${workOrder.wo_code})`}
-          </h2>
-          <button type="button" onClick={onClose} className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer">
-            <X size={20} />
-          </button>
-        </div>
+    <>
+      <div
+        className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-150"
+        onClick={handleBackdropClick}
+      >
+        <div
+          ref={dialogRef}
+          role={isAlertDialog ? 'alertdialog' : 'dialog'}
+          aria-modal="true"
+          aria-labelledby="wo-action-modal-title"
+          tabIndex="-1"
+          className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-md w-full overflow-hidden my-auto outline-none"
+        >
+          <div className="px-6 py-4.5 border-b border-slate-200 flex items-center justify-between">
+            <h2 id="wo-action-modal-title" className="text-xl font-bold text-slate-900 tracking-tight">
+              {mode === 'RESCHEDULE' && `เลื่อนวันครบกำหนด (${workOrder?.wo_code})`}
+              {mode === 'APPROVE' && `ตรวจรับผลและอนุมัติปิดใบงาน (${workOrder?.wo_code})`}
+              {mode === 'REJECT' && `ส่งกลับแก้ไขผลทวนสอบ (${workOrder?.wo_code})`}
+              {mode === 'RELEASE_HOLD' && `อนุมัติปลดระงับเครื่องมือ (${workOrder?.asset_code})`}
+              {mode === 'CANCEL' && `ยกเลิกใบสั่งงาน (${workOrder?.wo_code})`}
+            </h2>
+            <button
+              type="button"
+              onClick={requestClose}
+              aria-label="ปิดหน้าต่าง"
+              className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
+            >
+              <X size={20} />
+            </button>
+          </div>
 
-        <form onSubmit={onConfirm} className="p-6 space-y-4">
-          {error && (
-            <div role="alert" className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-sm font-semibold flex items-center gap-2">
-              <AlertTriangle size={17} className="text-rose-600 shrink-0" />
-              <span>{error}</span>
-            </div>
-          )}
-
-          {mode === 'RESCHEDULE' && (
-            <div>
-              <div className="text-xs sm:text-sm text-slate-600 font-medium mb-2">
-                วันครบกำหนดเดิม (เก็บไว้ในประวัติ): <span className="font-semibold text-slate-900 font-sans" title={`ค.ศ. ${workOrder.original_due_date}`}>{formatVccDueDate(workOrder.original_due_date)}</span>
+          <form onSubmit={onConfirm} className="p-6 space-y-4">
+            {error && (
+              <div role="alert" className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-sm font-semibold flex items-center gap-2">
+                <AlertTriangle size={17} className="text-rose-600 shrink-0" />
+                <span>{error}</span>
               </div>
-              <label className="block text-sm font-semibold text-slate-700 mb-1.5">วันครบกำหนดใหม่ <span className="text-rose-600">*</span></label>
-              <input
-                type="date"
-                required
-                aria-label="วันครบกำหนดใหม่"
-                value={form.new_due_date}
-                onChange={(e) => setForm({ ...form, new_due_date: e.target.value })}
-                className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium"
-              />
-            </div>
-          )}
+            )}
 
-          {mode === 'CANCEL' && (
-            <div>
-              <p className="text-xs sm:text-sm text-slate-600 mb-3">
-                ยกเลิกเฉพาะใบสั่งงานนี้ รอบในแผนประจำปียังอยู่ และออกใบสั่งงานใหม่ได้ หากต้องตัดรอบออกจากแผนให้ทำผ่านการปรับปรุงแผน
-              </p>
-              <label htmlFor="wo-cancel-category" className="block text-sm font-semibold text-slate-700 mb-1.5">ประเภทการยกเลิก <span className="text-rose-600">*</span></label>
-              <select
-                id="wo-cancel-category"
-                value={form.category || 'MISTAKE_CREATION'}
-                onChange={(e) => setForm({ ...form, category: e.target.value })}
-                className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium bg-white"
-              >
-                <option value="MISTAKE_CREATION">ออกใบสั่งงานผิดพลาด</option>
-                <option value="AUTHORIZED_CANCEL">ยกเลิกตามการอนุมัติของหัวหน้า</option>
-              </select>
-            </div>
-          )}
+            {mode === 'RESCHEDULE' && (
+              <div>
+                <div className="text-xs sm:text-sm text-slate-600 font-medium mb-2">
+                  วันครบกำหนดเดิม (เก็บไว้ในประวัติ): <span className="font-semibold text-slate-900 font-sans" title={`ค.ศ. ${workOrder.original_due_date}`}>{formatVccDueDate(workOrder.original_due_date)}</span>
+                </div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1.5">วันครบกำหนดใหม่ <span className="text-rose-600">*</span></label>
+                <input
+                  type="date"
+                  required
+                  aria-label="วันครบกำหนดใหม่"
+                  value={form.new_due_date}
+                  onChange={(e) => setForm({ ...form, new_due_date: e.target.value })}
+                  className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium"
+                />
+              </div>
+            )}
 
-          {mode === 'RELEASE_HOLD' && (
+            {mode === 'CANCEL' && (
+              <div>
+                <p className="text-xs sm:text-sm text-slate-600 mb-3">
+                  ยกเลิกเฉพาะใบสั่งงานนี้ รอบในแผนประจำปียังอยู่ และออกใบสั่งงานใหม่ได้ หากต้องตัดรอบออกจากแผนให้ทำผ่านการปรับปรุงแผน
+                </p>
+                <label htmlFor="wo-cancel-category" className="block text-sm font-semibold text-slate-700 mb-1.5">ประเภทการยกเลิก <span className="text-rose-600">*</span></label>
+                <select
+                  id="wo-cancel-category"
+                  value={form.category || 'MISTAKE_CREATION'}
+                  onChange={(e) => setForm({ ...form, category: e.target.value })}
+                  className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium bg-white"
+                >
+                  <option value="MISTAKE_CREATION">ออกใบสั่งงานผิดพลาด</option>
+                  <option value="AUTHORIZED_CANCEL">ยกเลิกตามการอนุมัติของหัวหน้า</option>
+                </select>
+              </div>
+            )}
+
+            {mode === 'RELEASE_HOLD' && (
+              <div>
+                <label htmlFor="wo-release-reason" className="block text-sm font-semibold text-slate-700 mb-1.5">
+                  เหตุผลการปลดระงับและการแก้ไขที่ทำแล้ว <span className="text-rose-600">*</span>
+                </label>
+                <textarea
+                  id="wo-release-reason"
+                  rows={2}
+                  required
+                  value={form.reason || ''}
+                  onChange={(e) => setForm({ ...form, reason: e.target.value })}
+                  placeholder="เช่น ซ่อมและสอบเทียบซ้ำผ่าน ใบรับรองเลขที่..."
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-medium"
+                />
+              </div>
+            )}
+
             <div>
-              <label htmlFor="wo-release-reason" className="block text-sm font-semibold text-slate-700 mb-1.5">
-                เหตุผลการปลดระงับและการแก้ไขที่ทำแล้ว <span className="text-rose-600">*</span>
+              <label htmlFor="wo-action-text" className="block text-sm font-semibold text-slate-700 mb-1.5">
+                {mode === 'RESCHEDULE' && 'เหตุผลในการขอเลื่อนวันครบกำหนด'}
+                {mode === 'APPROVE' && 'ความเห็นผู้ตรวจรับผล (ถ้ามี)'}
+                {mode === 'REJECT' && (workOrder.result_status === 'INCONCLUSIVE' ? 'สิ่งที่ต้องตรวจซ้ำ' : 'เหตุผลในการส่งกลับแก้ไขผล')}
+                {mode === 'RELEASE_HOLD' && 'ผลการประเมินผลกระทบและการแก้ไข (NC Impact Assessment)'}
+                {mode === 'CANCEL' && 'เหตุผลในการยกเลิก'}
+                {requiresText && <span className="text-rose-600"> *</span>}
               </label>
               <textarea
-                id="wo-release-reason"
-                rows={2}
-                required
-                value={form.reason || ''}
-                onChange={(e) => setForm({ ...form, reason: e.target.value })}
-                placeholder="เช่น ซ่อมและสอบเทียบซ้ำผ่าน ใบรับรองเลขที่..."
+                id="wo-action-text"
+                rows={3}
+                required={requiresText}
+                value={form.text}
+                onChange={(e) => setForm({ ...form, text: e.target.value })}
+                placeholder="ระบุรายละเอียด..."
                 className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-medium"
               />
             </div>
-          )}
 
-          <div>
-            <label htmlFor="wo-action-text" className="block text-sm font-semibold text-slate-700 mb-1.5">
-              {mode === 'RESCHEDULE' && 'เหตุผลในการขอเลื่อนวันครบกำหนด'}
-              {mode === 'APPROVE' && 'ความเห็นผู้ตรวจรับผล (ถ้ามี)'}
-              {mode === 'REJECT' && (workOrder.result_status === 'INCONCLUSIVE' ? 'สิ่งที่ต้องตรวจซ้ำ' : 'เหตุผลในการส่งกลับแก้ไขผล')}
-              {mode === 'RELEASE_HOLD' && 'ผลการประเมินผลกระทบและการแก้ไข (NC Impact Assessment)'}
-              {mode === 'CANCEL' && 'เหตุผลในการยกเลิก'}
-              {requiresText && <span className="text-rose-600"> *</span>}
-            </label>
-            <textarea
-              id="wo-action-text"
-              rows={3}
-              required={requiresText}
-              value={form.text}
-              onChange={(e) => setForm({ ...form, text: e.target.value })}
-              placeholder="ระบุรายละเอียด..."
-              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-medium"
-            />
-          </div>
-
-          <div className="pt-2 flex justify-end gap-2.5">
-            <button type="button" onClick={onClose} className="h-10 px-4 rounded-xl border border-slate-300 text-sm font-semibold hover:bg-slate-50 transition-colors cursor-pointer">
-              ปิด
-            </button>
-            <button
-              type="submit"
-              disabled={saving || (requiresText && !form.text.trim()) || missingReason}
-              className="h-10 px-5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 transition-colors cursor-pointer shadow-2xs"
-            >
-              {saving ? 'กำลังบันทึก...' : 'ยืนยันการดำเนินการ'}
-            </button>
-          </div>
-        </form>
+            <div className="pt-2 flex justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={requestClose}
+                className="h-10 px-4 rounded-xl border border-slate-300 text-sm font-semibold hover:bg-slate-50 transition-colors cursor-pointer"
+              >
+                ปิด
+              </button>
+              <button
+                type="submit"
+                disabled={saving || (requiresText && !form.text.trim()) || missingReason}
+                className="h-10 px-5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 transition-colors cursor-pointer shadow-2xs"
+              >
+                {saving ? 'กำลังบันทึก...' : 'ยืนยันการดำเนินการ'}
+              </button>
+            </div>
+          </form>
+        </div>
       </div>
-    </div>
+
+      <VccDiscardConfirmDialog
+        isOpen={showConfirmDiscard}
+        onConfirm={confirmDiscard}
+        onCancel={cancelDiscard}
+        title="ข้อมูลเหตุผลยังไม่ได้บันทึก"
+        message="คุณมีข้อมูลเหตุผลหรือรายละเอียดที่กำลังกรอก ต้องการยกเลิกและปิดหน้าต่างใช่หรือไม่?"
+      />
+    </>
   );
 };
 
@@ -354,6 +477,16 @@ export const WorkOrderSettingsModal = ({
   saving,
   onSave
 }) => {
+  const {
+    dialogRef,
+    requestClose,
+    handleBackdropClick
+  } = useVccModalAccessibility({
+    isOpen: open,
+    onClose,
+    isDirty: false
+  });
+
   if (!open) return null;
 
   const addCriteria = () => {
@@ -367,11 +500,26 @@ export const WorkOrderSettingsModal = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-lg w-full overflow-hidden">
+    <div
+      className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-150"
+      onClick={handleBackdropClick}
+    >
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="wo-settings-title"
+        tabIndex="-1"
+        className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-lg w-full overflow-hidden my-auto outline-none"
+      >
         <div className="px-6 py-4.5 border-b border-slate-200 flex items-center justify-between">
-          <h2 className="text-xl font-bold text-slate-900 tracking-tight">ตั้งค่าเกณฑ์ยอมรับและระยะเวลาเก็บเอกสาร (DCC)</h2>
-          <button type="button" onClick={onClose} className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer">
+          <h2 id="wo-settings-title" className="text-xl font-bold text-slate-900 tracking-tight">ตั้งค่าเกณฑ์ยอมรับและระยะเวลาเก็บเอกสาร (DCC)</h2>
+          <button
+            type="button"
+            onClick={requestClose}
+            aria-label="ปิดหน้าต่าง"
+            className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
+          >
             <X size={20} />
           </button>
         </div>
@@ -427,7 +575,11 @@ export const WorkOrderSettingsModal = ({
           </div>
 
           <div className="pt-2 flex justify-end gap-2.5">
-            <button type="button" onClick={onClose} className="h-10 px-4 rounded-xl border border-slate-300 text-sm font-semibold hover:bg-slate-50 transition-colors cursor-pointer">
+            <button
+              type="button"
+              onClick={requestClose}
+              className="h-10 px-4 rounded-xl border border-slate-300 text-sm font-semibold hover:bg-slate-50 transition-colors cursor-pointer"
+            >
               ยกเลิก
             </button>
             <button

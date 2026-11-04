@@ -25,6 +25,7 @@ import useStore from '../../../store/useStore';
 import { canReviewWorkOrder, canReleaseWorkOrderHold, canCancelWorkOrder } from '../utils/workOrderPermissions';
 import { WORK_ORDER_STATUS_LABELS, getWorkOrderStatusLabel } from '../utils/statusLabels';
 import { formatVccDueDate, formatVccDate, formatVccDateTime } from '../utils/vccDateUtils';
+import { useVccModalAccessibility } from '../hooks/useVccModalAccessibility';
 
 export const WorkOrderSideDrawer = ({
   workOrder,
@@ -73,23 +74,13 @@ export const WorkOrderSideDrawer = ({
     };
   }, [workOrder?.id]);
 
-  useEffect(() => {
-    if (!workOrder) return;
-    const originalOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-
-    const handleKeyDown = (e) => {
-      if (e.key === 'Escape') {
-        onClose?.();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-
-    return () => {
-      document.body.style.overflow = originalOverflow;
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [workOrder, onClose]);
+  const {
+    dialogRef,
+    requestClose
+  } = useVccModalAccessibility({
+    isOpen: !!workOrder,
+    onClose
+  });
 
   if (!workOrder) return null;
   if (typeof document === 'undefined') return null;
@@ -144,15 +135,24 @@ export const WorkOrderSideDrawer = ({
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-50 overflow-hidden" aria-labelledby="slide-over-title" role="dialog" aria-modal="true">
+    <div
+      ref={dialogRef}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="slide-over-title"
+      tabIndex="-1"
+      className="fixed inset-0 z-50 overflow-hidden outline-none"
+    >
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-slate-900/40 backdrop-blur-xs transition-opacity"
-        onClick={onClose}
+        onClick={requestClose}
       />
 
       <div className="fixed inset-y-0 right-0 pl-10 max-w-full flex">
-        <div className="w-screen max-w-xl bg-white shadow-2xl flex flex-col border-l border-slate-200">
+        <div
+          className="w-screen max-w-xl bg-white shadow-2xl flex flex-col border-l border-slate-200"
+        >
           {/* Header */}
           <div className="p-5 bg-slate-50 border-b border-slate-200 flex items-start justify-between gap-3">
             <div>
@@ -180,7 +180,7 @@ export const WorkOrderSideDrawer = ({
 
             <button
               type="button"
-              onClick={onClose}
+              onClick={requestClose}
               aria-label="ปิดหน้าต่างรายละเอียดใบสั่งงาน"
               className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition-colors cursor-pointer"
               title="ปิด"
@@ -642,7 +642,7 @@ export const WorkOrderSideDrawer = ({
 
             <button
               type="button"
-              onClick={onClose}
+              onClick={requestClose}
               className="h-9 px-3.5 rounded-xl border border-slate-300 text-slate-600 text-xs font-semibold hover:bg-slate-100 transition-colors cursor-pointer"
             >
               ปิดหน้าต่าง

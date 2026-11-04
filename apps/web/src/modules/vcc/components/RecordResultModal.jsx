@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useRef, useId } from 'react';
 import {
   X,
   AlertTriangle,
@@ -14,12 +14,32 @@ import {
 } from 'lucide-react';
 import { getResultStatusLabel } from '../utils/statusLabels';
 import { formatVccDate } from '../utils/vccDateUtils';
+import { useVccModalAccessibility } from '../hooks/useVccModalAccessibility';
+import { VccDiscardConfirmDialog } from './VccDiscardConfirmDialog';
 
 const MAX_PDF_BYTES = 25 * 1024 * 1024; // 25 MB
+
+const serializeResultForm = (f) => JSON.stringify({
+  performed_at: f?.performed_at || '',
+  result_status: f?.result_status || '',
+  certificate_no: f?.certificate_no || '',
+  certificate_issue_date: f?.certificate_issue_date || '',
+  certificate_valid_until: f?.certificate_valid_until || '',
+  acceptance_criteria: f?.acceptance_criteria || '',
+  result_remarks: f?.result_remarks || '',
+  calibration_provider_name: f?.calibration_provider_name || '',
+  calibration_method: f?.calibration_method || '',
+  traceability_ref: f?.traceability_ref || '',
+  environmental_conditions: f?.environmental_conditions || '',
+  uncertainty_value: f?.uncertainty_value || '',
+  calibration_error_value: f?.calibration_error_value || '',
+  hasFile: Boolean(f?.certificate_file)
+});
 
 export const RecordResultModal = ({
   workOrder,
   onClose,
+  onCancelSwitch,
   form,
   setForm,
   error,
@@ -27,11 +47,88 @@ export const RecordResultModal = ({
   onSubmit,
   criteriaOptions = []
 }) => {
+  const titleId = useId();
   const [fileError, setFileError] = useState('');
   const [fileHashPreview, setFileHashPreview] = useState('');
   const [activeTab, setActiveTab] = useState('MAIN'); // 'MAIN' | 'TRACEABILITY'
 
-  if (!workOrder) return null;
+  // Active work order being displayed and edited
+  const [activeWorkOrder, setActiveWorkOrder] = useState(workOrder);
+  const [initialSnapshot, setInitialSnapshot] = useState(() => (workOrder ? serializeResultForm(form) : null));
+  const lastHandledPropRef = useRef(workOrder);
+  const pendingSwitchWoRef = useRef(undefined);
+  const [showSwitchConfirm, setShowSwitchConfirm] = useState(false);
+
+  const isDirty = useMemo(() => {
+    if (!activeWorkOrder || !initialSnapshot || saving) return false;
+    return serializeResultForm(form) !== initialSnapshot;
+  }, [activeWorkOrder, form, initialSnapshot, saving]);
+
+  // Synchronous prop change detection (Parent-driven close or work order switch)
+  if (workOrder !== lastHandledPropRef.current) {
+    lastHandledPropRef.current = workOrder;
+    const incomingId = workOrder?.id ?? null;
+    const activeId = activeWorkOrder?.id ?? null;
+
+    if (incomingId !== activeId) {
+      if (!isDirty || saving) {
+        // Safe to switch immediately without confirmation
+        setActiveWorkOrder(workOrder);
+        setInitialSnapshot(workOrder ? serializeResultForm(form) : null);
+        pendingSwitchWoRef.current = undefined;
+      } else {
+        // Form is dirty! Guard against unconfirmed data loss
+        pendingSwitchWoRef.current = workOrder;
+        setShowSwitchConfirm(true);
+      }
+    }
+  }
+
+  const handleConfirmSwitch = () => {
+    const targetWo = pendingSwitchWoRef.current;
+    pendingSwitchWoRef.current = undefined;
+    setShowSwitchConfirm(false);
+    setActiveWorkOrder(targetWo);
+    setInitialSnapshot(targetWo ? serializeResultForm(form) : null);
+    if (!targetWo) {
+      onClose?.();
+    }
+  };
+
+  const handleCancelSwitch = () => {
+    pendingSwitchWoRef.current = undefined;
+    setShowSwitchConfirm(false);
+    onCancelSwitch?.(activeWorkOrder);
+  };
+
+  const handleFormSubmit = async (e) => {
+    // Synchronously sync snapshot to current form so that when parent completes save and sets workOrder = null,
+    // the modal does not falsely intercept with a discard prompt.
+    setInitialSnapshot(serializeResultForm(form));
+    await onSubmit?.(e);
+  };
+
+  const handleRegularClose = () => {
+    setActiveWorkOrder(null);
+    onClose?.();
+  };
+
+  const {
+    dialogRef,
+    requestClose,
+    handleBackdropClick,
+    showConfirmDiscard,
+    confirmDiscard,
+    cancelDiscard
+  } = useVccModalAccessibility({
+    isOpen: Boolean(activeWorkOrder),
+    onClose: handleRegularClose,
+    isDirty,
+    discardTitle: 'ข้อมูลผลการสอบเทียบยังไม่ได้บันทึก',
+    discardMessage: 'คุณมีข้อมูลผลการสอบเทียบที่กำลังบันทึก ต้องการยกเลิกและปิดหน้าต่างใช่หรือไม่?'
+  });
+
+  if (!activeWorkOrder) return null;
 
   const handleFileChange = async (e) => {
     const file = e.target.files?.[0];
@@ -93,29 +190,41 @@ export const RecordResultModal = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden">
-        {/* Header */}
-        <div className="px-6 py-4.5 border-b border-slate-200 flex items-center justify-between shrink-0 bg-slate-50/50">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="font-mono text-xs font-bold px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-700">
-                {workOrder.wo_code}
-              </span>
-              <span className="text-xs text-slate-500 font-medium">({workOrder.asset_code} — {workOrder.asset_name})</span>
+    <>
+      <div
+        className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-150"
+        onClick={handleBackdropClick}
+      >
+        <div
+          ref={dialogRef}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={titleId}
+          tabIndex="-1"
+          className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden my-auto outline-none"
+        >
+          {/* Header */}
+          <div className="px-6 py-4.5 border-b border-slate-200 flex items-center justify-between shrink-0 bg-slate-50/50">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-xs font-bold px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-700">
+                  {activeWorkOrder.wo_code}
+                </span>
+                <span className="text-xs text-slate-500 font-medium">({activeWorkOrder.asset_code} — {activeWorkOrder.asset_name})</span>
+              </div>
+              <h2 id={titleId} className="text-lg font-bold text-slate-900 tracking-tight mt-1">
+                บันทึกผลการสอบเทียบและหลักฐานดิจิทัล (Digital Record)
+              </h2>
             </div>
-            <h2 className="text-lg font-bold text-slate-900 tracking-tight mt-1">
-              บันทึกผลการสอบเทียบและหลักฐานดิจิทัล (Digital Record)
-            </h2>
+            <button
+              type="button"
+              onClick={requestClose}
+              aria-label="ปิดหน้าต่าง"
+              className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 cursor-pointer transition-colors"
+            >
+              <X size={20} />
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 cursor-pointer transition-colors"
-          >
-            <X size={20} />
-          </button>
-        </div>
 
         {/* Tab Selector */}
         <div className="flex border-b border-slate-200 px-6 bg-white shrink-0">
@@ -146,7 +255,7 @@ export const RecordResultModal = ({
         </div>
 
         {/* Scrollable Form Body */}
-        <form onSubmit={onSubmit} className="p-6 space-y-4.5 overflow-y-auto flex-1">
+        <form onSubmit={handleFormSubmit} className="p-6 space-y-4.5 overflow-y-auto flex-1">
           {error && (
             <div role="alert" className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-sm font-semibold flex items-center gap-2">
               <AlertTriangle size={17} className="text-rose-600 shrink-0" />
@@ -310,7 +419,7 @@ export const RecordResultModal = ({
                   <span className="text-xs font-semibold text-slate-400">PDF สูงสุด 25 MB</span>
                 </div>
 
-                {!form.certificate_file && !workOrder.certificate_file_name && (
+                {!form.certificate_file && !activeWorkOrder.certificate_file_name && (
                   <label className="flex flex-col items-center justify-center p-4 border border-slate-200 rounded-xl bg-white hover:bg-indigo-50/50 cursor-pointer transition-colors group">
                     <Upload size={22} className="text-slate-400 group-hover:text-indigo-600 mb-1.5" />
                     <span className="text-xs font-bold text-slate-700 group-hover:text-indigo-600">
@@ -360,17 +469,17 @@ export const RecordResultModal = ({
                 )}
 
                 {/* Existing certificate in work order */}
-                {!form.certificate_file && workOrder.certificate_file_name && (
+                {!form.certificate_file && activeWorkOrder.certificate_file_name && (
                   <div className="p-3 rounded-xl bg-white border border-slate-200 space-y-2">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2 min-w-0">
                         <FileText size={16} className="text-indigo-600 shrink-0" />
                         <div className="min-w-0">
                           <span className="text-xs font-bold text-slate-900 truncate block">
-                            {workOrder.certificate_file_name}
+                            {activeWorkOrder.certificate_file_name}
                           </span>
                           <span className="text-xs text-slate-500">
-                            เวอร์ชันปัจจุบัน: v{workOrder.certificate_version || 1} • {formatBytes(workOrder.certificate_file_size)}
+                            เวอร์ชันปัจจุบัน: v{activeWorkOrder.certificate_version || 1} • {formatBytes(activeWorkOrder.certificate_file_size)}
                           </span>
                         </div>
                       </div>
@@ -385,9 +494,9 @@ export const RecordResultModal = ({
                         />
                       </label>
                     </div>
-                    {workOrder.certificate_file_hash && (
+                    {activeWorkOrder.certificate_file_hash && (
                       <div className="p-1.5 rounded-lg bg-slate-50 border border-slate-100 text-xs font-mono text-slate-500 truncate">
-                        Hash: {workOrder.certificate_file_hash}
+                        Hash: {activeWorkOrder.certificate_file_hash}
                       </div>
                     )}
                   </div>
@@ -511,7 +620,7 @@ export const RecordResultModal = ({
             <div className="flex gap-2.5">
               <button
                 type="button"
-                onClick={onClose}
+                onClick={requestClose}
                 className="h-10 px-4 rounded-xl border border-slate-300 text-sm font-semibold hover:bg-slate-50 transition-colors cursor-pointer"
               >
                 ยกเลิก
@@ -529,6 +638,20 @@ export const RecordResultModal = ({
         </form>
       </div>
     </div>
+
+    {/* Discard Confirmation Dialog */}
+    <VccDiscardConfirmDialog
+      isOpen={showConfirmDiscard || showSwitchConfirm}
+      onConfirm={showSwitchConfirm ? handleConfirmSwitch : confirmDiscard}
+      onCancel={showSwitchConfirm ? handleCancelSwitch : cancelDiscard}
+      title="ข้อมูลผลการสอบเทียบยังไม่ได้บันทึก"
+      message={
+        pendingSwitchWoRef.current
+          ? 'คุณมีข้อมูลผลการสอบเทียบที่กำลังจัดทำ ต้องการยกเลิกและเปลี่ยนไปทำใบสั่งงานอื่นใช่หรือไม่?'
+          : 'คุณมีข้อมูลผลการสอบเทียบที่กำลังบันทึก ต้องการยกเลิกและปิดหน้าต่างใช่หรือไม่?'
+      }
+    />
+  </>
   );
 };
 

@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { AlertTriangle, CheckCircle2, Eye, ArrowLeft, X } from 'lucide-react';
+import { useVccModalAccessibility } from '../hooks/useVccModalAccessibility';
+import { VccDiscardConfirmDialog } from './VccDiscardConfirmDialog';
 
 const MONTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
 const EMPTY_ARRAY = [];
@@ -103,6 +105,23 @@ export const LegacyGroupConversionModal = ({
     setValidationError('');
   }, [open, groupItem, candidateAssets, existingByAssetId, usingDeptFallback]);
 
+  const isDirty = selectedIds.length > 0;
+
+  const {
+    dialogRef,
+    requestClose,
+    handleBackdropClick,
+    showConfirmDiscard,
+    confirmDiscard,
+    cancelDiscard
+  } = useVccModalAccessibility({
+    isOpen: open && !!groupItem,
+    onClose,
+    isDirty,
+    discardTitle: 'ยกเลิกการแปลงรายการกลุ่ม?',
+    discardMessage: `คุณได้เลือกเครื่องมือไว้ ${selectedIds.length} รายการ ต้องการยกเลิกและปิดหน้าต่างหรือไม่?`
+  });
+
   if (!open || !groupItem) return null;
 
   const legacyGroupMonths = Array.isArray(groupItem.planned_months) ? groupItem.planned_months : [];
@@ -193,33 +212,40 @@ export const LegacyGroupConversionModal = ({
   const previewItems = buildPayloadItems();
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs"
-      role="dialog"
-      aria-modal="true"
-      aria-label="แปลงรายการกลุ่มเดิมเป็นเครื่องมือรายตัว"
-    >
-      <div className="bg-white rounded-2xl max-w-3xl w-full border border-slate-200 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-        {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50 shrink-0">
-          <div>
-            <h3 className="text-base font-bold text-slate-900">
-              {step === 'PREVIEW'
-                ? 'ตรวจสอบตัวอย่างก่อนยืนยันการแปลงรายการ (Preview & Confirm)'
-                : 'แปลงรายการกลุ่มเดิมเป็นเครื่องมือรายตัว (Flat Planning)'}
-            </h3>
-            <p className="text-xs text-slate-600 mt-0.5">
-              รายการเดิมในแผนร่าง: <span className="font-mono font-bold text-slate-900">{groupItem.asset_code}</span> — {groupItem.asset_name}
-            </p>
+    <>
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs"
+        onClick={handleBackdropClick}
+      >
+        <div
+          ref={dialogRef}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="legacy-conversion-title"
+          tabIndex="-1"
+          className="bg-white rounded-2xl max-w-3xl w-full border border-slate-200 shadow-2xl overflow-hidden flex flex-col max-h-[90vh] outline-none"
+        >
+          {/* Header */}
+          <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50 shrink-0">
+            <div>
+              <h3 id="legacy-conversion-title" className="text-base font-bold text-slate-900">
+                {step === 'PREVIEW'
+                  ? 'ตรวจสอบตัวอย่างก่อนยืนยันการแปลงรายการ (Preview & Confirm)'
+                  : 'แปลงรายการกลุ่มเดิมเป็นเครื่องมือรายตัว (Flat Planning)'}
+              </h3>
+              <p className="text-xs text-slate-600 mt-0.5">
+                รายการเดิมในแผนร่าง: <span className="font-mono font-bold text-slate-900">{groupItem.asset_code}</span> — {groupItem.asset_name}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={requestClose}
+              aria-label="ปิดหน้าต่าง"
+              className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 cursor-pointer"
+            >
+              <X size={18} />
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 cursor-pointer"
-          >
-            <X size={18} />
-          </button>
-        </div>
 
         {/* Body */}
         <div className="p-6 overflow-y-auto space-y-4 text-sm text-slate-700">
@@ -435,7 +461,7 @@ export const LegacyGroupConversionModal = ({
             <>
               <button
                 type="button"
-                onClick={onClose}
+                onClick={requestClose}
                 disabled={converting}
                 className="h-9 px-4 rounded-xl border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 text-xs font-semibold cursor-pointer"
               >
@@ -455,7 +481,16 @@ export const LegacyGroupConversionModal = ({
         </div>
       </div>
     </div>
-  );
+
+    <VccDiscardConfirmDialog
+      isOpen={showConfirmDiscard}
+      onConfirm={confirmDiscard}
+      onCancel={cancelDiscard}
+      title="ยกเลิกการแปลงรายการกลุ่ม?"
+      message={`คุณได้เลือกเครื่องมือไว้ ${selectedIds.length} รายการ ต้องการยกเลิกและปิดหน้าต่างหรือไม่?`}
+    />
+  </>
+);
 };
 
 export default LegacyGroupConversionModal;

@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { createPortal } from 'react-dom';
 import { isSavedPlanItem } from '../utils/planLabels';
 import {
@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { getWorkOrderStatusLabel, getResultStatusLabel } from '../utils/statusLabels';
 import { formatVccDueDate, formatVccDueDatesList } from '../utils/vccDateUtils';
+import { useVccModalAccessibility } from '../hooks/useVccModalAccessibility';
 
 export const THAI_MONTH_NAMES = [
   'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
@@ -39,23 +40,13 @@ export const AnnualPlanSideInspector = ({
   onDeleteItem,
   onOpenGroupWorkOrderCheck
 }) => {
-  useEffect(() => {
-    if (!item) return;
-    const originalOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-
-    const handleKeyDown = (e) => {
-      if (e.key === 'Escape') {
-        onClose?.();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-
-    return () => {
-      document.body.style.overflow = originalOverflow;
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [item, onClose]);
+  const {
+    dialogRef,
+    requestClose
+  } = useVccModalAccessibility({
+    isOpen: !!item,
+    onClose
+  });
 
   if (!item) return null;
   if (typeof document === 'undefined') return null;
@@ -74,15 +65,24 @@ export const AnnualPlanSideInspector = ({
   const isAllPlannedCompleted = plannedCount > 0 && plannedCount === closedPassWos.length;
 
   return createPortal(
-    <div className="fixed inset-0 z-50 overflow-hidden" role="dialog" aria-modal="true" aria-label="รายละเอียดเครื่องมือวัด">
+    <div
+      ref={dialogRef}
+      role="dialog"
+      aria-modal="true"
+      aria-label="รายละเอียดเครื่องมือวัด"
+      tabIndex="-1"
+      className="fixed inset-0 z-50 overflow-hidden outline-none"
+    >
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-slate-900/40 backdrop-blur-xs transition-opacity"
-        onClick={onClose}
+        onClick={requestClose}
       />
 
       <div className="fixed inset-y-0 right-0 pl-10 max-w-full flex">
-        <div className="w-screen max-w-lg bg-white shadow-2xl flex flex-col border-l border-slate-200">
+        <div
+          className="w-screen max-w-lg bg-white shadow-2xl flex flex-col border-l border-slate-200"
+        >
           {/* Drawer Header */}
           <div className="p-5 bg-slate-50 border-b border-slate-200 flex items-start justify-between gap-3">
             <div>
@@ -105,14 +105,14 @@ export const AnnualPlanSideInspector = ({
                   </span>
                 )}
               </div>
-              <h3 className="text-base font-semibold text-slate-900 mt-1.5 leading-snug">
+              <h3 id="inspector-asset-name" className="text-base font-semibold text-slate-900 mt-1.5 leading-snug">
                 {item.asset_name}
               </h3>
             </div>
 
             <button
               type="button"
-              onClick={onClose}
+              onClick={requestClose}
               aria-label="ปิดหน้าต่างสเปก"
               className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition-colors cursor-pointer"
               title="ปิด"
@@ -389,7 +389,7 @@ export const AnnualPlanSideInspector = ({
 
             <button
               type="button"
-              onClick={onClose}
+              onClick={requestClose}
               className="px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-800 text-sm font-semibold transition-colors cursor-pointer"
             >
               ปิดหน้าต่าง

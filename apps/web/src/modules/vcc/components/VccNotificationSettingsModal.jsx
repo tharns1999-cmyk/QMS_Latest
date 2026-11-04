@@ -1,5 +1,19 @@
-import React from 'react';
+import React, { useState, useMemo, useId } from 'react';
 import { X, Settings } from 'lucide-react';
+import { useVccModalAccessibility } from '../hooks/useVccModalAccessibility';
+import { VccDiscardConfirmDialog } from './VccDiscardConfirmDialog';
+
+const serializeSettings = (props) => JSON.stringify({
+  monthlyDueSoonText: String(props.monthlyDueSoonText ?? ''),
+  monthlyOverdueText: String(props.monthlyOverdueText ?? ''),
+  annualDueSoonText: String(props.annualDueSoonText ?? ''),
+  annualOverdueText: String(props.annualOverdueText ?? ''),
+  reviewSlaDays: String(props.reviewSlaDays ?? ''),
+  escalationL1Days: Number(props.escalationL1Days ?? 1),
+  escalationL2Days: Number(props.escalationL2Days ?? 7),
+  escalationL3Days: Number(props.escalationL3Days ?? 14),
+  gracePeriodDays: Number(props.gracePeriodDays ?? 3)
+});
 
 /**
  * VccNotificationSettingsModal
@@ -29,33 +43,99 @@ export default function VccNotificationSettingsModal({
   setGracePeriodDays,
   saving = false
 }) {
+  const titleId = useId();
+  const isCurrentlyOpen = Boolean(isOpen);
+  const [prevOpen, setPrevOpen] = useState(isCurrentlyOpen);
+  const currentProps = {
+    monthlyDueSoonText,
+    monthlyOverdueText,
+    annualDueSoonText,
+    annualOverdueText,
+    reviewSlaDays,
+    escalationL1Days,
+    escalationL2Days,
+    escalationL3Days,
+    gracePeriodDays
+  };
+
+  const [initialSnapshot, setInitialSnapshot] = useState(() => (isCurrentlyOpen ? serializeSettings(currentProps) : null));
+
+  if (isCurrentlyOpen !== prevOpen) {
+    setPrevOpen(isCurrentlyOpen);
+    setInitialSnapshot(isCurrentlyOpen ? serializeSettings(currentProps) : null);
+  }
+
+  const isDirty = useMemo(() => {
+    if (!isCurrentlyOpen || !initialSnapshot) return false;
+    return serializeSettings(currentProps) !== initialSnapshot;
+  }, [
+    isCurrentlyOpen,
+    initialSnapshot,
+    monthlyDueSoonText,
+    monthlyOverdueText,
+    annualDueSoonText,
+    annualOverdueText,
+    reviewSlaDays,
+    escalationL1Days,
+    escalationL2Days,
+    escalationL3Days,
+    gracePeriodDays
+  ]);
+
+  const {
+    dialogRef,
+    requestClose,
+    handleBackdropClick,
+    showConfirmDiscard,
+    confirmDiscard,
+    cancelDiscard
+  } = useVccModalAccessibility({
+    isOpen,
+    onClose,
+    isDirty,
+    discardTitle: 'การตั้งค่าการแจ้งเตือนยังไม่ได้บันทึก',
+    discardMessage: 'คุณมีการแก้ไขค่าแจ้งเตือนหรือ SLA ที่ยังไม่ได้บันทึก ต้องการยกเลิกและปิดหน้าต่างใช่หรือไม่?'
+  });
+
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl space-y-4 border border-slate-200/80 animate-in fade-in zoom-in-95 duration-150">
-        <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-700 flex items-center justify-center border border-indigo-200/60 font-bold">
-              <Settings size={16} />
+    <>
+      <div
+        className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4"
+        onClick={handleBackdropClick}
+      >
+        <div
+          ref={dialogRef}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={titleId}
+          tabIndex="-1"
+          className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl space-y-4 border border-slate-200/80 animate-in fade-in zoom-in-95 duration-150 outline-none"
+        >
+          <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-700 flex items-center justify-center border border-indigo-200/60 font-bold">
+                <Settings size={16} />
+              </div>
+              <div>
+                <h3 id={titleId} className="text-base font-bold text-slate-900">
+                  ตั้งค่ากติกาวันแจ้งเตือนล่วงหน้าและเลยกำหนด (DCC)
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  กำหนดจำนวนวันสำหรับรอบการแจ้งเตือนงานสอบเทียบและ SLA
+                </p>
+              </div>
             </div>
-            <div>
-              <h3 className="text-base font-bold text-slate-900">
-                ตั้งค่ากติกาวันแจ้งเตือนล่วงหน้าและเลยกำหนด (DCC)
-              </h3>
-              <p className="text-xs text-slate-500 mt-0.5">
-                กำหนดจำนวนวันสำหรับรอบการแจ้งเตือนงานสอบเทียบและ SLA
-              </p>
-            </div>
+            <button
+              type="button"
+              onClick={requestClose}
+              aria-label="ปิดหน้าต่าง"
+              className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
+            >
+              <X size={18} />
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
-          >
-            <X size={18} />
-          </button>
-        </div>
 
         <form onSubmit={onSubmit} className="space-y-3.5 text-sm">
           <div>
@@ -196,7 +276,7 @@ export default function VccNotificationSettingsModal({
           <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-100">
             <button
               type="button"
-              onClick={onClose}
+              onClick={requestClose}
               className="h-9 px-4 rounded-xl border border-slate-200 text-slate-700 text-xs sm:text-sm font-medium hover:bg-slate-50 cursor-pointer"
             >
               ยกเลิก
@@ -213,5 +293,14 @@ export default function VccNotificationSettingsModal({
         </form>
       </div>
     </div>
+
+    <VccDiscardConfirmDialog
+      isOpen={showConfirmDiscard}
+      onConfirm={confirmDiscard}
+      onCancel={cancelDiscard}
+      title="การตั้งค่าการแจ้งเตือนยังไม่ได้บันทึก"
+      message="คุณมีการแก้ไขค่าแจ้งเตือนหรือ SLA ที่ยังไม่ได้บันทึก ต้องการยกเลิกและปิดหน้าต่างใช่หรือไม่?"
+    />
+  </>
   );
 }
