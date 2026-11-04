@@ -43,6 +43,8 @@
 | [VCC_UAT_Defect_Log.md](./VCC_UAT_Defect_Log.md) | แบบฟอร์มบันทึกข้อบกพร่องและระดับความรุนแรง (Blocker, Critical, Major, Minor) |
 | [VCC_UAT_Defect_Log.csv](./VCC_UAT_Defect_Log.csv) | ตารางบันทึก Defect ในรูปแบบตาราง CSV |
 | [VCC_UAT_Summary_and_Signoff.md](./VCC_UAT_Summary_and_Signoff.md) | แบบฟอร์มสรุปผลการทดสอบรับมอบและใบลงนามอนุมัติ (Sign-off Template) |
+| [VCC_UAT_Phase_2_Execution_Plan.md](./VCC_UAT_Phase_2_Execution_Plan.md) | แผนปฏิบัติการทดสอบจริง Phase 2, ลำดับการรัน, การจัดสรรผู้ทดสอบ, และ Defect Triage |
+| [evidence/](./evidence/README.md) | ไดเรกทอรีจัดเก็บหลักฐานดิจิทัล (Screenshots, Downloaded Certs, Audit Logs) |
 
 ---
 
