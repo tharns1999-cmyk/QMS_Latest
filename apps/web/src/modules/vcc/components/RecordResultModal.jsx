@@ -277,7 +277,7 @@ export const RecordResultModal = ({
             }`}
           >
             <Layers size={16} />
-            <span className="hidden sm:inline">การสอบกลับได้และสภาวะแวดล้อม (ISO/IEC 17025)</span>
+            <span className="hidden sm:inline">การสอบกลับได้และสภาวะแวดล้อม (อ้างอิง ISO/IEC 17025)</span>
             <span className="inline sm:hidden">ความสอบกลับได้</span>
           </button>
         </div>

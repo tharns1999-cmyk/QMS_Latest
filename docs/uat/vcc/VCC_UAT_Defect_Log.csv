@@ -1,0 +1,3 @@
+Defect_ID,Test_Case_Ref,Severity,Description,Steps_To_Reproduce,Expected_Result,Actual_Result,Reported_By,Assignee,Status,Resolution_Date
+VCC-DEF-000,VCC-UAT-004,Minor,"ตัวอย่าง: ข้อความขนาดไฟล์แนบแสดงหน่วยผิดพลาดเล็กน้อย","ลากไฟล์ขนาด 11MB เข้าฟอร์ม","แสดงข้อความเตือนขนาดเกิน 10 MB ชัดเจน","ระบบบล็อกได้ถูกต้อง แต่คำแนะนำแสดงหน่วย kb เล็กน้อย",QA Tester,Frontend Coder,Closed,2026-11-04
+

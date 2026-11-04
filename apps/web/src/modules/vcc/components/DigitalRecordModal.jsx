@@ -116,7 +116,7 @@ export const DigitalRecordModal = ({
               DIGITAL RECORD: {workOrder.wo_code}
             </span>
             <span className="text-xs text-slate-500 font-medium hidden sm:inline">
-              (ISO/IEC 17025 & ISO 9001 Compliant)
+              (จัดทำตามแนวทางมาตรฐาน ISO 9001 & ISO/IEC 17025)
             </span>
           </div>
           <div className="flex items-center gap-2">
@@ -155,7 +155,7 @@ export const DigitalRecordModal = ({
                 ใบบันทึกผลการทวนสอบ / สอบเทียบดิจิทัล (Digital Calibration Record)
               </h1>
               <div className="text-xs text-slate-500 mt-0.5">
-                เอกสารควบคุมมาตรฐาน ISO 9001:2015 ข้อ 7.1.5 และ ISO/IEC 17025:2017 ข้อ 7.8
+                เอกสารบันทึกตามแนวทางการควบคุมเครื่องมือวัด (อ้างอิงข้อกำหนด ISO 9001:2015 ข้อ 7.1.5 และ ISO/IEC 17025:2017 ข้อ 7.8)
               </div>
             </div>
             <div className="text-right sm:shrink-0 font-mono">
