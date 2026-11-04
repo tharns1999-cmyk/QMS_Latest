@@ -13,6 +13,7 @@ import {
 import { computeDueDateForMonth } from '../api/vccPlanApi';
 import { FloatingOverlay } from '../../../shared/components/ui/FloatingOverlay';
 import { getWorkOrderStatusLabel, getResultStatusLabel } from '../utils/statusLabels';
+import { formatVccDueDate } from '../utils/vccDateUtils';
 
 export const THAI_MONTH_NAMES = [
   'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
@@ -352,7 +353,7 @@ export const AnnualPlanMonthCell = ({
                 {scheduledDueDate && (
                   <div className="text-slate-700 flex items-center gap-1.5 font-medium">
                     <Clock size={13} className="text-slate-400 shrink-0" />
-                    <span>วันครบกำหนดตามเกณฑ์: <strong className="text-slate-900 font-mono font-bold">{scheduledDueDate}</strong></span>
+                    <span>วันครบกำหนดตามเกณฑ์: <strong className="text-slate-900 font-bold font-sans" title={`ค.ศ. ${scheduledDueDate}`}>{formatVccDueDate(scheduledDueDate)}</strong></span>
                   </div>
                 )}
 

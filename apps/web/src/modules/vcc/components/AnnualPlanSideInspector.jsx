@@ -17,6 +17,7 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import { getWorkOrderStatusLabel, getResultStatusLabel } from '../utils/statusLabels';
+import { formatVccDueDate, formatVccDueDatesList } from '../utils/vccDateUtils';
 
 export const THAI_MONTH_NAMES = [
   'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
@@ -178,8 +179,8 @@ export const AnnualPlanSideInspector = ({
                 </div>
                 <div className="col-span-2">
                   <span className="text-slate-500 block text-xs font-medium">วันครบกำหนดตามเกณฑ์</span>
-                  <span className="font-bold font-mono text-slate-900 text-sm">
-                    {(item.due_dates || []).join(', ') || '-'}
+                  <span className="font-semibold text-slate-900 text-sm font-sans" title={(item.due_dates || []).join(', ')}>
+                    {formatVccDueDatesList(item.due_dates || [])}
                   </span>
                 </div>
                 <div className="col-span-2">
@@ -247,8 +248,8 @@ export const AnnualPlanSideInspector = ({
                         </div>
 
                         {isPlanned && item.due_dates && (
-                          <span className="font-mono text-xs font-medium text-slate-500">
-                            ครบกำหนด: {item.due_dates[(item.planned_months || []).indexOf(m)] || '-'}
+                          <span className="text-xs font-medium text-slate-600 font-sans" title={item.due_dates[(item.planned_months || []).indexOf(m)] || ''}>
+                            ครบกำหนด: {formatVccDueDate(item.due_dates[(item.planned_months || []).indexOf(m)])}
                           </span>
                         )}
                       </div>

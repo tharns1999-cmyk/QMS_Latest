@@ -28,6 +28,7 @@ import DepartmentBadge from '../../../shared/components/ui/DepartmentBadge';
 import useStore from '../../../store/useStore';
 import { canReadAllVccDepartments, filterReadableDepartments } from '../utils/departmentScope';
 import { getResultStatusLabel } from '../utils/statusLabels';
+import { formatVccDueDate } from '../utils/vccDateUtils';
 
 const VERDICT_OPTIONS = [
   { value: '', label: 'ทุกผลการประเมิน (All Verdicts)' },
@@ -467,11 +468,11 @@ export default function VccComplianceReportTab() {
 
                       {/* 4. Due Dates */}
                       <td className="py-3 px-3 align-top">
-                        <div className="text-xs font-semibold text-slate-900 font-mono">
-                          {r.required_due_date}
+                        <div className="text-xs font-semibold text-slate-900 font-sans" title={`ค.ศ. ${r.required_due_date}`}>
+                          {formatVccDueDate(r.required_due_date)}
                         </div>
                         <div className="text-xs text-slate-500 mt-0.5">
-                          กำหนด: <span className="font-mono">{r.scheduled_date}</span>
+                          กำหนด: <span className="font-sans" title={`ค.ศ. ${r.scheduled_date}`}>{formatVccDueDate(r.scheduled_date)}</span>
                         </div>
                         {r.is_rescheduled && (
                           <span className="inline-block px-1.5 py-0.2 rounded text-xs font-semibold bg-amber-100 text-amber-800 mt-1 border border-amber-200">
@@ -504,8 +505,8 @@ export default function VccComplianceReportTab() {
                           Cert: {r.certificate_no || '-'}
                         </div>
                         {r.certificate_valid_until && (
-                          <div className="text-xs text-slate-400">
-                            หมดอายุ: {r.certificate_valid_until}
+                          <div className="text-xs text-slate-500 mt-0.5">
+                            หมดอายุ: <span className="font-sans" title={`ค.ศ. ${r.certificate_valid_until}`}>{formatVccDueDate(r.certificate_valid_until)}</span>
                           </div>
                         )}
                       </td>

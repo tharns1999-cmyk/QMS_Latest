@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { History } from 'lucide-react';
+import { formatVccDateTime } from '../utils/vccDateUtils';
 import useStore from '../../../store/useStore';
 import {
   fetchVccWorkOrderAmendmentRequests,
@@ -61,7 +62,14 @@ export const WorkOrderAmendmentRequests = ({ workOrderId, onResolved }) => {
         const isRequester = req.requested_by === currentUser?.id;
         return (
           <div key={req.id} className="bg-white/80 p-2 rounded-lg border border-amber-200/60 space-y-2">
-            <div>ผู้ขอ: <span className="font-bold">{req.requester_name || req.requested_by}</span></div>
+            <div className="flex items-center justify-between">
+              <div>ผู้ขอ: <span className="font-bold">{req.requester_name || req.requested_by}</span></div>
+              {(req.requested_at || req.created_at) && (
+                <span className="text-xs text-amber-800 font-sans" title={req.requested_at || req.created_at}>
+                  {formatVccDateTime(req.requested_at || req.created_at)}
+                </span>
+              )}
+            </div>
             <div>
               <span className="font-semibold block text-xs text-amber-900">เหตุผล:</span>
               <span>{req.amendment_reason}</span>

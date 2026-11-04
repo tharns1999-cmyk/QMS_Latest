@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { PLAN_STATUS_OPTIONS, getPlanStatusLabel, getDueDateRuleLabel } from '../utils/planLabels';
 import AnnualPlanApprovalChain from './AnnualPlanApprovalChain';
+import { formatVccDateTime, toBuddhistYear } from '../utils/vccDateUtils';
 
 const useDismiss = (open, onClose) => {
   const ref = useRef(null);
@@ -36,22 +37,6 @@ const useDismiss = (open, onClose) => {
     };
   }, [open, onClose]);
   return ref;
-};
-
-const formatThaiDateTime = (iso) => {
-  if (!iso) return null;
-  try {
-    return new Intl.DateTimeFormat('th-TH', {
-      timeZone: 'Asia/Bangkok',
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    }).format(new Date(iso));
-  } catch {
-    return iso;
-  }
 };
 
 const getNextStepText = (plan, thresholds = {}) => {
@@ -75,8 +60,8 @@ const getNextStepText = (plan, thresholds = {}) => {
     }
     case 'APPROVED': {
       const by = plan.approved_by_name || plan.approved_by;
-      const at = formatThaiDateTime(plan.approved_at);
-      return `พร้อมออกใบสั่งงาน${by ? ` · อนุมัติโดย ${by}` : ''}${at ? ` · ${at}` : ''}`;
+      const at = formatVccDateTime(plan.approved_at);
+      return `พร้อมออกใบสั่งงาน${by ? ` · อนุมัติโดย ${by}` : ''}${at && at !== '-' ? ` · ${at}` : ''}`;
     }
     default:
       return '';
@@ -289,10 +274,15 @@ export const AnnualPlanWorkspaceHeader = ({
             <div className="space-y-1">
               <div className="flex items-center gap-2 flex-wrap">
                 <h2
-                  className="text-sm sm:text-base font-bold text-slate-900 tracking-tight whitespace-nowrap"
+                  className="text-sm sm:text-base font-bold text-slate-900 tracking-tight whitespace-nowrap flex items-center gap-1.5"
                   title={activePlan.title}
                 >
-                  {getShortPlanTitle(activePlan)}
+                  <span>{getShortPlanTitle(activePlan)}</span>
+                  {activePlan.plan_year && (
+                    <span className="text-slate-500 font-medium text-xs sm:text-sm font-sans">
+                      (พ.ศ. {toBuddhistYear(activePlan.plan_year)})
+                    </span>
+                  )}
                 </h2>
 
                 <span
@@ -641,7 +631,7 @@ export const AnnualPlanWorkspaceHeader = ({
             {(activePlan.rejected_by_name || activePlan.rejected_by) && (
               <span className="text-rose-700 font-medium text-xs">
                 ผู้ส่งกลับ: {activePlan.rejected_by_name || activePlan.rejected_by}
-                {activePlan.rejected_at ? ` · ${formatThaiDateTime(activePlan.rejected_at)}` : ''}
+                {activePlan.rejected_at ? ` · ${formatVccDateTime(activePlan.rejected_at)}` : ''}
               </span>
             )}
           </div>

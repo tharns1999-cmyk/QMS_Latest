@@ -12,6 +12,7 @@ import {
   History,
   Building2
 } from 'lucide-react';
+import { formatVccDate, formatVccDateTime } from '../utils/vccDateUtils';
 
 export const DigitalRecordModal = ({
   workOrder,
@@ -147,7 +148,9 @@ export const DigitalRecordModal = ({
 
                 <div className="text-right text-xs">
                   <span className="text-slate-400 block text-xs">วันที่สอบเทียบจริง:</span>
-                  <span className="font-mono font-bold text-slate-900">{workOrder.performed_at || '-'}</span>
+                  <span className="font-semibold text-slate-900 font-sans" title={workOrder.performed_at || ''}>
+                    {formatVccDate(workOrder.performed_at)}
+                  </span>
                 </div>
               </div>
 
@@ -245,7 +248,7 @@ export const DigitalRecordModal = ({
               </h2>
               <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-950 space-y-1.5">
                 <div className="font-bold">
-                  แก้ไขเมื่อ: {workOrder.amended_at || '-'} โดย {workOrder.amended_by_name || workOrder.amended_by || '-'}
+                  แก้ไขเมื่อ: <span className="font-sans" title={workOrder.amended_at || ''}>{formatVccDateTime(workOrder.amended_at)}</span> โดย {workOrder.amended_by_name || workOrder.amended_by || '-'}
                 </div>
                 <div>
                   <span className="font-semibold text-amber-900">เหตุผลในการขอแก้ไข:</span> {workOrder.amendment_reason || '-'}
@@ -261,7 +264,7 @@ export const DigitalRecordModal = ({
               <div className="border-b border-dashed border-slate-400 w-3/4 mx-auto pb-1 font-semibold text-slate-900">
                 {workOrder.performed_by_name || workOrder.performed_by || '-'}
               </div>
-              <span className="text-xs text-slate-400 block">วันที่: {workOrder.performed_at || '-'}</span>
+              <span className="text-xs text-slate-500 block font-sans">วันที่: {formatVccDate(workOrder.performed_at)}</span>
             </div>
 
             <div className="space-y-8 p-3 rounded-xl border border-slate-200 bg-slate-50/50">
@@ -269,7 +272,7 @@ export const DigitalRecordModal = ({
               <div className="border-b border-dashed border-slate-400 w-3/4 mx-auto pb-1 font-semibold text-slate-900">
                 {workOrder.reviewed_by_name || workOrder.reviewed_by || '-'}
               </div>
-              <span className="text-xs text-slate-400 block">วันที่: {workOrder.reviewed_at || '-'}</span>
+              <span className="text-xs text-slate-500 block font-sans">วันที่: {formatVccDate(workOrder.reviewed_at)}</span>
             </div>
           </div>
         </div>

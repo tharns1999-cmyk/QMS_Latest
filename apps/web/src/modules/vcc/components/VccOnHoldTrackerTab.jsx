@@ -15,6 +15,7 @@ import {
 import { fetchVccOnHoldTracker } from '../api/vccDashboardApi';
 import { releaseVccWorkOrderHold } from '../api/vccWorkOrderApi';
 import DepartmentBadge from '../../../shared/components/ui/DepartmentBadge';
+import { formatVccDate } from '../utils/vccDateUtils';
 
 export default function VccOnHoldTrackerTab({ onNavigateToWorkOrder }) {
   const [trackerData, setTrackerData] = useState(null);
@@ -292,8 +293,8 @@ export default function VccOnHoldTrackerTab({ onNavigateToWorkOrder }) {
                           {days} วัน
                         </span>
                         {item.performed_at && (
-                          <div className="text-xs text-slate-400 mt-1">
-                            บันทึกผล: {item.performed_at}
+                          <div className="text-xs text-slate-500 mt-1 font-sans" title={item.performed_at}>
+                            บันทึกผล: {formatVccDate(item.performed_at)}
                           </div>
                         )}
                       </td>

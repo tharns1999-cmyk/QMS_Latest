@@ -13,6 +13,7 @@ import {
   FileCheck2
 } from 'lucide-react';
 import { getResultStatusLabel } from '../utils/statusLabels';
+import { formatVccDate } from '../utils/vccDateUtils';
 
 const MAX_PDF_BYTES = 25 * 1024 * 1024; // 25 MB
 
@@ -176,6 +177,11 @@ export const RecordResultModal = ({
                     onChange={(e) => setForm({ ...form, performed_at: e.target.value })}
                     className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium focus:outline-none focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600 shadow-2xs"
                   />
+                  {form.performed_at && (
+                    <span className="text-xs text-slate-500 font-medium mt-1 block">
+                      ตรงกับ: {formatVccDate(form.performed_at)}
+                    </span>
+                  )}
                 </div>
 
                 <div>
@@ -236,6 +242,11 @@ export const RecordResultModal = ({
                     onChange={(e) => setForm({ ...form, certificate_issue_date: e.target.value })}
                     className="w-full h-10 px-3 rounded-xl border border-slate-300 text-sm font-medium focus:outline-none focus:border-indigo-600 shadow-2xs"
                   />
+                  {form.certificate_issue_date && (
+                    <span className="text-xs text-slate-500 font-medium mt-1 block">
+                      ตรงกับ: {formatVccDate(form.certificate_issue_date)}
+                    </span>
+                  )}
                 </div>
 
                 <div>
@@ -249,6 +260,11 @@ export const RecordResultModal = ({
                     onChange={(e) => setForm({ ...form, certificate_valid_until: e.target.value })}
                     className="w-full h-10 px-3 rounded-xl border border-slate-300 text-sm font-medium focus:outline-none focus:border-indigo-600 shadow-2xs"
                   />
+                  {form.certificate_valid_until && (
+                    <span className="text-xs text-slate-500 font-medium mt-1 block">
+                      ตรงกับ: {formatVccDate(form.certificate_valid_until)}
+                    </span>
+                  )}
                 </div>
               </div>
 

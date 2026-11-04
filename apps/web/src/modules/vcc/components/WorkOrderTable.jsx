@@ -19,6 +19,7 @@ import { FloatingOverlay } from '../../../shared/components/ui/FloatingOverlay';
 import useStore from '../../../store/useStore';
 import { canReviewWorkOrder, canReleaseWorkOrderHold, canCancelWorkOrder } from '../utils/workOrderPermissions';
 import { WORK_ORDER_STATUS_LABELS, RESULT_STATUS_LABELS, getWorkOrderStatusLabel, getResultStatusLabel } from '../utils/statusLabels';
+import { formatVccDueDate } from '../utils/vccDateUtils';
 
 /**
  * WorkOrderRowActions - Renders primary action and floating overflow menu for each row
@@ -424,13 +425,22 @@ export const WorkOrderTable = ({
 
                 {/* Column 3: วันครบกำหนด */}
                 <td className="py-3 px-4 align-middle">
-                  <div className="font-mono font-semibold text-slate-900 text-sm">
-                    {wo.due_date}
+                  <div className="font-semibold text-slate-900 text-xs sm:text-sm font-sans" title={`วันครบกำหนด: ${wo.due_date}`}>
+                    <span>{formatVccDueDate(wo.due_date)}</span>
+                    <span className="block sm:inline text-slate-400 font-normal font-mono text-[11px] sm:text-xs sm:ml-1">
+                      (<span>{wo.due_date}</span>)
+                    </span>
                   </div>
                   {wo.due_date !== wo.original_due_date && (
                     <div className="text-xs text-amber-900 bg-amber-50 p-1 rounded border border-amber-200 font-medium mt-1 leading-tight">
                       <div>
-                        วันเดิม: <span className="font-mono line-through text-slate-400">{wo.original_due_date}</span>
+                        วันเดิม:{' '}
+                        <span className="line-through text-slate-400 font-sans" title={`วันครบกำหนดเดิม: ${wo.original_due_date}`}>
+                          {formatVccDueDate(wo.original_due_date)}
+                          <span className="block sm:inline text-slate-400 font-normal font-mono text-[11px] sm:text-xs sm:ml-1">
+                            (<span>{wo.original_due_date}</span>)
+                          </span>
+                        </span>
                       </div>
                       <div className="truncate max-w-[130px]" title={wo.reschedule_reason}>
                         ({wo.reschedule_reason})

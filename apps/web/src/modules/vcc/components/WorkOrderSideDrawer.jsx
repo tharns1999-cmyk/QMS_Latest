@@ -24,6 +24,7 @@ import { WorkOrderAmendmentRequests } from './WorkOrderAmendmentRequests';
 import useStore from '../../../store/useStore';
 import { canReviewWorkOrder, canReleaseWorkOrderHold, canCancelWorkOrder } from '../utils/workOrderPermissions';
 import { WORK_ORDER_STATUS_LABELS, getWorkOrderStatusLabel } from '../utils/statusLabels';
+import { formatVccDueDate, formatVccDate, formatVccDateTime } from '../utils/vccDateUtils';
 
 export const WorkOrderSideDrawer = ({
   workOrder,
@@ -249,7 +250,14 @@ export const WorkOrderSideDrawer = ({
                 </div>
                 <div>
                   <span className="text-slate-500 text-xs block">วันครบกำหนด:</span>
-                  <span className="font-mono font-bold text-slate-900">{currentWo.due_date}</span>
+                  <div className="font-semibold text-slate-900 font-sans" title={`ค.ศ. ${currentWo.due_date}`}>
+                    <span>{formatVccDueDate(currentWo.due_date)}</span>
+                    {currentWo.due_date && (
+                      <span className="text-slate-400 font-normal font-mono text-xs ml-1.5">
+                        ({currentWo.due_date})
+                      </span>
+                    )}
+                  </div>
                 </div>
                 {currentWo.due_date !== currentWo.original_due_date && (
                   <div className="col-span-2 p-2.5 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-900 space-y-1">
@@ -258,7 +266,15 @@ export const WorkOrderSideDrawer = ({
                       <span>มีการเลื่อนวันครบกำหนด:</span>
                     </div>
                     <div>
-                      วันเดิม: <span className="font-mono line-through text-slate-400">{currentWo.original_due_date}</span>
+                      วันเดิม:{' '}
+                      <span className="line-through text-slate-400 font-sans" title={`ค.ศ. ${currentWo.original_due_date}`}>
+                        {formatVccDueDate(currentWo.original_due_date)}
+                      </span>
+                      {currentWo.original_due_date && (
+                        <span className="text-slate-400 font-mono text-xs ml-1.5">
+                          ({currentWo.original_due_date})
+                        </span>
+                      )}
                     </div>
                     <div>เหตุผล: <span className="font-medium">{currentWo.reschedule_reason}</span></div>
                   </div>
@@ -298,7 +314,9 @@ export const WorkOrderSideDrawer = ({
                 {currentWo.performed_at && (
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-slate-500">วันที่ดำเนินการ:</span>
-                    <span className="font-mono font-medium text-slate-700">{currentWo.performed_at}</span>
+                    <span className="font-semibold text-slate-800 font-sans" title={`ค.ศ. ${currentWo.performed_at}`}>
+                      {formatVccDate(currentWo.performed_at)}
+                    </span>
                   </div>
                 )}
 
@@ -422,7 +440,9 @@ export const WorkOrderSideDrawer = ({
                         <History size={14} className="text-amber-700" />
                         <span>ใบสั่งงานนี้ผ่านการแก้ไข (Controlled Amendment)</span>
                       </span>
-                      <span className="font-mono text-xs text-amber-800">{currentWo.amended_at}</span>
+                      <span className="text-xs text-amber-800 font-sans" title={currentWo.amended_at}>
+                        {formatVccDateTime(currentWo.amended_at)}
+                      </span>
                     </div>
                     {currentWo.amended_by_name && (
                       <div>แก้ไขโดย: <span className="font-bold">{currentWo.amended_by_name}</span></div>
@@ -476,7 +496,9 @@ export const WorkOrderSideDrawer = ({
                     >
                       <div className="flex items-center justify-between text-slate-500">
                         <span className="font-semibold text-slate-700">{h.action}</span>
-                        <span className="font-mono text-xs">{h.created_at || '-'}</span>
+                        <span className="text-xs text-slate-500 font-sans" title={h.created_at || ''}>
+                          {formatVccDateTime(h.created_at)}
+                        </span>
                       </div>
                       <div className="text-slate-600 text-xs">
                         โดย: <span className="font-medium text-slate-800">{h.user_name || h.user_id || 'ระบบ'}</span>
