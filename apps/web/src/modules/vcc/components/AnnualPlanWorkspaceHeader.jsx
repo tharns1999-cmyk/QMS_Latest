@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { PLAN_STATUS_OPTIONS, getPlanStatusLabel, getDueDateRuleLabel } from '../utils/planLabels';
 import AnnualPlanApprovalChain from './AnnualPlanApprovalChain';
-import { formatVccDateTime } from '../utils/vccDateUtils';
+import { formatVccDateTime, toBuddhistYear } from '../utils/vccDateUtils';
 
 const useDismiss = (open, onClose) => {
   const ref = useRef(null);
@@ -280,7 +280,7 @@ export const AnnualPlanWorkspaceHeader = ({
                   <span>{getShortPlanTitle(activePlan)}</span>
                   {activePlan.plan_year && (
                     <span className="text-slate-500 font-medium text-xs sm:text-sm font-sans">
-                      (พ.ศ. {activePlan.plan_year + 543})
+                      (พ.ศ. {toBuddhistYear(activePlan.plan_year)})
                     </span>
                   )}
                 </h2>

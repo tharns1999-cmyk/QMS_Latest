@@ -427,7 +427,7 @@ export const WorkOrderTable = ({
                 <td className="py-3 px-4 align-middle">
                   <div className="font-semibold text-slate-900 text-xs sm:text-sm font-sans" title={`วันครบกำหนด: ${wo.due_date}`}>
                     <span>{formatVccDueDate(wo.due_date)}</span>
-                    <span className="sr-only sm:not-sr-only sm:inline text-slate-400 font-normal font-mono text-xs ml-1">
+                    <span className="block sm:inline text-slate-400 font-normal font-mono text-[11px] sm:text-xs sm:ml-1">
                       (<span>{wo.due_date}</span>)
                     </span>
                   </div>
@@ -437,7 +437,7 @@ export const WorkOrderTable = ({
                         วันเดิม:{' '}
                         <span className="line-through text-slate-400 font-sans" title={`วันครบกำหนดเดิม: ${wo.original_due_date}`}>
                           {formatVccDueDate(wo.original_due_date)}
-                          <span className="sr-only sm:not-sr-only sm:inline ml-1 font-mono text-xs">
+                          <span className="block sm:inline text-slate-400 font-normal font-mono text-[11px] sm:text-xs sm:ml-1">
                             (<span>{wo.original_due_date}</span>)
                           </span>
                         </span>

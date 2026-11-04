@@ -250,9 +250,14 @@ export const WorkOrderSideDrawer = ({
                 </div>
                 <div>
                   <span className="text-slate-500 text-xs block">วันครบกำหนด:</span>
-                  <span className="font-semibold text-slate-900 font-sans" title={`ค.ศ. ${currentWo.due_date}`}>
-                    {formatVccDueDate(currentWo.due_date)}
-                  </span>
+                  <div className="font-semibold text-slate-900 font-sans" title={`ค.ศ. ${currentWo.due_date}`}>
+                    <span>{formatVccDueDate(currentWo.due_date)}</span>
+                    {currentWo.due_date && (
+                      <span className="text-slate-400 font-normal font-mono text-xs ml-1.5">
+                        ({currentWo.due_date})
+                      </span>
+                    )}
+                  </div>
                 </div>
                 {currentWo.due_date !== currentWo.original_due_date && (
                   <div className="col-span-2 p-2.5 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-900 space-y-1">
@@ -261,7 +266,15 @@ export const WorkOrderSideDrawer = ({
                       <span>มีการเลื่อนวันครบกำหนด:</span>
                     </div>
                     <div>
-                      วันเดิม: <span className="line-through text-slate-400 font-sans" title={`ค.ศ. ${currentWo.original_due_date}`}>{formatVccDueDate(currentWo.original_due_date)}</span>
+                      วันเดิม:{' '}
+                      <span className="line-through text-slate-400 font-sans" title={`ค.ศ. ${currentWo.original_due_date}`}>
+                        {formatVccDueDate(currentWo.original_due_date)}
+                      </span>
+                      {currentWo.original_due_date && (
+                        <span className="text-slate-400 font-mono text-xs ml-1.5">
+                          ({currentWo.original_due_date})
+                        </span>
+                      )}
                     </div>
                     <div>เหตุผล: <span className="font-medium">{currentWo.reschedule_reason}</span></div>
                   </div>

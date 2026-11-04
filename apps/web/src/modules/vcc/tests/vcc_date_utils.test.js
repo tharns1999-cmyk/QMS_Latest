@@ -96,6 +96,34 @@ describe('VCC Thai Date & Buddhist Year (พ.ศ.) Utilities', () => {
       expect(formatVccDateTime(sqliteUtc)).toBe('15 เม.ย. 2569 16:00 น.');
     });
 
+    it('normalizes SQLite UTC datetime strings without timezone suffix', () => {
+      // Contract: SQLite stores timestamps in UTC. 14:30 UTC -> 21:30 Asia/Bangkok (+7h)
+      expect(formatVccDateTime('2026-04-15 14:30:00')).toBe('15 เม.ย. 2569 21:30 น.');
+      expect(formatVccDateTime('2026-04-15T14:30:00')).toBe('15 เม.ย. 2569 21:30 น.');
+      expect(formatVccDateTime('2026-04-15 14:30:00.500')).toBe('15 เม.ย. 2569 21:30 น.');
+    });
+
+    it('strictly rejects impossible ISO timestamps with time and timezone without automatic rollover', () => {
+      // 2026-02-31 does not exist; JavaScript Date must NOT silently roll over to March 3rd!
+      expect(formatVccDate('2026-02-31T14:30:00Z')).toBe('-');
+      expect(formatVccDate('2026-02-31T14:30:00+07:00')).toBe('-');
+      expect(formatVccDateTime('2026-02-31T14:30:00Z')).toBe('-');
+      expect(formatVccDateTime('2026-02-31T14:30:00+07:00')).toBe('-');
+
+      // Month 13 or invalid day in month
+      expect(formatVccDate('2026-13-01T10:00:00Z')).toBe('-');
+      expect(formatVccDate('2026-04-31T10:00:00Z')).toBe('-'); // April only has 30 days
+      expect(formatVccDateTime('2026-04-31T10:00:00Z')).toBe('-');
+
+      // Non-leap year Feb 29
+      expect(formatVccDate('2026-02-29T10:00:00Z')).toBe('-');
+      expect(formatVccDateTime('2026-02-29T10:00:00Z')).toBe('-');
+
+      // Leap year Feb 29 is valid
+      expect(formatVccDate('2024-02-29T10:00:00Z')).toBe('29 ก.พ. 2567');
+      expect(formatVccDateTime('2024-02-29T10:00:00Z')).toBe('29 ก.พ. 2567 17:00 น.');
+    });
+
     it('does NOT append "น." if input has NO time component (date-only)', () => {
       expect(formatVccDateTime('2026-04-15')).toBe('15 เม.ย. 2569');
       expect(formatVccDateTime('2026-12-31')).toBe('31 ธ.ค. 2569');

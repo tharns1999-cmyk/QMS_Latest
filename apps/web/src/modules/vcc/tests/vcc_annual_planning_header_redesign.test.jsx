@@ -192,4 +192,56 @@ describe('Annual Planning Header Redesign (FM-QC-46) — Compact 2-Tier Enterpri
     expect(screen.getByText('สมศรี ผู้ทบทวน')).toBeInTheDocument();
     expect(screen.getByText('รอการอนุมัติ')).toBeInTheDocument();
   });
+
+  it('6. Plan year regression: safely formats plan_year as Number, String, and Buddhist Era without string concatenation', () => {
+    // Number CE
+    const { rerender } = render(
+      <AnnualPlanWorkspaceHeader
+        statusTab="DRAFT"
+        setStatusTab={() => {}}
+        activePlan={{ ...mockDraftPlan, plan_year: 2026 }}
+        plans={[]}
+        planItems={[]}
+      />
+    );
+    expect(screen.getByText('(พ.ศ. 2569)')).toBeInTheDocument();
+
+    // String CE ("2026") - must NOT become "(พ.ศ. 2026543)"
+    rerender(
+      <AnnualPlanWorkspaceHeader
+        statusTab="DRAFT"
+        setStatusTab={() => {}}
+        activePlan={{ ...mockDraftPlan, plan_year: '2026' }}
+        plans={[]}
+        planItems={[]}
+      />
+    );
+    expect(screen.getByText('(พ.ศ. 2569)')).toBeInTheDocument();
+    expect(screen.queryByText(/2026543/)).toBeNull();
+
+    // Number Buddhist Era (2569) - must NOT double-add 543 to become "(พ.ศ. 3112)"
+    rerender(
+      <AnnualPlanWorkspaceHeader
+        statusTab="DRAFT"
+        setStatusTab={() => {}}
+        activePlan={{ ...mockDraftPlan, plan_year: 2569 }}
+        plans={[]}
+        planItems={[]}
+      />
+    );
+    expect(screen.getByText('(พ.ศ. 2569)')).toBeInTheDocument();
+    expect(screen.queryByText(/3112/)).toBeNull();
+
+    // String Buddhist Era ("2569")
+    rerender(
+      <AnnualPlanWorkspaceHeader
+        statusTab="DRAFT"
+        setStatusTab={() => {}}
+        activePlan={{ ...mockDraftPlan, plan_year: '2569' }}
+        plans={[]}
+        planItems={[]}
+      />
+    );
+    expect(screen.getByText('(พ.ศ. 2569)')).toBeInTheDocument();
+  });
 });

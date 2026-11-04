@@ -159,6 +159,19 @@ export const formatVccDate = (dateInput, options = {}) => {
     } else if (typeof dateInput === 'string') {
       const trimmed = dateInput.trim();
 
+      // Validate calendar date part if string starts with ISO date pattern (YYYY-MM-DD...)
+      // Prevents JavaScript Date parser from silently rolling over impossible calendar dates
+      // (e.g. "2026-02-31T14:30:00Z" -> March 3rd or "2026-13-01T00:00:00Z" -> next year)
+      const isoPrefixMatch = trimmed.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+      if (isoPrefixMatch) {
+        const year = parseInt(isoPrefixMatch[1], 10);
+        const month = parseInt(isoPrefixMatch[2], 10);
+        const day = parseInt(isoPrefixMatch[3], 10);
+        if (!isValidCalendarDate(year, month, day)) {
+          return fallback;
+        }
+      }
+
       // Check if string is a datetime without explicit timezone offset (e.g. "2026-04-15 14:30:00" from SQLite)
       // Contract: SQLite stores timestamps in UTC. If no timezone indicator (Z or +HH:mm), normalize to UTC ('Z')
       const noTzMatch = trimmed.match(/^(\d{4})-(\d{1,2})-(\d{1,2})[T ](\d{2}):(\d{2})(?::(\d{2}))?(?:\.\d+)?$/);
