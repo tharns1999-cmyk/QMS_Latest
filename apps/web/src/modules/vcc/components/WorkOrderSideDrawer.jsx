@@ -90,6 +90,8 @@ export const WorkOrderSideDrawer = ({
     handleTouchMove,
     handleTouchEnd
   } = useVccMobileViewport({
+    containerRef: dialogRef,
+    isOpen: !!workOrder,
     onDismiss: requestClose
   });
 
@@ -216,7 +218,7 @@ export const WorkOrderSideDrawer = ({
           </div>
 
           {/* Drawer Body */}
-          <div className="flex-1 overflow-y-auto p-5 space-y-5 text-sm text-slate-700">
+          <div className="flex-1 overflow-y-auto overscroll-y-contain p-5 space-y-5 text-sm text-slate-700">
             {loading && (
               <div className="text-center py-2 text-xs font-medium text-slate-400">
                 กำลังดึงข้อมูลประวัติใบสั่งงานล่าสุด...

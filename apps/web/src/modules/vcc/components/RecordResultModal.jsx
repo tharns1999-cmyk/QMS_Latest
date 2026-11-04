@@ -136,6 +136,8 @@ export const RecordResultModal = ({
     handleTouchMove,
     handleTouchEnd
   } = useVccMobileViewport({
+    containerRef: dialogRef,
+    isOpen: Boolean(activeWorkOrder),
     onDismiss: requestClose,
     isDirty
   });
@@ -281,7 +283,7 @@ export const RecordResultModal = ({
         </div>
 
         {/* Scrollable Form Body */}
-        <form onSubmit={handleFormSubmit} className="p-6 space-y-4.5 overflow-y-auto flex-1">
+        <form onSubmit={handleFormSubmit} className="p-6 space-y-4.5 overflow-y-auto flex-1 overscroll-y-contain">
           {error && (
             <div role="alert" className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-sm font-semibold flex items-center gap-2">
               <AlertTriangle size={17} className="text-rose-600 shrink-0" />

@@ -189,7 +189,7 @@ export const AnnualPlanMonthCell = ({
                     ? 'มีใบสั่งงานกำลังดำเนินการ'
                     : 'รอบตามแผนประจำปี'
                 }`}
-                className={`min-h-[36px] sm:min-h-0 min-w-[36px] sm:min-w-0 inline-flex items-center justify-center gap-0.5 rounded font-mono font-bold transition-transform cursor-pointer shadow-2xs hover:scale-105 motion-safe:active:scale-95 select-none ${
+                className={`min-h-[44px] sm:min-h-[24px] min-w-[44px] sm:min-w-0 inline-flex items-center justify-center gap-0.5 rounded font-mono font-bold transition-transform cursor-pointer shadow-2xs hover:scale-105 motion-safe:active:scale-95 select-none ${
                   isCompact ? 'px-1 py-0.5 text-xs' : 'px-1.5 py-0.5 text-xs'
                 } ${
                   cycleWo?.nc_status === 'OPEN' || cycleWo?.result_status === 'FAIL'
@@ -252,7 +252,7 @@ export const AnnualPlanMonthCell = ({
                     setIsOpen((prev) => !prev);
                   }}
                   title={`ทำจริง ${extWo.performed_at} (${pMonth ? `จากรอบแผนเดือน ${pMonth}` : 'นอกแผน'})`}
-                  className={`min-h-[36px] sm:min-h-0 min-w-[36px] sm:min-w-0 inline-flex items-center justify-center gap-0.5 rounded font-mono font-bold transition-transform cursor-pointer shadow-2xs hover:scale-105 motion-safe:active:scale-95 select-none ${
+                  className={`min-h-[44px] sm:min-h-[24px] min-w-[44px] sm:min-w-0 inline-flex items-center justify-center gap-0.5 rounded font-mono font-bold transition-transform cursor-pointer shadow-2xs hover:scale-105 motion-safe:active:scale-95 select-none ${
                     isCompact ? 'px-1 py-0.5 text-xs' : 'px-1.5 py-0.5 text-xs'
                   } ${
                     isNc
@@ -281,9 +281,9 @@ export const AnnualPlanMonthCell = ({
             }}
             title={`คลิกเพื่อกำหนดเป้าหมายทวนสอบเดือน ${month}`}
             aria-label={`กำหนดเป้าหมายเดือน ${month}`}
-            className="w-5 h-5 rounded flex items-center justify-center text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 hover:border hover:border-indigo-200 transition-all opacity-40 hover:opacity-100 cursor-pointer"
+            className="min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 sm:w-5 sm:h-5 rounded-lg sm:rounded flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 hover:border hover:border-indigo-200 transition-all opacity-60 sm:opacity-40 hover:opacity-100 cursor-pointer motion-safe:active:scale-95"
           >
-            <Plus size={12} />
+            <Plus size={14} className="sm:w-3 sm:h-3" />
           </button>
         ) : (
           <span className="text-slate-300 font-mono text-xs">-</span>

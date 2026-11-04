@@ -2,6 +2,7 @@ import React, { useMemo, useState, useId } from 'react';
 import { AlertTriangle, Trash2, X } from 'lucide-react';
 import { formatVccDueDate } from '../utils/vccDateUtils';
 import { useVccModalAccessibility } from '../hooks/useVccModalAccessibility';
+import { useVccMobileViewport } from '../hooks/useVccMobileViewport';
 import { VccDiscardConfirmDialog } from './VccDiscardConfirmDialog';
 
 const serializeCreateForm = (f) => JSON.stringify({
@@ -58,6 +59,19 @@ export const CreateWorkOrderModal = ({
     discardMessage: 'คุณมีข้อมูลใบสั่งงานที่กำลังจัดทำ ต้องการยกเลิกและปิดหน้าต่างใช่หรือไม่?'
   });
 
+  const {
+    isMobile,
+    dragOffset,
+    handleTouchStart,
+    handleTouchMove,
+    handleTouchEnd
+  } = useVccMobileViewport({
+    containerRef: dialogRef,
+    isOpen: open,
+    onDismiss: requestClose,
+    isDirty
+  });
+
   if (!open) return null;
 
   const selectedPlanItem = planItems.find((i) => i.id === form.plan_item_id);
@@ -79,11 +93,19 @@ export const CreateWorkOrderModal = ({
           aria-modal="true"
           aria-labelledby={titleId}
           tabIndex="-1"
-          className="bg-white rounded-t-3xl sm:rounded-2xl border border-slate-200 shadow-xl max-w-lg w-full max-h-[92dvh] sm:max-h-[90vh] flex flex-col overflow-hidden outline-none animate-in slide-in-from-bottom-6 sm:slide-in-from-bottom-0 duration-200"
+          style={isMobile && dragOffset > 0 ? { transform: `translateY(${dragOffset}px)` } : undefined}
+          className="bg-white rounded-t-3xl sm:rounded-2xl border border-slate-200 shadow-xl max-w-lg w-full max-h-[92dvh] sm:max-h-[90vh] flex flex-col overflow-hidden outline-none animate-in slide-in-from-bottom-6 sm:slide-in-from-bottom-0 duration-200 transition-transform duration-100 ease-out"
         >
           {/* Mobile Drag Handle Bar */}
-          <div className="sm:hidden pt-2.5 pb-1 flex justify-center shrink-0">
-            <span className="w-10 h-1.5 rounded-full bg-slate-300" />
+          <div
+            data-testid="vcc-drag-handle"
+            className="sm:hidden pt-3 pb-1.5 flex justify-center cursor-grab active:cursor-grabbing select-none shrink-0 bg-slate-50 border-b border-slate-100"
+            aria-hidden="true"
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+          >
+            <div className="w-12 h-1.5 rounded-full bg-slate-300 active:bg-slate-400 transition-colors" />
           </div>
 
           <div className="px-5 sm:px-6 py-3.5 sm:py-4.5 border-b border-slate-200 flex items-center justify-between shrink-0">
@@ -98,7 +120,7 @@ export const CreateWorkOrderModal = ({
             </button>
           </div>
 
-        <form onSubmit={onSubmit} className="p-5 sm:p-6 space-y-4 overflow-y-auto flex-1">
+        <form onSubmit={onSubmit} className="p-5 sm:p-6 space-y-4 overflow-y-auto flex-1 overscroll-y-contain">
           {error && (
             <div role="alert" className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-sm font-semibold flex items-center gap-2">
               <AlertTriangle size={17} className="text-rose-600 shrink-0" />
@@ -245,10 +267,12 @@ export const CreateWorkOrderModal = ({
                 </div>
 
                 <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">วันครบกำหนด (YYYY-MM-DD)</label>
+                  <label htmlFor="create-wo-due-date" className="block text-sm font-semibold text-slate-700 mb-1.5">วันครบกำหนด (YYYY-MM-DD)</label>
                   <input
+                    id="create-wo-due-date"
                     type="date"
                     required
+                    aria-label="วันครบกำหนด"
                     value={form.due_date}
                     onChange={(e) => setForm({ ...form, due_date: e.target.value })}
                     className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium"
@@ -325,6 +349,19 @@ export const WorkOrderActionModal = ({
     discardMessage: 'คุณมีข้อมูลเหตุผลหรือรายละเอียดที่กำลังกรอก ต้องการยกเลิกและปิดหน้าต่างใช่หรือไม่?'
   });
 
+  const {
+    isMobile,
+    dragOffset,
+    handleTouchStart,
+    handleTouchMove,
+    handleTouchEnd
+  } = useVccMobileViewport({
+    containerRef: dialogRef,
+    isOpen: Boolean(modal),
+    onDismiss: requestClose,
+    isDirty
+  });
+
   if (!modal) return null;
   const requiresText = mode !== 'APPROVE';
   const missingReason = mode === 'RELEASE_HOLD' && !form.reason?.trim();
@@ -341,11 +378,19 @@ export const WorkOrderActionModal = ({
           aria-modal="true"
           aria-labelledby="wo-action-modal-title"
           tabIndex="-1"
-          className="bg-white rounded-t-3xl sm:rounded-2xl border border-slate-200 shadow-xl max-w-md w-full max-h-[92dvh] sm:max-h-[90vh] flex flex-col overflow-hidden outline-none animate-in slide-in-from-bottom-6 sm:slide-in-from-bottom-0 duration-200"
+          style={isMobile && dragOffset > 0 ? { transform: `translateY(${dragOffset}px)` } : undefined}
+          className="bg-white rounded-t-3xl sm:rounded-2xl border border-slate-200 shadow-xl max-w-md w-full max-h-[92dvh] sm:max-h-[90vh] flex flex-col overflow-hidden outline-none animate-in slide-in-from-bottom-6 sm:slide-in-from-bottom-0 duration-200 transition-transform duration-100 ease-out"
         >
           {/* Mobile Drag Handle Bar */}
-          <div className="sm:hidden pt-2.5 pb-1 flex justify-center shrink-0">
-            <span className="w-10 h-1.5 rounded-full bg-slate-300" />
+          <div
+            data-testid="vcc-drag-handle"
+            className="sm:hidden pt-3 pb-1.5 flex justify-center cursor-grab active:cursor-grabbing select-none shrink-0 bg-slate-50 border-b border-slate-100"
+            aria-hidden="true"
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+          >
+            <div className="w-12 h-1.5 rounded-full bg-slate-300 active:bg-slate-400 transition-colors" />
           </div>
 
           <div className="px-5 sm:px-6 py-3.5 sm:py-4.5 border-b border-slate-200 flex items-center justify-between shrink-0">
@@ -366,7 +411,7 @@ export const WorkOrderActionModal = ({
             </button>
           </div>
 
-          <form onSubmit={onConfirm} className="p-5 sm:p-6 space-y-4 overflow-y-auto flex-1">
+          <form onSubmit={onConfirm} className="p-5 sm:p-6 space-y-4 overflow-y-auto flex-1 overscroll-y-contain">
             {error && (
               <div role="alert" className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-sm font-semibold flex items-center gap-2">
                 <AlertTriangle size={17} className="text-rose-600 shrink-0" />
@@ -497,6 +542,18 @@ export const WorkOrderSettingsModal = ({
     isDirty: false
   });
 
+  const {
+    isMobile,
+    dragOffset,
+    handleTouchStart,
+    handleTouchMove,
+    handleTouchEnd
+  } = useVccMobileViewport({
+    containerRef: dialogRef,
+    isOpen: open,
+    onDismiss: requestClose
+  });
+
   if (!open) return null;
 
   const addCriteria = () => {
@@ -520,11 +577,19 @@ export const WorkOrderSettingsModal = ({
         aria-modal="true"
         aria-labelledby="wo-settings-title"
         tabIndex="-1"
-        className="bg-white rounded-t-3xl sm:rounded-2xl border border-slate-200 shadow-xl max-w-lg w-full max-h-[92dvh] sm:max-h-[90vh] flex flex-col overflow-hidden outline-none animate-in slide-in-from-bottom-6 sm:slide-in-from-bottom-0 duration-200"
+        style={isMobile && dragOffset > 0 ? { transform: `translateY(${dragOffset}px)` } : undefined}
+        className="bg-white rounded-t-3xl sm:rounded-2xl border border-slate-200 shadow-xl max-w-lg w-full max-h-[92dvh] sm:max-h-[90vh] flex flex-col overflow-hidden outline-none animate-in slide-in-from-bottom-6 sm:slide-in-from-bottom-0 duration-200 transition-transform duration-100 ease-out"
       >
         {/* Mobile Drag Handle Bar */}
-        <div className="sm:hidden pt-2.5 pb-1 flex justify-center shrink-0">
-          <span className="w-10 h-1.5 rounded-full bg-slate-300" />
+        <div
+          data-testid="vcc-drag-handle"
+          className="sm:hidden pt-3 pb-1.5 flex justify-center cursor-grab active:cursor-grabbing select-none shrink-0 bg-slate-50 border-b border-slate-100"
+          aria-hidden="true"
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+        >
+          <div className="w-12 h-1.5 rounded-full bg-slate-300 active:bg-slate-400 transition-colors" />
         </div>
 
         <div className="px-5 sm:px-6 py-3.5 sm:py-4.5 border-b border-slate-200 flex items-center justify-between shrink-0">
@@ -539,7 +604,7 @@ export const WorkOrderSettingsModal = ({
           </button>
         </div>
 
-        <div className="p-5 sm:p-6 space-y-4 overflow-y-auto flex-1">
+        <div className="p-5 sm:p-6 space-y-4 overflow-y-auto flex-1 overscroll-y-contain">
           <div>
             <label className="block text-sm font-semibold text-slate-700 mb-1.5">ระยะเวลาเก็บประวัติใบรับรอง (ปี)</label>
             <input

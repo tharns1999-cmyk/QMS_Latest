@@ -16,8 +16,9 @@ import { useState, useEffect, useRef, useCallback } from 'react';
  * ─────────────────────────────────────────────────────────────────────────────
  */
 export const useVccMobileViewport = ({
+  containerRef = null,
+  isOpen = true,
   onDismiss = null,
-  isDirty = false,
   dragThreshold = 70
 } = {}) => {
   const [isMobile, setIsMobile] = useState(() => {
@@ -67,32 +68,46 @@ export const useVccMobileViewport = ({
     };
   }, []);
 
-  // 2. Safe Input Visibility on Focus
+  // 2. Safe Input Visibility on Focus (Scoped strictly to open modal & active mobile view)
   useEffect(() => {
     if (typeof window === 'undefined') return;
+    if (!isOpen) return;
 
     const handleFocusIn = (e) => {
+      // Only execute on mobile screens where virtual keyboards can cover inputs
+      if (window.innerWidth >= 640) return;
+
       const target = e.target;
-      if (
-        target &&
-        (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT')
-      ) {
-        // Delay slightly for virtual keyboard animation to settle
-        setTimeout(() => {
-          try {
-            target.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-          } catch {
-            // Safe fallback
-          }
-        }, 150);
+      if (!target || !target.tagName) return;
+
+      const isInput =
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.tagName === 'SELECT';
+
+      if (!isInput) return;
+
+      // Scoped focus check: only scroll if the input is inside this active modal
+      if (containerRef?.current && !containerRef.current.contains(target)) {
+        return;
       }
+
+      // Delay slightly for virtual keyboard animation to settle (iOS Safari & Android Chrome)
+      setTimeout(() => {
+        try {
+          // Centering input in visible space prevents sticky bottom action bar from covering it
+          target.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+        } catch {
+          // Safe fallback
+        }
+      }, 180);
     };
 
     window.addEventListener('focusin', handleFocusIn, { passive: true });
     return () => {
       window.removeEventListener('focusin', handleFocusIn);
     };
-  }, []);
+  }, [isOpen, containerRef]);
 
   // 3. Ergonomic Bottom Sheet Drag-to-Dismiss Gesture
   const handleTouchStart = useCallback((e) => {
@@ -146,3 +161,4 @@ export const useVccMobileViewport = ({
 };
 
 export default useVccMobileViewport;
+

@@ -58,11 +58,12 @@ export const VccModalShell = ({
   const {
     isMobile,
     dragOffset,
-    isDragging,
     handleTouchStart,
     handleTouchMove,
     handleTouchEnd
   } = useVccMobileViewport({
+    containerRef: dialogRef,
+    isOpen,
     onDismiss: requestClose,
     isDirty
   });

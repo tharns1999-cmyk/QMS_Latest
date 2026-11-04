@@ -56,6 +56,8 @@ export const AnnualPlanSideInspector = ({
     handleTouchMove,
     handleTouchEnd
   } = useVccMobileViewport({
+    containerRef: dialogRef,
+    isOpen: !!item,
     onDismiss: requestClose
   });
 
@@ -146,7 +148,7 @@ export const AnnualPlanSideInspector = ({
           </div>
 
           {/* Drawer Scrollable Content */}
-          <div className="flex-1 overflow-y-auto p-5 space-y-5 text-sm text-slate-700">
+          <div className="flex-1 overflow-y-auto overscroll-y-contain p-5 space-y-5 text-sm text-slate-700">
             {/* Section 1: Specs & Location */}
             <div className="bg-slate-50/80 p-4 rounded-xl border border-slate-200/80 space-y-3">
               <h4 className="font-bold text-slate-900 flex items-center gap-2 text-sm">

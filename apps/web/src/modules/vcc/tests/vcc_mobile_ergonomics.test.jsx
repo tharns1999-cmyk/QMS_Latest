@@ -8,6 +8,7 @@ import { CreateWorkOrderModal } from '../components/WorkOrderModals';
 import { RecordResultModal } from '../components/RecordResultModal';
 import { WorkOrderRowActions } from '../components/WorkOrderTable';
 import { AnnualPlanMonthCell } from '../components/AnnualPlanMonthCell';
+import { DigitalRecordModal } from '../components/DigitalRecordModal';
 
 // Helper hook test component
 const ViewportTestHarness = ({ onDismiss }) => {
@@ -367,7 +368,7 @@ describe('VCC Mobile Ergonomics Suite (Round D3)', () => {
       expect(footerContainer.className).toContain('safe-area-inset-bottom');
     });
 
-    it('Dirty Form Protection blocks accidental dismissal via drag gesture', () => {
+    it('Dirty Form Protection blocks accidental dismissal via swipe-to-dismiss drag gesture and preserves data', () => {
       window.innerWidth = 375;
       const onClose = vi.fn();
 
@@ -412,13 +413,38 @@ describe('VCC Mobile Ergonomics Suite (Round D3)', () => {
       // Form is initially clean. Now dirty it.
       fireEvent.click(screen.getByTestId('make-dirty'));
 
-      // Attempt to close via backdrop or X
-      const closeBtn = screen.getByRole('button', { name: /ปิดหน้าต่าง/i });
-      fireEvent.click(closeBtn);
+      const dragHandle = screen.getByTestId('vcc-drag-handle');
+      expect(dragHandle).toBeInTheDocument();
+
+      // Trigger Swipe-to-Dismiss drag gesture down by 150px (exceeds 70px threshold)
+      fireEvent.touchStart(dragHandle, { touches: [{ clientY: 50 }] });
+      fireEvent.touchMove(dragHandle, { touches: [{ clientY: 200 }] });
+      fireEvent.touchEnd(dragHandle);
 
       // Confirm dialog appears instead of immediately closing
       expect(screen.getByText('ข้อมูลใบสั่งงานยังไม่ได้บันทึก')).toBeInTheDocument();
       expect(onClose).not.toHaveBeenCalled();
+
+      // Verify user's modified form data is still intact
+      const dateInput = screen.getByLabelText(/วันครบกำหนด/i);
+      expect(dateInput.value).toBe('2026-12-15');
+
+      // Clicking "ยกเลิก / แก้ไขต่อ" in confirmation keeps modal open and preserves data
+      const keepEditingBtn = screen.getByRole('button', { name: /แก้ไขต่อ/i });
+      fireEvent.click(keepEditingBtn);
+      expect(screen.queryByText('ข้อมูลใบสั่งงานยังไม่ได้บันทึก')).not.toBeInTheDocument();
+      expect(onClose).not.toHaveBeenCalled();
+      expect(dateInput.value).toBe('2026-12-15');
+
+      // Swipe down again
+      fireEvent.touchStart(dragHandle, { touches: [{ clientY: 50 }] });
+      fireEvent.touchMove(dragHandle, { touches: [{ clientY: 200 }] });
+      fireEvent.touchEnd(dragHandle);
+
+      // This time, confirm discarding changes
+      const confirmDiscardBtn = screen.getByRole('button', { name: /ละทิ้งข้อมูล/i });
+      fireEvent.click(confirmDiscardBtn);
+      expect(onClose).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -480,13 +506,137 @@ describe('VCC Mobile Ergonomics Suite (Round D3)', () => {
       );
 
       const badgeBtn = screen.getByRole('button', { name: /เป้าหมายทวนสอบเดือน 5/i });
-      expect(badgeBtn.className).toContain('min-h-[36px]');
+      expect(badgeBtn.className).toContain('min-h-[44px]');
+      expect(badgeBtn.className).toContain('min-w-[44px]');
       expect(badgeBtn.className).toContain('motion-safe:active:scale-95');
       expect(badgeBtn.className).toContain('select-none');
 
       // The container wrapping the cell badge trigger must provide at least 44px height for mobile taps
       const cellContainer = badgeBtn.closest('div.min-h-\\[44px\\]') || badgeBtn.closest('div');
       expect(cellContainer.className).toContain('min-h-[44px]');
+    });
+
+    it('AnnualPlanMonthCell quick add button has minimum 44x44px touch target on mobile', () => {
+      window.innerWidth = 375;
+      const mockPlan = { id: 'p-1', plan_year: 2026, due_date_rule: 'END_OF_MONTH' };
+      const mockItem = { id: 'it-1', asset_id: 'a-1', planned_months: [] };
+
+      render(
+        <table>
+          <tbody>
+            <tr>
+              <AnnualPlanMonthCell
+                month={5}
+                item={mockItem}
+                plan={mockPlan}
+                workOrders={[]}
+                canEditPlan={true}
+              />
+            </tr>
+          </tbody>
+        </table>
+      );
+
+      const addBtn = screen.getByRole('button', { name: /กำหนดเป้าหมายเดือน 5/i });
+      expect(addBtn.className).toContain('min-w-[44px]');
+      expect(addBtn.className).toContain('min-h-[44px]');
+    });
+
+    it('DigitalRecordModal handles multi-page print preview safety and mobile touch swipe', () => {
+      window.innerWidth = 375;
+      const onClose = vi.fn();
+      const mockWo = {
+        id: 'wo-1',
+        wo_code: 'WO-2026-001',
+        asset_code: 'CAL-01',
+        asset_name: 'Digital Caliper',
+        department: 'QA',
+        status: 'CLOSED',
+        result_status: 'PASS',
+        performed_at: '2026-10-15',
+        certificate_no: 'CERT-9988',
+        acceptance_criteria: '±0.02 mm'
+      };
+
+      const { container } = render(
+        <DigitalRecordModal
+          workOrder={mockWo}
+          onClose={onClose}
+        />
+      );
+
+      // Print container ID must be present
+      const printContainer = container.querySelector('#vcc-digital-record-print');
+      expect(printContainer).toBeInTheDocument();
+      expect(printContainer.className).toContain('print:overflow-visible');
+      expect(printContainer.className).toContain('print:h-auto');
+      expect(printContainer.className).toContain('overscroll-y-contain');
+
+      // Print sections must contain page-break avoidance class
+      const printSections = container.querySelectorAll('.vcc-print-section');
+      expect(printSections.length).toBeGreaterThanOrEqual(4);
+
+      // Mobile drag handle must be present and trigger dismissal on swipe
+      const dragHandle = screen.getByTestId('vcc-drag-handle');
+      expect(dragHandle).toBeInTheDocument();
+
+      fireEvent.touchStart(dragHandle, { touches: [{ clientY: 40 }] });
+      fireEvent.touchMove(dragHandle, { touches: [{ clientY: 160 }] });
+      fireEvent.touchEnd(dragHandle);
+
+      expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    it('useVccMobileViewport restricts focus scrolling to open modal and internal inputs', () => {
+      window.innerWidth = 375;
+      const modalRef = React.createRef();
+
+      const FocusScrollHarness = ({ isOpen }) => {
+        useVccMobileViewport({
+          containerRef: modalRef,
+          isOpen
+        });
+
+        return (
+          <div>
+            <input data-testid="outside-input" />
+            <div ref={modalRef}>
+              <input data-testid="inside-input" />
+            </div>
+          </div>
+        );
+      };
+
+      const { rerender } = render(<FocusScrollHarness isOpen={true} />);
+
+      const insideInput = screen.getByTestId('inside-input');
+      const outsideInput = screen.getByTestId('outside-input');
+
+      insideInput.scrollIntoView = vi.fn();
+      outsideInput.scrollIntoView = vi.fn();
+
+      // Focus outside input: must NOT scroll
+      fireEvent.focusIn(outsideInput);
+      expect(outsideInput.scrollIntoView).not.toHaveBeenCalled();
+
+      // Focus inside input: must trigger scroll with center alignment
+      vi.useFakeTimers();
+      fireEvent.focusIn(insideInput);
+      act(() => {
+        vi.advanceTimersByTime(250);
+      });
+      expect(insideInput.scrollIntoView).toHaveBeenCalledWith({
+        behavior: 'smooth',
+        block: 'center',
+        inline: 'nearest'
+      });
+      vi.useRealTimers();
+
+      // When modal is closed, focus inside input must NOT scroll
+      rerender(<FocusScrollHarness isOpen={false} />);
+      insideInput.scrollIntoView.mockClear();
+      fireEvent.focusIn(insideInput);
+      expect(insideInput.scrollIntoView).not.toHaveBeenCalled();
     });
   });
 });

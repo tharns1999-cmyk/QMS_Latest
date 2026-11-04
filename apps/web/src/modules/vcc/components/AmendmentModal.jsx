@@ -8,6 +8,7 @@ import {
   Layers
 } from 'lucide-react';
 import { useVccModalAccessibility } from '../hooks/useVccModalAccessibility';
+import { useVccMobileViewport } from '../hooks/useVccMobileViewport';
 import { VccDiscardConfirmDialog } from './VccDiscardConfirmDialog';
 
 export const AmendmentModal = ({
@@ -39,6 +40,18 @@ export const AmendmentModal = ({
     discardMessage: 'คุณมีข้อความเหตุผลการขอแก้ไขที่ยังไม่ได้ส่งคำขอ ต้องการยกเลิกและปิดหน้าต่างหรือไม่?'
   });
 
+  const {
+    isMobile,
+    dragOffset,
+    handleTouchStart,
+    handleTouchMove,
+    handleTouchEnd
+  } = useVccMobileViewport({
+    containerRef: dialogRef,
+    isOpen: !!workOrder,
+    onDismiss: requestClose
+  });
+
   if (!workOrder) return null;
 
   return (
@@ -53,11 +66,19 @@ export const AmendmentModal = ({
           aria-modal="true"
           aria-labelledby="amendment-dialog-title"
           tabIndex="-1"
-          className="bg-white rounded-t-3xl sm:rounded-2xl border border-slate-200 shadow-2xl max-w-2xl w-full max-h-[92dvh] sm:max-h-[90vh] flex flex-col overflow-hidden outline-none animate-in slide-in-from-bottom-6 sm:slide-in-from-bottom-0 duration-200"
+          style={isMobile && dragOffset > 0 ? { transform: `translateY(${dragOffset}px)` } : undefined}
+          className="bg-white rounded-t-3xl sm:rounded-2xl border-t sm:border border-slate-200 shadow-2xl max-w-2xl w-full max-h-[92dvh] sm:max-h-[90vh] flex flex-col overflow-hidden outline-none animate-in slide-in-from-bottom-6 sm:slide-in-from-bottom-0 duration-200 transition-transform duration-100 ease-out"
         >
           {/* Mobile Drag Handle Bar */}
-          <div className="sm:hidden pt-2.5 pb-1 flex justify-center shrink-0">
-            <span className="w-10 h-1.5 rounded-full bg-slate-300" />
+          <div
+            data-testid="vcc-drag-handle"
+            className="sm:hidden pt-3 pb-1.5 flex justify-center cursor-grab active:cursor-grabbing select-none shrink-0 bg-amber-50/50 border-b border-amber-100"
+            aria-hidden="true"
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+          >
+            <div className="w-12 h-1.5 rounded-full bg-slate-300 active:bg-slate-400 transition-colors" />
           </div>
 
           {/* Header */}
@@ -120,7 +141,7 @@ export const AmendmentModal = ({
         </div>
 
         {/* Scrollable Form Body */}
-        <form onSubmit={onSubmit} className="p-6 space-y-4.5 overflow-y-auto flex-1">
+        <form onSubmit={onSubmit} className="p-6 space-y-4.5 overflow-y-auto flex-1 overscroll-y-contain">
           {error && (
             <div role="alert" className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-sm font-semibold flex items-center gap-2">
               <AlertTriangle size={17} className="text-rose-600 shrink-0" />

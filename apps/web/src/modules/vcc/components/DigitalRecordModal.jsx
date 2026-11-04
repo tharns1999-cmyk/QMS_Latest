@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { formatVccDate, formatVccDateTime } from '../utils/vccDateUtils';
 import { useVccModalAccessibility } from '../hooks/useVccModalAccessibility';
+import { useVccMobileViewport } from '../hooks/useVccMobileViewport';
 
 export const DigitalRecordModal = ({
   workOrder,
@@ -30,6 +31,18 @@ export const DigitalRecordModal = ({
     isDirty: false
   });
 
+  const {
+    isMobile,
+    dragOffset,
+    handleTouchStart,
+    handleTouchMove,
+    handleTouchEnd
+  } = useVccMobileViewport({
+    containerRef: dialogRef,
+    isOpen: !!workOrder,
+    onDismiss: requestClose
+  });
+
   if (!workOrder) return null;
 
   const handlePrint = () => {
@@ -41,20 +54,59 @@ export const DigitalRecordModal = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-y-auto animate-in fade-in duration-150"
+      className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-y-auto animate-in fade-in duration-150 print:p-0 print:bg-white print:static print:overflow-visible print:block"
       onClick={handleBackdropClick}
     >
+      <style>{`
+        @media print {
+          @page {
+            size: A4 portrait;
+            margin: 12mm 15mm 15mm 15mm;
+          }
+          body * {
+            visibility: hidden !important;
+          }
+          #vcc-digital-record-print, #vcc-digital-record-print * {
+            visibility: visible !important;
+          }
+          #vcc-digital-record-print {
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 100% !important;
+            max-height: none !important;
+            overflow: visible !important;
+            box-shadow: none !important;
+            border: none !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            background: white !important;
+          }
+          .vcc-print-section {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+          }
+        }
+      `}</style>
       <div
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="digital-record-title"
         tabIndex="-1"
-        className="bg-white rounded-t-3xl sm:rounded-2xl border border-slate-200 shadow-2xl max-w-3xl w-full max-h-[92dvh] sm:max-h-[90vh] my-0 sm:my-8 flex flex-col overflow-hidden outline-none animate-in slide-in-from-bottom-6 sm:slide-in-from-bottom-0 duration-200 print:m-0 print:border-none print:shadow-none print:max-w-none"
+        style={isMobile && dragOffset > 0 ? { transform: `translateY(${dragOffset}px)` } : undefined}
+        className="bg-white rounded-t-3xl sm:rounded-2xl border-t sm:border border-slate-200 shadow-2xl max-w-3xl w-full max-h-[92dvh] sm:max-h-[90vh] my-0 sm:my-8 flex flex-col overflow-hidden outline-none animate-in slide-in-from-bottom-6 sm:slide-in-from-bottom-0 duration-200 transition-transform duration-100 ease-out print:m-0 print:border-none print:shadow-none print:max-w-none print:max-h-none print:overflow-visible print:rounded-none"
       >
         {/* Mobile Drag Handle Bar */}
-        <div className="sm:hidden pt-2.5 pb-1 flex justify-center shrink-0 print:hidden">
-          <span className="w-10 h-1.5 rounded-full bg-slate-300" />
+        <div
+          data-testid="vcc-drag-handle"
+          className="sm:hidden pt-3 pb-1.5 flex justify-center cursor-grab active:cursor-grabbing select-none shrink-0 bg-slate-50 border-b border-slate-100 print:hidden"
+          aria-hidden="true"
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+        >
+          <div className="w-12 h-1.5 rounded-full bg-slate-300 active:bg-slate-400 transition-colors" />
         </div>
         
         {/* Modal Header (Hidden during browser printing) */}
@@ -89,7 +141,10 @@ export const DigitalRecordModal = ({
         </div>
 
         {/* Official Digital Certificate Document Body */}
-        <div className="p-8 space-y-6 text-slate-800 text-sm">
+        <div
+          id="vcc-digital-record-print"
+          className="p-6 sm:p-8 space-y-6 text-slate-800 text-sm overflow-y-auto flex-1 overscroll-y-contain print:overflow-visible print:h-auto print:p-0"
+        >
           {/* Document Title Banner */}
           <div className="border-b-2 border-slate-900 pb-4 flex flex-col sm:flex-row sm:items-end justify-between gap-3">
             <div>
@@ -111,7 +166,7 @@ export const DigitalRecordModal = ({
           </div>
 
           {/* Section 1: Instrument & Organization Information */}
-          <div className="space-y-2">
+          <div className="space-y-2 vcc-print-section">
             <h2 className="text-xs font-bold uppercase tracking-wider text-slate-900 flex items-center gap-1.5">
               <Building2 size={14} className="text-indigo-600" />
               <span>1. ข้อมูลเครื่องมือวัดและสถานที่ (Instrument Identification)</span>
@@ -137,7 +192,7 @@ export const DigitalRecordModal = ({
           </div>
 
           {/* Section 2: Calibration Execution & Acceptance Result */}
-          <div className="space-y-2">
+          <div className="space-y-2 vcc-print-section">
             <h2 className="text-xs font-bold uppercase tracking-wider text-slate-900 flex items-center gap-1.5">
               <FileCheck2 size={14} className="text-indigo-600" />
               <span>2. ผลการสอบเทียบและเกณฑ์ยอมรับ (Calibration & Acceptance Result)</span>
@@ -201,7 +256,7 @@ export const DigitalRecordModal = ({
           </div>
 
           {/* Section 3: Measurement Traceability & Environmental Conditions (ISO/IEC 17025) */}
-          <div className="space-y-2">
+          <div className="space-y-2 vcc-print-section">
             <h2 className="text-xs font-bold uppercase tracking-wider text-slate-900 flex items-center gap-1.5">
               <Layers size={14} className="text-indigo-600" />
               <span>3. ความสอบกลับได้ทางมาตรวิทยาและสภาวะแวดล้อม (Measurement Traceability)</span>
@@ -232,7 +287,7 @@ export const DigitalRecordModal = ({
 
           {/* Section 4: Digital Certificate Attachment Evidence (R2) */}
           {workOrder.certificate_file_name && (
-            <div className="space-y-2">
+            <div className="space-y-2 vcc-print-section">
               <h2 className="text-xs font-bold uppercase tracking-wider text-slate-900 flex items-center gap-1.5">
                 <Hash size={14} className="text-indigo-600" />
                 <span>4. หลักฐานไฟล์ใบรับรองดิจิทัล (Digital Certificate Attachment)</span>
@@ -268,7 +323,7 @@ export const DigitalRecordModal = ({
 
           {/* Section 5: Controlled Amendment Audit Trail (if amended) */}
           {Boolean(workOrder.is_amended) && (
-            <div className="space-y-2">
+            <div className="space-y-2 vcc-print-section">
               <h2 className="text-xs font-bold uppercase tracking-wider text-amber-900 flex items-center gap-1.5">
                 <History size={14} className="text-amber-700" />
                 <span>5. ประวัติการแก้ไขผลอย่างควบคุม (Controlled Amendment Trail ISO/IEC 17025 clause 7.8.8)</span>
@@ -285,7 +340,7 @@ export const DigitalRecordModal = ({
           )}
 
           {/* Section 6: Signatures & Verification Sign-off */}
-          <div className="pt-4 border-t border-slate-200 grid grid-cols-2 gap-6 text-xs text-center">
+          <div className="pt-4 border-t border-slate-200 grid grid-cols-2 gap-6 text-xs text-center vcc-print-section">
             <div className="space-y-8 p-3 rounded-xl border border-slate-200 bg-slate-50/50">
               <span className="font-bold text-slate-700 block">ผู้บันทึกผลการสอบเทียบ (Performer)</span>
               <div className="border-b border-dashed border-slate-400 w-3/4 mx-auto pb-1 font-semibold text-slate-900">
