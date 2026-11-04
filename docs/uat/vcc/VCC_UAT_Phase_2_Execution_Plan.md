@@ -125,30 +125,39 @@ flowchart TD
 
 ## 5. รายการตรวจสอบความปลอดภัยของสภาพแวดล้อม (Environment Safety & Preflight Checklist)
 
-> **คำเตือน**: คำสั่ง `db:seed:local` ทำหน้าที่เพียงเพิ่มข้อมูลผู้ใช้และข้อมูลจำลอง (`INSERT OR IGNORE`) เท่านั้น **ไม่ใช่คำสั่ง Reset หรือ Restore ฐานข้อมูลทั้งหมด** หากต้องการเริ่มต้นสภาพแวดล้อมใหม่ที่สะอาดสมบูรณ์ ให้ปฏิบัติตามขั้นตอนด้านล่างนี้
+> [!CAUTION]
+> **กฎเหล็กด้านความปลอดภัยของฐานข้อมูลในเครื่อง:**
+> 1. **ห้ามลบฐานข้อมูลก่อนตรวจสอบข้อมูลเดิม:** ในเครื่องมีข้อมูลจริง/ข้อมูลทดสอบเดิม (Audit Log, เครื่องมือวัด, ใบสั่งงาน) ห้ามลบโฟลเดอร์ฐานข้อมูลโดยไม่ได้รับอนุมัติจากผู้ใช้
+> 2. **ห้ามใช้ Wildcard ในการ Restore:** การใช้ `*.sqlite` เป็นชื่อปลายทางจะทำให้ระบบเสียหาย ต้องหาชื่อไฟล์จริง (`*[0-9a-f].sqlite`) และลบไฟล์ `-wal` / `-shm` เก่าออกเสมอ
+> 3. **`db:seed:local` ไม่ใช่คำสั่ง Reset:** ทำหน้าที่เพียงเพิ่มข้อมูลผู้ใช้จำลอง (`INSERT OR IGNORE`) ไม่ใช่การล้างหรือกู้คืนฐานข้อมูล
 
-### 5.1 ขั้นตอนการเตรียมสภาพแวดล้อมใหม่แบบปลอดภัย (Safe Fresh Setup & Verification)
-1. **การล้างฐานข้อมูลชั่วคราวและเริ่มระบบใหม่ (Clean Reset):**
+### 5.1 ขั้นตอนการสำรองและฟื้นฟูข้อมูลที่ปลอดภัย (Verifiable Backup & Safe Restore)
+1. **การตรวจสอบจำนวนข้อมูลก่อนดำเนินการ:**
    ```powershell
-   # 1. หยุดการทำงานของ dev server ทั้งหมด
-   # 2. ลบพื้นที่เก็บฐานข้อมูลจำลอง Miniflare
-   Remove-Item -Recurse -Force apps/api/.wrangler/state/v3/d1
-   # 3. รันโครงสร้าง Migration ล่าสุดทั้งหมด (0001–0039)
-   pnpm --dir apps/api run db:migrate:local
-   # 4. บันทึกข้อมูลตั้งต้นและบัญชีทดสอบจำลอง
-   pnpm --dir apps/api run db:seed:local
+   node -e "const { DatabaseSync } = require('node:sqlite'); const fs = require('fs'); const dbFile = fs.readdirSync('apps/api/.wrangler/state/v3/d1/miniflare-D1DatabaseObject').find(f => /^[0-9a-f]{64}\.sqlite$/.test(f)); const db = new DatabaseSync('apps/api/.wrangler/state/v3/d1/miniflare-D1DatabaseObject/' + dbFile); console.log({ users: db.prepare('SELECT count(*) as c FROM users').get().c, assets: db.prepare('SELECT count(*) as c FROM vcc_assets').get().c, work_orders: db.prepare('SELECT count(*) as c FROM vcc_work_orders').get().c, audit_log: db.prepare('SELECT count(*) as c FROM audit_log').get().c });"
    ```
-2. **การสำรองฐานข้อมูลก่อนเริ่มการทดสอบ (Pre-UAT Backup):**
+2. **การสำรองฐานข้อมูลก่อนเริ่มการทดสอบแบบ Atomic (Pre-UAT Backup via VACUUM INTO):**
    ```powershell
-   # คัดลอกไฟล์ฐานข้อมูล SQLite เก็บไว้เป็น Snaphot สำรอง
    $backupDir = "apps/api/.wrangler/backup"
    New-Item -ItemType Directory -Path $backupDir -Force
-   Copy-Item "apps/api/.wrangler/state/v3/d1/miniflare-D1DatabaseObject/*.sqlite" -Destination "$backupDir/pre_uat_backup.sqlite"
+   node -e "const { DatabaseSync } = require('node:sqlite'); const fs = require('fs'); const crypto = require('crypto'); const dbFile = fs.readdirSync('apps/api/.wrangler/state/v3/d1/miniflare-D1DatabaseObject').find(f => /^[0-9a-f]{64}\.sqlite$/.test(f)); const src = 'apps/api/.wrangler/state/v3/d1/miniflare-D1DatabaseObject/' + dbFile; const dest = 'apps/api/.wrangler/backup/pre_uat_backup.sqlite'; if (fs.existsSync(dest)) fs.unlinkSync(dest); const db = new DatabaseSync(src); db.exec('VACUUM INTO \'' + dest + '\''); db.close(); const backupDb = new DatabaseSync(dest); const integrity = backupDb.prepare('PRAGMA integrity_check').get(); backupDb.close(); const hash = crypto.createHash('sha256').update(fs.readFileSync(dest)).digest('hex'); console.log('Backup SHA-256:', hash, 'Integrity:', integrity.integrity_check);"
    ```
-3. **การฟื้นฟูข้อมูลกรณีต้องการเริ่มใหม่ (Restore Procedure):**
+3. **การฟื้นฟูข้อมูลกรณีต้องการเริ่มใหม่แบบปลอดภัย ไร้ Wildcard (Safe Restore Procedure):**
    ```powershell
-   # ปิด Worker แล้วคัดลอกไฟล์สำรองกลับมาทับ
-   Copy-Item "$backupDir/pre_uat_backup.sqlite" -Destination "apps/api/.wrangler/state/v3/d1/miniflare-D1DatabaseObject/*.sqlite" -Force
+   # ปิด Worker (dev:api) ก่อนเสมอ
+   $targetFile = (Get-ChildItem -Path "apps/api/.wrangler/state/v3/d1/miniflare-D1DatabaseObject" -Filter "*[0-9a-f].sqlite" | Select-Object -First 1).FullName
+   if ($targetFile) {
+       Remove-Item -Path "$targetFile-wal", "$targetFile-shm" -ErrorAction SilentlyContinue
+       Copy-Item -Path "apps/api/.wrangler/backup/pre_uat_backup.sqlite" -Destination $targetFile -Force
+       Write-Host "Restored successfully to $targetFile"
+   }
+   ```
+4. **การล้างฐานข้อมูลชั่วคราวและเริ่มระบบใหม่ (Clean Reset — เฉพาะเมื่อได้รับอนุมัติเท่านั้น):**
+   ```powershell
+   # ต้องได้รับอนุมัติจากผู้ใช้ก่อนดำเนินการ
+   # Remove-Item -Recurse -Force apps/api/.wrangler/state/v3/d1
+   # pnpm --dir apps/api run db:migrate:local
+   # pnpm --dir apps/api run db:seed:local
    ```
 
 ### 5.2 ตารางตรวจสอบ Preflight Safety Checklist ก่อนเริ่มคลิกทดสอบ
