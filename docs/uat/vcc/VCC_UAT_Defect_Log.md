@@ -31,12 +31,14 @@
 
 ## 3. สรุปสถานะข้อบกพร่อง (Defect Summary Dashboard)
 
-- **Total Defects Found:** 0
-- **Blocker (Severity 1):** 0
-- **Critical (Severity 2):** 0
+> **สถานะปัจจุบัน**: **PENDING (ยังไม่ได้เริ่มการรัน UAT ใน Phase 2 จึงยังไม่มีการบันทึกข้อบกพร่องจากการใช้งานจริง)**
+
+- **Total Defects Recorded:** 0 *(รอการบันทึกในการทดสอบจริง Phase 2)*
+- **Blocker (Severity 1):** 0 *(เกณฑ์รับมอบ: ต้องเป็น 0)*
+- **Critical (Severity 2):** 0 *(เกณฑ์รับมอบ: ต้องเป็น 0)*
 - **Major (Severity 3):** 0
 - **Minor (Severity 4):** 0
 - **Open Defects:** 0
 - **Resolved / Closed Defects:** 0
-- **Pass Status:** ✅ ผ่านเกณฑ์เริ่มต้น (ไม่มีข้อบกพร่องระดับวิกฤตตกค้าง)
+- **Execution Status:** ⏳ PENDING (รอดำเนินการคัดกรองและบันทึกข้อบกพร่องระหว่างการทดสอบจริง Phase 2)
 
