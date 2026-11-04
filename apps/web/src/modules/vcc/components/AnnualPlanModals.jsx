@@ -1,22 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { AlertTriangle, CheckCircle2, FolderTree, Trash2, X, Send, UserCheck, ShieldCheck } from 'lucide-react';
 import { computeDueDates, computeDueDateForMonth } from '../api/vccPlanApi';
-
-const formatThaiDateTime = (iso) => {
-  if (!iso) return '-';
-  try {
-    return new Intl.DateTimeFormat('th-TH', {
-      timeZone: 'Asia/Bangkok',
-      year: 'numeric',
-      month: 'short',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit'
-    }).format(new Date(iso));
-  } catch {
-    return iso;
-  }
-};
+import { formatVccDateTime, formatVccDueDatesList } from '../utils/vccDateUtils';
 
 const PLAN_AUDIT_LABELS = {
   VCC_PLAN_CREATED: { label: 'สร้างแผนประจำปีใหม่', badge: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
@@ -401,7 +386,7 @@ export const PlanItemModal = ({
             </div>
             <div className="mt-2.5 p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs sm:text-sm text-slate-700 font-medium">
               <span className="font-bold text-slate-900">วันครบกำหนดตามกติกา ({plan.due_date_rule}):</span>{' '}
-              <span className="font-mono text-slate-900 font-bold">{previewDueDates.length > 0 ? previewDueDates.join(', ') : 'กรุณาเลือกอย่างน้อย 1 เดือน'}</span>
+              <span className="font-semibold text-slate-900 font-sans" title={previewDueDates.join(', ')}>{previewDueDates.length > 0 ? formatVccDueDatesList(previewDueDates) : 'กรุณาเลือกอย่างน้อย 1 เดือน'}</span>
             </div>
           </div>
 
@@ -809,7 +794,7 @@ export const GroupWorkOrderModal = ({
                 <span>พร้อมสร้างใบสั่งงานสำหรับเครื่องมือรายตัว: {checkResult.target_asset.asset_code}</span>
               </div>
               <div>ชื่อเครื่องมือ: {checkResult.target_asset.name}</div>
-              <div>วันครบกำหนดตามแผน: <span className="font-mono font-bold">{(checkResult.due_dates || []).join(', ')}</span></div>
+              <div>วันครบกำหนดตามแผน: <span className="font-semibold text-slate-900 font-sans" title={(checkResult.due_dates || []).join(', ')}>{(checkResult.due_dates || []).length > 0 ? formatVccDueDatesList(checkResult.due_dates) : '-'}</span></div>
             </div>
           )}
 
@@ -983,7 +968,7 @@ export const PlanHistoryModal = ({ open, onClose, history = [] }) => {
                 <div key={h.id} className="p-4 rounded-xl border border-slate-200 text-sm space-y-2">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span className={`px-2.5 py-0.5 rounded-md border text-xs font-bold ${meta.badge}`}>{meta.label}</span>
-                    <span className="text-xs text-slate-500 font-mono">{formatThaiDateTime(h.at)} • {h.actor_name || h.actor_id}</span>
+                    <span className="text-xs text-slate-500 font-sans">{formatVccDateTime(h.at)} • {h.actor_name || h.actor_id}</span>
                   </div>
                   {h.details?.reason && <div className="text-rose-700 font-semibold text-sm">เหตุผล: {h.details.reason}</div>}
                   {h.details?.comment && <div className="text-slate-700 font-medium text-sm">ความเห็น: {h.details.comment}</div>}

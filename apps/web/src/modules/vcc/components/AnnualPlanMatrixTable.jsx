@@ -19,6 +19,7 @@ import {
 import AnnualPlanMonthCell from './AnnualPlanMonthCell';
 import { isSavedPlanItem } from '../utils/planLabels';
 import AnnualPlanSideInspector from './AnnualPlanSideInspector';
+import { formatVccDueDatesList } from '../utils/vccDateUtils';
 
 const useDismiss = (open, onClose) => {
   const ref = useRef(null);
@@ -545,10 +546,24 @@ export const AnnualPlanMatrixTable = ({
 
                     {/* Due Dates & Completion Evidence Summary */}
                     <td className="py-2.5 px-3.5 align-middle border-l border-slate-100 min-w-[180px]">
-                      <div className="font-mono font-bold text-slate-900 text-sm">
-                        {(item.due_dates || []).length > 0
-                          ? `${(item.due_dates || []).slice(0, 2).join(', ')}${(item.due_dates || []).length > 2 ? ` (+${item.due_dates.length - 2} เดือน)` : ''}`
-                          : <span className="text-slate-400 font-sans text-xs">ไม่มีรอบวางแผน</span>}
+                      <div className="font-semibold text-slate-900 text-xs sm:text-sm font-sans" title={(item.due_dates || []).join(', ')}>
+                        {(item.due_dates || []).length > 0 ? (
+                          <>
+                            <span>{formatVccDueDatesList(item.due_dates, 2)}</span>
+                            <span className="text-slate-400 font-normal font-mono text-xs block sm:inline sm:ml-1">
+                              (
+                              {(item.due_dates || []).slice(0, 2).map((d, idx) => (
+                                <React.Fragment key={d}>
+                                  {idx > 0 && ', '}
+                                  <span>{d}</span>
+                                </React.Fragment>
+                              ))}
+                              )
+                            </span>
+                          </>
+                        ) : (
+                          <span className="text-slate-400 font-sans text-xs">ไม่มีรอบวางแผน</span>
+                        )}
                       </div>
                       {hasHoldOrNc ? (
                         <span className="mt-1 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-rose-50 border border-rose-200 text-rose-800 font-bold text-xs">

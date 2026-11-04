@@ -1,5 +1,6 @@
 import React from 'react';
 import { AlertTriangle, Trash2, X } from 'lucide-react';
+import { formatVccDueDate } from '../utils/vccDateUtils';
 
 export const CreateWorkOrderModal = ({
   open,
@@ -256,7 +257,7 @@ export const WorkOrderActionModal = ({
           {mode === 'RESCHEDULE' && (
             <div>
               <div className="text-xs sm:text-sm text-slate-600 font-medium mb-2">
-                วันครบกำหนดเดิม (เก็บไว้ในประวัติ): <span className="font-mono font-bold text-slate-900">{workOrder.original_due_date}</span>
+                วันครบกำหนดเดิม (เก็บไว้ในประวัติ): <span className="font-semibold text-slate-900 font-sans" title={`ค.ศ. ${workOrder.original_due_date}`}>{formatVccDueDate(workOrder.original_due_date)}</span>
               </div>
               <label className="block text-sm font-semibold text-slate-700 mb-1.5">วันครบกำหนดใหม่ <span className="text-rose-600">*</span></label>
               <input

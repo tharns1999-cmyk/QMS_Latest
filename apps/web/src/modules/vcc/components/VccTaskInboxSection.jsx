@@ -28,6 +28,7 @@ import {
 } from '../api/vccPlanApi';
 import { getPlanStatusLabel, getDueDateRuleLabel } from '../utils/planLabels';
 import { fetchVccWorkTasks, syncVccWorkTasks } from '../api/vccWorkOrderApi';
+import { formatVccDueDate } from '../utils/vccDateUtils';
 import { describeWorkTask, sortWorkTasks } from '../utils/workTaskLabels';
 import { PlanWorkflowModal } from './AnnualPlanModals';
 
@@ -898,7 +899,10 @@ export const VccTaskInboxSection = () => {
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-600">
                       {task.due_date && (
                         <span>
-                          <strong className="text-slate-700">ครบกำหนด:</strong> {task.due_date}
+                          <strong className="text-slate-700">ครบกำหนด:</strong>{' '}
+                          <span className="font-semibold text-slate-800 font-sans" title={`ค.ศ. ${task.due_date}`}>
+                            {formatVccDueDate(task.due_date)}
+                          </span>
                         </span>
                       )}
                       <span>

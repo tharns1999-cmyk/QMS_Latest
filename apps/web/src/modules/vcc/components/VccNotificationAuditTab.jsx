@@ -22,6 +22,7 @@ import useStore from '../../../store/useStore';
 import DepartmentBadge from '../../../shared/components/ui/DepartmentBadge';
 import VccNotificationAcknowledgementModal from './VccNotificationAcknowledgementModal';
 import { NOTIFICATION_STATUS_LABELS } from '../utils/statusLabels';
+import { formatVccDateTime } from '../utils/vccDateUtils';
 
 const SEVERITY_BADGES = {
   CRITICAL: 'bg-rose-100 text-rose-800 border-rose-200',
@@ -374,8 +375,8 @@ export default function VccNotificationAuditTab() {
                             <span className="font-medium text-emerald-800 block">
                               รับทราบโดย: {n.acknowledged_by_name || n.acknowledged_by}
                             </span>
-                            <span className="text-xs text-slate-400">
-                              {n.acknowledged_at ? new Date(n.acknowledged_at).toLocaleString('th-TH') : ''}
+                            <span className="text-xs text-slate-500 font-sans" title={n.acknowledged_at || ''}>
+                              {formatVccDateTime(n.acknowledged_at)}
                             </span>
                             {n.acknowledgement_note && (
                               <div className="text-xs text-slate-500 italic mt-0.5 max-w-xs truncate" title={n.acknowledgement_note}>
@@ -388,8 +389,8 @@ export default function VccNotificationAuditTab() {
                             <span className="text-slate-500 block">
                               เหตุผล: {n.resolved_reason || 'งานเสร็จสิ้น'}
                             </span>
-                            <span className="text-xs text-slate-400">
-                              {n.resolved_at ? new Date(n.resolved_at).toLocaleString('th-TH') : ''}
+                            <span className="text-xs text-slate-500 font-sans" title={n.resolved_at || ''}>
+                              {formatVccDateTime(n.resolved_at)}
                             </span>
                           </div>
                         ) : (
