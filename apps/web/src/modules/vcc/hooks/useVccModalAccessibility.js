@@ -99,7 +99,7 @@ export const useVccModalAccessibility = ({
     if (!isOpen) return;
 
     const dialogId = idRef.current;
-    previousActiveElement.current = returnFocusRef?.current || document.activeElement;
+    previousActiveElement.current = returnFocusRef?.current || (typeof document !== 'undefined' ? document.activeElement : null);
     vccDialogStack.push(dialogId);
     lockBodyScroll();
 
@@ -114,8 +114,12 @@ export const useVccModalAccessibility = ({
       const elementToFocus = previousActiveElement.current;
       if (elementToFocus && typeof elementToFocus.focus === 'function') {
         setTimeout(() => {
-          if (document.body.contains(elementToFocus)) {
-            elementToFocus.focus({ preventScroll: true });
+          try {
+            if (typeof document !== 'undefined' && document?.body && typeof document.body.contains === 'function' && document.body.contains(elementToFocus)) {
+              elementToFocus.focus({ preventScroll: true });
+            }
+          } catch {
+            // Environment may be unmounted or torn down
           }
         }, 10);
       }
@@ -127,15 +131,20 @@ export const useVccModalAccessibility = ({
     if (!isOpen) return;
 
     const timer = setTimeout(() => {
-      if (initialFocusRef?.current) {
-        initialFocusRef.current.focus({ preventScroll: true });
-      } else if (dialogRef.current) {
-        const firstFocusable = dialogRef.current.querySelector(FOCUSABLE_SELECTOR);
-        if (firstFocusable) {
-          firstFocusable.focus({ preventScroll: true });
-        } else {
-          dialogRef.current.focus({ preventScroll: true });
+      try {
+        if (typeof document === 'undefined') return;
+        if (initialFocusRef?.current) {
+          initialFocusRef.current.focus({ preventScroll: true });
+        } else if (dialogRef.current) {
+          const firstFocusable = dialogRef.current.querySelector(FOCUSABLE_SELECTOR);
+          if (firstFocusable) {
+            firstFocusable.focus({ preventScroll: true });
+          } else {
+            dialogRef.current.focus({ preventScroll: true });
+          }
         }
+      } catch {
+        // Silently ignore
       }
     }, 40);
 
@@ -160,10 +169,15 @@ export const useVccModalAccessibility = ({
     setShowConfirmDiscard(false);
     // Return focus back to dialog container or its first focusable
     setTimeout(() => {
-      if (dialogRef.current) {
-        const first = dialogRef.current.querySelector(FOCUSABLE_SELECTOR);
-        if (first) first.focus({ preventScroll: true });
-        else dialogRef.current.focus({ preventScroll: true });
+      try {
+        if (typeof document === 'undefined') return;
+        if (dialogRef.current) {
+          const first = dialogRef.current.querySelector(FOCUSABLE_SELECTOR);
+          if (first) first.focus({ preventScroll: true });
+          else dialogRef.current.focus({ preventScroll: true });
+        }
+      } catch {
+        // Silently ignore
       }
     }, 10);
   }, []);

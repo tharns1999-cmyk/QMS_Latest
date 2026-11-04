@@ -32,7 +32,12 @@ export const VccDiscardConfirmDialog = ({
 
     // Initial focus on safe action (Cancel Discard / Edit More)
     const timer = setTimeout(() => {
-      cancelBtnRef.current?.focus({ preventScroll: true });
+      try {
+        if (typeof document === 'undefined') return;
+        cancelBtnRef.current?.focus({ preventScroll: true });
+      } catch {
+        // Silently ignore
+      }
     }, 40);
 
     const handleKeyDown = (e) => {
