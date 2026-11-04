@@ -1,0 +1,7 @@
+# Ignore all real UAT execution artifacts (screenshots, downloads, logs)
+# to prevent committing sensitive data, PII, or large binary files to repository.
+*
+!.gitignore
+!README.md
+!*/
+!*/.gitkeep
