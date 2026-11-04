@@ -170,7 +170,7 @@ export const WorkOrderSideDrawer = ({
               <button
                 type="button"
                 onClick={() => onViewDigitalRecord?.(currentWo)}
-                className="h-9 inline-flex items-center gap-1.5 px-3.5 rounded-xl border border-purple-200 bg-purple-50 text-purple-700 text-xs font-semibold hover:bg-purple-100 transition-colors cursor-pointer shadow-2xs"
+                className="h-9 inline-flex items-center gap-1.5 px-3.5 rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700 text-xs font-semibold hover:bg-indigo-100 transition-colors cursor-pointer shadow-2xs"
               >
                 <Printer size={14} />
                 <span>พิมพ์/ดูเอกสารดิจิทัล</span>
@@ -331,7 +331,7 @@ export const WorkOrderSideDrawer = ({
                           <span className="font-bold text-xs text-slate-900 truncate block">
                             {currentWo.certificate_file_name}
                           </span>
-                          <span className="text-[11px] text-slate-500">
+                          <span className="text-xs text-slate-500">
                             เวอร์ชัน v{currentWo.certificate_version || 1} {currentWo.certificate_file_size ? `• ${(currentWo.certificate_file_size / 1024).toFixed(1)} KB` : ''}
                           </span>
                         </div>
@@ -358,7 +358,7 @@ export const WorkOrderSideDrawer = ({
                       </div>
                     </div>
                     {currentWo.certificate_file_hash && (
-                      <div className="p-1.5 rounded-md bg-slate-50 border border-slate-100 text-[10px] font-mono text-slate-500 truncate" title={`SHA-256: ${currentWo.certificate_file_hash}`}>
+                      <div className="p-1.5 rounded-md bg-slate-50 border border-slate-100 text-xs font-mono text-slate-500 truncate" title={`SHA-256: ${currentWo.certificate_file_hash}`}>
                         SHA-256: {currentWo.certificate_file_hash}
                       </div>
                     )}
@@ -376,37 +376,37 @@ export const WorkOrderSideDrawer = ({
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                       {currentWo.calibration_provider_name && (
                         <div>
-                          <span className="text-slate-400 block text-[11px]">สถาบัน/แล็บสอบเทียบ:</span>
+                          <span className="text-slate-400 block text-xs">สถาบัน/แล็บสอบเทียบ:</span>
                           <span className="font-semibold text-slate-800">{currentWo.calibration_provider_name}</span>
                         </div>
                       )}
                       {currentWo.calibration_method && (
                         <div>
-                          <span className="text-slate-400 block text-[11px]">วิธีการสอบเทียบ:</span>
+                          <span className="text-slate-400 block text-xs">วิธีการสอบเทียบ:</span>
                           <span className="font-semibold text-slate-800">{currentWo.calibration_method}</span>
                         </div>
                       )}
                       {currentWo.traceability_ref && (
                         <div className="sm:col-span-2">
-                          <span className="text-slate-400 block text-[11px]">การสอบกลับได้สู่มาตรฐานแห่งชาติ:</span>
+                          <span className="text-slate-400 block text-xs">การสอบกลับได้สู่มาตรฐานแห่งชาติ:</span>
                           <span className="font-mono text-slate-800">{currentWo.traceability_ref}</span>
                         </div>
                       )}
                       {currentWo.environmental_conditions && (
                         <div className="sm:col-span-2">
-                          <span className="text-slate-400 block text-[11px]">สภาวะแวดล้อม (Temp / RH):</span>
+                          <span className="text-slate-400 block text-xs">สภาวะแวดล้อม (Temp / RH):</span>
                           <span className="text-slate-800">{currentWo.environmental_conditions}</span>
                         </div>
                       )}
                       {currentWo.uncertainty_value && (
                         <div>
-                          <span className="text-slate-400 block text-[11px]">ความไม่แน่นอนขยาย (U):</span>
+                          <span className="text-slate-400 block text-xs">ความไม่แน่นอนขยาย (U):</span>
                           <span className="font-mono font-bold text-indigo-700">{currentWo.uncertainty_value}</span>
                         </div>
                       )}
                       {currentWo.calibration_error_value && (
                         <div>
-                          <span className="text-slate-400 block text-[11px]">ค่าความคลาดเคลื่อน (Error):</span>
+                          <span className="text-slate-400 block text-xs">ค่าความคลาดเคลื่อน (Error):</span>
                           <span className="font-mono font-bold text-slate-800">{currentWo.calibration_error_value}</span>
                         </div>
                       )}
@@ -422,14 +422,14 @@ export const WorkOrderSideDrawer = ({
                         <History size={14} className="text-amber-700" />
                         <span>ใบสั่งงานนี้ผ่านการแก้ไข (Controlled Amendment)</span>
                       </span>
-                      <span className="font-mono text-[10px] text-amber-800">{currentWo.amended_at}</span>
+                      <span className="font-mono text-xs text-amber-800">{currentWo.amended_at}</span>
                     </div>
                     {currentWo.amended_by_name && (
                       <div>แก้ไขโดย: <span className="font-bold">{currentWo.amended_by_name}</span></div>
                     )}
                     {currentWo.amendment_reason && (
                       <div className="bg-white/80 p-2 rounded-lg border border-amber-200/60 mt-1">
-                        <span className="font-semibold block text-[11px] text-amber-900">เหตุผลในการแก้ไข:</span>
+                        <span className="font-semibold block text-xs text-amber-900">เหตุผลในการแก้ไข:</span>
                         <span>{currentWo.amendment_reason}</span>
                       </div>
                     )}
@@ -476,7 +476,7 @@ export const WorkOrderSideDrawer = ({
                     >
                       <div className="flex items-center justify-between text-slate-500">
                         <span className="font-semibold text-slate-700">{h.action}</span>
-                        <span className="font-mono text-[11px]">{h.created_at || '-'}</span>
+                        <span className="font-mono text-xs">{h.created_at || '-'}</span>
                       </div>
                       <div className="text-slate-600 text-xs">
                         โดย: <span className="font-medium text-slate-800">{h.user_name || h.user_id || 'ระบบ'}</span>
@@ -492,7 +492,7 @@ export const WorkOrderSideDrawer = ({
                         </div>
                       )}
                       {h.details?.assessment && (
-                        <div className="text-slate-700 text-xs mt-1 bg-purple-50 p-1.5 rounded border border-purple-100 text-purple-900">
+                        <div className="text-slate-700 text-xs mt-1 bg-indigo-50 p-1.5 rounded border border-indigo-100 text-indigo-900">
                           การประเมินผลกระทบ: {h.details.assessment}
                         </div>
                       )}
@@ -611,7 +611,7 @@ export const WorkOrderSideDrawer = ({
               <button
                 type="button"
                 onClick={() => onViewDigitalRecord?.(currentWo)}
-                className="h-9 inline-flex items-center gap-1.5 px-3.5 rounded-xl border border-purple-200 bg-purple-50 text-purple-700 text-xs font-semibold hover:bg-purple-100 transition-colors cursor-pointer shadow-2xs"
+                className="h-9 inline-flex items-center gap-1.5 px-3.5 rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700 text-xs font-semibold hover:bg-indigo-100 transition-colors cursor-pointer shadow-2xs"
               >
                 <Printer size={14} />
                 <span>พิมพ์/ดูเอกสารดิจิทัล</span>

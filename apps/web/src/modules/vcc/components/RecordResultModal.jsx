@@ -291,7 +291,7 @@ export const RecordResultModal = ({
                       แนบไฟล์ใบรับรองดิจิทัล (Digital PDF Attachment)
                     </span>
                   </div>
-                  <span className="text-[11px] font-semibold text-slate-400">PDF สูงสุด 25 MB</span>
+                  <span className="text-xs font-semibold text-slate-400">PDF สูงสุด 25 MB</span>
                 </div>
 
                 {!form.certificate_file && !workOrder.certificate_file_name && (
@@ -300,7 +300,7 @@ export const RecordResultModal = ({
                     <span className="text-xs font-bold text-slate-700 group-hover:text-indigo-600">
                       คลิกเพื่อเลือกไฟล์ หรือลากไฟล์ PDF มาวางที่นี่
                     </span>
-                    <span className="text-[11px] text-slate-400 mt-0.5">ระบบจะตรวจสอบ %PDF- และสร้าง SHA-256 Hash อัตโนมัติ</span>
+                    <span className="text-xs text-slate-400 mt-0.5">ระบบจะตรวจสอบ %PDF- และสร้าง SHA-256 Hash อัตโนมัติ</span>
                     <input
                       type="file"
                       accept=".pdf,application/pdf"
@@ -320,7 +320,7 @@ export const RecordResultModal = ({
                         <span className="text-xs font-bold text-slate-900 truncate">
                           {form.certificate_file.name}
                         </span>
-                        <span className="text-[11px] font-mono text-slate-400 shrink-0">
+                        <span className="text-xs font-mono text-slate-400 shrink-0">
                           ({formatBytes(form.certificate_file.size)})
                         </span>
                       </div>
@@ -335,7 +335,7 @@ export const RecordResultModal = ({
                     </div>
 
                     {fileHashPreview && (
-                      <div className="p-2 rounded-lg bg-slate-50 border border-slate-100 flex items-center gap-1.5 text-[11px] font-mono text-slate-600 break-all">
+                      <div className="p-2 rounded-lg bg-slate-50 border border-slate-100 flex items-center gap-1.5 text-xs font-mono text-slate-600 break-all">
                         <Hash size={13} className="text-indigo-600 shrink-0" />
                         <span>SHA-256: {fileHashPreview}</span>
                       </div>
@@ -353,7 +353,7 @@ export const RecordResultModal = ({
                           <span className="text-xs font-bold text-slate-900 truncate block">
                             {workOrder.certificate_file_name}
                           </span>
-                          <span className="text-[11px] text-slate-500">
+                          <span className="text-xs text-slate-500">
                             เวอร์ชันปัจจุบัน: v{workOrder.certificate_version || 1} • {formatBytes(workOrder.certificate_file_size)}
                           </span>
                         </div>
@@ -370,7 +370,7 @@ export const RecordResultModal = ({
                       </label>
                     </div>
                     {workOrder.certificate_file_hash && (
-                      <div className="p-1.5 rounded-lg bg-slate-50 border border-slate-100 text-[11px] font-mono text-slate-500 truncate">
+                      <div className="p-1.5 rounded-lg bg-slate-50 border border-slate-100 text-xs font-mono text-slate-500 truncate">
                         Hash: {workOrder.certificate_file_hash}
                       </div>
                     )}
@@ -489,7 +489,7 @@ export const RecordResultModal = ({
 
           {/* Actions */}
           <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
-            <span className="text-[11px] text-slate-400">
+            <span className="text-xs text-slate-400">
               * ข้อมูลจะถูกจัดเก็บเข้าสู่คิวรอตรวจรับ (PENDING_REVIEW)
             </span>
             <div className="flex gap-2.5">

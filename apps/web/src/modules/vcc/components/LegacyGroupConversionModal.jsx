@@ -288,11 +288,11 @@ export const LegacyGroupConversionModal = ({
                             <span className="font-semibold text-slate-800 text-sm">— {asset.name}</span>
                           </label>
                           {alreadyInPlan ? (
-                            <span className="px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 border border-amber-200 font-semibold text-[11px]">
+                            <span className="px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 border border-amber-200 font-semibold text-xs">
                               มีอยู่ในแผนแล้ว (จะใช้ค่าที่กำหนดด้านล่าง)
                             </span>
                           ) : (
-                            <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200 font-semibold text-[11px]">
+                            <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200 font-semibold text-xs">
                               เพิ่มเป็นแถวใหม่ในแผน
                             </span>
                           )}

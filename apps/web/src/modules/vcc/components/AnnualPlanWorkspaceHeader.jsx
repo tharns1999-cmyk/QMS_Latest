@@ -296,7 +296,7 @@ export const AnnualPlanWorkspaceHeader = ({
                 </h2>
 
                 <span
-                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border shrink-0 ${getStatusBadgeStyle(
+                  className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold border shrink-0 ${getStatusBadgeStyle(
                     activePlan.status
                   )}`}
                 >
@@ -348,13 +348,13 @@ export const AnnualPlanWorkspaceHeader = ({
         {/* ฝั่งขวา: เปลี่ยนแผน + กรองสถานะ + Primary CTA + Secondary Actions */}
         <div className="flex items-center gap-1.5 flex-wrap shrink-0 justify-start xl:justify-end">
           {/* Plan Switcher Dropdown */}
-          <div className="flex items-center gap-1 text-xs">
+          <div className="flex items-center gap-1 text-xs w-full sm:w-auto">
             <select
               aria-label="เลือกแผนประจำปี"
               value={selectedPlanId || ''}
               onChange={(e) => onSelectPlan && onSelectPlan(e.target.value)}
               disabled={effectivePlans.length === 0}
-              className="h-8 px-2.5 rounded-lg border border-slate-300 text-xs font-semibold bg-white text-slate-800 shadow-2xs hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 cursor-pointer w-44 sm:w-48 truncate"
+              className="h-8 px-2.5 rounded-lg border border-slate-300 text-xs font-semibold bg-white text-slate-800 shadow-2xs hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 cursor-pointer w-full sm:w-48 truncate"
             >
               {effectivePlans.length === 0 && <option value="">ไม่มีแผนในสถานะนี้</option>}
               {effectivePlans.map((p) => (
@@ -530,7 +530,7 @@ export const AnnualPlanWorkspaceHeader = ({
               {unincludedRegisterSummary.unincludedAssets.length > 0 && (
                 <span
                   data-testid="register-vs-plan-scope-note"
-                  className="inline-flex items-center gap-1 text-[11px] text-slate-500 bg-slate-100/80 border border-slate-200/80 px-2 py-0.5 rounded-md ml-0.5"
+                  className="inline-flex items-center gap-1 text-xs text-slate-500 bg-slate-100/80 border border-slate-200/80 px-2 py-0.5 rounded-md ml-0.5"
                 >
                   <span>
                     (จากทะเบียนใช้งานปกติ {unincludedRegisterSummary.totalActiveInRegister} เครื่อง — อยู่นอกแผนนี้{' '}
@@ -639,7 +639,7 @@ export const AnnualPlanWorkspaceHeader = ({
               <span>ส่งกลับแก้ไข — กรุณาปรับปรุงรายการในตารางแล้วกดปุ่ม &ldquo;ส่งทบทวนอีกครั้ง&rdquo;</span>
             </div>
             {(activePlan.rejected_by_name || activePlan.rejected_by) && (
-              <span className="text-rose-700 font-medium text-[11px]">
+              <span className="text-rose-700 font-medium text-xs">
                 ผู้ส่งกลับ: {activePlan.rejected_by_name || activePlan.rejected_by}
                 {activePlan.rejected_at ? ` · ${formatThaiDateTime(activePlan.rejected_at)}` : ''}
               </span>

@@ -27,7 +27,7 @@ export default function VccMetricsStrip({ eq = {}, wo = {}, certKpi = {}, review
         {/* 1. เครื่องมือปกติพร้อมใช้ */}
         <div className="p-4 sm:p-5 flex flex-col justify-between hover:bg-slate-50/50 transition-colors">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
               เครื่องมือปกติ
             </span>
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
@@ -51,7 +51,7 @@ export default function VccMetricsStrip({ eq = {}, wo = {}, certKpi = {}, review
         >
           <div className="flex items-center justify-between">
             <span
-              className={`text-[11px] font-semibold uppercase tracking-wider ${
+              className={`text-xs font-semibold uppercase tracking-wider ${
                 onHoldCount > 0 ? 'text-rose-700' : 'text-slate-500'
               }`}
             >
@@ -89,7 +89,7 @@ export default function VccMetricsStrip({ eq = {}, wo = {}, certKpi = {}, review
         >
           <div className="flex items-center justify-between">
             <span
-              className={`text-[11px] font-semibold uppercase tracking-wider ${
+              className={`text-xs font-semibold uppercase tracking-wider ${
                 overdueCount > 0 ? 'text-amber-800' : 'text-slate-500'
               }`}
             >
@@ -126,7 +126,7 @@ export default function VccMetricsStrip({ eq = {}, wo = {}, certKpi = {}, review
         {/* 4. ครบกำหนดใน 30 วัน — Non-overlapping Bucket Breakdown */}
         <div className="p-4 sm:p-5 flex flex-col justify-between hover:bg-slate-50/50 transition-colors">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
               ครบใน 30 วัน
             </span>
             {totalDueSoon > 0 && <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />}
@@ -152,7 +152,7 @@ export default function VccMetricsStrip({ eq = {}, wo = {}, certKpi = {}, review
         >
           <div className="flex items-center justify-between">
             <span
-              className={`text-[11px] font-semibold uppercase tracking-wider ${
+              className={`text-xs font-semibold uppercase tracking-wider ${
                 certExpired > 0 ? 'text-rose-700' : certExpiringSoon > 0 ? 'text-amber-700' : 'text-slate-500'
               }`}
             >
@@ -205,7 +205,7 @@ export default function VccMetricsStrip({ eq = {}, wo = {}, certKpi = {}, review
         {/* 6. รอตรวจรับ (Pending Review) */}
         <div className="p-4 sm:p-5 flex flex-col justify-between hover:bg-slate-50/50 transition-colors">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
               รอตรวจรับ
             </span>
             {pendingCount > 0 && <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />}
@@ -226,7 +226,7 @@ export default function VccMetricsStrip({ eq = {}, wo = {}, certKpi = {}, review
         {/* 7. ปิดงานแล้ว / ทันกำหนด (Success Metric) */}
         <div className="p-4 sm:p-5 flex flex-col justify-between hover:bg-slate-50/50 transition-colors">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
               ปิดงานแล้ว / ทันกำหนด
             </span>
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />

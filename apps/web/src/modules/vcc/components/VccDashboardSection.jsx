@@ -205,9 +205,9 @@ export default function VccDashboardSection({ onNavigateToWorkOrders }) {
   }, [allAlerts, alertTab]);
 
   return (
-    <div className="space-y-6 text-slate-800" data-testid="vcc-dashboard-section">
+    <div className="space-y-6 text-slate-800 w-full min-w-0" data-testid="vcc-dashboard-section">
       {/* 0. Top-Level Main Dashboard Navigation Tabs (Approach A) */}
-      <div className="flex border-b border-slate-200">
+      <div className="flex border-b border-slate-200 overflow-x-auto sm:overflow-visible">
         <nav className="-mb-px w-full grid grid-cols-2 gap-x-3 sm:w-auto sm:flex sm:space-x-6" aria-label="Dashboard Tabs">
           {MAIN_TABS.map((tab) => {
             const Icon = tab.icon;
@@ -218,16 +218,16 @@ export default function VccDashboardSection({ onNavigateToWorkOrders }) {
                 type="button"
                 onClick={() => setMainTab(tab.id)}
                 data-testid={`main-tab-${tab.id}`}
-                className={`py-3 px-1 inline-flex items-center justify-start gap-2 text-left leading-tight border-b-2 text-sm font-semibold transition-colors cursor-pointer ${
+                className={`py-3 px-1 inline-flex items-center justify-start gap-1.5 sm:gap-2 text-left leading-tight border-b-2 text-xs sm:text-sm font-semibold transition-colors cursor-pointer min-w-0 ${
                   isActive
                     ? 'border-indigo-600 text-indigo-600'
                     : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
                 }`}
               >
                 <Icon size={16} className="shrink-0" />
-                <span>{tab.label}</span>
+                <span className="truncate">{tab.label}</span>
                 {tab.id === 'ON_HOLD' && (eq.on_hold_assets ?? 0) > 0 && (
-                  <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-rose-100 text-rose-700">
+                  <span className="px-1.5 py-0.2 rounded-full text-xs font-bold bg-rose-100 text-rose-700 shrink-0">
                     {eq.on_hold_assets}
                   </span>
                 )}
@@ -432,7 +432,7 @@ export default function VccDashboardSection({ onNavigateToWorkOrders }) {
                 {filteredAlerts.map((alert) => (
                   <div
                     key={alert.dedupe_key}
-                    className="py-3 px-2.5 -mx-2.5 rounded-xl hover:bg-slate-50/80 transition-colors flex flex-col md:flex-row md:items-center md:justify-between gap-3 text-sm"
+                    className="py-3 px-2 rounded-xl hover:bg-slate-50/80 transition-colors flex flex-col md:flex-row md:items-center md:justify-between gap-3 text-sm"
                   >
                     <div className="flex items-center gap-2.5 flex-wrap">
                       <span className="font-mono font-bold text-slate-900">{alert.wo_code}</span>
@@ -446,7 +446,7 @@ export default function VccDashboardSection({ onNavigateToWorkOrders }) {
                       <div className="text-right">
                         <span className="text-slate-600 text-xs sm:text-sm font-medium block">{alert.message}</span>
                         {alert.recommended_action && (
-                          <span className="text-[11px] text-indigo-600 font-medium block mt-0.5">
+                          <span className="text-xs text-indigo-600 font-medium block mt-0.5">
                             แนะนำ: {alert.recommended_action}
                           </span>
                         )}

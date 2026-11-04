@@ -107,7 +107,7 @@ const WorkOrderRowActions = ({
         aria-expanded={isMenuOpen}
         title="ตัวเลือกเพิ่มเติม"
         className={`h-8 w-8 rounded-lg border text-slate-500 hover:text-slate-800 hover:bg-slate-100 flex items-center justify-center cursor-pointer transition-colors ${
-          isMenuOpen ? 'border-purple-300 bg-purple-50 text-purple-700' : 'border-slate-200'
+          isMenuOpen ? 'border-indigo-300 bg-indigo-50 text-indigo-700' : 'border-slate-200'
         }`}
       >
         <MoreHorizontal size={15} />
@@ -190,9 +190,9 @@ const WorkOrderRowActions = ({
               handleClose();
               onViewDigitalRecord(wo);
             }}
-            className="w-full text-left px-3 py-2 text-xs font-semibold text-purple-700 hover:bg-purple-50 flex items-center gap-2 transition-colors cursor-pointer"
+            className="w-full text-left px-3 py-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-50 flex items-center gap-2 transition-colors cursor-pointer"
           >
-            <Printer size={13} className="text-purple-600" />
+            <Printer size={13} className="text-indigo-600" />
             <span>พิมพ์/ดูเอกสารดิจิทัล</span>
           </button>
         )}
@@ -240,7 +240,7 @@ export const WorkOrderTable = ({
       <div className="w-full bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
         <div className="p-4 border-b border-slate-100 flex items-center justify-between text-xs text-slate-500 font-medium">
           <span>กำลังโหลดข้อมูลใบสั่งงาน...</span>
-          <div className="flex items-center gap-1.5 text-purple-700 font-semibold">
+          <div className="flex items-center gap-1.5 text-indigo-700 font-semibold">
             <Clock size={14} className="animate-spin" />
             <span>เชื่อมต่อระบบ</span>
           </div>
@@ -354,7 +354,7 @@ export const WorkOrderTable = ({
       case 'SCHEDULED':
         return <span className="inline-block px-2.5 py-0.5 rounded-md bg-sky-50 text-sky-700 border border-sky-200 text-xs font-semibold">{WORK_ORDER_STATUS_LABELS.SCHEDULED}</span>;
       case 'OPEN':
-        return <span className="inline-block px-2.5 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-200 text-xs font-semibold">{WORK_ORDER_STATUS_LABELS.OPEN}</span>;
+        return <span className="inline-block px-2.5 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200 text-xs font-semibold">{WORK_ORDER_STATUS_LABELS.OPEN}</span>;
       case 'PENDING_REVIEW':
         return <span className="inline-block px-2.5 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-300 text-xs font-semibold">{WORK_ORDER_STATUS_LABELS.PENDING_REVIEW}</span>;
       case 'REJECTED':
@@ -389,14 +389,14 @@ export const WorkOrderTable = ({
               >
                 {/* Column 1: เลขที่ใบงาน */}
                 <td className="py-3 px-4 align-middle">
-                  <div className="font-mono font-bold text-slate-900 group-hover:text-purple-700 transition-colors text-sm">
+                  <div className="font-mono font-bold text-slate-900 group-hover:text-indigo-700 transition-colors text-sm">
                     {wo.wo_code}
                   </div>
                   <div className="text-xs text-slate-500 font-medium mt-0.5">
                     {wo.plan_year ? (
                       <span className="text-slate-600">แผนปี {wo.plan_year} (ด.{wo.planned_month})</span>
                     ) : (
-                      <span className="text-amber-800 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200 font-medium text-[11px]">
+                      <span className="text-amber-800 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200 font-medium text-xs">
                         นอกแผน (Ad-hoc)
                       </span>
                     )}
@@ -405,18 +405,18 @@ export const WorkOrderTable = ({
 
                 {/* Column 2: เครื่องมือวัด */}
                 <td className="py-3 px-4 align-middle">
-                  <div className="font-mono font-bold text-purple-700 text-sm">
+                  <div className="font-mono font-bold text-indigo-700 text-sm">
                     {wo.asset_code}
                   </div>
                   <div className="font-semibold text-slate-900 line-clamp-1 text-sm mt-0.5" title={wo.asset_name}>
                     {wo.asset_name}
                   </div>
                   <div className="text-xs text-slate-500 font-medium mt-0.5 flex items-center gap-1.5 flex-wrap">
-                    <span className="bg-slate-100 text-slate-700 px-1.5 py-0.2 rounded text-[11px] font-semibold">
+                    <span className="bg-slate-100 text-slate-700 px-1.5 py-0.2 rounded text-xs font-semibold">
                       {wo.department}
                     </span>
                     <span>•</span>
-                    <span className="truncate max-w-[140px] text-[11px]" title={wo.provider_name}>
+                    <span className="truncate max-w-[140px] text-xs" title={wo.provider_name}>
                       {wo.provider_name}
                     </span>
                   </div>
@@ -428,7 +428,7 @@ export const WorkOrderTable = ({
                     {wo.due_date}
                   </div>
                   {wo.due_date !== wo.original_due_date && (
-                    <div className="text-[11px] text-amber-900 bg-amber-50 p-1 rounded border border-amber-200 font-medium mt-1 leading-tight">
+                    <div className="text-xs text-amber-900 bg-amber-50 p-1 rounded border border-amber-200 font-medium mt-1 leading-tight">
                       <div>
                         วันเดิม: <span className="font-mono line-through text-slate-400">{wo.original_due_date}</span>
                       </div>
@@ -453,12 +453,12 @@ export const WorkOrderTable = ({
                         {wo.certificate_no}
                       </span>
                       {wo.certificate_file_name && (
-                        <span className="inline-flex items-center px-1.5 py-0.2 rounded-md bg-indigo-50 text-indigo-700 font-bold text-[10px] border border-indigo-200" title={`ไฟล์ PDF: ${wo.certificate_file_name} (v${wo.certificate_version || 1})`}>
+                        <span className="inline-flex items-center px-1.5 py-0.2 rounded-md bg-indigo-50 text-indigo-700 font-bold text-xs border border-indigo-200" title={`ไฟล์ PDF: ${wo.certificate_file_name} (v${wo.certificate_version || 1})`}>
                           PDF v{wo.certificate_version || 1}
                         </span>
                       )}
                       {Boolean(wo.is_amended) && (
-                        <span className="inline-flex items-center px-1.5 py-0.2 rounded-md bg-amber-100 text-amber-800 font-bold text-[10px] border border-amber-300" title={`แก้ไขแล้ว: ${wo.amendment_reason || ''}`}>
+                        <span className="inline-flex items-center px-1.5 py-0.2 rounded-md bg-amber-100 text-amber-800 font-bold text-xs border border-amber-300" title={`แก้ไขแล้ว: ${wo.amendment_reason || ''}`}>
                           AMENDED
                         </span>
                       )}

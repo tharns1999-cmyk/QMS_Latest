@@ -667,7 +667,7 @@ const PlanSubmitModalContent = ({
                 <UserCheck size={14} className="text-indigo-600" />
                 ผู้ทบทวนแผน (Reviewer - ขั้นต่ำ L{minReviewerLevel})
               </span>
-              <span className="text-[11px] font-semibold text-slate-500">แผนก {planDept}</span>
+              <span className="text-xs font-semibold text-slate-500">แผนก {planDept}</span>
             </label>
             {hasNoReviewer ? (
               <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs">
@@ -697,7 +697,7 @@ const PlanSubmitModalContent = ({
                 <ShieldCheck size={14} className="text-emerald-600" />
                 ผู้อนุมัติแผน (Approver - ขั้นต่ำ L{minApproverLevel})
               </span>
-              <span className="text-[11px] font-semibold text-slate-500">แผนก {planDept}</span>
+              <span className="text-xs font-semibold text-slate-500">แผนก {planDept}</span>
             </label>
             {hasNoApprover ? (
               <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs">
@@ -720,7 +720,7 @@ const PlanSubmitModalContent = ({
             )}
           </div>
 
-          <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 text-[11px] text-slate-600 space-y-1">
+          <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 text-xs text-slate-600 space-y-1">
             <p className="font-semibold text-slate-800">หลักการควบคุมสายการอนุมัติ (Approval Matrix Governance):</p>
             <ul className="list-disc list-inside space-y-0.5 pl-1">
               <li>ผู้จัดทำจะไม่สามารถทบทวนหรืออนุมัติแผนของตนเองได้ (Separation of Duties)</li>

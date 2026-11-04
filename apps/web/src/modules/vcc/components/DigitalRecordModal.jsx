@@ -34,7 +34,7 @@ export const DigitalRecordModal = ({
         {/* Modal Header (Hidden during browser printing) */}
         <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between shrink-0 bg-slate-50/70 print:hidden">
           <div className="flex items-center gap-2">
-            <span className="font-mono text-xs font-bold px-2.5 py-0.5 rounded-md bg-purple-100 text-purple-700">
+            <span className="font-mono text-xs font-bold px-2.5 py-0.5 rounded-md bg-indigo-100 text-indigo-700">
               DIGITAL RECORD: {workOrder.wo_code}
             </span>
             <span className="text-xs text-slate-500 font-medium">
@@ -77,32 +77,32 @@ export const DigitalRecordModal = ({
             </div>
             <div className="text-right sm:shrink-0 font-mono">
               <div className="text-xs text-slate-500">เลขที่ใบสั่งงาน (Work Order):</div>
-              <div className="text-base font-black text-purple-900">{workOrder.wo_code}</div>
-              <div className="text-[11px] text-slate-500">สถานะ: {workOrder.status}</div>
+              <div className="text-base font-black text-indigo-900">{workOrder.wo_code}</div>
+              <div className="text-xs text-slate-500">สถานะ: {workOrder.status}</div>
             </div>
           </div>
 
           {/* Section 1: Instrument & Organization Information */}
           <div className="space-y-2">
             <h2 className="text-xs font-bold uppercase tracking-wider text-slate-900 flex items-center gap-1.5">
-              <Building2 size={14} className="text-purple-700" />
+              <Building2 size={14} className="text-indigo-600" />
               <span>1. ข้อมูลเครื่องมือวัดและสถานที่ (Instrument Identification)</span>
             </h2>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-xs">
               <div>
-                <span className="text-slate-400 block text-[11px]">รหัสเครื่องมือ:</span>
+                <span className="text-slate-400 block text-xs">รหัสเครื่องมือ:</span>
                 <span className="font-mono font-bold text-slate-900">{workOrder.asset_code || '-'}</span>
               </div>
               <div>
-                <span className="text-slate-400 block text-[11px]">ชื่อเครื่องมือ:</span>
+                <span className="text-slate-400 block text-xs">ชื่อเครื่องมือ:</span>
                 <span className="font-semibold text-slate-900">{workOrder.asset_name || '-'}</span>
               </div>
               <div>
-                <span className="text-slate-400 block text-[11px]">แผนกผู้ครอบครอง:</span>
+                <span className="text-slate-400 block text-xs">แผนกผู้ครอบครอง:</span>
                 <span className="font-semibold text-slate-900">{workOrder.department_name_th || workOrder.department || '-'}</span>
               </div>
               <div>
-                <span className="text-slate-400 block text-[11px]">หน่วยงานผู้สอบเทียบ:</span>
+                <span className="text-slate-400 block text-xs">หน่วยงานผู้สอบเทียบ:</span>
                 <span className="font-semibold text-slate-900">{workOrder.calibration_provider_name || workOrder.provider_name || '-'}</span>
               </div>
             </div>
@@ -111,7 +111,7 @@ export const DigitalRecordModal = ({
           {/* Section 2: Calibration Execution & Acceptance Result */}
           <div className="space-y-2">
             <h2 className="text-xs font-bold uppercase tracking-wider text-slate-900 flex items-center gap-1.5">
-              <FileCheck2 size={14} className="text-purple-700" />
+              <FileCheck2 size={14} className="text-indigo-600" />
               <span>2. ผลการสอบเทียบและเกณฑ์ยอมรับ (Calibration & Acceptance Result)</span>
             </h2>
             <div className="p-4 rounded-xl border border-slate-200 bg-white space-y-3">
@@ -137,7 +137,7 @@ export const DigitalRecordModal = ({
                       </span>
                     )}
                     {Boolean(workOrder.is_amended) && (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-300">
                         <History size={12} />
                         <span>AMENDED (ฉบับแก้ไข)</span>
                       </span>
@@ -146,23 +146,23 @@ export const DigitalRecordModal = ({
                 </div>
 
                 <div className="text-right text-xs">
-                  <span className="text-slate-400 block text-[11px]">วันที่สอบเทียบจริง:</span>
+                  <span className="text-slate-400 block text-xs">วันที่สอบเทียบจริง:</span>
                   <span className="font-mono font-bold text-slate-900">{workOrder.performed_at || '-'}</span>
                 </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                 <div>
-                  <span className="text-slate-400 block text-[11px]">เลขที่ใบรับรอง (Certificate No.):</span>
+                  <span className="text-slate-400 block text-xs">เลขที่ใบรับรอง (Certificate No.):</span>
                   <span className="font-mono font-bold text-slate-900">{workOrder.certificate_no || '-'}</span>
                 </div>
                 <div>
-                  <span className="text-slate-400 block text-[11px]">เกณฑ์ยอมรับ (Acceptance Criteria):</span>
+                  <span className="text-slate-400 block text-xs">เกณฑ์ยอมรับ (Acceptance Criteria):</span>
                   <span className="font-semibold text-slate-900">{workOrder.acceptance_criteria || '-'}</span>
                 </div>
                 {workOrder.result_remarks && (
                   <div className="sm:col-span-2">
-                    <span className="text-slate-400 block text-[11px]">หมายเหตุ / ผลการสังเกต:</span>
+                    <span className="text-slate-400 block text-xs">หมายเหตุ / ผลการสังเกต:</span>
                     <span className="text-slate-700">{workOrder.result_remarks}</span>
                   </div>
                 )}
@@ -173,29 +173,29 @@ export const DigitalRecordModal = ({
           {/* Section 3: Measurement Traceability & Environmental Conditions (ISO/IEC 17025) */}
           <div className="space-y-2">
             <h2 className="text-xs font-bold uppercase tracking-wider text-slate-900 flex items-center gap-1.5">
-              <Layers size={14} className="text-purple-700" />
+              <Layers size={14} className="text-indigo-600" />
               <span>3. ความสอบกลับได้ทางมาตรวิทยาและสภาวะแวดล้อม (Measurement Traceability)</span>
             </h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-xs">
               <div>
-                <span className="text-slate-400 block text-[11px]">วิธีการสอบเทียบ (Method):</span>
+                <span className="text-slate-400 block text-xs">วิธีการสอบเทียบ (Method):</span>
                 <span className="font-semibold text-slate-800">{workOrder.calibration_method || 'EXTERNAL_LAB'}</span>
               </div>
               <div>
-                <span className="text-slate-400 block text-[11px]">การสอบกลับได้สู่มาตรฐานแห่งชาติ (Traceability):</span>
+                <span className="text-slate-400 block text-xs">การสอบกลับได้สู่มาตรฐานแห่งชาติ (Traceability):</span>
                 <span className="font-mono text-slate-800">{workOrder.traceability_ref || 'ตามใบรับรองสถาบันมาตรวิทยา'}</span>
               </div>
               <div>
-                <span className="text-slate-400 block text-[11px]">สภาวะแวดล้อมขณะสอบเทียบ (Temp / Humidity):</span>
+                <span className="text-slate-400 block text-xs">สภาวะแวดล้อมขณะสอบเทียบ (Temp / Humidity):</span>
                 <span className="text-slate-800">{workOrder.environmental_conditions || '-'}</span>
               </div>
               <div>
-                <span className="text-slate-400 block text-[11px]">ค่าความคลาดเคลื่อนที่วัดได้ (Error):</span>
+                <span className="text-slate-400 block text-xs">ค่าความคลาดเคลื่อนที่วัดได้ (Error):</span>
                 <span className="font-mono font-bold text-slate-800">{workOrder.calibration_error_value || '-'}</span>
               </div>
               <div className="sm:col-span-2">
-                <span className="text-slate-400 block text-[11px]">ค่าความไม่แน่นอนขยาย (Expanded Uncertainty U):</span>
-                <span className="font-mono font-bold text-purple-700">{workOrder.uncertainty_value || '-'}</span>
+                <span className="text-slate-400 block text-xs">ค่าความไม่แน่นอนขยาย (Expanded Uncertainty U):</span>
+                <span className="font-mono font-bold text-indigo-700">{workOrder.uncertainty_value || '-'}</span>
               </div>
             </div>
           </div>
@@ -204,13 +204,13 @@ export const DigitalRecordModal = ({
           {workOrder.certificate_file_name && (
             <div className="space-y-2">
               <h2 className="text-xs font-bold uppercase tracking-wider text-slate-900 flex items-center gap-1.5">
-                <Hash size={14} className="text-purple-700" />
+                <Hash size={14} className="text-indigo-600" />
                 <span>4. หลักฐานไฟล์ใบรับรองดิจิทัล (Digital Certificate Attachment)</span>
               </h2>
               <div className="p-3.5 rounded-xl border border-indigo-200 bg-indigo-50/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
                 <div className="space-y-1">
                   <div className="font-bold text-slate-900">{workOrder.certificate_file_name}</div>
-                  <div className="text-[11px] text-slate-500 font-mono">
+                  <div className="text-xs text-slate-500 font-mono">
                     เวอร์ชัน v{workOrder.certificate_version || 1} • SHA-256: {workOrder.certificate_file_hash || 'Verified'}
                   </div>
                 </div>
@@ -261,7 +261,7 @@ export const DigitalRecordModal = ({
               <div className="border-b border-dashed border-slate-400 w-3/4 mx-auto pb-1 font-semibold text-slate-900">
                 {workOrder.performed_by_name || workOrder.performed_by || '-'}
               </div>
-              <span className="text-[11px] text-slate-400 block">วันที่: {workOrder.performed_at || '-'}</span>
+              <span className="text-xs text-slate-400 block">วันที่: {workOrder.performed_at || '-'}</span>
             </div>
 
             <div className="space-y-8 p-3 rounded-xl border border-slate-200 bg-slate-50/50">
@@ -269,7 +269,7 @@ export const DigitalRecordModal = ({
               <div className="border-b border-dashed border-slate-400 w-3/4 mx-auto pb-1 font-semibold text-slate-900">
                 {workOrder.reviewed_by_name || workOrder.reviewed_by || '-'}
               </div>
-              <span className="text-[11px] text-slate-400 block">วันที่: {workOrder.reviewed_at || '-'}</span>
+              <span className="text-xs text-slate-400 block">วันที่: {workOrder.reviewed_at || '-'}</span>
             </div>
           </div>
         </div>

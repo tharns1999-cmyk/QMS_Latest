@@ -124,14 +124,14 @@ export const CreateWorkOrderModal = ({
 
                   {isGroupPlanItem && (
                     <div>
-                      <label className="block text-sm font-semibold text-purple-900 mb-1.5">
+                      <label className="block text-sm font-semibold text-indigo-900 mb-1.5">
                         เลือกรหัสเครื่องมือลูกรายตัว <span className="text-rose-600">*</span>
                       </label>
                       <select
                         required
                         value={form.child_asset_id}
                         onChange={(e) => setForm({ ...form, child_asset_id: e.target.value })}
-                        className="w-full h-10 px-3.5 rounded-xl border border-purple-300 text-sm font-medium bg-white"
+                        className="w-full h-10 px-3.5 rounded-xl border border-indigo-300 text-sm font-medium bg-white"
                       >
                         <option value="">-- เลือกเครื่องมือลูก --</option>
                         {groupChildren.map((ch) => (

@@ -247,49 +247,49 @@ export default function VccComplianceReportTab() {
       {/* 2. Compliance KPI Summary Strip */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <div className="p-4 bg-white rounded-xl border border-slate-200/80 shadow-2xs">
-          <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
             ใบสั่งงานที่ตรวจประเมิน
           </span>
           <div className="text-2xl font-bold font-mono text-slate-900 mt-1" data-testid="summary-total-records">
             {summary.total_records ?? 0}
           </div>
-          <span className="text-[11px] text-slate-400 mt-1 block">รอบปี {year}</span>
+          <span className="text-xs text-slate-400 mt-1 block">รอบปี {year}</span>
         </div>
 
         <div className="p-4 bg-white rounded-xl border border-slate-200/80 shadow-2xs">
-          <span className="text-[11px] font-semibold text-emerald-700 uppercase tracking-wider">
+          <span className="text-xs font-semibold text-emerald-700 uppercase tracking-wider">
             ผ่านเกณฑ์สมบูรณ์
           </span>
           <div className="text-2xl font-bold font-mono text-emerald-600 mt-1" data-testid="summary-compliant-count">
             {summary.compliant_count ?? 0}
           </div>
-          <span className="text-[11px] text-emerald-600/80 mt-1 block">
+          <span className="text-xs text-emerald-600/80 mt-1 block">
             แก้ไขผล (Amended): {summary.compliant_amended_count ?? 0}
           </span>
         </div>
 
         <div className="p-4 bg-white rounded-xl border border-slate-200/80 shadow-2xs">
-          <span className="text-[11px] font-semibold text-amber-700 uppercase tracking-wider">
+          <span className="text-xs font-semibold text-amber-700 uppercase tracking-wider">
             เลยกำหนดตามเกณฑ์
           </span>
           <div className="text-2xl font-bold font-mono text-amber-600 mt-1" data-testid="summary-overdue-count">
             {summary.non_compliant_overdue_count ?? 0}
           </div>
-          <span className="text-[11px] text-amber-700/80 mt-1 block">นับจาก Required Due Date</span>
+          <span className="text-xs text-amber-700/80 mt-1 block">นับจาก Required Due Date</span>
         </div>
 
         <div className="p-4 bg-white rounded-xl border border-slate-200/80 shadow-2xs">
-          <span className="text-[11px] font-semibold text-rose-700 uppercase tracking-wider">
+          <span className="text-xs font-semibold text-rose-700 uppercase tracking-wider">
             ไม่ผ่านเกณฑ์ / ระงับใช้
           </span>
           <div className="text-2xl font-bold font-mono text-rose-600 mt-1" data-testid="summary-hold-count">
             {summary.non_compliant_hold_count ?? 0}
           </div>
-          <span className="text-[11px] text-rose-600/80 mt-1 block">ระงับใช้ หรือไม่ผ่านเกณฑ์</span>
+          <span className="text-xs text-rose-600/80 mt-1 block">ระงับใช้ หรือไม่ผ่านเกณฑ์</span>
         </div>
 
         <div className="p-4 bg-white rounded-xl border border-slate-200/80 shadow-2xs col-span-2 md:col-span-1">
-          <span className="text-[11px] font-semibold text-indigo-700 uppercase tracking-wider">
+          <span className="text-xs font-semibold text-indigo-700 uppercase tracking-wider">
             อัตราความสอดคล้อง (Rate)
           </span>
           <div
@@ -306,7 +306,7 @@ export default function VccComplianceReportTab() {
           >
             {complianceRateDisplay}
           </div>
-          <span className="text-[11px] text-slate-400 mt-1 block">
+          <span className="text-xs text-slate-400 mt-1 block">
             {hasRecords ? 'เกณฑ์มาตรฐาน QMS: 95%' : 'ไม่มีข้อมูลการตรวจประเมิน'}
           </span>
         </div>
@@ -385,7 +385,7 @@ export default function VccComplianceReportTab() {
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs text-slate-700">
-              <thead className="bg-slate-50/75 border-b border-slate-200 text-slate-600 font-semibold uppercase tracking-wider text-[11px]">
+              <thead className="bg-slate-50/75 border-b border-slate-200 text-slate-600 font-semibold uppercase tracking-wider text-xs">
                 <tr>
                   <th className="py-3 px-3">ใบสั่งงาน / วันที่</th>
                   <th className="py-3 px-3">เครื่องมือวัด & แผนก</th>
@@ -434,10 +434,10 @@ export default function VccComplianceReportTab() {
                           <span>{r.wo_code}</span>
                           <ExternalLink size={11} />
                         </button>
-                        <div className="text-[11px] text-slate-500 mt-1">
+                        <div className="text-xs text-slate-500 mt-1">
                           ตรวจจริง: <span className="font-semibold">{r.performed_at || '-'}</span>
                         </div>
-                        <div className="text-[10px] text-slate-400 mt-0.5">
+                        <div className="text-xs text-slate-400 mt-0.5">
                           ผู้บันทึก: {r.performed_by_name || '-'}
                         </div>
                       </td>
@@ -448,7 +448,7 @@ export default function VccComplianceReportTab() {
                         <div className="font-medium text-slate-800 text-xs mt-0.5">{r.asset_name}</div>
                         <div className="mt-1 flex items-center gap-1">
                           <DepartmentBadge department={r.department} />
-                          <span className="text-[10px] text-slate-400">· {r.location || '-'}</span>
+                          <span className="text-xs text-slate-400">· {r.location || '-'}</span>
                         </div>
                       </td>
 
@@ -457,10 +457,10 @@ export default function VccComplianceReportTab() {
                         <div className="font-semibold text-slate-800 text-xs">
                           {r.provider_name || 'ทวนสอบภายใน'}
                         </div>
-                        <div className="text-[11px] text-slate-600 mt-0.5 truncate" title={r.calibration_method}>
+                        <div className="text-xs text-slate-600 mt-0.5 truncate" title={r.calibration_method}>
                           วิธี: {r.calibration_method || '-'}
                         </div>
-                        <div className="text-[11px] text-indigo-700 mt-0.5 truncate" title={r.traceability_ref}>
+                        <div className="text-xs text-indigo-700 mt-0.5 truncate" title={r.traceability_ref}>
                           มาตรฐาน: {r.traceability_ref || '-'}
                         </div>
                       </td>
@@ -470,11 +470,11 @@ export default function VccComplianceReportTab() {
                         <div className="text-xs font-semibold text-slate-900 font-mono">
                           {r.required_due_date}
                         </div>
-                        <div className="text-[11px] text-slate-500 mt-0.5">
+                        <div className="text-xs text-slate-500 mt-0.5">
                           กำหนด: <span className="font-mono">{r.scheduled_date}</span>
                         </div>
                         {r.is_rescheduled && (
-                          <span className="inline-block px-1.5 py-0.2 rounded text-[10px] font-semibold bg-amber-100 text-amber-800 mt-1 border border-amber-200">
+                          <span className="inline-block px-1.5 py-0.2 rounded text-xs font-semibold bg-amber-100 text-amber-800 mt-1 border border-amber-200">
                             มีการเลื่อนกำหนด
                           </span>
                         )}
@@ -484,7 +484,7 @@ export default function VccComplianceReportTab() {
                       <td className="py-3 px-3 align-top">
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <span
-                            className={`px-2 py-0.5 rounded text-[11px] font-bold ${
+                            className={`px-2 py-0.5 rounded text-xs font-bold ${
                               r.result_status === 'PASS'
                                 ? 'bg-emerald-100 text-emerald-800'
                                 : r.result_status === 'FAIL'
@@ -495,16 +495,16 @@ export default function VccComplianceReportTab() {
                             {getResultStatusLabel(r.result_status)}
                           </span>
                           {r.is_amended && (
-                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-700 border border-blue-200">
+                            <span className="px-1.5 py-0.5 rounded text-xs font-bold bg-blue-100 text-blue-700 border border-blue-200">
                               AMENDED
                             </span>
                           )}
                         </div>
-                        <div className="text-[11px] text-slate-700 font-mono mt-1">
+                        <div className="text-xs text-slate-700 font-mono mt-1">
                           Cert: {r.certificate_no || '-'}
                         </div>
                         {r.certificate_valid_until && (
-                          <div className="text-[10px] text-slate-400">
+                          <div className="text-xs text-slate-400">
                             หมดอายุ: {r.certificate_valid_until}
                           </div>
                         )}
@@ -515,7 +515,7 @@ export default function VccComplianceReportTab() {
                         {r.cert_sha256_hash ? (
                           <div className="flex items-center gap-1">
                             <span
-                              className="font-mono text-[10px] bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 text-slate-700 max-w-[110px] truncate"
+                              className="font-mono text-xs bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 text-slate-700 max-w-[110px] truncate"
                               title={r.cert_sha256_hash}
                             >
                               {r.cert_sha256_hash.slice(0, 12)}...
@@ -534,13 +534,13 @@ export default function VccComplianceReportTab() {
                             </button>
                           </div>
                         ) : (
-                          <span className="text-[11px] text-slate-400 italic">ไม่มีไฟล์แนบ</span>
+                          <span className="text-xs text-slate-400 italic">ไม่มีไฟล์แนบ</span>
                         )}
                         {r.has_certificate_file && (
                           <button
                             type="button"
                             onClick={() => handleDownloadCert(r.wo_id)}
-                            className="text-[10px] text-indigo-600 hover:text-indigo-800 font-semibold mt-1 inline-block hover:underline cursor-pointer"
+                            className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold mt-1 inline-block hover:underline cursor-pointer"
                           >
                             ดาวน์โหลด PDF
                           </button>
@@ -550,7 +550,7 @@ export default function VccComplianceReportTab() {
                       {/* 7. Verdict */}
                       <td className="py-3 px-3 align-top text-right">
                         <span
-                          className={`inline-block px-2.5 py-1 rounded-full text-[11px] font-bold border ${verdictBadgeClass}`}
+                          className={`inline-block px-2.5 py-1 rounded-full text-xs font-bold border ${verdictBadgeClass}`}
                         >
                           {verdictLabel}
                         </span>
