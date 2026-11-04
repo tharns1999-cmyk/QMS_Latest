@@ -44,7 +44,7 @@ export const AmendmentModal = ({
   return (
     <>
       <div
-        className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4"
+        className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-y-auto animate-in fade-in duration-150"
         onClick={handleBackdropClick}
       >
         <div
@@ -53,10 +53,15 @@ export const AmendmentModal = ({
           aria-modal="true"
           aria-labelledby="amendment-dialog-title"
           tabIndex="-1"
-          className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden outline-none"
+          className="bg-white rounded-t-3xl sm:rounded-2xl border border-slate-200 shadow-2xl max-w-2xl w-full max-h-[92dvh] sm:max-h-[90vh] flex flex-col overflow-hidden outline-none animate-in slide-in-from-bottom-6 sm:slide-in-from-bottom-0 duration-200"
         >
+          {/* Mobile Drag Handle Bar */}
+          <div className="sm:hidden pt-2.5 pb-1 flex justify-center shrink-0">
+            <span className="w-10 h-1.5 rounded-full bg-slate-300" />
+          </div>
+
           {/* Header */}
-          <div className="px-6 py-4.5 border-b border-amber-200 bg-amber-50/70 flex items-center justify-between shrink-0">
+          <div className="px-5 sm:px-6 py-3.5 sm:py-4.5 border-b border-amber-200 bg-amber-50/70 flex items-center justify-between shrink-0">
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-mono text-xs font-bold px-2 py-0.5 rounded-md bg-amber-200 text-amber-900">
@@ -64,7 +69,7 @@ export const AmendmentModal = ({
                 </span>
                 <span className="text-xs text-amber-800 font-medium">({workOrder.asset_code} — {workOrder.asset_name})</span>
               </div>
-              <h2 id="amendment-dialog-title" className="text-lg font-bold text-slate-900 tracking-tight mt-1">
+              <h2 id="amendment-dialog-title" className="text-base sm:text-lg font-bold text-slate-900 tracking-tight mt-1">
                 ขอแก้ไขผลการสอบเทียบที่ปิดงานแล้ว (Controlled Amendment)
               </h2>
             </div>
@@ -72,7 +77,7 @@ export const AmendmentModal = ({
               type="button"
               onClick={requestClose}
               aria-label="ปิดหน้าต่าง"
-              className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 cursor-pointer transition-colors"
+              className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 cursor-pointer transition-colors motion-safe:active:scale-[0.96] select-none"
             >
               <X size={20} />
             </button>
@@ -87,11 +92,11 @@ export const AmendmentModal = ({
         </div>
 
         {/* Tab Selector */}
-        <div className="flex border-b border-slate-200 px-6 bg-white shrink-0">
+        <div className="flex border-b border-slate-200 px-4 sm:px-6 bg-white shrink-0 overflow-x-auto">
           <button
             type="button"
             onClick={() => setActiveTab('MAIN')}
-            className={`py-3 px-3 text-xs sm:text-sm font-bold border-b-2 transition-colors flex items-center gap-2 cursor-pointer ${
+            className={`min-h-[44px] py-2.5 px-3.5 text-xs sm:text-sm font-bold border-b-2 transition-colors flex items-center gap-2 cursor-pointer motion-safe:active:scale-[0.98] select-none whitespace-nowrap ${
               activeTab === 'MAIN'
                 ? 'border-amber-600 text-amber-700'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -103,7 +108,7 @@ export const AmendmentModal = ({
           <button
             type="button"
             onClick={() => setActiveTab('TRACEABILITY')}
-            className={`py-3 px-3 text-xs sm:text-sm font-bold border-b-2 transition-colors flex items-center gap-2 cursor-pointer ${
+            className={`min-h-[44px] py-2.5 px-3.5 text-xs sm:text-sm font-bold border-b-2 transition-colors flex items-center gap-2 cursor-pointer motion-safe:active:scale-[0.98] select-none whitespace-nowrap ${
               activeTab === 'TRACEABILITY'
                 ? 'border-amber-600 text-amber-700'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -304,22 +309,22 @@ export const AmendmentModal = ({
           )}
 
           {/* Actions */}
-          <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+          <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] sm:pb-0">
             <span className="text-xs text-slate-400">
               * การแก้ไขต้องผ่านการตรวจสอบโดยผู้มีอำนาจ L4+
             </span>
-            <div className="flex gap-2.5">
+            <div className="flex flex-col sm:flex-row gap-2.5 w-full sm:w-auto">
               <button
                 type="button"
                 onClick={requestClose}
-                className="h-10 px-4 rounded-xl border border-slate-300 text-sm font-semibold hover:bg-slate-50 transition-colors cursor-pointer"
+                className="order-1 sm:order-1 w-full sm:w-auto min-h-[44px] h-11 sm:h-10 px-4 rounded-xl border border-slate-300 text-sm font-semibold hover:bg-slate-50 transition-colors cursor-pointer motion-safe:active:scale-[0.98] select-none text-center"
               >
                 ยกเลิก
               </button>
               <button
                 type="submit"
                 disabled={saving || !form.amendment_reason?.trim()}
-                className="h-10 px-5 rounded-xl bg-amber-600 text-white text-sm font-semibold hover:bg-amber-700 disabled:opacity-50 transition-colors cursor-pointer shadow-2xs flex items-center gap-2"
+                className="order-2 sm:order-2 w-full sm:w-auto min-h-[44px] h-11 sm:h-10 px-5 rounded-xl bg-amber-600 text-white text-sm font-semibold hover:bg-amber-700 disabled:opacity-50 transition-colors cursor-pointer shadow-2xs flex items-center justify-center gap-2 motion-safe:active:scale-[0.98] select-none"
               >
                 {saving && <span className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" />}
                 <span>{saving ? 'กำลังบันทึกการแก้ไข...' : 'บันทึกการขอแก้ไข (Amendment)'}</span>

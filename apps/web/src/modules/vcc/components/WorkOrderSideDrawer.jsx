@@ -26,6 +26,7 @@ import { canReviewWorkOrder, canReleaseWorkOrderHold, canCancelWorkOrder } from 
 import { WORK_ORDER_STATUS_LABELS, getWorkOrderStatusLabel } from '../utils/statusLabels';
 import { formatVccDueDate, formatVccDate, formatVccDateTime } from '../utils/vccDateUtils';
 import { useVccModalAccessibility } from '../hooks/useVccModalAccessibility';
+import { useVccMobileViewport } from '../hooks/useVccMobileViewport';
 
 export const WorkOrderSideDrawer = ({
   workOrder,
@@ -80,6 +81,16 @@ export const WorkOrderSideDrawer = ({
   } = useVccModalAccessibility({
     isOpen: !!workOrder,
     onClose
+  });
+
+  const {
+    isMobile,
+    dragOffset,
+    handleTouchStart,
+    handleTouchMove,
+    handleTouchEnd
+  } = useVccMobileViewport({
+    onDismiss: requestClose
   });
 
   if (!workOrder) return null;
@@ -149,44 +160,59 @@ export const WorkOrderSideDrawer = ({
         onClick={requestClose}
       />
 
-      <div className="fixed inset-y-0 right-0 pl-10 max-w-full flex">
+      <div className="fixed inset-x-0 bottom-0 top-auto sm:inset-y-0 sm:right-0 sm:left-auto flex flex-col justify-end sm:justify-start max-w-full sm:pl-10">
         <div
-          className="w-screen max-w-xl bg-white shadow-2xl flex flex-col border-l border-slate-200"
+          className="w-full sm:w-screen max-w-full sm:max-w-xl bg-white shadow-2xl flex flex-col rounded-t-3xl sm:rounded-none border-t sm:border-t-0 sm:border-l border-slate-200 overflow-hidden h-[88dvh] max-h-[92dvh] sm:h-full sm:max-h-full transition-transform duration-100 ease-out"
+          style={isMobile && dragOffset > 0 ? { transform: `translateY(${dragOffset}px)` } : undefined}
         >
+          {/* Mobile Drag Handle Bar */}
+          <div
+            data-testid="vcc-drag-handle"
+            className="sm:hidden pt-3 pb-1.5 flex justify-center cursor-grab active:cursor-grabbing select-none shrink-0 bg-slate-50 border-b border-slate-100"
+            aria-hidden="true"
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+          >
+            <div className="w-12 h-1.5 rounded-full bg-slate-300 active:bg-slate-400 transition-colors" />
+          </div>
+
           {/* Header */}
-          <div className="p-5 bg-slate-50 border-b border-slate-200 flex items-start justify-between gap-3">
-            <div>
+          <div className="p-4 sm:p-5 bg-slate-50 border-b border-slate-200 flex items-start justify-between gap-3 shrink-0">
+            <div className="min-w-0 pr-2">
               <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="font-mono font-bold text-lg text-slate-900 tracking-tight" id="slide-over-title">
                   {currentWo.wo_code}
                 </h2>
                 {getStatusBadge(currentWo.status, currentWo.nc_status)}
               </div>
-              <p className="text-xs text-slate-500 font-medium mt-1">
+              <p className="text-xs text-slate-500 font-medium mt-1 truncate">
                 {currentWo.plan_year ? `อิงแผนการทวนสอบประจำปี ${currentWo.plan_year} (เดือน ${currentWo.planned_month})` : 'ใบสั่งงานนอกแผน (Ad-hoc)'}
               </p>
             </div>
 
-            {currentWo.performed_at && (
+            <div className="flex items-center gap-1.5 shrink-0">
+              {currentWo.performed_at && (
+                <button
+                  type="button"
+                  onClick={() => onViewDigitalRecord?.(currentWo)}
+                  className="min-h-[44px] sm:min-h-[36px] sm:h-9 inline-flex items-center gap-1.5 px-3 rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700 text-xs font-semibold hover:bg-indigo-100 motion-safe:active:scale-[0.98] transition-all cursor-pointer shadow-2xs select-none"
+                >
+                  <Printer size={15} />
+                  <span className="hidden sm:inline">พิมพ์/ดูเอกสารดิจิทัล</span>
+                </button>
+              )}
+
               <button
                 type="button"
-                onClick={() => onViewDigitalRecord?.(currentWo)}
-                className="h-9 inline-flex items-center gap-1.5 px-3.5 rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700 text-xs font-semibold hover:bg-indigo-100 transition-colors cursor-pointer shadow-2xs"
+                onClick={requestClose}
+                aria-label="ปิดหน้าต่างรายละเอียดใบสั่งงาน"
+                className="min-w-[44px] min-h-[44px] flex items-center justify-center p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 motion-safe:active:bg-slate-300 transition-colors cursor-pointer select-none"
+                title="ปิด"
               >
-                <Printer size={14} />
-                <span>พิมพ์/ดูเอกสารดิจิทัล</span>
+                <X size={20} />
               </button>
-            )}
-
-            <button
-              type="button"
-              onClick={requestClose}
-              aria-label="ปิดหน้าต่างรายละเอียดใบสั่งงาน"
-              className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition-colors cursor-pointer"
-              title="ปิด"
-            >
-              <X size={20} />
-            </button>
+            </div>
           </div>
 
           {/* Drawer Body */}
@@ -526,7 +552,7 @@ export const WorkOrderSideDrawer = ({
           </div>
 
           {/* Drawer Footer Actions */}
-          <div className="p-4 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-end gap-2">
+          <div className="p-4 sm:p-5 pb-[max(1rem,env(safe-area-inset-bottom,0px))] bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center sm:justify-end gap-2.5 shrink-0">
             {(currentWo.status === 'OPEN' || currentWo.status === 'REJECTED') && (
               <>
                 <button
@@ -535,9 +561,9 @@ export const WorkOrderSideDrawer = ({
                     onClose();
                     onRecordResult(currentWo);
                   }}
-                  className="h-9 inline-flex items-center gap-1.5 px-3.5 rounded-xl bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700 transition-colors cursor-pointer shadow-2xs"
+                  className="min-h-[44px] sm:min-h-[38px] sm:h-9 w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 sm:px-3.5 rounded-xl bg-indigo-600 text-white text-xs sm:text-sm font-semibold hover:bg-indigo-700 motion-safe:active:scale-[0.98] transition-all cursor-pointer shadow-2xs select-none order-last sm:order-none"
                 >
-                  <FileCheck2 size={14} />
+                  <FileCheck2 size={15} />
                   <span>บันทึกผลและใบรับรอง</span>
                 </button>
                 <button
@@ -546,16 +572,16 @@ export const WorkOrderSideDrawer = ({
                     onClose();
                     onReschedule(currentWo);
                   }}
-                  className="h-9 inline-flex items-center gap-1.5 px-3.5 rounded-xl border border-slate-300 text-slate-700 text-xs font-semibold hover:bg-slate-100 transition-colors cursor-pointer"
+                  className="min-h-[44px] sm:min-h-[38px] sm:h-9 w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 sm:px-3.5 rounded-xl border border-slate-300 text-slate-700 text-xs sm:text-sm font-semibold hover:bg-slate-100 motion-safe:active:scale-[0.98] transition-all cursor-pointer select-none"
                 >
-                  <CalendarClock size={14} />
+                  <CalendarClock size={15} />
                   <span>เลื่อนวันครบกำหนด</span>
                 </button>
               </>
             )}
 
             {currentWo.status === 'PENDING_REVIEW' && !canReviewWorkOrder(currentUser, currentWo, thresholds) && (
-              <span className="text-xs font-medium text-slate-500">รอผู้ตรวจรับ</span>
+              <span className="text-xs font-medium text-slate-500 text-center py-2 sm:py-0">รอผู้ตรวจรับ</span>
             )}
 
             {currentWo.status === 'PENDING_REVIEW' && canReviewWorkOrder(currentUser, currentWo, thresholds) && (
@@ -567,9 +593,9 @@ export const WorkOrderSideDrawer = ({
                       onClose();
                       onApprove(currentWo);
                     }}
-                    className="h-9 inline-flex items-center gap-1.5 px-3.5 rounded-xl bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 transition-colors cursor-pointer shadow-2xs"
+                    className="min-h-[44px] sm:min-h-[38px] sm:h-9 w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 sm:px-3.5 rounded-xl bg-emerald-600 text-white text-xs sm:text-sm font-semibold hover:bg-emerald-700 motion-safe:active:scale-[0.98] transition-all cursor-pointer shadow-2xs select-none order-last sm:order-none"
                   >
-                    <CheckCircle2 size={14} />
+                    <CheckCircle2 size={15} />
                     <span>ตรวจรับปิดงาน</span>
                   </button>
                 )}
@@ -579,9 +605,9 @@ export const WorkOrderSideDrawer = ({
                     onClose();
                     onReject(currentWo);
                   }}
-                  className="h-9 inline-flex items-center gap-1.5 px-3.5 rounded-xl bg-rose-600 text-white text-xs font-semibold hover:bg-rose-700 transition-colors cursor-pointer shadow-2xs"
+                  className="min-h-[44px] sm:min-h-[38px] sm:h-9 w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 sm:px-3.5 rounded-xl bg-rose-600 text-white text-xs sm:text-sm font-semibold hover:bg-rose-700 motion-safe:active:scale-[0.98] transition-all cursor-pointer shadow-2xs select-none"
                 >
-                  <XCircle size={14} />
+                  <XCircle size={15} />
                   <span>{currentWo.result_status === 'INCONCLUSIVE' ? 'ส่งกลับตรวจซ้ำ' : 'ส่งกลับแก้ไข'}</span>
                 </button>
               </>
@@ -594,9 +620,9 @@ export const WorkOrderSideDrawer = ({
                   onClose();
                   onCancel(currentWo);
                 }}
-                className="h-9 inline-flex items-center gap-1.5 px-3.5 rounded-xl border border-rose-200 text-rose-700 text-xs font-semibold hover:bg-rose-50 transition-colors cursor-pointer"
+                className="min-h-[44px] sm:min-h-[38px] sm:h-9 w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 sm:px-3.5 rounded-xl border border-rose-200 text-rose-700 text-xs sm:text-sm font-semibold hover:bg-rose-50 motion-safe:active:scale-[0.98] transition-all cursor-pointer select-none"
               >
-                <Ban size={14} />
+                <Ban size={15} />
                 <span>ยกเลิกใบสั่งงาน</span>
               </button>
             )}
@@ -608,9 +634,9 @@ export const WorkOrderSideDrawer = ({
                   onClose();
                   onReleaseHold(currentWo);
                 }}
-                className="h-9 inline-flex items-center gap-1.5 px-3.5 rounded-xl bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700 transition-colors cursor-pointer shadow-2xs"
+                className="min-h-[44px] sm:min-h-[38px] sm:h-9 w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 sm:px-3.5 rounded-xl bg-indigo-600 text-white text-xs sm:text-sm font-semibold hover:bg-indigo-700 motion-safe:active:scale-[0.98] transition-all cursor-pointer shadow-2xs select-none order-last sm:order-none"
               >
-                <ShieldAlert size={14} />
+                <ShieldAlert size={15} />
                 <span>ปลดระงับใช้ (L{reqApproverLevel}+)</span>
               </button>
             )}
@@ -622,9 +648,9 @@ export const WorkOrderSideDrawer = ({
                   onClose();
                   onAmend?.(currentWo);
                 }}
-                className="h-9 inline-flex items-center gap-1.5 px-3.5 rounded-xl bg-amber-600 text-white text-xs font-semibold hover:bg-amber-700 transition-colors cursor-pointer shadow-2xs"
+                className="min-h-[44px] sm:min-h-[38px] sm:h-9 w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 sm:px-3.5 rounded-xl bg-amber-600 text-white text-xs sm:text-sm font-semibold hover:bg-amber-700 motion-safe:active:scale-[0.98] transition-all cursor-pointer shadow-2xs select-none"
               >
-                <History size={14} />
+                <History size={15} />
                 <span>ขอแก้ไขผล (Amendment)</span>
               </button>
             )}
@@ -633,9 +659,9 @@ export const WorkOrderSideDrawer = ({
               <button
                 type="button"
                 onClick={() => onViewDigitalRecord?.(currentWo)}
-                className="h-9 inline-flex items-center gap-1.5 px-3.5 rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700 text-xs font-semibold hover:bg-indigo-100 transition-colors cursor-pointer shadow-2xs"
+                className="min-h-[44px] sm:min-h-[38px] sm:h-9 w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 sm:px-3.5 rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700 text-xs sm:text-sm font-semibold hover:bg-indigo-100 motion-safe:active:scale-[0.98] transition-all cursor-pointer shadow-2xs select-none"
               >
-                <Printer size={14} />
+                <Printer size={15} />
                 <span>พิมพ์/ดูเอกสารดิจิทัล</span>
               </button>
             )}
@@ -643,7 +669,7 @@ export const WorkOrderSideDrawer = ({
             <button
               type="button"
               onClick={requestClose}
-              className="h-9 px-3.5 rounded-xl border border-slate-300 text-slate-600 text-xs font-semibold hover:bg-slate-100 transition-colors cursor-pointer"
+              className="min-h-[44px] sm:min-h-[38px] sm:h-9 w-full sm:w-auto px-4 rounded-xl border border-slate-300 text-slate-700 text-xs sm:text-sm font-semibold hover:bg-slate-100 motion-safe:active:scale-[0.98] transition-all cursor-pointer select-none order-first sm:order-last"
             >
               ปิดหน้าต่าง
             </button>

@@ -41,7 +41,7 @@ export const DigitalRecordModal = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto"
+      className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-y-auto animate-in fade-in duration-150"
       onClick={handleBackdropClick}
     >
       <div
@@ -50,16 +50,20 @@ export const DigitalRecordModal = ({
         aria-modal="true"
         aria-labelledby="digital-record-title"
         tabIndex="-1"
-        className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-3xl w-full my-8 flex flex-col overflow-hidden outline-none print:m-0 print:border-none print:shadow-none print:max-w-none"
+        className="bg-white rounded-t-3xl sm:rounded-2xl border border-slate-200 shadow-2xl max-w-3xl w-full max-h-[92dvh] sm:max-h-[90vh] my-0 sm:my-8 flex flex-col overflow-hidden outline-none animate-in slide-in-from-bottom-6 sm:slide-in-from-bottom-0 duration-200 print:m-0 print:border-none print:shadow-none print:max-w-none"
       >
+        {/* Mobile Drag Handle Bar */}
+        <div className="sm:hidden pt-2.5 pb-1 flex justify-center shrink-0 print:hidden">
+          <span className="w-10 h-1.5 rounded-full bg-slate-300" />
+        </div>
         
         {/* Modal Header (Hidden during browser printing) */}
-        <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between shrink-0 bg-slate-50/70 print:hidden">
+        <div className="px-5 sm:px-6 py-3.5 sm:py-4 border-b border-slate-200 flex items-center justify-between shrink-0 bg-slate-50/70 print:hidden">
           <div className="flex items-center gap-2">
             <span className="font-mono text-xs font-bold px-2.5 py-0.5 rounded-md bg-indigo-100 text-indigo-700">
               DIGITAL RECORD: {workOrder.wo_code}
             </span>
-            <span className="text-xs text-slate-500 font-medium">
+            <span className="text-xs text-slate-500 font-medium hidden sm:inline">
               (ISO/IEC 17025 & ISO 9001 Compliant)
             </span>
           </div>
@@ -67,7 +71,7 @@ export const DigitalRecordModal = ({
             <button
               type="button"
               onClick={handlePrint}
-              className="h-8 inline-flex items-center gap-1.5 px-3 rounded-lg border border-slate-300 bg-white text-slate-700 text-xs font-semibold hover:bg-slate-50 transition-colors cursor-pointer shadow-2xs"
+              className="min-h-[44px] sm:min-h-[32px] h-10 sm:h-8 inline-flex items-center gap-1.5 px-3.5 sm:px-3 rounded-lg border border-slate-300 bg-white text-slate-700 text-xs font-semibold hover:bg-slate-50 transition-colors cursor-pointer shadow-2xs motion-safe:active:scale-[0.98] select-none"
             >
               <Printer size={14} />
               <span>พิมพ์เอกสาร</span>
@@ -76,7 +80,7 @@ export const DigitalRecordModal = ({
               type="button"
               onClick={requestClose}
               aria-label="ปิด"
-              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 cursor-pointer transition-colors"
+              className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 cursor-pointer transition-colors motion-safe:active:scale-[0.96] select-none"
               title="ปิด"
             >
               <X size={18} />
@@ -301,12 +305,12 @@ export const DigitalRecordModal = ({
         </div>
 
         {/* Modal Footer */}
-        <div className="px-6 py-3.5 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-xs text-slate-500 print:hidden shrink-0">
-          <span>* เอกสารนี้จัดทำขึ้นโดยระบบดิจิทัล 100% สามารถตรวจสอบย้อนหลังได้ในระบบ Audit Trail</span>
+        <div className="px-5 sm:px-6 py-3.5 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500 print:hidden shrink-0 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] sm:pb-3.5">
+          <span className="hidden sm:inline">* เอกสารนี้จัดทำขึ้นโดยระบบดิจิทัล 100% สามารถตรวจสอบย้อนหลังได้ในระบบ Audit Trail</span>
           <button
             type="button"
             onClick={requestClose}
-            className="h-8 px-4 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 font-semibold cursor-pointer"
+            className="w-full sm:w-auto min-h-[44px] h-11 sm:h-8 px-4 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 font-semibold cursor-pointer motion-safe:active:scale-[0.98] select-none text-center"
           >
             ปิดหน้าต่าง
           </button>

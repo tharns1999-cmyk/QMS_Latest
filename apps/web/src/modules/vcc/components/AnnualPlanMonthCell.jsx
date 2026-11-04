@@ -164,7 +164,7 @@ export const AnnualPlanMonthCell = ({
       }}
     >
       {/* Cell Badge Trigger */}
-      <div className="flex items-center justify-center gap-1 min-h-[26px] flex-wrap">
+      <div className="flex items-center justify-center gap-1 min-h-[44px] sm:min-h-[26px] flex-wrap">
         {hasAnyActivity ? (
           <div className="inline-flex items-center gap-1 flex-wrap justify-center">
             {/* Planned Cycle Badge */}
@@ -189,7 +189,7 @@ export const AnnualPlanMonthCell = ({
                     ? 'มีใบสั่งงานกำลังดำเนินการ'
                     : 'รอบตามแผนประจำปี'
                 }`}
-                className={`inline-flex items-center justify-center gap-0.5 rounded font-mono font-bold transition-transform cursor-pointer shadow-2xs hover:scale-105 active:scale-95 ${
+                className={`min-h-[36px] sm:min-h-0 min-w-[36px] sm:min-w-0 inline-flex items-center justify-center gap-0.5 rounded font-mono font-bold transition-transform cursor-pointer shadow-2xs hover:scale-105 motion-safe:active:scale-95 select-none ${
                   isCompact ? 'px-1 py-0.5 text-xs' : 'px-1.5 py-0.5 text-xs'
                 } ${
                   cycleWo?.nc_status === 'OPEN' || cycleWo?.result_status === 'FAIL'
@@ -252,7 +252,7 @@ export const AnnualPlanMonthCell = ({
                     setIsOpen((prev) => !prev);
                   }}
                   title={`ทำจริง ${extWo.performed_at} (${pMonth ? `จากรอบแผนเดือน ${pMonth}` : 'นอกแผน'})`}
-                  className={`inline-flex items-center justify-center gap-0.5 rounded font-mono font-bold transition-transform cursor-pointer shadow-2xs hover:scale-105 active:scale-95 ${
+                  className={`min-h-[36px] sm:min-h-0 min-w-[36px] sm:min-w-0 inline-flex items-center justify-center gap-0.5 rounded font-mono font-bold transition-transform cursor-pointer shadow-2xs hover:scale-105 motion-safe:active:scale-95 select-none ${
                     isCompact ? 'px-1 py-0.5 text-xs' : 'px-1.5 py-0.5 text-xs'
                   } ${
                     isNc
