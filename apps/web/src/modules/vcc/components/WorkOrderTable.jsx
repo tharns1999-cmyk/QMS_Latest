@@ -425,9 +425,9 @@ export const WorkOrderTable = ({
 
                 {/* Column 3: วันครบกำหนด */}
                 <td className="py-3 px-4 align-middle">
-                  <div className="font-semibold text-slate-900 text-xs sm:text-sm font-sans">
+                  <div className="font-semibold text-slate-900 text-xs sm:text-sm font-sans" title={`วันครบกำหนด: ${wo.due_date}`}>
                     <span>{formatVccDueDate(wo.due_date)}</span>
-                    <span className="text-slate-400 font-normal font-mono text-xs block sm:inline sm:ml-1">
+                    <span className="sr-only sm:not-sr-only sm:inline text-slate-400 font-normal font-mono text-xs ml-1">
                       (<span>{wo.due_date}</span>)
                     </span>
                   </div>
@@ -435,8 +435,11 @@ export const WorkOrderTable = ({
                     <div className="text-xs text-amber-900 bg-amber-50 p-1 rounded border border-amber-200 font-medium mt-1 leading-tight">
                       <div>
                         วันเดิม:{' '}
-                        <span className="line-through text-slate-400 font-sans">
-                          {formatVccDueDate(wo.original_due_date)} (<span>{wo.original_due_date}</span>)
+                        <span className="line-through text-slate-400 font-sans" title={`วันครบกำหนดเดิม: ${wo.original_due_date}`}>
+                          {formatVccDueDate(wo.original_due_date)}
+                          <span className="sr-only sm:not-sr-only sm:inline ml-1 font-mono text-xs">
+                            (<span>{wo.original_due_date}</span>)
+                          </span>
                         </span>
                       </div>
                       <div className="truncate max-w-[130px]" title={wo.reschedule_reason}>

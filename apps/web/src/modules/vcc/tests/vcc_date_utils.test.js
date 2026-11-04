@@ -4,17 +4,53 @@ import {
   formatVccDateTime,
   formatVccDueDate,
   formatVccYearLabel,
-  formatVccDueDatesList
+  formatVccDueDatesList,
+  isLeapYear,
+  isValidCalendarDate,
+  toBuddhistYear,
+  toCommonEraYear
 } from '../utils/vccDateUtils';
 
 describe('VCC Thai Date & Buddhist Year (พ.ศ.) Utilities', () => {
+  describe('isLeapYear and isValidCalendarDate', () => {
+    it('accurately identifies leap years according to standard astronomical rules', () => {
+      expect(isLeapYear(2024)).toBe(true);
+      expect(isLeapYear('2028')).toBe(true);
+      expect(isLeapYear(2000)).toBe(true); // divisible by 400
+      expect(isLeapYear(2026)).toBe(false);
+      expect(isLeapYear(2100)).toBe(false); // century not divisible by 400
+      expect(isLeapYear('invalid')).toBe(false);
+      expect(isLeapYear(null)).toBe(false);
+    });
+
+    it('rejects impossible calendar dates like 2026-02-31 and 2026-13-01', () => {
+      expect(isValidCalendarDate(2026, 2, 31)).toBe(false);
+      expect(isValidCalendarDate(2026, 13, 1)).toBe(false);
+      expect(isValidCalendarDate(2026, 0, 15)).toBe(false);
+      expect(isValidCalendarDate(2026, 4, 31)).toBe(false); // April has 30 days
+      expect(isValidCalendarDate(2026, 4, 30)).toBe(true);
+      expect(isValidCalendarDate(2026, 2, 29)).toBe(false); // 2026 is not a leap year
+      expect(isValidCalendarDate(2024, 2, 29)).toBe(true); // 2024 is a leap year
+      expect(isValidCalendarDate(2028, 2, 29)).toBe(true); // 2028 is a leap year
+      expect(isValidCalendarDate(2100, 2, 29)).toBe(false);
+    });
+  });
+
   describe('formatVccDate', () => {
-    it('formats date-only strings without timezone day-shift', () => {
+    it('formats valid date-only strings without timezone day-shift', () => {
       expect(formatVccDate('2026-03-31')).toBe('31 มี.ค. 2569');
       expect(formatVccDate('2026-12-31')).toBe('31 ธ.ค. 2569');
       expect(formatVccDate('2027-01-01')).toBe('1 ม.ค. 2570');
       // Leap year
       expect(formatVccDate('2028-02-29')).toBe('29 ก.พ. 2571');
+    });
+
+    it('returns fallback for impossible or invalid calendar dates', () => {
+      expect(formatVccDate('2026-02-31')).toBe('-');
+      expect(formatVccDate('2026-13-01')).toBe('-');
+      expect(formatVccDate('2026-02-29')).toBe('-'); // non-leap year
+      expect(formatVccDate('2026-04-31')).toBe('-'); // April has 30 days
+      expect(formatVccDate('not-a-date')).toBe('-');
     });
 
     it('supports different formatting styles', () => {
@@ -30,36 +66,79 @@ describe('VCC Thai Date & Buddhist Year (พ.ศ.) Utilities', () => {
       expect(formatted).toBe('28 ต.ค. 2569 09:00');
     });
 
+    it('handles UTC boundary crossings across midnight and across year boundaries', () => {
+      // UTC 2026-12-31 20:30 -> Bangkok 2027-01-01 03:30
+      const newYearUtc = '2026-12-31T20:30:00Z';
+      expect(formatVccDate(newYearUtc, { includeTime: true })).toBe('1 ม.ค. 2570 03:30');
+    });
+
+    it('handles timestamps without timezone as SQLite UTC contract', () => {
+      // SQLite datetime string without Z: "2026-04-15 14:30:00" -> UTC 14:30 -> Bangkok 21:30
+      expect(formatVccDate('2026-04-15 14:30:00', { includeTime: true })).toBe('15 เม.ย. 2569 21:30');
+    });
+
     it('handles falsy or invalid values gracefully', () => {
       expect(formatVccDate(null)).toBe('-');
       expect(formatVccDate('')).toBe('-');
       expect(formatVccDate('-')).toBe('-');
+      expect(formatVccDate('null')).toBe('-');
+      expect(formatVccDate('undefined')).toBe('-');
       expect(formatVccDate(undefined, { fallback: 'ไม่มีข้อมูล' })).toBe('ไม่มีข้อมูล');
     });
   });
 
   describe('formatVccDateTime', () => {
-    it('appends "น." suffix in Asia/Bangkok time', () => {
+    it('appends "น." suffix when input contains a time component', () => {
       const iso = '2026-10-28T02:30:00.000Z';
       expect(formatVccDateTime(iso)).toBe('28 ต.ค. 2569 09:30 น.');
+
+      const sqliteUtc = '2026-04-15 09:00:00';
+      expect(formatVccDateTime(sqliteUtc)).toBe('15 เม.ย. 2569 16:00 น.');
     });
 
-    it('returns fallback for falsy input', () => {
+    it('does NOT append "น." if input has NO time component (date-only)', () => {
+      expect(formatVccDateTime('2026-04-15')).toBe('15 เม.ย. 2569');
+      expect(formatVccDateTime('2026-12-31')).toBe('31 ธ.ค. 2569');
+    });
+
+    it('returns fallback for falsy or invalid input', () => {
       expect(formatVccDateTime(null)).toBe('-');
+      expect(formatVccDateTime('')).toBe('-');
+      expect(formatVccDateTime('-')).toBe('-');
+      expect(formatVccDateTime('2026-02-31')).toBe('-');
+    });
+  });
+
+  describe('Year Conversion (toBuddhistYear, toCommonEraYear, formatVccYearLabel)', () => {
+    it('safely converts year number and string without string concatenation', () => {
+      expect(toBuddhistYear(2026)).toBe(2569);
+      expect(toBuddhistYear('2026')).toBe(2569);
+      expect(toCommonEraYear(2026)).toBe(2026);
+      expect(toCommonEraYear('2026')).toBe(2026);
+    });
+
+    it('prevents double-addition when year is already in Buddhist Era (>= 2400)', () => {
+      expect(toBuddhistYear(2569)).toBe(2569); // NOT 3112
+      expect(toBuddhistYear('2569')).toBe(2569);
+      expect(toCommonEraYear(2569)).toBe(2026);
+      expect(toCommonEraYear('2569')).toBe(2026);
+    });
+
+    it('formats year label with Buddhist Era and CE indicators', () => {
+      expect(formatVccYearLabel(2026)).toBe('พ.ศ. 2569 (2026)');
+      expect(formatVccYearLabel('2027')).toBe('พ.ศ. 2570 (2027)');
+      expect(formatVccYearLabel(2569)).toBe('พ.ศ. 2569 (2026)');
+      expect(formatVccYearLabel('2570')).toBe('พ.ศ. 2570 (2027)');
+      expect(formatVccYearLabel(null)).toBe('-');
+      expect(formatVccYearLabel('')).toBe('-');
+      expect(formatVccYearLabel('invalid')).toBe('-');
     });
   });
 
   describe('formatVccDueDate', () => {
     it('formats standard work order due date', () => {
       expect(formatVccDueDate('2026-03-31')).toBe('31 มี.ค. 2569');
-    });
-  });
-
-  describe('formatVccYearLabel', () => {
-    it('formats year with Buddhist Era and CE', () => {
-      expect(formatVccYearLabel(2026)).toBe('พ.ศ. 2569 (2026)');
-      expect(formatVccYearLabel('2027')).toBe('พ.ศ. 2570 (2027)');
-      expect(formatVccYearLabel(null)).toBe('-');
+      expect(formatVccDueDate('2026-02-31')).toBe('-'); // invalid date returns fallback
     });
   });
 
@@ -75,6 +154,7 @@ describe('VCC Thai Date & Buddhist Year (พ.ศ.) Utilities', () => {
     it('handles empty or non-array inputs', () => {
       expect(formatVccDueDatesList([])).toBe('-');
       expect(formatVccDueDatesList(null)).toBe('-');
+      expect(formatVccDueDatesList(['-'])).toBe('-');
     });
   });
 });

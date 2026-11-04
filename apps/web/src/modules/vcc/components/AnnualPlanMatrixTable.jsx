@@ -550,7 +550,7 @@ export const AnnualPlanMatrixTable = ({
                         {(item.due_dates || []).length > 0 ? (
                           <>
                             <span>{formatVccDueDatesList(item.due_dates, 2)}</span>
-                            <span className="text-slate-400 font-normal font-mono text-xs block sm:inline sm:ml-1">
+                            <span className="sr-only sm:not-sr-only sm:inline text-slate-400 font-normal font-mono text-xs ml-1">
                               (
                               {(item.due_dates || []).slice(0, 2).map((d, idx) => (
                                 <React.Fragment key={d}>
