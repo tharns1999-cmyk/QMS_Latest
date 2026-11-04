@@ -46,12 +46,12 @@ describe('VCC Phase 3 — Work Orders, Execution, Review, Close & Hold/NC Contro
     expect(await screen.findByText('WO-2026-001')).toBeInTheDocument();
 
     // Switching to CLOSED tab must NOT show OPEN work orders
-    fireEvent.click(screen.getByRole('tab', { name: /ตรวจรับปิดงานแล้ว \(CLOSED\)/i }));
-    expect(await screen.findByText(/ไม่พบรายการใบสั่งงานในแท็บ CLOSED/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('tab', { name: /ปิดงานแล้ว/i }));
+    expect(await screen.findByText(/ไม่พบรายการใบสั่งงานในแท็บปิดงานแล้ว/i)).toBeInTheDocument();
     expect(screen.queryByText('WO-2026-001')).not.toBeInTheDocument();
 
     // Switch back to OPEN tab and test Reschedule mandatory reason
-    fireEvent.click(screen.getByRole('tab', { name: /เปิดงาน \/ รอบันทึกผล \(OPEN\)/i }));
+    fireEvent.click(screen.getByRole('tab', { name: /เปิดงาน \/ รอบันทึกผล/i }));
     // the action sits in the row's "more" menu: closed it is hidden from users and the keyboard, so open it first
     expect(screen.queryByRole('button', { name: /เลื่อนวันครบกำหนด/i })).not.toBeInTheDocument();
     fireEvent.click(await screen.findByRole('button', { name: /การจัดการเพิ่มเติมสำหรับ WO-2026-001/ }));
@@ -130,10 +130,10 @@ describe('VCC Phase 3 — Work Orders, Execution, Review, Close & Hold/NC Contro
     fireEvent.click(screen.getByRole('button', { name: /ส่งผลให้ผู้ตรวจรับพิจารณา/i }));
 
     // Immediately shows ON_HOLD badge
-    expect(await screen.findByText(/ON_HOLD \(ระงับใช้ชั่วคราว\)/i)).toBeInTheDocument();
+    expect(await screen.findByTestId('wo-hold-badge')).toBeInTheDocument();
 
     // Not reviewed yet (and dc4 is the L4 performer): no release is offered, and the rule refuses it anyway
-    expect(screen.queryByRole('button', { name: /ปลดระงับ ON_HOLD/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /ปลดระงับใช้/i })).not.toBeInTheDocument();
     const heldWo = getLocalWos().find((w) => w.nc_status === 'OPEN');
     await expect(releaseVccWorkOrderHold(heldWo.id, 'ประเมินแล้ว', 'สอบเทียบซ้ำผ่าน')).rejects.toThrow(/L5 ขึ้นไป/);
 
@@ -153,7 +153,7 @@ describe('VCC Phase 3 — Work Orders, Execution, Review, Close & Hold/NC Contro
     fireEvent.click(await screen.findByRole('button', { name: 'ยืนยันการดำเนินการ' }));
 
     // ... then releases the hold with both a reason and an impact assessment
-    fireEvent.click(await screen.findByRole('button', { name: /ปลดระงับ ON_HOLD/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /ปลดระงับใช้/i }));
     const confirmReleaseBtn = await screen.findByRole('button', { name: 'ยืนยันการดำเนินการ' });
     fireEvent.change(screen.getByPlaceholderText(/ระบุรายละเอียด/i), {
       target: { value: 'ตรวจสอบย้อนหลังแล้วไม่กระทบสินค้า' }
@@ -164,7 +164,7 @@ describe('VCC Phase 3 — Work Orders, Execution, Review, Close & Hold/NC Contro
     fireEvent.click(confirmReleaseBtn);
 
     await screen.findByText('WO-2026-001');
-    expect(screen.queryByText(/ON_HOLD \(ระงับใช้ชั่วคราว\)/i)).not.toBeInTheDocument();
+    expect(screen.queryByTestId('wo-hold-badge')).not.toBeInTheDocument();
     expect(getLocalWos().find((w) => w.id === heldWo.id).nc_status).toBe('RELEASED');
   });
 
@@ -185,7 +185,7 @@ describe('VCC Phase 3 — Work Orders, Execution, Review, Close & Hold/NC Contro
     expect(screen.getByText(/ผลรอตรวจซ้ำปิดงานไม่ได้/)).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText(/เลขที่ใบรับรอง/i), { target: { value: 'CERT-INC-01' } });
     fireEvent.click(screen.getByRole('button', { name: /ส่งผลให้ผู้ตรวจรับพิจารณา/i }));
-    expect(await screen.findByText(/ON_HOLD \(ระงับใช้ชั่วคราว\)/i)).toBeInTheDocument();
+    expect(await screen.findByTestId('wo-hold-badge')).toBeInTheDocument();
 
     useStore.setState({
       currentUser: { id: 'qc4', name: 'QC หัวหน้า (L4)', role: 'STAFF', department: 'QC', approval_level: 4, approvalLevel: 4, isDcc: true }

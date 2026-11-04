@@ -38,8 +38,8 @@ export default function VccMetricsStrip({ eq = {}, wo = {}, certKpi = {}, review
               / {eq.total_assets ?? 0}
             </span>
           </div>
-          <div className="mt-2 text-xs text-slate-400 font-medium truncate">
-            ชุดเครื่องมือ {eq.composite_set_count ?? 0} · ปลดระวาง {eq.retired_assets ?? 0}
+          <div className="mt-2 text-xs text-slate-400 font-medium leading-snug">
+            ชุดเครื่องมือ {eq.composite_set_count ?? 0} · ปลดออกแล้ว {eq.retired_assets ?? 0}
           </div>
         </div>
 
@@ -55,7 +55,7 @@ export default function VccMetricsStrip({ eq = {}, wo = {}, certKpi = {}, review
                 onHoldCount > 0 ? 'text-rose-700' : 'text-slate-500'
               }`}
             >
-              ระงับใช้ (ON_HOLD)
+              ระงับใช้
             </span>
             {onHoldCount > 0 && (
               <span className="relative flex h-2 w-2">
@@ -73,11 +73,11 @@ export default function VccMetricsStrip({ eq = {}, wo = {}, certKpi = {}, review
             {onHoldCount}
           </div>
           <div
-            className={`mt-2 text-xs font-medium truncate ${
+            className={`mt-2 text-xs font-medium leading-snug ${
               onHoldCount > 0 ? 'text-rose-600' : 'text-slate-400'
             }`}
           >
-            {onHoldCount > 0 ? `พบผลไม่ผ่าน (FAIL): ${wo.fail_count ?? 0} งาน` : 'ไม่มีเครื่องมือถูกระงับใช้'}
+            {onHoldCount > 0 ? `พบผลไม่ผ่าน: ${wo.fail_count ?? 0} งาน` : 'ไม่มีเครื่องมือถูกระงับใช้'}
           </div>
         </div>
 
@@ -93,7 +93,7 @@ export default function VccMetricsStrip({ eq = {}, wo = {}, certKpi = {}, review
                 overdueCount > 0 ? 'text-amber-800' : 'text-slate-500'
               }`}
             >
-              เลยกำหนด (OVERDUE)
+              เลยกำหนด
             </span>
             {overdueCount > 0 && (
               <span className="relative flex h-2 w-2">
@@ -111,14 +111,14 @@ export default function VccMetricsStrip({ eq = {}, wo = {}, certKpi = {}, review
             {overdueCount}
           </div>
           <div
-            className={`mt-2 text-xs font-medium truncate ${
+            className={`mt-2 text-xs font-medium leading-snug ${
               overdueCount > 0 ? 'text-amber-700' : 'text-slate-400'
             }`}
           >
             {rescheduledOverdueCount > 0
               ? `เลื่อนนัดแต่เลยเกณฑ์เดิม: ${rescheduledOverdueCount} งาน`
               : overdueCount > 0
-              ? `คำนวณจาก Required Due Date`
+              ? 'นับจากวันครบกำหนดเดิม'
               : 'ไม่มีงานค้างเลยกำหนด'}
           </div>
         </div>
@@ -139,8 +139,8 @@ export default function VccMetricsStrip({ eq = {}, wo = {}, certKpi = {}, review
           >
             {totalDueSoon}
           </div>
-          <div className="mt-2 text-xs text-slate-400 font-medium truncate" title={`0-7วัน: ${due0To7} | 8-15วัน: ${due8To15} | 16-30วัน: ${due16To30}`}>
-            0-7วัน: {due0To7} · 8-15วัน: {due8To15} · 16-30วัน: {due16To30}
+          <div className="mt-2 text-xs text-slate-400 font-medium leading-snug">
+            0-7 วัน: {due0To7} · 8-15 วัน: {due8To15} · 16-30 วัน: {due16To30}
           </div>
         </div>
 
@@ -193,7 +193,7 @@ export default function VccMetricsStrip({ eq = {}, wo = {}, certKpi = {}, review
               </span>
             )}
           </div>
-          <div className="mt-2 text-xs text-slate-400 font-medium truncate">
+          <div className="mt-2 text-xs text-slate-400 font-medium leading-snug">
             {certExpired > 0
               ? `หมดอายุแล้ว ${certExpired} ใบรับรอง`
               : certExpiringSoon > 0
@@ -218,8 +218,8 @@ export default function VccMetricsStrip({ eq = {}, wo = {}, certKpi = {}, review
           >
             {pendingCount}
           </div>
-          <div className="mt-2 text-xs text-slate-400 font-medium truncate">
-            SLA ตรวจรับ: {reviewSlaDays} วัน
+          <div className="mt-2 text-xs text-slate-400 font-medium leading-snug">
+            เกณฑ์ตรวจรับ: {reviewSlaDays} วัน
           </div>
         </div>
 
@@ -227,7 +227,7 @@ export default function VccMetricsStrip({ eq = {}, wo = {}, certKpi = {}, review
         <div className="p-4 sm:p-5 flex flex-col justify-between hover:bg-slate-50/50 transition-colors">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-              ปิดงานแล้ว / On-Time
+              ปิดงานแล้ว / ทันกำหนด
             </span>
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
           </div>
@@ -242,7 +242,7 @@ export default function VccMetricsStrip({ eq = {}, wo = {}, certKpi = {}, review
               ({onTimeRate}%)
             </span>
           </div>
-          <div className="mt-2 text-xs text-slate-400 font-medium truncate">
+          <div className="mt-2 text-xs text-slate-400 font-medium leading-snug">
             ทันกำหนด: {wo.on_time_count ?? 0} · ผ่าน: {wo.pass_count ?? 0}
           </div>
         </div>

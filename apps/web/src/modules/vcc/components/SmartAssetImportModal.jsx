@@ -337,7 +337,7 @@ export const SmartAssetImportModal = ({
               <div className="text-xs text-slate-500 font-medium">
                 กติกาวันครบกำหนด:{' '}
                 <strong className="text-slate-800">
-                  {plan.due_date_rule === 'START_OF_MONTH' ? 'วันที่ 1 ของเดือน' : 'วันสิ้นเดือน (END_OF_MONTH)'}
+                  {plan.due_date_rule === 'START_OF_MONTH' ? 'วันที่ 1 ของเดือน' : 'วันสิ้นเดือน'}
                 </strong>
               </div>
             </div>

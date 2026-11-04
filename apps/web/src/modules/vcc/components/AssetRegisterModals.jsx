@@ -4,6 +4,7 @@ import {
   X,
   Trash2
 } from 'lucide-react';
+import { getAssetStatusLabel } from '../utils/statusLabels';
 
 const ACTION_LABELS = {
   VCC_ASSET_CREATED: { label: 'เพิ่มเครื่องมือใหม่', badge: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
@@ -425,7 +426,7 @@ export const AssetDetailHistoryModal = ({
                         : 'bg-rose-50 text-rose-700 border-rose-200'
                     }`}
                   >
-                    {detailData.asset.status}
+                    {getAssetStatusLabel(detailData.asset.status)}
                   </span>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-xs sm:text-sm text-slate-600 pt-1.5">

@@ -168,7 +168,7 @@ export const AnnualPlanMatrixTable = ({
             <button
               type="button"
               onClick={onOpenSmartImport}
-              className="inline-flex items-center justify-center h-9 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold transition-colors cursor-pointer shadow-2xs focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+              className="inline-flex items-center justify-center h-9 px-4 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-sm font-semibold transition-colors cursor-pointer shadow-2xs focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
             >
               <span>เพิ่มเครื่องมือจากทะเบียน</span>
             </button>
@@ -525,7 +525,7 @@ export const AnnualPlanMatrixTable = ({
                       {hasHoldOrNc ? (
                         <span className="mt-1 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-rose-50 border border-rose-200 text-rose-800 font-bold text-xs">
                           <AlertTriangle size={12} className="text-rose-700 shrink-0" />
-                          <span>{item.asset_status === 'ON_HOLD' ? 'ระงับใช้งาน (ON_HOLD)' : 'พบข้อบกพร่อง / ระงับใช้ (NC)'}</span>
+                          <span>{item.asset_status === 'ON_HOLD' ? 'ระงับใช้' : 'พบข้อบกพร่อง / ระงับใช้ (NC)'}</span>
                         </span>
                       ) : plannedMonthsCount > 0 && closedPassCount >= plannedMonthsCount ? (
                         <span className="mt-1 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-800 font-bold text-xs">
@@ -717,7 +717,7 @@ export const AnnualPlanMatrixTable = ({
           </span>
           <span className="inline-flex items-center gap-1.5">
             <span className="w-2.5 h-2.5 rounded-sm bg-emerald-600 inline-block shadow-2xs" />
-            <span className="text-slate-700 font-medium">✓ (PASS): ปิดงานตรวจรับเสร็จสิ้นแล้ว</span>
+            <span className="text-slate-700 font-medium">✓: ปิดงานตรวจรับเสร็จสิ้นแล้ว</span>
           </span>
           <span className="inline-flex items-center gap-1.5">
             <span className="px-1.5 py-0.5 rounded bg-teal-100 text-teal-800 text-[10px] font-bold">ชุดเครื่องมือ</span>

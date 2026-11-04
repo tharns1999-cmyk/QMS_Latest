@@ -18,6 +18,7 @@ import {
 import { FloatingOverlay } from '../../../shared/components/ui/FloatingOverlay';
 import useStore from '../../../store/useStore';
 import { canReviewWorkOrder, canReleaseWorkOrderHold, canCancelWorkOrder } from '../utils/workOrderPermissions';
+import { WORK_ORDER_STATUS_LABELS, RESULT_STATUS_LABELS, getWorkOrderStatusLabel, getResultStatusLabel } from '../utils/statusLabels';
 
 /**
  * WorkOrderRowActions - Renders primary action and floating overflow menu for each row
@@ -51,7 +52,7 @@ const WorkOrderRowActions = ({
         <button
           type="button"
           onClick={() => onRecordResult(wo)}
-          className="h-8 inline-flex items-center gap-1.5 px-3 rounded-lg bg-purple-700 text-white font-medium hover:bg-purple-800 transition-colors cursor-pointer text-xs shadow-2xs whitespace-nowrap"
+          className="h-8 inline-flex items-center gap-1.5 px-3 rounded-lg bg-indigo-600 text-white font-medium hover:bg-indigo-700 transition-colors cursor-pointer text-xs shadow-2xs whitespace-nowrap"
         >
           <FileCheck2 size={13} />
           <span>บันทึกผลและใบรับรอง</span>
@@ -89,10 +90,10 @@ const WorkOrderRowActions = ({
         <button
           type="button"
           onClick={() => onReleaseHold(wo)}
-          className="h-8 inline-flex items-center gap-1.5 px-3 rounded-lg bg-purple-700 text-white font-medium hover:bg-purple-800 transition-colors cursor-pointer text-xs shadow-2xs whitespace-nowrap"
+          className="h-8 inline-flex items-center gap-1.5 px-3 rounded-lg bg-indigo-600 text-white font-medium hover:bg-indigo-700 transition-colors cursor-pointer text-xs shadow-2xs whitespace-nowrap"
         >
           <ShieldAlert size={13} />
-          <span>ปลดระงับ ON_HOLD (L{reqApproverLevel}+)</span>
+          <span>ปลดระงับใช้ (L{reqApproverLevel}+)</span>
         </button>
       )}
 
@@ -290,7 +291,7 @@ export const WorkOrderTable = ({
           <FileCheck2 size={24} />
         </div>
         <div className="font-bold text-slate-800 text-base">
-          ไม่พบรายการใบสั่งงานในแท็บ {activeTab}
+          ไม่พบรายการใบสั่งงานในแท็บ{getWorkOrderStatusLabel(activeTab)}
         </div>
         <p className="text-sm text-slate-500 max-w-md mx-auto">
           {isFiltered
@@ -312,7 +313,7 @@ export const WorkOrderTable = ({
             <button
               type="button"
               onClick={onOpenCreate}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-purple-700 text-white text-xs font-semibold hover:bg-purple-800 transition-colors cursor-pointer shadow-2xs"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-slate-300 bg-white text-slate-700 text-xs font-semibold hover:bg-slate-50 transition-colors cursor-pointer shadow-2xs"
             >
               <Plus size={14} />
               <span>สร้างใบสั่งงานใหม่</span>
@@ -328,7 +329,7 @@ export const WorkOrderTable = ({
       return (
         <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
           <CheckCircle2 size={12} className="text-emerald-600" />
-          <span>PASS</span>
+          <span>{RESULT_STATUS_LABELS.PASS}</span>
         </span>
       );
     }
@@ -336,14 +337,14 @@ export const WorkOrderTable = ({
       return (
         <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200">
           <XCircle size={12} className="text-rose-600" />
-          <span>FAIL</span>
+          <span>{RESULT_STATUS_LABELS.FAIL}</span>
         </span>
       );
     }
     return (
       <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600 border border-slate-200">
         <Clock size={12} />
-        <span>{resultStatus || 'PENDING'}</span>
+        <span>{getResultStatusLabel(resultStatus || 'PENDING')}</span>
       </span>
     );
   };
@@ -351,17 +352,17 @@ export const WorkOrderTable = ({
   const getStatusBadge = (status) => {
     switch (status) {
       case 'SCHEDULED':
-        return <span className="inline-block px-2.5 py-0.5 rounded-md bg-sky-50 text-sky-700 border border-sky-200 text-xs font-semibold">SCHEDULED</span>;
+        return <span className="inline-block px-2.5 py-0.5 rounded-md bg-sky-50 text-sky-700 border border-sky-200 text-xs font-semibold">{WORK_ORDER_STATUS_LABELS.SCHEDULED}</span>;
       case 'OPEN':
-        return <span className="inline-block px-2.5 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-200 text-xs font-semibold">OPEN</span>;
+        return <span className="inline-block px-2.5 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-200 text-xs font-semibold">{WORK_ORDER_STATUS_LABELS.OPEN}</span>;
       case 'PENDING_REVIEW':
-        return <span className="inline-block px-2.5 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-300 text-xs font-semibold">PENDING_REVIEW</span>;
+        return <span className="inline-block px-2.5 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-300 text-xs font-semibold">{WORK_ORDER_STATUS_LABELS.PENDING_REVIEW}</span>;
       case 'REJECTED':
-        return <span className="inline-block px-2.5 py-0.5 rounded-md bg-rose-50 text-rose-700 border border-rose-200 text-xs font-semibold">REJECTED</span>;
+        return <span className="inline-block px-2.5 py-0.5 rounded-md bg-rose-50 text-rose-700 border border-rose-200 text-xs font-semibold">{WORK_ORDER_STATUS_LABELS.REJECTED}</span>;
       case 'CLOSED':
-        return <span className="inline-block px-2.5 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-300 text-xs font-semibold">CLOSED</span>;
+        return <span className="inline-block px-2.5 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-300 text-xs font-semibold">{WORK_ORDER_STATUS_LABELS.CLOSED}</span>;
       default:
-        return <span className="inline-block px-2.5 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200 text-xs font-semibold">{status}</span>;
+        return <span className="inline-block px-2.5 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200 text-xs font-semibold">{getWorkOrderStatusLabel(status)}</span>;
     }
   };
 
@@ -483,9 +484,9 @@ export const WorkOrderTable = ({
                   <div>{getStatusBadge(wo.status)}</div>
                   {wo.nc_status === 'OPEN' && (
                     <div>
-                      <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-100 text-rose-800 border border-rose-300 text-xs font-bold">
+                      <div data-testid="wo-hold-badge" className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-100 text-rose-800 border border-rose-300 text-xs font-bold">
                         <ShieldAlert size={13} />
-                        <span>ON_HOLD (ระงับใช้ชั่วคราว)</span>
+                        <span>{WORK_ORDER_STATUS_LABELS.ON_HOLD}</span>
                       </div>
                     </div>
                   )}

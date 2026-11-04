@@ -41,7 +41,7 @@ describe('VCC Work Orders — Enterprise UI/UX Redesign Tests', () => {
     fireEvent.click(await screen.findByRole('button', { name: /ใบสั่งงานและบันทึกผล \(Work Orders\)/i }));
 
     const infoBarToggle = await screen.findByRole('button', {
-      name: /กติกาใบสั่งงานทวนสอบ\/สอบเทียบ การตรวจรับผล และการระงับใช้ \(ON_HOLD\)/i
+      name: /กติกาใบสั่งงานทวนสอบ\/สอบเทียบ การตรวจรับผล และการระงับใช้/i
     });
     expect(infoBarToggle).toHaveAttribute('aria-expanded', 'false');
 
@@ -69,13 +69,13 @@ describe('VCC Work Orders — Enterprise UI/UX Redesign Tests', () => {
     expect(tabs).toHaveLength(5);
 
     // Initial seed WO is in OPEN tab (1 item)
-    const openTab = screen.getByRole('tab', { name: /เปิดงาน \/ รอบันทึกผล \(OPEN\)/i });
+    const openTab = screen.getByRole('tab', { name: /เปิดงาน \/ รอบันทึกผล/i });
     expect(openTab).toHaveAttribute('aria-selected', 'true');
     await waitFor(() => {
       expect(openTab).toHaveTextContent('1');
     });
 
-    const closedTab = screen.getByRole('tab', { name: /ตรวจรับปิดงานแล้ว \(CLOSED\)/i });
+    const closedTab = screen.getByRole('tab', { name: /ปิดงานแล้ว/i });
     expect(closedTab).toHaveAttribute('aria-selected', 'false');
     expect(closedTab).toHaveTextContent('0');
   });
@@ -90,7 +90,7 @@ describe('VCC Work Orders — Enterprise UI/UX Redesign Tests', () => {
 
     // Search for non-existent item
     fireEvent.change(searchInput, { target: { value: 'NONEXISTENT-999' } });
-    expect(await screen.findByText(/ไม่พบรายการใบสั่งงานในแท็บ OPEN/i)).toBeInTheDocument();
+    expect(await screen.findByText(/ไม่พบรายการใบสั่งงานในแท็บเปิดงาน/i)).toBeInTheDocument();
     expect(screen.queryByText('WO-2026-001')).not.toBeInTheDocument();
 
     // Click Clear filter button

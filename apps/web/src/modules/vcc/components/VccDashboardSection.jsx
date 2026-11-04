@@ -25,19 +25,20 @@ import VccNotificationSettingsModal from './VccNotificationSettingsModal';
 import VccOnHoldTrackerTab from './VccOnHoldTrackerTab';
 import VccComplianceReportTab from './VccComplianceReportTab';
 import VccNotificationAuditTab from './VccNotificationAuditTab';
+import MobileCollapsible from './MobileCollapsible';
 
 const MAIN_TABS = [
-  { id: 'OVERVIEW', label: 'ภาพรวมและแจ้งเตือน', icon: LayoutDashboard },
-  { id: 'ON_HOLD', label: 'ติดตาม ON_HOLD & NC', icon: ShieldAlert },
-  { id: 'COMPLIANCE', label: 'รายงานตรวจสอบย้อนกลับ (Compliance Report)', icon: FileCheck2 },
-  { id: 'NOTIFICATIONS', label: 'ประวัติการแจ้งเตือน & Escalation (Audit)', icon: Bell }
+  { id: 'OVERVIEW', label: 'ภาพรวม', icon: LayoutDashboard },
+  { id: 'ON_HOLD', label: 'ระงับใช้และ NC', icon: ShieldAlert },
+  { id: 'COMPLIANCE', label: 'รายงานตรวจสอบย้อนกลับ', icon: FileCheck2 },
+  { id: 'NOTIFICATIONS', label: 'ประวัติการแจ้งเตือน', icon: Bell }
 ];
 
 const ALERT_TABS = [
-  { key: 'OVERDUE', label: 'เลยกำหนด (OVERDUE)', alertBadgeClass: 'bg-amber-100 text-amber-900' },
-  { key: 'ON_HOLD', label: 'ระงับใช้ (ON_HOLD)', alertBadgeClass: 'bg-rose-100 text-rose-900' },
-  { key: 'DUE_SOON', label: 'ใกล้ครบกำหนด (DUE_SOON)', alertBadgeClass: 'bg-blue-100 text-blue-900' },
-  { key: 'PENDING_REVIEW', label: 'รอตรวจรับ (PENDING_REVIEW)', alertBadgeClass: 'bg-indigo-100 text-indigo-900' }
+  { key: 'OVERDUE', label: 'เลยกำหนด', alertBadgeClass: 'bg-amber-100 text-amber-900' },
+  { key: 'ON_HOLD', label: 'ระงับใช้', alertBadgeClass: 'bg-rose-100 text-rose-900' },
+  { key: 'DUE_SOON', label: 'ใกล้ครบกำหนด', alertBadgeClass: 'bg-blue-100 text-blue-900' },
+  { key: 'PENDING_REVIEW', label: 'รอตรวจรับ', alertBadgeClass: 'bg-indigo-100 text-indigo-900' }
 ];
 
 const parseDaysInput = (text) =>
@@ -73,7 +74,7 @@ export default function VccDashboardSection({ onNavigateToWorkOrders }) {
   const currentYear = useMemo(() => new Date().getFullYear(), []);
   const [year, setYear] = useState(currentYear);
   const [dashboard, setDashboard] = useState(null);
-  const [alertTab, setAlertTab] = useState('OVERDUE');
+  const [pickedAlertTab, setAlertTab] = useState(null);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
   const [exportMsg, setExportMsg] = useState('');
@@ -185,13 +186,6 @@ export default function VccDashboardSection({ onNavigateToWorkOrders }) {
   const certKpi = dashboard?.certificate_kpi || {};
   const allAlerts = useMemo(() => dashboard?.alerts || [], [dashboard?.alerts]);
 
-  const filteredAlerts = useMemo(() => {
-    return allAlerts.filter((a) => {
-      if (alertTab === 'DUE_SOON') return a.alert_type === 'DUE_SOON' || a.alert_type === 'DUE_TODAY';
-      return a.alert_type === alertTab;
-    });
-  }, [allAlerts, alertTab]);
-
   const countByAlertTab = useCallback(
     (tabKey) =>
       allAlerts.filter((a) =>
@@ -199,6 +193,16 @@ export default function VccDashboardSection({ onNavigateToWorkOrders }) {
       ).length,
     [allAlerts]
   );
+
+  // Opens on the first category that has work, unless the user has picked a tab
+  const alertTab = pickedAlertTab ?? ALERT_TABS.find((t) => countByAlertTab(t.key) > 0)?.key ?? ALERT_TABS[0].key;
+
+  const filteredAlerts = useMemo(() => {
+    return allAlerts.filter((a) => {
+      if (alertTab === 'DUE_SOON') return a.alert_type === 'DUE_SOON' || a.alert_type === 'DUE_TODAY';
+      return a.alert_type === alertTab;
+    });
+  }, [allAlerts, alertTab]);
 
   return (
     <div className="space-y-6 text-slate-800" data-testid="vcc-dashboard-section">
@@ -272,10 +276,11 @@ export default function VccDashboardSection({ onNavigateToWorkOrders }) {
 
               <div className="hidden lg:flex items-center gap-1.5 text-xs text-slate-500 pl-3 border-l border-slate-200">
                 <Clock size={13} className="text-slate-400 shrink-0" />
-                <span>คำนวณ Overdue จาก Required Due Date แท้จริง ป้องกันประวัติสูญหายจากการเลื่อนกำหนด</span>
+                <span>นับเลยกำหนดจากวันครบกำหนดเดิม ป้องกันประวัติสูญหายจากการเลื่อนกำหนด</span>
               </div>
             </div>
 
+            <MobileCollapsible summary="ส่งออกรายงานและตั้งค่า">
             <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
@@ -316,6 +321,7 @@ export default function VccDashboardSection({ onNavigateToWorkOrders }) {
                 <RefreshCw size={14} className={loading ? 'animate-spin text-indigo-600' : ''} />
               </button>
             </div>
+            </MobileCollapsible>
           </div>
 
           {errorMsg && !loadFailed && (

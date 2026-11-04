@@ -12,6 +12,7 @@ import {
   Layers,
   FileCheck2
 } from 'lucide-react';
+import { getResultStatusLabel } from '../utils/statusLabels';
 
 const MAX_PDF_BYTES = 25 * 1024 * 1024; // 25 MB
 
@@ -187,9 +188,9 @@ export const RecordResultModal = ({
                     onChange={(e) => setForm({ ...form, result_status: e.target.value })}
                     className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-bold bg-white focus:outline-none focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600 shadow-2xs"
                   >
-                    <option value="PASS">ผ่านเกณฑ์ (PASS)</option>
-                    <option value="FAIL">ไม่ผ่านเกณฑ์ (FAIL — ระงับใช้ ON_HOLD ทันที)</option>
-                    <option value="INCONCLUSIVE">รอผลตรวจซ้ำ (INCONCLUSIVE — ระงับใช้จนตรวจซ้ำและปลดระงับ)</option>
+                    <option value="PASS">ผ่านเกณฑ์</option>
+                    <option value="FAIL">ไม่ผ่านเกณฑ์ (ระงับใช้ทันที)</option>
+                    <option value="INCONCLUSIVE">รอผลตรวจซ้ำ (ระงับใช้จนตรวจซ้ำและปลดระงับ)</option>
                   </select>
                 </div>
               </div>
@@ -201,7 +202,7 @@ export const RecordResultModal = ({
                     <span>แจ้งเตือนการควบคุมเครื่องมือ (Equipment Hold Policy):</span>
                   </div>
                   <p className="leading-relaxed">
-                    เมื่อบันทึกผลเป็น <span className="font-bold">{form.result_status}</span> เครื่องมือจะถูกเปลี่ยนสถานะเป็น <span className="font-bold font-mono">ON_HOLD</span> โดยอัตโนมัติ เพื่อป้องกันการนำไปใช้ในสายการผลิต จนกว่าผู้อนุมัติระดับ L5+ จะทำการประเมินผลกระทบย้อนหลัง
+                    เมื่อบันทึกผลเป็น <span className="font-bold">{getResultStatusLabel(form.result_status)}</span> เครื่องมือจะถูกเปลี่ยนสถานะเป็น <span className="font-bold">ระงับใช้</span> โดยอัตโนมัติ เพื่อป้องกันการนำไปใช้ในสายการผลิต จนกว่าผู้อนุมัติระดับ L5+ จะทำการประเมินผลกระทบย้อนหลัง
                     {form.result_status === 'INCONCLUSIVE' && ' ผลรอตรวจซ้ำปิดงานไม่ได้ ผู้ตรวจรับจะส่งกลับให้ตรวจซ้ำและบันทึกผลใหม่ในใบสั่งงานนี้'}
                   </p>
                 </div>
