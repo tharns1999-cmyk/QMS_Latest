@@ -81,6 +81,25 @@ export const AnnualPlanMatrixTable = ({
     }
     return '12_MONTHS';
   });
+  const userExplicitlySetMode = useRef(false);
+
+  const handleSetViewMode = (mode) => {
+    userExplicitlySetMode.current = true;
+    setViewMode(mode);
+  };
+
+  useEffect(() => {
+    const handleResize = () => {
+      // Auto-adapt view mode on viewport change ONLY if user hasn't explicitly chosen
+      if (!userExplicitlySetMode.current && typeof window !== 'undefined') {
+        const isMobile = window.innerWidth < 768;
+        setViewMode(isMobile ? 'QUARTERLY' : '12_MONTHS');
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
   const [density, setDensity] = useState('compact'); // default to compact per UX Round C
   const [tableSearch, setTableSearch] = useState('');
   const [inspectorItem, setInspectorItem] = useState(null);
@@ -302,7 +321,7 @@ export const AnnualPlanMatrixTable = ({
           <div className="inline-flex items-center gap-1 bg-slate-200/70 p-1 rounded-xl text-xs">
             <button
               type="button"
-              onClick={() => setViewMode('12_MONTHS')}
+              onClick={() => handleSetViewMode('12_MONTHS')}
               className={`px-2.5 py-1 rounded-lg font-semibold transition-all cursor-pointer ${
                 viewMode === '12_MONTHS'
                   ? 'bg-white text-slate-900 shadow-2xs'
@@ -313,7 +332,7 @@ export const AnnualPlanMatrixTable = ({
             </button>
             <button
               type="button"
-              onClick={() => setViewMode('QUARTERLY')}
+              onClick={() => handleSetViewMode('QUARTERLY')}
               className={`px-2.5 py-1 rounded-lg font-semibold transition-all cursor-pointer ${
                 viewMode === 'QUARTERLY'
                   ? 'bg-white text-slate-900 shadow-2xs'
@@ -431,10 +450,10 @@ export const AnnualPlanMatrixTable = ({
                   >
                     {/* Sticky Left: Asset Code & Operation Context (Flat Row, Zero Indentation) */}
                     <td className={`py-2 sm:py-2.5 px-2 sm:px-3.5 align-middle sticky left-0 z-10 shadow-[1px_0_0_0_#e2e8f0] w-[140px] min-w-[140px] max-w-[150px] sm:w-[220px] sm:min-w-[220px] md:min-w-[260px] md:w-auto ${
-                      isLogicalGroup ? 'bg-slate-50' : 'bg-white'
+                      isLogicalGroup ? 'bg-slate-50 group-hover:bg-slate-100' : 'bg-white group-hover:bg-slate-50'
                     }`}>
                       <div className="flex items-start justify-between gap-1.5 sm:gap-2">
-                        <div className="space-y-1 min-w-0">
+                        <div className="space-y-1 min-w-0 flex-1">
                           <div className="flex items-center gap-1.5 flex-wrap">
                             <button
                               type="button"
@@ -453,13 +472,15 @@ export const AnnualPlanMatrixTable = ({
 
                             {/* Clean Badges: Composite Set / Historical Frozen Group */}
                             {isCompositeSet ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-teal-50 border border-teal-200 text-teal-800 font-semibold text-xs">
-                                ชุดเครื่องมือ (Composite Set)
+                              <span className="inline-flex items-center gap-1 px-1.5 sm:px-2 py-0.5 rounded-md bg-teal-50 border border-teal-200 text-teal-800 font-semibold text-xs">
+                                <span className="hidden sm:inline">ชุดเครื่องมือ (Composite Set)</span>
+                                <span className="inline sm:hidden">ชุดเครื่องมือ</span>
                               </span>
                             ) : isLogicalGroup ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-purple-50 border border-purple-200 text-purple-900 font-bold text-xs">
+                              <span className="inline-flex items-center gap-1 px-1.5 sm:px-2 py-0.5 rounded-md bg-purple-50 border border-purple-200 text-purple-900 font-bold text-xs">
                                 <FolderTree size={12} className="text-purple-600 shrink-0" />
-                                <span>กลุ่มเครื่องมือ (Group)</span>
+                                <span className="hidden sm:inline">กลุ่มเครื่องมือ (Group)</span>
+                                <span className="inline sm:hidden">กลุ่ม</span>
                               </span>
                             ) : null}
                           </div>
@@ -475,13 +496,13 @@ export const AnnualPlanMatrixTable = ({
                           <div className="text-xs text-slate-500 flex flex-wrap items-center gap-1 sm:gap-1.5 pt-0.5">
                             <span className="font-semibold text-slate-700">{item.frequency_label || 'รายปี'}</span>
                             <span>•</span>
-                            <span className="truncate max-w-[100px] sm:max-w-none">{item.provider_name || 'ทวนสอบภายใน'}</span>
+                            <span className="truncate max-w-[80px] sm:max-w-none">{item.provider_name || 'ทวนสอบภายใน'}</span>
                             <span>•</span>
-                            <span className="text-slate-600">แผนก {item.responsible_dept || item.asset_department}</span>
+                            <span className="text-slate-600 truncate max-w-[70px] sm:max-w-none">แผนก {item.responsible_dept || item.asset_department}</span>
                             {item.asset_type && (
                               <>
                                 <span>•</span>
-                                <span className="text-slate-500 font-medium">{item.asset_type}</span>
+                                <span className="text-slate-500 font-medium truncate max-w-[60px] sm:max-w-none">{item.asset_type}</span>
                               </>
                             )}
                           </div>
@@ -493,10 +514,11 @@ export const AnnualPlanMatrixTable = ({
                                 onClick={() => onOpenGroupWorkOrderCheck(item)}
                                 title="ตรวจรหัสลูกก่อนออกใบงาน"
                                 aria-label="ตรวจรหัสลูกก่อนออกใบงาน"
-                                className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-purple-100/70 hover:bg-purple-200 border border-purple-300 text-purple-950 font-bold text-xs transition-colors cursor-pointer text-left"
+                                className="inline-flex items-center gap-1.5 px-1.5 sm:px-2 py-0.5 rounded-md bg-purple-100/70 hover:bg-purple-200 border border-purple-300 text-purple-950 font-bold text-xs transition-colors cursor-pointer text-left"
                               >
                                 <ShieldAlert size={12} className="text-purple-700 shrink-0" />
-                                <span>ตรวจรหัสลูกก่อนออกใบงาน</span>
+                                <span className="hidden sm:inline">ตรวจรหัสลูกก่อนออกใบงาน</span>
+                                <span className="inline sm:hidden">ตรวจรหัสลูก</span>
                               </button>
                             </div>
                           )}
@@ -513,9 +535,10 @@ export const AnnualPlanMatrixTable = ({
                           type="button"
                           onClick={() => setInspectorItem(item)}
                           title="ดูรายละเอียดข้อมูลเครื่องมือ"
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer mt-0.5 shrink-0 opacity-70 group-hover:opacity-100"
+                          aria-label={`ดูรายละเอียด ${item.asset_code}`}
+                          className="p-1 sm:p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer mt-0.5 shrink-0 opacity-80 group-hover:opacity-100"
                         >
-                          <Info size={15} />
+                          <Info size={14} className="shrink-0" />
                         </button>
                       </div>
                     </td>

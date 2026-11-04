@@ -205,7 +205,7 @@ export default function VccDashboardSection({ onNavigateToWorkOrders }) {
   }, [allAlerts, alertTab]);
 
   return (
-    <div className="space-y-6 text-slate-800 max-w-full overflow-x-hidden" data-testid="vcc-dashboard-section">
+    <div className="space-y-6 text-slate-800 w-full min-w-0" data-testid="vcc-dashboard-section">
       {/* 0. Top-Level Main Dashboard Navigation Tabs (Approach A) */}
       <div className="flex border-b border-slate-200 overflow-x-auto sm:overflow-visible">
         <nav className="-mb-px w-full grid grid-cols-2 gap-x-3 sm:w-auto sm:flex sm:space-x-6" aria-label="Dashboard Tabs">
@@ -432,7 +432,7 @@ export default function VccDashboardSection({ onNavigateToWorkOrders }) {
                 {filteredAlerts.map((alert) => (
                   <div
                     key={alert.dedupe_key}
-                    className="py-3 px-2.5 -mx-2.5 rounded-xl hover:bg-slate-50/80 transition-colors flex flex-col md:flex-row md:items-center md:justify-between gap-3 text-sm"
+                    className="py-3 px-2 rounded-xl hover:bg-slate-50/80 transition-colors flex flex-col md:flex-row md:items-center md:justify-between gap-3 text-sm"
                   >
                     <div className="flex items-center gap-2.5 flex-wrap">
                       <span className="font-mono font-bold text-slate-900">{alert.wo_code}</span>

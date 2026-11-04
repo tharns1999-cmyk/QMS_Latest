@@ -102,7 +102,7 @@ export default function VccPlanActualChart({ monthlyComparison = [], year = new 
 
         {/* Visual Chart Mode (12-Month Comparative Column Grid) */}
         {viewMode === 'chart' ? (
-          <div className="overflow-hidden">
+          <div>
             {/* Chart Legends */}
             <div className="flex items-center justify-end gap-3.5 mb-2 text-xs">
               <div className="flex items-center gap-1.5">
@@ -115,85 +115,90 @@ export default function VccPlanActualChart({ monthlyComparison = [], year = new 
               </div>
             </div>
 
-            {/* 12-Month Columns Container — Guaranteed No Desktop Scrollbar */}
-            <div className="relative pt-4 pb-2 px-1 border-b border-slate-200 overflow-x-auto sm:overflow-visible">
-              {/* Background Reference Gridlines */}
-              <div className="absolute inset-x-0 top-6 bottom-6 flex flex-col justify-between pointer-events-none opacity-40">
-                <div className="border-b border-dashed border-slate-200 w-full" />
-                <div className="border-b border-dashed border-slate-200 w-full" />
-                <div className="border-b border-dashed border-slate-200 w-full" />
-              </div>
+            {/* Combined Scroll Container — Month Labels and Bars Synchronized in 1:1 Lockstep */}
+            <div className="overflow-x-auto sm:overflow-visible pb-1" data-testid="vcc-chart-scroll-container">
+              <div className="min-w-[340px] sm:min-w-0">
+                {/* 12-Month Columns Container */}
+                <div className="relative pt-4 pb-2 px-1 border-b border-slate-200">
+                  {/* Background Reference Gridlines */}
+                  <div className="absolute inset-x-0 top-6 bottom-6 flex flex-col justify-between pointer-events-none opacity-40">
+                    <div className="border-b border-dashed border-slate-200 w-full" />
+                    <div className="border-b border-dashed border-slate-200 w-full" />
+                    <div className="border-b border-dashed border-slate-200 w-full" />
+                  </div>
 
-              {/* Empty Year Notice (when no plan items approved yet) */}
-              {totalPlanned === 0 && totalActual === 0 && (
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
-                  <span className="text-xs text-slate-400 font-medium bg-white/90 backdrop-blur-xs px-3 py-1 rounded-full border border-slate-200/60 shadow-2xs">
-                    ยังไม่มีเป้าหมายแผนที่ได้รับการอนุมัติในปี {year}
-                  </span>
+                  {/* Empty Year Notice (when no plan items approved yet) */}
+                  {totalPlanned === 0 && totalActual === 0 && (
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+                      <span className="text-xs text-slate-400 font-medium bg-white/90 backdrop-blur-xs px-3 py-1 rounded-full border border-slate-200/60 shadow-2xs">
+                        ยังไม่มีเป้าหมายแผนที่ได้รับการอนุมัติในปี {year}
+                      </span>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-12 gap-0.5 sm:gap-1.5 h-36 sm:h-40 items-end">
+                    {MONTH_LABELS.map((label, idx) => {
+                      const item = monthlyComparison[idx] || { planned: 0, actual_closed: 0 };
+                      const p = Number(item.planned) || 0;
+                      const a = Number(item.actual_closed) || 0;
+
+                      const pHeightPct = maxVal > 0 && p > 0 ? Math.max(8, Math.round((p / maxVal) * 100)) : 0;
+                      const aHeightPct = maxVal > 0 && a > 0 ? Math.max(8, Math.round((a / maxVal) * 100)) : 0;
+
+                      return (
+                        <div
+                          key={idx}
+                          className="flex flex-col items-center h-full justify-end group relative select-none"
+                        >
+                          {/* Hover Floating Tooltip */}
+                          <div className="opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-150 absolute -top-10 left-1/2 -translate-x-1/2 z-20 bg-slate-900 text-white text-xs font-mono px-2 py-1 rounded shadow-lg whitespace-nowrap">
+                            {label}: แผน {p} | ปิด {a}
+                          </div>
+
+                          {/* Dual Comparative Bars */}
+                          <div className="w-full flex items-end justify-center gap-0.5 sm:gap-1 h-full pb-1">
+                            {/* Plan Bar */}
+                            <div
+                              style={{ height: `${pHeightPct}%` }}
+                              className={`w-1.5 sm:w-3 rounded-t-xs transition-all duration-300 ${
+                                p > 0
+                                  ? 'bg-indigo-100 border border-indigo-200/80 group-hover:bg-indigo-200'
+                                  : 'h-0.5 bg-slate-100'
+                              }`}
+                            />
+                            {/* Actual Closed Bar */}
+                            <div
+                              style={{ height: `${aHeightPct}%` }}
+                              className={`w-1.5 sm:w-3 rounded-t-xs transition-all duration-300 ${
+                                a > 0
+                                  ? 'bg-emerald-600 group-hover:bg-emerald-500'
+                                  : 'h-0.5 bg-slate-100'
+                              }`}
+                            />
+                          </div>
+
+                          {/* Value indicator when non-zero */}
+                          <div className="text-xs font-mono font-semibold text-slate-500 h-3.5 leading-none">
+                            {a > 0 ? a : p > 0 ? p : ''}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-              )}
 
-              <div className="grid grid-cols-12 gap-0.5 sm:gap-1.5 h-36 sm:h-40 items-end min-w-[270px]">
-                {MONTH_LABELS.map((label, idx) => {
-                  const item = monthlyComparison[idx] || { planned: 0, actual_closed: 0 };
-                  const p = Number(item.planned) || 0;
-                  const a = Number(item.actual_closed) || 0;
-
-                  const pHeightPct = maxVal > 0 && p > 0 ? Math.max(8, Math.round((p / maxVal) * 100)) : 0;
-                  const aHeightPct = maxVal > 0 && a > 0 ? Math.max(8, Math.round((a / maxVal) * 100)) : 0;
-
-                  return (
+                {/* Month Labels Bar (Guaranteed in sync with column bars above) */}
+                <div className="grid grid-cols-12 gap-0.5 sm:gap-1.5 pt-1.5 px-1 text-center">
+                  {MONTH_LABELS.map((m, idx) => (
                     <div
                       key={idx}
-                      className="flex flex-col items-center h-full justify-end group relative select-none"
+                      className="text-xs font-semibold text-slate-600 truncate"
                     >
-                      {/* Hover Floating Tooltip */}
-                      <div className="opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-150 absolute -top-10 left-1/2 -translate-x-1/2 z-20 bg-slate-900 text-white text-xs font-mono px-2 py-1 rounded shadow-lg whitespace-nowrap">
-                        {label}: แผน {p} | ปิด {a}
-                      </div>
-
-                      {/* Dual Comparative Bars */}
-                      <div className="w-full flex items-end justify-center gap-0.5 sm:gap-1 h-full pb-1">
-                        {/* Plan Bar */}
-                        <div
-                          style={{ height: `${pHeightPct}%` }}
-                          className={`w-1.5 sm:w-3 rounded-t-xs transition-all duration-300 ${
-                            p > 0
-                              ? 'bg-indigo-100 border border-indigo-200/80 group-hover:bg-indigo-200'
-                              : 'h-0.5 bg-slate-100'
-                          }`}
-                        />
-                        {/* Actual Closed Bar */}
-                        <div
-                          style={{ height: `${aHeightPct}%` }}
-                          className={`w-1.5 sm:w-3 rounded-t-xs transition-all duration-300 ${
-                            a > 0
-                              ? 'bg-emerald-600 group-hover:bg-emerald-500'
-                              : 'h-0.5 bg-slate-100'
-                          }`}
-                        />
-                      </div>
-
-                      {/* Value indicator when non-zero */}
-                      <div className="text-xs font-mono font-semibold text-slate-500 h-3.5 leading-none">
-                        {a > 0 ? a : p > 0 ? p : ''}
-                      </div>
+                      {m}
                     </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Month Labels Bar */}
-            <div className="grid grid-cols-12 gap-0.5 sm:gap-1.5 pt-1.5 px-1 text-center min-w-[270px]">
-              {MONTH_LABELS.map((m, idx) => (
-                <div
-                  key={idx}
-                  className="text-xs font-semibold text-slate-600 truncate"
-                >
-                  {m}
+                  ))}
                 </div>
-              ))}
+              </div>
             </div>
           </div>
         ) : (
