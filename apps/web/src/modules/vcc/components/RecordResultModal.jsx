@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useId } from 'react';
 import {
   X,
   AlertTriangle,
@@ -19,6 +19,23 @@ import { VccDiscardConfirmDialog } from './VccDiscardConfirmDialog';
 
 const MAX_PDF_BYTES = 25 * 1024 * 1024; // 25 MB
 
+const serializeResultForm = (f) => JSON.stringify({
+  performed_at: f?.performed_at || '',
+  result_status: f?.result_status || '',
+  certificate_no: f?.certificate_no || '',
+  certificate_issue_date: f?.certificate_issue_date || '',
+  certificate_valid_until: f?.certificate_valid_until || '',
+  acceptance_criteria: f?.acceptance_criteria || '',
+  result_remarks: f?.result_remarks || '',
+  calibration_provider_name: f?.calibration_provider_name || '',
+  calibration_method: f?.calibration_method || '',
+  traceability_ref: f?.traceability_ref || '',
+  environmental_conditions: f?.environmental_conditions || '',
+  uncertainty_value: f?.uncertainty_value || '',
+  calibration_error_value: f?.calibration_error_value || '',
+  hasFile: Boolean(f?.certificate_file)
+});
+
 export const RecordResultModal = ({
   workOrder,
   onClose,
@@ -29,52 +46,27 @@ export const RecordResultModal = ({
   onSubmit,
   criteriaOptions = []
 }) => {
+  const titleId = useId();
   const [fileError, setFileError] = useState('');
   const [fileHashPreview, setFileHashPreview] = useState('');
   const [activeTab, setActiveTab] = useState('MAIN'); // 'MAIN' | 'TRACEABILITY'
 
   // Snapshot initial form state to detect true changes (dirty form)
-  const initialFormRef = useRef(null);
-  useEffect(() => {
-    if (workOrder && !initialFormRef.current) {
-      initialFormRef.current = JSON.stringify({
-        performed_at: form?.performed_at || '',
-        result_status: form?.result_status || '',
-        certificate_no: form?.certificate_no || '',
-        acceptance_criteria: form?.acceptance_criteria || '',
-        result_remarks: form?.result_remarks || '',
-        calibration_provider_name: form?.calibration_provider_name || '',
-        calibration_method: form?.calibration_method || '',
-        traceability_ref: form?.traceability_ref || '',
-        environmental_conditions: form?.environmental_conditions || '',
-        uncertainty_value: form?.uncertainty_value || '',
-        calibration_error_value: form?.calibration_error_value || '',
-        hasFile: Boolean(form?.certificate_file)
-      });
-    }
-    if (!workOrder) {
-      initialFormRef.current = null;
-    }
-  }, [workOrder]);
+  // Uses synchronous state adjustment during render (React recommended pattern) to guarantee
+  // that initialSnapshot is never stale when workOrder changes.
+  const currentWorkOrderId = workOrder?.id ?? null;
+  const [prevWorkOrderId, setPrevWorkOrderId] = useState(currentWorkOrderId);
+  const [initialSnapshot, setInitialSnapshot] = useState(() => (workOrder ? serializeResultForm(form) : null));
+
+  if (currentWorkOrderId !== prevWorkOrderId) {
+    setPrevWorkOrderId(currentWorkOrderId);
+    setInitialSnapshot(workOrder ? serializeResultForm(form) : null);
+  }
 
   const isDirty = useMemo(() => {
-    if (!initialFormRef.current) return false;
-    const current = JSON.stringify({
-      performed_at: form?.performed_at || '',
-      result_status: form?.result_status || '',
-      certificate_no: form?.certificate_no || '',
-      acceptance_criteria: form?.acceptance_criteria || '',
-      result_remarks: form?.result_remarks || '',
-      calibration_provider_name: form?.calibration_provider_name || '',
-      calibration_method: form?.calibration_method || '',
-      traceability_ref: form?.traceability_ref || '',
-      environmental_conditions: form?.environmental_conditions || '',
-      uncertainty_value: form?.uncertainty_value || '',
-      calibration_error_value: form?.calibration_error_value || '',
-      hasFile: Boolean(form?.certificate_file)
-    });
-    return current !== initialFormRef.current;
-  }, [form]);
+    if (!workOrder || !initialSnapshot) return false;
+    return serializeResultForm(form) !== initialSnapshot;
+  }, [workOrder, form, initialSnapshot]);
 
   const {
     dialogRef,
@@ -162,7 +154,7 @@ export const RecordResultModal = ({
           ref={dialogRef}
           role="dialog"
           aria-modal="true"
-          aria-labelledby="record-result-title"
+          aria-labelledby={titleId}
           tabIndex="-1"
           className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden my-auto outline-none"
         >
@@ -175,7 +167,7 @@ export const RecordResultModal = ({
                 </span>
                 <span className="text-xs text-slate-500 font-medium">({workOrder.asset_code} — {workOrder.asset_name})</span>
               </div>
-              <h2 id="record-result-title" className="text-lg font-bold text-slate-900 tracking-tight mt-1">
+              <h2 id={titleId} className="text-lg font-bold text-slate-900 tracking-tight mt-1">
                 บันทึกผลการสอบเทียบและหลักฐานดิจิทัล (Digital Record)
               </h2>
             </div>

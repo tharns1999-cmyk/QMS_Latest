@@ -23,6 +23,8 @@ export const VccDiscardConfirmDialog = ({
   const dialogRef = useRef(null);
   const cancelBtnRef = useRef(null);
   const idRef = useRef(`vcc-confirm-discard-${Math.random().toString(36).slice(2, 9)}`);
+  const titleId = `discard-dialog-title-${idRef.current}`;
+  const descId = `discard-dialog-desc-${idRef.current}`;
 
   useEffect(() => {
     if (!isOpen) return;
@@ -101,8 +103,8 @@ export const VccDiscardConfirmDialog = ({
         ref={dialogRef}
         role="alertdialog"
         aria-modal="true"
-        aria-labelledby="discard-dialog-title"
-        aria-describedby="discard-dialog-desc"
+        aria-labelledby={titleId}
+        aria-describedby={descId}
         tabIndex="-1"
         className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-sm w-full p-5 space-y-4 outline-none"
       >
@@ -111,10 +113,10 @@ export const VccDiscardConfirmDialog = ({
             <AlertTriangle size={22} className="shrink-0" />
           </div>
           <div className="space-y-1">
-            <h3 id="discard-dialog-title" className="text-base font-bold text-slate-900 tracking-tight">
+            <h3 id={titleId} className="text-base font-bold text-slate-900 tracking-tight">
               {title}
             </h3>
-            <p id="discard-dialog-desc" className="text-xs text-slate-600 leading-relaxed">
+            <p id={descId} className="text-xs text-slate-600 leading-relaxed">
               {message}
             </p>
           </div>

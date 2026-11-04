@@ -1,8 +1,19 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useId } from 'react';
 import { AlertTriangle, Trash2, X } from 'lucide-react';
 import { formatVccDueDate } from '../utils/vccDateUtils';
 import { useVccModalAccessibility } from '../hooks/useVccModalAccessibility';
 import { VccDiscardConfirmDialog } from './VccDiscardConfirmDialog';
+
+const serializeCreateForm = (f) => JSON.stringify({
+  mode: f?.mode || 'ADHOC',
+  plan_id: f?.plan_id || '',
+  plan_item_id: f?.plan_item_id || '',
+  planned_month: f?.planned_month || '',
+  child_asset_id: f?.child_asset_id || '',
+  asset_id: f?.asset_id || '',
+  provider_name: f?.provider_name || '',
+  due_date: f?.due_date || ''
+});
 
 export const CreateWorkOrderModal = ({
   open,
@@ -17,9 +28,20 @@ export const CreateWorkOrderModal = ({
   individualAssets,
   providers
 }) => {
+  const titleId = useId();
+  const isCurrentlyOpen = Boolean(open);
+  const [prevOpen, setPrevOpen] = useState(isCurrentlyOpen);
+  const [initialSnapshot, setInitialSnapshot] = useState(() => (isCurrentlyOpen && form ? serializeCreateForm(form) : null));
+
+  if (isCurrentlyOpen !== prevOpen) {
+    setPrevOpen(isCurrentlyOpen);
+    setInitialSnapshot(isCurrentlyOpen && form ? serializeCreateForm(form) : null);
+  }
+
   const isDirty = useMemo(() => {
-    return Boolean(form?.plan_id || form?.plan_item_id || form?.asset_id || form?.due_date || (form?.mode === 'ADHOC' && form?.provider_id));
-  }, [form]);
+    if (!isCurrentlyOpen || !initialSnapshot || !form) return false;
+    return serializeCreateForm(form) !== initialSnapshot;
+  }, [isCurrentlyOpen, form, initialSnapshot]);
 
   const {
     dialogRef,
@@ -55,12 +77,12 @@ export const CreateWorkOrderModal = ({
           ref={dialogRef}
           role="dialog"
           aria-modal="true"
-          aria-labelledby="create-wo-title"
+          aria-labelledby={titleId}
           tabIndex="-1"
           className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-lg w-full overflow-hidden my-auto outline-none"
         >
           <div className="px-6 py-4.5 border-b border-slate-200 flex items-center justify-between">
-            <h2 id="create-wo-title" className="text-xl font-bold text-slate-900 tracking-tight">สร้างใบสั่งงานทวนสอบ/สอบเทียบ (Work Order)</h2>
+            <h2 id={titleId} className="text-xl font-bold text-slate-900 tracking-tight">สร้างใบสั่งงานทวนสอบ/สอบเทียบ (Work Order)</h2>
             <button
               type="button"
               onClick={requestClose}

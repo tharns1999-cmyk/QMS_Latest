@@ -3,6 +3,9 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { vccDialogStack } from '../hooks/useVccModalAccessibility';
 import { VccModalShell } from '../components/VccModalShell';
+import { RecordResultModal } from '../components/RecordResultModal';
+import { CreateWorkOrderModal } from '../components/WorkOrderModals';
+import VccNotificationSettingsModal from '../components/VccNotificationSettingsModal';
 
 // Test component simulating a real-world enterprise form modal
 const TestFormModal = ({ isOpen, onClose, isDirty = false }) => {
@@ -57,6 +60,98 @@ const Harness = ({ isDirty = false }) => {
         isDirty={isDirty}
       />
     </div>
+  );
+};
+
+// Real Form Harnesses for Integration Tests
+const RealRecordResultHarness = ({ initialWorkOrder, onClose }) => {
+  const [workOrder, setWorkOrder] = useState(initialWorkOrder);
+  const [form, setForm] = useState({
+    performed_at: '2026-11-04',
+    result_status: 'PASS',
+    certificate_no: 'CERT-001',
+    certificate_issue_date: '2026-11-04',
+    certificate_valid_until: '2027-11-04',
+    acceptance_criteria: '±0.5 mm',
+    result_remarks: '',
+    calibration_provider_name: 'NIMT',
+    calibration_method: 'WI-01',
+    traceability_ref: 'STD-01',
+    environmental_conditions: '23C, 50%RH',
+    uncertainty_value: '±0.01',
+    calibration_error_value: '0.00',
+    certificate_file: null
+  });
+
+  return (
+    <div>
+      <button
+        data-testid="switch-wo-btn"
+        onClick={() => setWorkOrder({ id: 'wo-2', wo_code: 'WO-2026-0002', asset_code: 'ASSET-2', asset_name: 'Micrometer' })}
+      >
+        Switch WO
+      </button>
+      <RecordResultModal
+        workOrder={workOrder}
+        onClose={onClose}
+        form={form}
+        setForm={setForm}
+        onSubmit={(e) => { e.preventDefault(); }}
+        criteriaOptions={['±0.5 mm', '±1.0 mm']}
+      />
+    </div>
+  );
+};
+
+const RealCreateWorkOrderHarness = ({ onClose }) => {
+  const [form, setForm] = useState({
+    mode: 'PLAN',
+    plan_id: 'plan-1',
+    plan_item_id: 'item-1',
+    planned_month: 3,
+    child_asset_id: '',
+    asset_id: 'asset-1',
+    provider_name: 'Internal DCC',
+    due_date: '2026-12-01'
+  });
+
+  return (
+    <CreateWorkOrderModal
+      open={true}
+      onClose={onClose}
+      form={form}
+      setForm={setForm}
+      approvedPlans={[{ id: 'plan-1', plan_year: 2026, department: 'QA', title: 'Plan QA' }]}
+      planItems={[{ id: 'item-1', asset_id: 'asset-1', asset_code: 'V-01', asset_name: 'Vernier', planned_months: [3] }]}
+      individualAssets={[{ id: 'asset-1', asset_code: 'V-01', name: 'Vernier' }]}
+      providers={['Internal DCC', 'External Lab']}
+    />
+  );
+};
+
+const RealNotificationSettingsHarness = ({ onClose }) => {
+  const [monthlyDueSoonText, setMonthlyDueSoonText] = useState('7, 3');
+  const [monthlyOverdueText, setMonthlyOverdueText] = useState('1, 3');
+  const [annualDueSoonText, setAnnualDueSoonText] = useState('30, 14');
+  const [annualOverdueText, setAnnualOverdueText] = useState('1, 7');
+  const [reviewSlaDays, setReviewSlaDays] = useState(3);
+
+  return (
+    <VccNotificationSettingsModal
+      isOpen={true}
+      onClose={onClose}
+      onSubmit={(e) => { e.preventDefault(); }}
+      monthlyDueSoonText={monthlyDueSoonText}
+      setMonthlyDueSoonText={setMonthlyDueSoonText}
+      monthlyOverdueText={monthlyOverdueText}
+      setMonthlyOverdueText={setMonthlyOverdueText}
+      annualDueSoonText={annualDueSoonText}
+      setAnnualDueSoonText={setAnnualDueSoonText}
+      annualOverdueText={annualOverdueText}
+      setAnnualOverdueText={setAnnualOverdueText}
+      reviewSlaDays={reviewSlaDays}
+      setReviewSlaDays={setReviewSlaDays}
+    />
   );
 };
 
@@ -209,5 +304,141 @@ describe('VCC UX/UI Round D2 — Enterprise Modal Accessibility Tests', () => {
     await waitFor(() => {
       expect(document.activeElement).toBe(openBtn);
     });
+  });
+
+  /* ─────────────────────────────────────────────────────────────────────────────
+   * REAL FORM INTEGRATION & REGRESSION TESTS
+   * ───────────────────────────────────────────────────────────────────────────── */
+
+  it('10. RealForm_RecordResultModal: Clean initial state dismisses immediately on Escape', () => {
+    const handleClose = vi.fn();
+    const wo = { id: 'wo-1', wo_code: 'WO-2026-0001', asset_code: 'ASSET-1', asset_name: 'Caliper' };
+    render(<RealRecordResultHarness initialWorkOrder={wo} onClose={handleClose} />);
+
+    expect(screen.getByRole('dialog')).toBeTruthy();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(handleClose).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+  });
+
+  it('11. RealForm_RecordResultModal: Editing certificate_no triggers dirty form protection on Escape and Backdrop', () => {
+    const handleClose = vi.fn();
+    const wo = { id: 'wo-1', wo_code: 'WO-2026-0001', asset_code: 'ASSET-1', asset_name: 'Caliper' };
+    render(<RealRecordResultHarness initialWorkOrder={wo} onClose={handleClose} />);
+
+    const certInput = screen.getByLabelText('เลขที่ใบรับรอง');
+    fireEvent.change(certInput, { target: { value: 'CERT-MODIFIED-999' } });
+
+    // Press Escape -> Should be blocked and open alertdialog
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(handleClose).not.toHaveBeenCalled();
+
+    const alertDialog = screen.getByRole('alertdialog');
+    expect(alertDialog).toBeTruthy();
+    expect(screen.getByText('ข้อมูลผลการสอบเทียบยังไม่ได้บันทึก')).toBeTruthy();
+
+    // Clicking "แก้ไขต่อ" cancels discard and preserves form
+    const cancelDiscardBtn = screen.getByRole('button', { name: /แก้ไขต่อ/i });
+    fireEvent.click(cancelDiscardBtn);
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(handleClose).not.toHaveBeenCalled();
+
+    // Clicking close "X" also triggers discard prompt
+    fireEvent.click(screen.getByLabelText('ปิดหน้าต่าง'));
+    expect(screen.getByRole('alertdialog')).toBeTruthy();
+
+    // Confirm discard
+    const confirmBtn = screen.getByRole('button', { name: /ละทิ้งข้อมูลและปิด/i });
+    fireEvent.click(confirmBtn);
+    expect(handleClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('12. RealForm_CreateWorkOrderModal: Initial state with prefilled data is NOT dirty; closes cleanly', () => {
+    const handleClose = vi.fn();
+    render(<RealCreateWorkOrderHarness onClose={handleClose} />);
+
+    expect(screen.getByRole('dialog')).toBeTruthy();
+    // Clean escape without modifying anything
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(handleClose).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+  });
+
+  it('13. RealForm_CreateWorkOrderModal: Modifying form values activates discard prompt', () => {
+    const handleClose = vi.fn();
+    render(<RealCreateWorkOrderHarness onClose={handleClose} />);
+
+    // Switch mode to ADHOC
+    const adhocRadio = screen.getByLabelText(/ใบสั่งงานนอกแผน/i);
+    fireEvent.click(adhocRadio);
+
+    // Try closing via Cancel button
+    const cancelBtn = screen.getByRole('button', { name: 'ยกเลิก' });
+    fireEvent.click(cancelBtn);
+
+    expect(handleClose).not.toHaveBeenCalled();
+    const alertDialog = screen.getByRole('alertdialog');
+    expect(alertDialog).toBeTruthy();
+    expect(screen.getByText('ข้อมูลใบสั่งงานยังไม่ได้บันทึก')).toBeTruthy();
+
+    // Confirm discard
+    fireEvent.click(screen.getByRole('button', { name: /ละทิ้งข้อมูลและปิด/i }));
+    expect(handleClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('14. RealForm_VccNotificationSettingsModal: Clean settings close cleanly; edited values trigger discard prompt', () => {
+    const handleClose = vi.fn();
+    render(<RealNotificationSettingsHarness onClose={handleClose} />);
+
+    const dialog = screen.getByRole('dialog');
+    expect(dialog).toBeTruthy();
+
+    // Edit monthly due soon field
+    const input = screen.getByLabelText('งานรายเดือน แจ้งเตือนล่วงหน้า');
+    fireEvent.change(input, { target: { value: '14, 7, 3' } });
+
+    // Press Escape
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(handleClose).not.toHaveBeenCalled();
+
+    // Prompt shown
+    expect(screen.getByRole('alertdialog')).toBeTruthy();
+    expect(screen.getByText('การตั้งค่าการแจ้งเตือนยังไม่ได้บันทึก')).toBeTruthy();
+
+    // Click "แก้ไขต่อ"
+    fireEvent.click(screen.getByRole('button', { name: /แก้ไขต่อ/i }));
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(handleClose).not.toHaveBeenCalled();
+
+    // Click cancel button on form
+    fireEvent.click(screen.getByRole('button', { name: 'ยกเลิก' }));
+    expect(screen.getByRole('alertdialog')).toBeTruthy();
+
+    // Confirm discard
+    fireEvent.click(screen.getByRole('button', { name: /ละทิ้งข้อมูลและปิด/i }));
+    expect(handleClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('15. RealForm_RecordResultModal: Switching workOrder resets dirty state snapshot', async () => {
+    const handleClose = vi.fn();
+    const wo1 = { id: 'wo-1', wo_code: 'WO-2026-0001', asset_code: 'ASSET-1', asset_name: 'Caliper' };
+    render(<RealRecordResultHarness initialWorkOrder={wo1} onClose={handleClose} />);
+
+    // Modify certificate_no on WO 1
+    const certInput = screen.getByLabelText('เลขที่ใบรับรอง');
+    fireEvent.change(certInput, { target: { value: 'CERT-MODIFIED' } });
+
+    // Switch to WO 2 and reset form as done in real page
+    fireEvent.click(screen.getByTestId('switch-wo-btn'));
+
+    // Should now show WO-2026-0002 header and snapshot is fresh for WO 2
+    await waitFor(() => {
+      expect(screen.getByText('WO-2026-0002')).toBeTruthy();
+    });
+
+    // Escape should now close without prompt because snapshot re-initialized for WO 2
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(handleClose).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('alertdialog')).toBeNull();
   });
 });
