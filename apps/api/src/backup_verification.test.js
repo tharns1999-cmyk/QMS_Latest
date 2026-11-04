@@ -14,15 +14,16 @@ describe('Backup Verification - Migration Integrity Suite', () => {
     .filter((f) => f.endsWith('.sql'))
     .sort();
 
-  it('verifies that the repository currently contains 39 migration files', () => {
-    expect(repoMigrations.length).toBe(39);
+  it('verifies that the repository contains at least 39 baseline migrations in valid sequence', () => {
+    expect(repoMigrations.length).toBeGreaterThanOrEqual(39);
     expect(repoMigrations[0]).toBe('0001_users_and_audit.sql');
     expect(repoMigrations[25]).toBe('0026_vcc_work_orders.sql');
     expect(repoMigrations[38]).toBe('0039_vcc_asset_hold_started_at.sql');
   });
 
   describe('verifyMigrationsList logic', () => {
-    it('passes when database has the exact complete set of migrations (39/39)', () => {
+    it('passes when database has the exact complete set of repository migrations', () => {
+      const total = repoMigrations.length;
       const dbEntries = repoMigrations.map((name, idx) => ({
         id: idx + 1,
         name
@@ -33,11 +34,14 @@ describe('Backup Verification - Migration Integrity Suite', () => {
       expect(res.isComplete).toBe(true);
       expect(res.isPrefix).toBe(true);
       expect(res.problems).toEqual([]);
-      expect(res.appliedCount).toBe(39);
-      expect(res.summary).toContain('39/39 (complete: 0001 to 0039_vcc_asset_hold_started_at.sql)');
+      expect(res.appliedCount).toBe(total);
+      expect(res.pendingCount).toBe(0);
+      expect(res.warning).toBeNull();
+      expect(res.summary).toContain(`${total}/${total} (complete: 0001 to ${repoMigrations[total - 1]})`);
     });
 
-    it('passes when database has a valid sequential prefix of migrations (e.g. 26/39 as on current remote)', () => {
+    it('passes and emits a clear warning when database has a valid sequential prefix (e.g. 26 deployed)', () => {
+      const total = repoMigrations.length;
       const dbEntries = repoMigrations.slice(0, 26).map((name, idx) => ({
         id: idx + 1,
         name
@@ -49,11 +53,15 @@ describe('Backup Verification - Migration Integrity Suite', () => {
       expect(res.isPrefix).toBe(true);
       expect(res.problems).toEqual([]);
       expect(res.appliedCount).toBe(26);
-      expect(res.summary).toContain('26/39 (valid prefix: 0001 to 0026_vcc_work_orders.sql)');
+      expect(res.pendingCount).toBe(total - 26);
+      expect(res.warning).toContain(`database is at migration prefix 26/${total}`);
+      expect(res.warning).toContain(`${total - 26} pending migration(s) in repository`);
+      expect(res.summary).toContain(`26/${total} (valid prefix: 0001 to 0026_vcc_work_orders.sql)`);
     });
 
-    it('passes for any valid prefix from 1 up to 39', () => {
-      for (const count of [1, 5, 10, 20, 26, 35, 39]) {
+    it('passes and warns for any valid prefix from 1 up to repoMigrations.length', () => {
+      const total = repoMigrations.length;
+      for (const count of [1, 5, 10, 20, 26, Math.min(35, total), total]) {
         const dbEntries = repoMigrations.slice(0, count).map((name, idx) => ({
           id: idx + 1,
           name
@@ -61,6 +69,13 @@ describe('Backup Verification - Migration Integrity Suite', () => {
         const res = verifyMigrationsList(dbEntries, repoMigrations);
         expect(res.isValid).toBe(true);
         expect(res.appliedCount).toBe(count);
+        if (count < total) {
+          expect(res.warning).not.toBeNull();
+          expect(res.pendingCount).toBe(total - count);
+        } else {
+          expect(res.warning).toBeNull();
+          expect(res.pendingCount).toBe(0);
+        }
       }
     });
 
@@ -76,12 +91,13 @@ describe('Backup Verification - Migration Integrity Suite', () => {
 
     it('fails when database records more migrations than the repository contains', () => {
       const dbEntries = repoMigrations.map((name, idx) => ({ id: idx + 1, name }));
-      dbEntries.push({ id: 40, name: '0040_future_uncommitted_migration.sql' });
+      const excessId = repoMigrations.length + 1;
+      dbEntries.push({ id: excessId, name: '0099_future_uncommitted_migration.sql' });
 
       const res = verifyMigrationsList(dbEntries, repoMigrations);
       expect(res.isValid).toBe(false);
-      expect(res.problems.some((p) => p.includes('database has 40 migrations recorded, but repository only has 39'))).toBe(true);
-      expect(res.problems.some((p) => p.includes('unknown migration "0040_future_uncommitted_migration.sql" at position 40 exceeds repository migrations'))).toBe(true);
+      expect(res.problems.some((p) => p.includes(`database has ${excessId} migrations recorded, but repository only has ${repoMigrations.length}`))).toBe(true);
+      expect(res.problems.some((p) => p.includes('unknown migration "0099_future_uncommitted_migration.sql" at position'))).toBe(true);
     });
 
     it('fails when an unknown or rogue migration name is recorded', () => {
@@ -204,6 +220,23 @@ describe('Backup Verification - Migration Integrity Suite', () => {
         expect(res.migrationCheck.isValid).toBe(true);
         expect(res.migrationCheck.isPrefix).toBe(true);
         expect(res.migrationCheck.appliedCount).toBe(26);
+        expect(res.migrationCheck.warning).not.toBeNull();
+      } finally {
+        unlinkSync(dumpPath);
+      }
+    });
+
+    it('proves runVerify fails under strictMigrations when database is behind repository', () => {
+      const dumpPath = join(tmpdir(), `test-dump-strict-fail-${Date.now()}.sql`);
+      writeFileSync(dumpPath, buildSqlDump({ migrationCount: 26 }));
+
+      try {
+        expect(() => {
+          runVerify(dumpPath, {
+            migrationsDir: join(__dirname, '../migrations'),
+            strictMigrations: true
+          });
+        }).toThrow(/strict migration check failed/);
       } finally {
         unlinkSync(dumpPath);
       }

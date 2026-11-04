@@ -88,6 +88,13 @@ export function verifyMigrationsList(recordedMigrations, availableMigrationFiles
 
   const isPrefix = problems.length === 0 && appliedCount <= expectedList.length;
   const isComplete = problems.length === 0 && appliedCount === expectedList.length;
+  const pendingCount = Math.max(0, expectedList.length - appliedCount);
+  const pendingMigrations = pendingCount > 0 ? expectedList.slice(appliedCount) : [];
+
+  let warning = null;
+  if (isPrefix && !isComplete) {
+    warning = `database is at migration prefix ${appliedCount}/${expectedList.length}; ${pendingCount} pending migration(s) in repository (${pendingMigrations[0]} to ${pendingMigrations[pendingMigrations.length - 1]})`;
+  }
 
   let summary = '';
   if (isComplete) {
@@ -103,8 +110,11 @@ export function verifyMigrationsList(recordedMigrations, availableMigrationFiles
     problems,
     appliedCount,
     totalAvailable: expectedList.length,
+    pendingCount,
+    pendingMigrations,
     isComplete,
     isPrefix,
+    warning,
     summary
   };
 }
@@ -131,6 +141,15 @@ export function runVerify(dumpFile, options = {}) {
     const migrationCheck = verifyMigrationsList(migrations, availableFiles);
     if (!migrationCheck.isValid) {
       problems.push(...migrationCheck.problems);
+    } else if (options.strictMigrations && !migrationCheck.isComplete) {
+      problems.push(`strict migration check failed: database is at ${migrationCheck.appliedCount}/${migrationCheck.totalAvailable} (${migrationCheck.pendingCount} pending migrations)`);
+    }
+
+    if (migrationCheck.warning) {
+      if (process.env.CI) {
+        console.log(`::warning::${migrationCheck.warning}`);
+      }
+      console.warn(`[WARN] ${migrationCheck.warning}`);
     }
 
     const min = options.min;
@@ -168,7 +187,8 @@ if (isMain) {
     } else if (command === 'verify' && args[0]) {
       const min = option('--min') && JSON.parse(readFileSync(option('--min'), 'utf8'));
       const max = option('--max') && JSON.parse(readFileSync(option('--max'), 'utf8'));
-      runVerify(args[0], { min, max });
+      const strictMigrations = args.includes('--strict-migrations');
+      runVerify(args[0], { min, max, strictMigrations });
     } else {
       console.error('Usage: node scripts/backup-tools.js counts [--remote] | verify <dump.sql> [--min a.json] [--max b.json]');
       process.exitCode = 2;
