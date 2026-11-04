@@ -2,6 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { AlertTriangle, CheckCircle2, FolderTree, Trash2, X, Send, UserCheck, ShieldCheck } from 'lucide-react';
 import { computeDueDates, computeDueDateForMonth } from '../api/vccPlanApi';
 import { formatVccDateTime, formatVccDueDatesList } from '../utils/vccDateUtils';
+import { useVccModalAccessibility } from '../hooks/useVccModalAccessibility';
+import { VccDiscardConfirmDialog } from './VccDiscardConfirmDialog';
 
 const PLAN_AUDIT_LABELS = {
   VCC_PLAN_CREATED: { label: 'สร้างแผนประจำปีใหม่', badge: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
@@ -27,6 +29,35 @@ export const PlanFormModal = ({
   onSubmit,
   activeDepartments
 }) => {
+  const isDirty = useMemo(() => {
+    if (!form) return false;
+    if (editingPlan) {
+      return (
+        form.department !== editingPlan.department ||
+        form.document_code !== editingPlan.document_code ||
+        form.revision !== editingPlan.revision ||
+        form.title !== editingPlan.title ||
+        form.due_date_rule !== editingPlan.due_date_rule
+      );
+    }
+    return Boolean(form.plan_year || form.department || form.document_code || form.title);
+  }, [form, editingPlan]);
+
+  const {
+    dialogRef,
+    requestClose,
+    handleBackdropClick,
+    showConfirmDiscard,
+    confirmDiscard,
+    cancelDiscard
+  } = useVccModalAccessibility({
+    isOpen: open,
+    onClose,
+    isDirty,
+    discardTitle: 'ข้อมูลแผนประจำปียังไม่ได้บันทึก',
+    discardMessage: 'คุณมีข้อมูลแผนประจำปีที่กำลังแก้ไข ต้องการยกเลิกและปิดหน้าต่างใช่หรือไม่?'
+  });
+
   if (!open) return null;
 
   const previewYear = form.plan_year && Number.isInteger(Number(form.plan_year)) && Number(form.plan_year) >= 2000 && Number(form.plan_year) <= 2100
@@ -36,16 +67,32 @@ export const PlanFormModal = ({
   const startOfMonthPreview = computeDueDateForMonth(previewYear, 2, 'START_OF_MONTH');
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-lg w-full overflow-hidden">
-        <div className="px-6 py-4.5 border-b border-slate-200 flex items-center justify-between">
-          <h2 className="text-xl font-bold text-slate-900 tracking-tight">
-            {editingPlan ? `แก้ไขหัวแผนประจำปี ${editingPlan.plan_year}` : 'สร้างแผนการทวนสอบเครื่องมือประจำปีใหม่'}
-          </h2>
-          <button type="button" onClick={onClose} className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer">
-            <X size={20} />
-          </button>
-        </div>
+    <>
+      <div
+        className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-150"
+        onClick={handleBackdropClick}
+      >
+        <div
+          ref={dialogRef}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="plan-form-modal-title"
+          tabIndex="-1"
+          className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-lg w-full overflow-hidden my-auto outline-none"
+        >
+          <div className="px-6 py-4.5 border-b border-slate-200 flex items-center justify-between">
+            <h2 id="plan-form-modal-title" className="text-xl font-bold text-slate-900 tracking-tight">
+              {editingPlan ? `แก้ไขหัวแผนประจำปี ${editingPlan.plan_year}` : 'สร้างแผนการทวนสอบเครื่องมือประจำปีใหม่'}
+            </h2>
+            <button
+              type="button"
+              onClick={requestClose}
+              aria-label="ปิดหน้าต่าง"
+              className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
+            >
+              <X size={20} />
+            </button>
+          </div>
 
         <form onSubmit={onSubmit} className="p-6 space-y-4">
           {error && (
@@ -164,7 +211,11 @@ export const PlanFormModal = ({
           </div>
 
           <div className="pt-2 flex justify-end gap-2.5">
-            <button type="button" onClick={onClose} className="h-10 px-4 rounded-xl border border-slate-300 text-sm font-semibold hover:bg-slate-50 transition-colors cursor-pointer">
+            <button
+              type="button"
+              onClick={requestClose}
+              className="h-10 px-4 rounded-xl border border-slate-300 text-sm font-semibold hover:bg-slate-50 transition-colors cursor-pointer"
+            >
               ยกเลิก
             </button>
             <button
@@ -178,61 +229,117 @@ export const PlanFormModal = ({
         </form>
       </div>
     </div>
+
+    <VccDiscardConfirmDialog
+      isOpen={showConfirmDiscard}
+      onConfirm={confirmDiscard}
+      onCancel={cancelDiscard}
+      title="ข้อมูลแผนประจำปียังไม่ได้บันทึก"
+      message="คุณมีข้อมูลแผนประจำปีที่กำลังแก้ไข ต้องการยกเลิกและปิดหน้าต่างใช่หรือไม่?"
+    />
+  </>
   );
 };
 
 export const PlanRevisionModal = ({ open, onClose, plan, reason, setReason, error, saving, onSubmit }) => {
+  const isDirty = Boolean(reason?.trim());
+
+  const {
+    dialogRef,
+    requestClose,
+    handleBackdropClick,
+    showConfirmDiscard,
+    confirmDiscard,
+    cancelDiscard
+  } = useVccModalAccessibility({
+    isOpen: open,
+    onClose,
+    isDirty,
+    discardTitle: 'ข้อมูลฉบับแก้ไขยังไม่ได้บันทึก',
+    discardMessage: 'คุณมีข้อมูลเหตุผลการแก้ไขที่กำลังกรอก ต้องการยกเลิกและปิดหน้าต่างใช่หรือไม่?'
+  });
+
   if (!open || !plan) return null;
+
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-lg w-full overflow-hidden">
-        <div className="px-6 py-4.5 border-b border-slate-200 flex items-center justify-between">
-          <h2 className="text-xl font-bold text-slate-900 tracking-tight">
-            สร้างแผนฉบับแก้ไข (Revision) ของแผนปี {plan.plan_year}
-          </h2>
-          <button type="button" onClick={onClose} aria-label="ปิด" className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer">
-            <X size={20} />
-          </button>
-        </div>
-        <form onSubmit={onSubmit} className="p-6 space-y-4">
-          {error && (
-            <div role="alert" className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-sm font-semibold flex items-center gap-2">
-              <AlertTriangle size={17} className="text-rose-600 shrink-0" />
-              <span>{error}</span>
-            </div>
-          )}
-          <p className="text-sm text-slate-600 font-medium">
-            ระบบจะคัดลอกแผน {plan.department} Rev.{plan.revision} เป็นฉบับร่างใหม่ แผนเดิมยังใช้งานต่อจนกว่าฉบับใหม่จะผ่านการทบทวนและอนุมัติ
-          </p>
-          <div>
-            <label htmlFor="plan_revision_reason" className="block text-sm font-semibold text-slate-700 mb-1.5">
-              เหตุผลการขอปรับปรุงแผน <span className="text-rose-600">*</span>
-            </label>
-            <textarea
-              id="plan_revision_reason"
-              rows={3}
-              required
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              placeholder="เช่น เพิ่มเครื่องมือใหม่เข้าแผน / เปลี่ยนรอบทวนสอบ..."
-              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-medium focus:outline-none focus:border-indigo-600"
-            />
-          </div>
-          <div className="pt-2 flex items-center justify-end gap-2.5">
-            <button type="button" onClick={onClose} className="h-10 px-4 rounded-xl border border-slate-300 text-slate-700 text-sm font-semibold hover:bg-slate-50 cursor-pointer">
-              ยกเลิก
-            </button>
+    <>
+      <div
+        className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-150"
+        onClick={handleBackdropClick}
+      >
+        <div
+          ref={dialogRef}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="plan-revision-modal-title"
+          tabIndex="-1"
+          className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-lg w-full overflow-hidden my-auto outline-none"
+        >
+          <div className="px-6 py-4.5 border-b border-slate-200 flex items-center justify-between">
+            <h2 id="plan-revision-modal-title" className="text-xl font-bold text-slate-900 tracking-tight">
+              สร้างแผนฉบับแก้ไข (Revision) ของแผนปี {plan.plan_year}
+            </h2>
             <button
-              type="submit"
-              disabled={saving || !reason.trim()}
-              className="h-10 px-5 rounded-xl bg-indigo-600 text-white text-sm font-bold hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
+              type="button"
+              onClick={requestClose}
+              aria-label="ปิดหน้าต่าง"
+              className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
             >
-              {saving ? 'กำลังสร้าง...' : 'สร้างฉบับแก้ไข'}
+              <X size={20} />
             </button>
           </div>
-        </form>
+          <form onSubmit={onSubmit} className="p-6 space-y-4">
+            {error && (
+              <div role="alert" className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-sm font-semibold flex items-center gap-2">
+                <AlertTriangle size={17} className="text-rose-600 shrink-0" />
+                <span>{error}</span>
+              </div>
+            )}
+            <p className="text-sm text-slate-600 font-medium">
+              ระบบจะคัดลอกแผน {plan.department} Rev.{plan.revision} เป็นฉบับร่างใหม่ แผนเดิมยังใช้งานต่อจนกว่าฉบับใหม่จะผ่านการทบทวนและอนุมัติ
+            </p>
+            <div>
+              <label htmlFor="plan_revision_reason" className="block text-sm font-semibold text-slate-700 mb-1.5">
+                เหตุผลการขอปรับปรุงแผน <span className="text-rose-600">*</span>
+              </label>
+              <textarea
+                id="plan_revision_reason"
+                rows={3}
+                required
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder="เช่น เพิ่มเครื่องมือใหม่เข้าแผน / เปลี่ยนรอบทวนสอบ..."
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-medium focus:outline-none focus:border-indigo-600"
+              />
+            </div>
+            <div className="pt-2 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={requestClose}
+                className="h-10 px-4 rounded-xl border border-slate-300 text-slate-700 text-sm font-semibold hover:bg-slate-50 cursor-pointer"
+              >
+                ยกเลิก
+              </button>
+              <button
+                type="submit"
+                disabled={saving || !reason.trim()}
+                className="h-10 px-5 rounded-xl bg-indigo-600 text-white text-sm font-bold hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
+              >
+                {saving ? 'กำลังสร้าง...' : 'สร้างฉบับแก้ไข'}
+              </button>
+            </div>
+          </form>
+        </div>
       </div>
-    </div>
+
+      <VccDiscardConfirmDialog
+        isOpen={showConfirmDiscard}
+        onConfirm={confirmDiscard}
+        onCancel={cancelDiscard}
+        title="ข้อมูลฉบับแก้ไขยังไม่ได้บันทึก"
+        message="คุณมีข้อมูลเหตุผลการแก้ไขที่กำลังกรอก ต้องการยกเลิกและปิดหน้าต่างใช่หรือไม่?"
+      />
+    </>
   );
 };
 
@@ -249,6 +356,25 @@ export const PlanItemModal = ({
   providers,
   activeDepartments
 }) => {
+  const isDirty = useMemo(() => {
+    return Boolean(itemForm?.asset_id || (itemForm?.planned_months && itemForm.planned_months.length > 0) || itemForm?.remarks?.trim());
+  }, [itemForm]);
+
+  const {
+    dialogRef,
+    requestClose,
+    handleBackdropClick,
+    showConfirmDiscard,
+    confirmDiscard,
+    cancelDiscard
+  } = useVccModalAccessibility({
+    isOpen: open,
+    onClose,
+    isDirty,
+    discardTitle: 'ข้อมูลกำหนดการเครื่องมือยังไม่ได้บันทึก',
+    discardMessage: 'คุณมีข้อมูลตารางทวนสอบที่กำลังกำหนด ต้องการยกเลิกและปิดหน้าต่างใช่หรือไม่?'
+  });
+
   if (!open || !plan) return null;
 
   const handleAssetChange = (newAssetId) => {
@@ -289,16 +415,32 @@ export const PlanItemModal = ({
   const previewDueDates = computeDueDates(plan.plan_year, itemForm.planned_months, plan.due_date_rule);
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-xl w-full overflow-hidden">
-        <div className="px-6 py-4.5 border-b border-slate-200 flex items-center justify-between">
-          <h2 className="text-xl font-bold text-slate-900 tracking-tight">
-            กำหนดตารางทวนสอบเครื่องมือในแผนปี {plan.plan_year}
-          </h2>
-          <button type="button" onClick={onClose} className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer">
-            <X size={20} />
-          </button>
-        </div>
+    <>
+      <div
+        className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-150"
+        onClick={handleBackdropClick}
+      >
+        <div
+          ref={dialogRef}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="plan-item-modal-title"
+          tabIndex="-1"
+          className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-xl w-full overflow-hidden my-auto outline-none"
+        >
+          <div className="px-6 py-4.5 border-b border-slate-200 flex items-center justify-between">
+            <h2 id="plan-item-modal-title" className="text-xl font-bold text-slate-900 tracking-tight">
+              กำหนดตารางทวนสอบเครื่องมือในแผนปี {plan.plan_year}
+            </h2>
+            <button
+              type="button"
+              onClick={requestClose}
+              aria-label="ปิดหน้าต่าง"
+              className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
+            >
+              <X size={20} />
+            </button>
+          </div>
 
         <form onSubmit={onSubmit} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
           {error && (
@@ -434,7 +576,11 @@ export const PlanItemModal = ({
           </div>
 
           <div className="pt-2 flex justify-end gap-2.5">
-            <button type="button" onClick={onClose} className="h-10 px-4 rounded-xl border border-slate-300 text-sm font-semibold hover:bg-slate-50 transition-colors cursor-pointer">
+            <button
+              type="button"
+              onClick={requestClose}
+              className="h-10 px-4 rounded-xl border border-slate-300 text-sm font-semibold hover:bg-slate-50 transition-colors cursor-pointer"
+            >
               ยกเลิก
             </button>
             <button
@@ -448,6 +594,15 @@ export const PlanItemModal = ({
         </form>
       </div>
     </div>
+
+    <VccDiscardConfirmDialog
+      isOpen={showConfirmDiscard}
+      onConfirm={confirmDiscard}
+      onCancel={cancelDiscard}
+      title="ข้อมูลกำหนดการเครื่องมือยังไม่ได้บันทึก"
+      message="คุณมีข้อมูลตารางทวนสอบที่กำลังกำหนด ต้องการยกเลิกและปิดหน้าต่างใช่หรือไม่?"
+    />
+  </>
   );
 };
 
@@ -460,71 +615,118 @@ export const PlanWorkflowModal = ({
   saving,
   onConfirm
 }) => {
+  const isReject = modalState?.mode === 'REJECT';
+  const isDirty = Boolean(commentOrReason?.trim());
+
+  const {
+    dialogRef,
+    requestClose,
+    handleBackdropClick,
+    showConfirmDiscard,
+    confirmDiscard,
+    cancelDiscard
+  } = useVccModalAccessibility({
+    isOpen: Boolean(modalState),
+    onClose,
+    isDirty,
+    discardTitle: 'ข้อคิดเห็นยังไม่ได้บันทึก',
+    discardMessage: 'คุณมีข้อความความเห็นที่กำลังกรอก ต้องการยกเลิกและปิดหน้าต่างใช่หรือไม่?'
+  });
+
   if (!modalState) return null;
-  const isReject = modalState.mode === 'REJECT';
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-md w-full overflow-hidden">
-        <div className="px-6 py-4.5 border-b border-slate-200 flex items-center justify-between">
-          <h2 className="text-xl font-bold text-slate-900 tracking-tight">
-            {isReject
-              ? 'ส่งกลับแก้ไขแผนประจำปี (Reject)'
-              : modalState.mode === 'REVIEW'
-                ? 'ยืนยันการทบทวนแผนประจำปี (Review)'
-                : 'ยืนยันการอนุมัติแผนประจำปี (Approve)'}
-          </h2>
-          <button type="button" onClick={onClose} className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer">
-            <X size={20} />
-          </button>
-        </div>
-
-        <form onSubmit={onConfirm} className="p-6 space-y-4">
-          {error && (
-            <div role="alert" className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-sm font-semibold flex items-center gap-2">
-              <AlertTriangle size={17} className="text-rose-600 shrink-0" />
-              <span>{error}</span>
-            </div>
-          )}
-
-          <div>
-            <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-              {isReject ? 'เหตุผลในการส่งกลับแก้ไข' : 'ความเห็นเพิ่มเติม (ถ้ามี)'}{' '}
-              {isReject && <span className="text-rose-600">*</span>}
-            </label>
-            <textarea
-              rows={3}
-              required={isReject}
-              value={commentOrReason}
-              onChange={(e) => setCommentOrReason(e.target.value)}
-              placeholder={isReject ? 'ระบุสิ่งที่ต้องแก้ไขในแผนประจำปี...' : 'ความเห็นประกอบการทบทวน/อนุมัติ...'}
-              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-medium"
-            />
-          </div>
-
-          <div className="pt-2 flex justify-end gap-2.5">
-            <button type="button" onClick={onClose} className="h-10 px-4 rounded-xl border border-slate-300 text-sm font-semibold hover:bg-slate-50 transition-colors cursor-pointer">
-              ยกเลิก
-            </button>
+    <>
+      <div
+        className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-150"
+        onClick={handleBackdropClick}
+      >
+        <div
+          ref={dialogRef}
+          role={isReject ? 'alertdialog' : 'dialog'}
+          aria-modal="true"
+          aria-labelledby="plan-workflow-title"
+          tabIndex="-1"
+          className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-md w-full overflow-hidden my-auto outline-none"
+        >
+          <div className="px-6 py-4.5 border-b border-slate-200 flex items-center justify-between">
+            <h2 id="plan-workflow-title" className="text-xl font-bold text-slate-900 tracking-tight">
+              {isReject
+                ? 'ส่งกลับแก้ไขแผนประจำปี (Reject)'
+                : modalState.mode === 'REVIEW'
+                  ? 'ยืนยันการทบทวนแผนประจำปี (Review)'
+                  : 'ยืนยันการอนุมัติแผนประจำปี (Approve)'}
+            </h2>
             <button
-              type="submit"
-              disabled={saving || (isReject && !commentOrReason.trim())}
-              className={`h-10 px-5 rounded-xl text-white text-sm font-semibold disabled:opacity-50 transition-colors cursor-pointer shadow-2xs ${
-                isReject ? 'bg-rose-600 hover:bg-rose-700' : 'bg-emerald-600 hover:bg-emerald-700'
-              }`}
+              type="button"
+              onClick={requestClose}
+              aria-label="ปิดหน้าต่าง"
+              className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
             >
-              {saving
-                ? 'กำลังบันทึก...'
-                : isReject
-                  ? 'ยืนยันส่งกลับแก้ไข'
-                  : modalState.mode === 'REVIEW'
-                    ? 'บันทึกผลการทบทวน'
-                    : 'บันทึกการอนุมัติแผน'}
+              <X size={20} />
             </button>
           </div>
-        </form>
+
+          <form onSubmit={onConfirm} className="p-6 space-y-4">
+            {error && (
+              <div role="alert" className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-sm font-semibold flex items-center gap-2">
+                <AlertTriangle size={17} className="text-rose-600 shrink-0" />
+                <span>{error}</span>
+              </div>
+            )}
+
+            <div>
+              <label htmlFor="plan-workflow-comment" className="block text-sm font-semibold text-slate-700 mb-1.5">
+                {isReject ? 'เหตุผลในการส่งกลับแก้ไข' : 'ความเห็นเพิ่มเติม (ถ้ามี)'}{' '}
+                {isReject && <span className="text-rose-600">*</span>}
+              </label>
+              <textarea
+                id="plan-workflow-comment"
+                rows={3}
+                required={isReject}
+                value={commentOrReason}
+                onChange={(e) => setCommentOrReason(e.target.value)}
+                placeholder={isReject ? 'ระบุสิ่งที่ต้องแก้ไขในแผนประจำปี...' : 'ความเห็นประกอบการทบทวน/อนุมัติ...'}
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-medium"
+              />
+            </div>
+
+            <div className="pt-2 flex justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={requestClose}
+                className="h-10 px-4 rounded-xl border border-slate-300 text-sm font-semibold hover:bg-slate-50 transition-colors cursor-pointer"
+              >
+                ยกเลิก
+              </button>
+              <button
+                type="submit"
+                disabled={saving || (isReject && !commentOrReason.trim())}
+                className={`h-10 px-5 rounded-xl text-white text-sm font-semibold disabled:opacity-50 transition-colors cursor-pointer shadow-2xs ${
+                  isReject ? 'bg-rose-600 hover:bg-rose-700' : 'bg-emerald-600 hover:bg-emerald-700'
+                }`}
+              >
+                {saving
+                  ? 'กำลังบันทึก...'
+                  : isReject
+                    ? 'ยืนยันส่งกลับแก้ไข'
+                    : modalState.mode === 'REVIEW'
+                      ? 'บันทึกผลการทบทวน'
+                      : 'บันทึกการอนุมัติแผน'}
+              </button>
+            </div>
+          </form>
+        </div>
       </div>
-    </div>
+
+      <VccDiscardConfirmDialog
+        isOpen={showConfirmDiscard}
+        onConfirm={confirmDiscard}
+        onCancel={cancelDiscard}
+        title="ข้อคิดเห็นยังไม่ได้บันทึก"
+        message="คุณมีข้อความความเห็นที่กำลังกรอก ต้องการยกเลิกและปิดหน้าต่างใช่หรือไม่?"
+      />
+    </>
   );
 };
 
@@ -606,16 +808,35 @@ const PlanSubmitModalContent = ({
   const hasNoApprover = eligibleApprovers.length === 0;
   const isResubmit = plan.status === 'REJECTED';
 
+  const {
+    dialogRef,
+    requestClose,
+    handleBackdropClick
+  } = useVccModalAccessibility({
+    isOpen: true,
+    onClose
+  });
+
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-lg w-full overflow-hidden">
+    <div
+      className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4"
+      onClick={handleBackdropClick}
+    >
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="plan-submit-title"
+        tabIndex="-1"
+        className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-lg w-full overflow-hidden outline-none"
+      >
         <div className="px-6 py-4.5 border-b border-slate-200 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
               <Send size={18} />
             </div>
             <div>
-              <h2 className="text-base font-bold text-slate-900 tracking-tight">
+              <h2 id="plan-submit-title" className="text-base font-bold text-slate-900 tracking-tight">
                 {isResubmit
                   ? 'ส่งทบทวนอีกครั้ง — ส่งแผนประจำปีเข้าสู่กระบวนการทบทวนและอนุมัติ'
                   : 'ส่งแผนประจำปีเข้าสู่กระบวนการทบทวนและอนุมัติ'}
@@ -625,7 +846,12 @@ const PlanSubmitModalContent = ({
               </p>
             </div>
           </div>
-          <button type="button" onClick={onClose} className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer">
+          <button
+            type="button"
+            onClick={requestClose}
+            aria-label="ปิดหน้าต่าง"
+            className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
+          >
             <X size={20} />
           </button>
         </div>
@@ -717,7 +943,7 @@ const PlanSubmitModalContent = ({
           <div className="pt-2 flex justify-end gap-2.5">
             <button
               type="button"
-              onClick={onClose}
+              onClick={requestClose}
               className="h-9 px-4 rounded-xl border border-slate-300 text-xs font-semibold hover:bg-slate-50 transition-colors cursor-pointer"
             >
               ยกเลิก
@@ -754,17 +980,41 @@ export const GroupWorkOrderModal = ({
   checkError,
   onValidate
 }) => {
+  const {
+    dialogRef,
+    requestClose,
+    handleBackdropClick
+  } = useVccModalAccessibility({
+    isOpen: !!modalData,
+    onClose
+  });
+
   if (!modalData) return null;
   const { item, childAssets } = modalData;
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-lg w-full overflow-hidden">
+    <div
+      className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4"
+      onClick={handleBackdropClick}
+    >
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="group-wo-modal-title"
+        tabIndex="-1"
+        className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-lg w-full overflow-hidden outline-none"
+      >
         <div className="px-6 py-4.5 border-b border-slate-200 flex items-center justify-between">
-          <h2 className="text-xl font-bold text-slate-900 tracking-tight">
+          <h2 id="group-wo-modal-title" className="text-xl font-bold text-slate-900 tracking-tight">
             ตรวจสอบความพร้อมก่อนออกใบสั่งงาน ({item.asset_code})
           </h2>
-          <button type="button" onClick={onClose} className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer">
+          <button
+            type="button"
+            onClick={requestClose}
+            aria-label="ปิดหน้าต่าง"
+            className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
+          >
             <X size={20} />
           </button>
         </div>
@@ -818,7 +1068,7 @@ export const GroupWorkOrderModal = ({
           </div>
 
           <div className="pt-2 flex justify-end gap-2.5">
-            <button type="button" onClick={onClose} className="h-10 px-4 rounded-xl border border-slate-300 text-sm font-semibold hover:bg-slate-50 transition-colors cursor-pointer">
+            <button type="button" onClick={requestClose} className="h-10 px-4 rounded-xl border border-slate-300 text-sm font-semibold hover:bg-slate-50 transition-colors cursor-pointer">
               ปิดหน้าต่าง
             </button>
             <button
@@ -847,6 +1097,21 @@ export const PlanSettingsModal = ({
   saving,
   onSave
 }) => {
+  const isDirty = Boolean(newProvider?.trim());
+
+  const {
+    dialogRef,
+    requestClose,
+    handleBackdropClick,
+    showConfirmDiscard,
+    confirmDiscard,
+    cancelDiscard
+  } = useVccModalAccessibility({
+    isOpen: open,
+    onClose,
+    isDirty
+  });
+
   if (!open) return null;
 
   const addProvider = () => {
@@ -857,14 +1122,30 @@ export const PlanSettingsModal = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-lg w-full overflow-hidden">
-        <div className="px-6 py-4.5 border-b border-slate-200 flex items-center justify-between">
-          <h2 className="text-xl font-bold text-slate-900 tracking-tight">ตั้งค่าแผนประจำปีและเกณฑ์อนุมัติ (DCC)</h2>
-          <button type="button" onClick={onClose} className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer">
-            <X size={20} />
-          </button>
-        </div>
+    <>
+      <div
+        className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4"
+        onClick={handleBackdropClick}
+      >
+        <div
+          ref={dialogRef}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="plan-settings-title"
+          tabIndex="-1"
+          className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-lg w-full overflow-hidden outline-none"
+        >
+          <div className="px-6 py-4.5 border-b border-slate-200 flex items-center justify-between">
+            <h2 id="plan-settings-title" className="text-xl font-bold text-slate-900 tracking-tight">ตั้งค่าแผนประจำปีและเกณฑ์อนุมัติ (DCC)</h2>
+            <button
+              type="button"
+              onClick={requestClose}
+              aria-label="ปิดหน้าต่าง"
+              className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
+            >
+              <X size={20} />
+            </button>
+          </div>
 
         <div className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
@@ -928,7 +1209,7 @@ export const PlanSettingsModal = ({
           </div>
 
           <div className="pt-2 flex justify-end gap-2.5">
-            <button type="button" onClick={onClose} className="h-10 px-4 rounded-xl border border-slate-300 text-sm font-semibold hover:bg-slate-50 transition-colors cursor-pointer">
+            <button type="button" onClick={requestClose} className="h-10 px-4 rounded-xl border border-slate-300 text-sm font-semibold hover:bg-slate-50 transition-colors cursor-pointer">
               ยกเลิก
             </button>
             <button
@@ -943,18 +1224,49 @@ export const PlanSettingsModal = ({
         </div>
       </div>
     </div>
-  );
+
+    <VccDiscardConfirmDialog
+      isOpen={showConfirmDiscard}
+      onConfirm={confirmDiscard}
+      onCancel={cancelDiscard}
+    />
+  </>
+);
 };
 
 export const PlanHistoryModal = ({ open, onClose, history = [] }) => {
+  const {
+    dialogRef,
+    requestClose,
+    handleBackdropClick
+  } = useVccModalAccessibility({
+    isOpen: open,
+    onClose
+  });
+
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-xl w-full overflow-hidden">
+    <div
+      className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4"
+      onClick={handleBackdropClick}
+    >
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="plan-history-title"
+        tabIndex="-1"
+        className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-xl w-full overflow-hidden outline-none"
+      >
         <div className="px-6 py-4.5 border-b border-slate-200 flex items-center justify-between">
-          <h2 className="text-xl font-bold text-slate-900 tracking-tight">ประวัติการอนุมัติและแก้ไขแผน (Audit Log)</h2>
-          <button type="button" onClick={onClose} className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer">
+          <h2 id="plan-history-title" className="text-xl font-bold text-slate-900 tracking-tight">ประวัติการอนุมัติและแก้ไขแผน (Audit Log)</h2>
+          <button
+            type="button"
+            onClick={requestClose}
+            aria-label="ปิดหน้าต่าง"
+            className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
+          >
             <X size={20} />
           </button>
         </div>
@@ -1019,6 +1331,21 @@ export const UnplannedJustificationModal = ({
     setError('');
   }, [open, unplannedItems]);
 
+  const isDirty = Object.values(customReasons).some((r) => Boolean(r?.trim()));
+
+  const {
+    dialogRef,
+    requestClose,
+    handleBackdropClick,
+    showConfirmDiscard,
+    confirmDiscard,
+    cancelDiscard
+  } = useVccModalAccessibility({
+    isOpen: open,
+    onClose,
+    isDirty
+  });
+
   if (!open) return null;
 
   const handleApplyAll = (standardReason) => {
@@ -1055,25 +1382,37 @@ export const UnplannedJustificationModal = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-2xl w-full overflow-hidden flex flex-col max-h-[85vh]">
-        <div className="px-6 py-4.5 border-b border-slate-200 flex items-center justify-between shrink-0">
-          <div>
-            <h2 className="text-lg font-bold text-slate-900 tracking-tight">
-              ระบุเหตุผลที่ไม่วางแผนทวนสอบในปีนี้
-            </h2>
-            <p className="text-xs text-slate-500 mt-0.5">
-              เครื่องมือที่ไม่มีรอบทวนสอบ ต้องระบุเหตุผลประกอบก่อนส่งขออนุมัติแผนตามข้อกำหนด QMS
-            </p>
+    <>
+      <div
+        className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4"
+        onClick={handleBackdropClick}
+      >
+        <div
+          ref={dialogRef}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="unplanned-justification-title"
+          tabIndex="-1"
+          className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-2xl w-full overflow-hidden flex flex-col max-h-[85vh] outline-none"
+        >
+          <div className="px-6 py-4.5 border-b border-slate-200 flex items-center justify-between shrink-0">
+            <div>
+              <h2 id="unplanned-justification-title" className="text-lg font-bold text-slate-900 tracking-tight">
+                ระบุเหตุผลที่ไม่วางแผนทวนสอบในปีนี้
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                เครื่องมือที่ไม่มีรอบทวนสอบ ต้องระบุเหตุผลประกอบก่อนส่งขออนุมัติแผนตามข้อกำหนด QMS
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={requestClose}
+              aria-label="ปิดหน้าต่าง"
+              className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
+            >
+              <X size={20} />
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
-          >
-            <X size={20} />
-          </button>
-        </div>
 
         <form onSubmit={handleSubmit} className="flex flex-col min-h-0 overflow-hidden">
           <div className="p-6 overflow-y-auto space-y-4">
@@ -1168,7 +1507,7 @@ export const UnplannedJustificationModal = ({
           <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-3 shrink-0">
             <button
               type="button"
-              onClick={onClose}
+              onClick={requestClose}
               disabled={saving}
               className="h-9 px-4 rounded-xl border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 text-sm font-semibold cursor-pointer"
             >
@@ -1185,7 +1524,14 @@ export const UnplannedJustificationModal = ({
         </form>
       </div>
     </div>
-  );
+
+    <VccDiscardConfirmDialog
+      isOpen={showConfirmDiscard}
+      onConfirm={confirmDiscard}
+      onCancel={cancelDiscard}
+    />
+  </>
+);
 };
 
 export { LegacyGroupConversionModal as DraftGroupConversionModal } from './LegacyGroupConversionModal';

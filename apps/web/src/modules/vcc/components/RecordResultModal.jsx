@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import {
   X,
   AlertTriangle,
@@ -14,6 +14,8 @@ import {
 } from 'lucide-react';
 import { getResultStatusLabel } from '../utils/statusLabels';
 import { formatVccDate } from '../utils/vccDateUtils';
+import { useVccModalAccessibility } from '../hooks/useVccModalAccessibility';
+import { VccDiscardConfirmDialog } from './VccDiscardConfirmDialog';
 
 const MAX_PDF_BYTES = 25 * 1024 * 1024; // 25 MB
 
@@ -30,6 +32,64 @@ export const RecordResultModal = ({
   const [fileError, setFileError] = useState('');
   const [fileHashPreview, setFileHashPreview] = useState('');
   const [activeTab, setActiveTab] = useState('MAIN'); // 'MAIN' | 'TRACEABILITY'
+
+  // Snapshot initial form state to detect true changes (dirty form)
+  const initialFormRef = useRef(null);
+  useEffect(() => {
+    if (workOrder && !initialFormRef.current) {
+      initialFormRef.current = JSON.stringify({
+        performed_at: form?.performed_at || '',
+        result_status: form?.result_status || '',
+        certificate_no: form?.certificate_no || '',
+        acceptance_criteria: form?.acceptance_criteria || '',
+        result_remarks: form?.result_remarks || '',
+        calibration_provider_name: form?.calibration_provider_name || '',
+        calibration_method: form?.calibration_method || '',
+        traceability_ref: form?.traceability_ref || '',
+        environmental_conditions: form?.environmental_conditions || '',
+        uncertainty_value: form?.uncertainty_value || '',
+        calibration_error_value: form?.calibration_error_value || '',
+        hasFile: Boolean(form?.certificate_file)
+      });
+    }
+    if (!workOrder) {
+      initialFormRef.current = null;
+    }
+  }, [workOrder]);
+
+  const isDirty = useMemo(() => {
+    if (!initialFormRef.current) return false;
+    const current = JSON.stringify({
+      performed_at: form?.performed_at || '',
+      result_status: form?.result_status || '',
+      certificate_no: form?.certificate_no || '',
+      acceptance_criteria: form?.acceptance_criteria || '',
+      result_remarks: form?.result_remarks || '',
+      calibration_provider_name: form?.calibration_provider_name || '',
+      calibration_method: form?.calibration_method || '',
+      traceability_ref: form?.traceability_ref || '',
+      environmental_conditions: form?.environmental_conditions || '',
+      uncertainty_value: form?.uncertainty_value || '',
+      calibration_error_value: form?.calibration_error_value || '',
+      hasFile: Boolean(form?.certificate_file)
+    });
+    return current !== initialFormRef.current;
+  }, [form]);
+
+  const {
+    dialogRef,
+    requestClose,
+    handleBackdropClick,
+    showConfirmDiscard,
+    confirmDiscard,
+    cancelDiscard
+  } = useVccModalAccessibility({
+    isOpen: Boolean(workOrder),
+    onClose,
+    isDirty,
+    discardTitle: 'ข้อมูลผลการสอบเทียบยังไม่ได้บันทึก',
+    discardMessage: 'คุณมีข้อมูลผลการสอบเทียบที่กำลังบันทึก ต้องการยกเลิกและปิดหน้าต่างใช่หรือไม่?'
+  });
 
   if (!workOrder) return null;
 
@@ -93,29 +153,41 @@ export const RecordResultModal = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden">
-        {/* Header */}
-        <div className="px-6 py-4.5 border-b border-slate-200 flex items-center justify-between shrink-0 bg-slate-50/50">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="font-mono text-xs font-bold px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-700">
-                {workOrder.wo_code}
-              </span>
-              <span className="text-xs text-slate-500 font-medium">({workOrder.asset_code} — {workOrder.asset_name})</span>
+    <>
+      <div
+        className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-150"
+        onClick={handleBackdropClick}
+      >
+        <div
+          ref={dialogRef}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="record-result-title"
+          tabIndex="-1"
+          className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden my-auto outline-none"
+        >
+          {/* Header */}
+          <div className="px-6 py-4.5 border-b border-slate-200 flex items-center justify-between shrink-0 bg-slate-50/50">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-xs font-bold px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-700">
+                  {workOrder.wo_code}
+                </span>
+                <span className="text-xs text-slate-500 font-medium">({workOrder.asset_code} — {workOrder.asset_name})</span>
+              </div>
+              <h2 id="record-result-title" className="text-lg font-bold text-slate-900 tracking-tight mt-1">
+                บันทึกผลการสอบเทียบและหลักฐานดิจิทัล (Digital Record)
+              </h2>
             </div>
-            <h2 className="text-lg font-bold text-slate-900 tracking-tight mt-1">
-              บันทึกผลการสอบเทียบและหลักฐานดิจิทัล (Digital Record)
-            </h2>
+            <button
+              type="button"
+              onClick={requestClose}
+              aria-label="ปิดหน้าต่าง"
+              className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 cursor-pointer transition-colors"
+            >
+              <X size={20} />
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 cursor-pointer transition-colors"
-          >
-            <X size={20} />
-          </button>
-        </div>
 
         {/* Tab Selector */}
         <div className="flex border-b border-slate-200 px-6 bg-white shrink-0">
@@ -511,7 +583,7 @@ export const RecordResultModal = ({
             <div className="flex gap-2.5">
               <button
                 type="button"
-                onClick={onClose}
+                onClick={requestClose}
                 className="h-10 px-4 rounded-xl border border-slate-300 text-sm font-semibold hover:bg-slate-50 transition-colors cursor-pointer"
               >
                 ยกเลิก
@@ -529,6 +601,16 @@ export const RecordResultModal = ({
         </form>
       </div>
     </div>
+
+    {/* Discard Confirmation Dialog */}
+    <VccDiscardConfirmDialog
+      isOpen={showConfirmDiscard}
+      onConfirm={confirmDiscard}
+      onCancel={cancelDiscard}
+      title="ข้อมูลผลการสอบเทียบยังไม่ได้บันทึก"
+      message="คุณมีข้อมูลผลการสอบเทียบที่กำลังบันทึก ต้องการยกเลิกและปิดหน้าต่างใช่หรือไม่?"
+    />
+  </>
   );
 };
 

@@ -5,6 +5,8 @@ import {
   Trash2
 } from 'lucide-react';
 import { getAssetStatusLabel } from '../utils/statusLabels';
+import { useVccModalAccessibility } from '../hooks/useVccModalAccessibility';
+import { VccDiscardConfirmDialog } from './VccDiscardConfirmDialog';
 
 const ACTION_LABELS = {
   VCC_ASSET_CREATED: { label: 'เพิ่มเครื่องมือใหม่', badge: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
@@ -57,23 +59,56 @@ export const AssetFormModal = ({
   activeDepartments,
   canTransfer = true
 }) => {
+  const isDirty = Boolean(
+    form?.asset_code?.trim() ||
+    form?.name?.trim() ||
+    form?.serial_no?.trim() ||
+    form?.model?.trim() ||
+    form?.composite_details?.trim()
+  );
+
+  const {
+    dialogRef,
+    requestClose,
+    handleBackdropClick,
+    showConfirmDiscard,
+    confirmDiscard,
+    cancelDiscard
+  } = useVccModalAccessibility({
+    isOpen: formOpen,
+    onClose: () => setFormOpen(false),
+    isDirty
+  });
+
   if (!formOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-xl w-full overflow-hidden">
-        <div className="px-6 py-4.5 border-b border-slate-200 flex items-center justify-between">
-          <h2 className="text-xl font-bold text-slate-900 tracking-tight">
-            {editingAsset ? `แก้ไขข้อมูลเครื่องมือ (${editingAsset.asset_code})` : 'เพิ่มเครื่องมือวัดใหม่'}
-          </h2>
-          <button
-            type="button"
-            onClick={() => setFormOpen(false)}
-            className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
-          >
-            <X size={20} />
-          </button>
-        </div>
+    <>
+      <div
+        className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4"
+        onClick={handleBackdropClick}
+      >
+        <div
+          ref={dialogRef}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="asset-form-title"
+          tabIndex="-1"
+          className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-xl w-full overflow-hidden outline-none"
+        >
+          <div className="px-6 py-4.5 border-b border-slate-200 flex items-center justify-between">
+            <h2 id="asset-form-title" className="text-xl font-bold text-slate-900 tracking-tight">
+              {editingAsset ? `แก้ไขข้อมูลเครื่องมือ (${editingAsset.asset_code})` : 'เพิ่มเครื่องมือวัดใหม่'}
+            </h2>
+            <button
+              type="button"
+              onClick={requestClose}
+              aria-label="ปิดหน้าต่าง"
+              className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
+            >
+              <X size={20} />
+            </button>
+          </div>
 
         <form onSubmit={handleSaveAsset} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
           {formError && (
@@ -248,7 +283,7 @@ export const AssetFormModal = ({
           <div className="pt-3 border-t border-slate-200 flex items-center justify-end gap-2.5">
             <button
               type="button"
-              onClick={() => setFormOpen(false)}
+              onClick={requestClose}
               className="h-10 px-4 rounded-xl border border-slate-300 text-slate-700 text-sm font-semibold hover:bg-slate-50 transition-colors cursor-pointer"
             >
               ยกเลิก
@@ -264,7 +299,14 @@ export const AssetFormModal = ({
         </form>
       </div>
     </div>
-  );
+
+    <VccDiscardConfirmDialog
+      isOpen={showConfirmDiscard}
+      onConfirm={confirmDiscard}
+      onCancel={cancelDiscard}
+    />
+  </>
+);
 };
 
 export const AssetStatusModal = ({
@@ -277,25 +319,53 @@ export const AssetStatusModal = ({
   savingStatus,
   handleConfirmStatusChange
 }) => {
+  const isDirty = Boolean(statusReason?.trim());
+  const isRetire = statusModal?.mode === 'RETIRE';
+
+  const {
+    dialogRef,
+    requestClose,
+    handleBackdropClick,
+    showConfirmDiscard,
+    confirmDiscard,
+    cancelDiscard
+  } = useVccModalAccessibility({
+    isOpen: !!statusModal,
+    onClose: () => setStatusModal(null),
+    isDirty
+  });
+
   if (!statusModal) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-md w-full overflow-hidden">
-        <div className="px-6 py-4.5 border-b border-slate-200 flex items-center justify-between">
-          <h2 className="text-xl font-bold text-slate-900 tracking-tight">
-            {statusModal.mode === 'RETIRE'
-              ? `ปลดออกจากทะเบียน (${statusModal.asset.asset_code})`
-              : `นำเครื่องมือกลับมาใช้งาน (${statusModal.asset.asset_code})`}
-          </h2>
-          <button
-            type="button"
-            onClick={() => setStatusModal(null)}
-            className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
-          >
-            <X size={20} />
-          </button>
-        </div>
+    <>
+      <div
+        className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4"
+        onClick={handleBackdropClick}
+      >
+        <div
+          ref={dialogRef}
+          role={isRetire ? 'alertdialog' : 'dialog'}
+          aria-modal="true"
+          aria-labelledby="asset-status-title"
+          tabIndex="-1"
+          className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-md w-full overflow-hidden outline-none"
+        >
+          <div className="px-6 py-4.5 border-b border-slate-200 flex items-center justify-between">
+            <h2 id="asset-status-title" className="text-xl font-bold text-slate-900 tracking-tight">
+              {statusModal.mode === 'RETIRE'
+                ? `ปลดออกจากทะเบียน (${statusModal.asset.asset_code})`
+                : `นำเครื่องมือกลับมาใช้งาน (${statusModal.asset.asset_code})`}
+            </h2>
+            <button
+              type="button"
+              onClick={requestClose}
+              aria-label="ปิดหน้าต่าง"
+              className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
+            >
+              <X size={20} />
+            </button>
+          </div>
 
         <form onSubmit={handleConfirmStatusChange} className="p-6 space-y-4">
           {statusError && (
@@ -356,7 +426,7 @@ export const AssetStatusModal = ({
           <div className="pt-2 flex items-center justify-end gap-2.5">
             <button
               type="button"
-              onClick={() => setStatusModal(null)}
+              onClick={requestClose}
               className="h-10 px-4 rounded-xl border border-slate-300 text-slate-700 text-sm font-semibold hover:bg-slate-50 transition-colors cursor-pointer"
             >
               ยกเลิก
@@ -380,7 +450,14 @@ export const AssetStatusModal = ({
         </form>
       </div>
     </div>
-  );
+
+    <VccDiscardConfirmDialog
+      isOpen={showConfirmDiscard}
+      onConfirm={confirmDiscard}
+      onCancel={cancelDiscard}
+    />
+  </>
+);
 };
 
 export const AssetDetailHistoryModal = ({
@@ -389,18 +466,38 @@ export const AssetDetailHistoryModal = ({
   loadingDetail,
   detailData
 }) => {
+  const {
+    dialogRef,
+    requestClose,
+    handleBackdropClick
+  } = useVccModalAccessibility({
+    isOpen: detailModalOpen,
+    onClose: () => setDetailModalOpen(false)
+  });
+
   if (!detailModalOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-2xl w-full overflow-hidden">
+    <div
+      className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4"
+      onClick={handleBackdropClick}
+    >
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="asset-detail-history-title"
+        tabIndex="-1"
+        className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-2xl w-full overflow-hidden outline-none"
+      >
         <div className="px-6 py-4.5 border-b border-slate-200 flex items-center justify-between">
-          <h2 className="text-xl font-bold text-slate-900 tracking-tight">
+          <h2 id="asset-detail-history-title" className="text-xl font-bold text-slate-900 tracking-tight">
             รายละเอียดและประวัติการแก้ไข (Audit Log)
           </h2>
           <button
             type="button"
-            onClick={() => setDetailModalOpen(false)}
+            onClick={requestClose}
+            aria-label="ปิดหน้าต่าง"
             className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
           >
             <X size={20} />
@@ -529,21 +626,48 @@ export const AssetTypesModal = ({
   savingTypes,
   handleSaveTypes
 }) => {
+  const isDirty = Boolean(newTypeName?.trim());
+
+  const {
+    dialogRef,
+    requestClose,
+    handleBackdropClick,
+    showConfirmDiscard,
+    confirmDiscard,
+    cancelDiscard
+  } = useVccModalAccessibility({
+    isOpen: typesModalOpen,
+    onClose: () => setTypesModalOpen(false),
+    isDirty
+  });
+
   if (!typesModalOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-lg w-full overflow-hidden">
-        <div className="px-6 py-4.5 border-b border-slate-200 flex items-center justify-between">
-          <h2 className="text-xl font-bold text-slate-900 tracking-tight">ตั้งค่ารายการประเภทเครื่องมือ</h2>
-          <button
-            type="button"
-            onClick={() => setTypesModalOpen(false)}
-            className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
-          >
-            <X size={20} />
-          </button>
-        </div>
+    <>
+      <div
+        className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4"
+        onClick={handleBackdropClick}
+      >
+        <div
+          ref={dialogRef}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="asset-types-title"
+          tabIndex="-1"
+          className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-lg w-full overflow-hidden outline-none"
+        >
+          <div className="px-6 py-4.5 border-b border-slate-200 flex items-center justify-between">
+            <h2 id="asset-types-title" className="text-xl font-bold text-slate-900 tracking-tight">ตั้งค่ารายการประเภทเครื่องมือ</h2>
+            <button
+              type="button"
+              onClick={requestClose}
+              aria-label="ปิดหน้าต่าง"
+              className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
+            >
+              <X size={20} />
+            </button>
+          </div>
 
         <div className="p-6 space-y-4">
           <p className="text-sm text-slate-600 leading-relaxed font-medium">
@@ -592,7 +716,7 @@ export const AssetTypesModal = ({
           <div className="pt-2 flex items-center justify-end gap-2.5">
             <button
               type="button"
-              onClick={() => setTypesModalOpen(false)}
+              onClick={requestClose}
               className="h-10 px-4 rounded-xl border border-slate-300 text-slate-700 text-sm font-semibold hover:bg-slate-50 transition-colors cursor-pointer"
             >
               ยกเลิก
@@ -609,5 +733,12 @@ export const AssetTypesModal = ({
         </div>
       </div>
     </div>
-  );
+
+    <VccDiscardConfirmDialog
+      isOpen={showConfirmDiscard}
+      onConfirm={confirmDiscard}
+      onCancel={cancelDiscard}
+    />
+  </>
+);
 };

@@ -1,5 +1,6 @@
 import React from 'react';
 import { X, Settings } from 'lucide-react';
+import { useVccModalAccessibility } from '../hooks/useVccModalAccessibility';
 
 /**
  * VccNotificationSettingsModal
@@ -29,18 +30,37 @@ export default function VccNotificationSettingsModal({
   setGracePeriodDays,
   saving = false
 }) {
+  const {
+    dialogRef,
+    requestClose,
+    handleBackdropClick
+  } = useVccModalAccessibility({
+    isOpen,
+    onClose
+  });
+
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl space-y-4 border border-slate-200/80 animate-in fade-in zoom-in-95 duration-150">
+    <div
+      className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4"
+      onClick={handleBackdropClick}
+    >
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="notif-settings-title"
+        tabIndex="-1"
+        className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl space-y-4 border border-slate-200/80 animate-in fade-in zoom-in-95 duration-150 outline-none"
+      >
         <div className="flex items-center justify-between pb-3 border-b border-slate-100">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-700 flex items-center justify-center border border-indigo-200/60 font-bold">
               <Settings size={16} />
             </div>
             <div>
-              <h3 className="text-base font-bold text-slate-900">
+              <h3 id="notif-settings-title" className="text-base font-bold text-slate-900">
                 ตั้งค่ากติกาวันแจ้งเตือนล่วงหน้าและเลยกำหนด (DCC)
               </h3>
               <p className="text-xs text-slate-500 mt-0.5">
@@ -50,7 +70,8 @@ export default function VccNotificationSettingsModal({
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={requestClose}
+            aria-label="ปิดหน้าต่าง"
             className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
           >
             <X size={18} />
@@ -196,7 +217,7 @@ export default function VccNotificationSettingsModal({
           <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-100">
             <button
               type="button"
-              onClick={onClose}
+              onClick={requestClose}
               className="h-9 px-4 rounded-xl border border-slate-200 text-slate-700 text-xs sm:text-sm font-medium hover:bg-slate-50 cursor-pointer"
             >
               ยกเลิก
