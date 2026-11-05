@@ -433,19 +433,41 @@ export const WorkOrderActionModal = ({
             )}
 
             {mode === 'RESCHEDULE' && (
-              <div>
-                <div className="text-xs sm:text-sm text-slate-600 font-medium mb-2">
-                  วันครบกำหนดเดิม (เก็บไว้ในประวัติ): <span className="font-semibold text-slate-900 font-sans" title={`ค.ศ. ${workOrder.original_due_date}`}>{formatVccDueDate(workOrder.original_due_date)}</span>
+              <div className="space-y-3">
+                <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 grid grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <span className="text-slate-500 block mb-0.5">วันครบกำหนดเริ่มแรก (Original Due Date):</span>
+                    <span className="font-semibold text-slate-900 font-sans" title={`ค.ศ. ${workOrder.original_due_date || workOrder.due_date}`}>
+                      {formatVccDueDate(workOrder.original_due_date || workOrder.due_date)}
+                    </span>
+                    <span className="text-[10px] text-slate-400 block mt-0.5">(เก็บรักษาถาวรตามนโยบายตรวจสอบย้อนกลับ)</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block mb-0.5">วันครบกำหนดปัจจุบัน (Current Due Date):</span>
+                    <span className="font-semibold text-indigo-700 font-sans" title={`ค.ศ. ${workOrder.due_date}`}>
+                      {formatVccDueDate(workOrder.due_date)}
+                    </span>
+                  </div>
                 </div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1.5">วันครบกำหนดใหม่ <span className="text-rose-600">*</span></label>
-                <input
-                  type="date"
-                  required
-                  aria-label="วันครบกำหนดใหม่"
-                  value={form.new_due_date}
-                  onChange={(e) => setForm({ ...form, new_due_date: e.target.value })}
-                  className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium"
-                />
+
+                <div>
+                  <label htmlFor="wo-reschedule-new-date" className="block text-sm font-semibold text-slate-700 mb-1.5">
+                    วันครบกำหนดใหม่ที่เสนอ (Proposed Due Date) <span className="text-rose-600">*</span>
+                  </label>
+                  <input
+                    id="wo-reschedule-new-date"
+                    type="date"
+                    required
+                    aria-label="วันครบกำหนดใหม่ที่เสนอ"
+                    value={form.new_due_date}
+                    onChange={(e) => setForm({ ...form, new_due_date: e.target.value })}
+                    className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium"
+                  />
+                </div>
+
+                <div className="p-2.5 rounded-lg bg-indigo-50/60 border border-indigo-100 text-[11px] text-indigo-900 leading-relaxed">
+                  * การขอเลื่อนกำหนดต้องได้รับความเห็นชอบจากผู้มีอำนาจ (หัวหน้าฝ่าย L4 ขึ้นไป หรือเจ้าหน้าที่ DCC) และจะถูกบันทึกประวัติการเปลี่ยนแปลงอย่างถาวรใน Audit Trail
+                </div>
               </div>
             )}
 

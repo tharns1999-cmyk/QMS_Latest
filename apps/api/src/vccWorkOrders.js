@@ -1,5 +1,5 @@
 import { getThresholds } from './approval.js';
-import { computeDueDateForMonth, isUserAuthorizedForPlanDept } from './vccPlans.js';
+import { computeDueDateForMonth, isUserAuthorizedForPlanDept, getUserDepartments } from './vccPlans.js';
 import { requireVccAccess, requireDccOnly, canReadVccDepartment, vccDeptScopeSql, VCC_DEPT_FORBIDDEN, canManageVccAsset } from './vccAuth.js';
 
 const NOW = "strftime('%Y-%m-%dT%H:%M:%SZ', 'now')";
@@ -85,8 +85,8 @@ export const computeSha256 = async (bytes) => {
     .join('');
 };
 
-const fetchWorkOrder = async (db, id) =>
-  db.prepare(`
+const fetchWorkOrder = async (db, id) => {
+  const wo = await db.prepare(`
     SELECT w.*,
       a.asset_code,
       a.name AS asset_name,
@@ -121,6 +121,21 @@ const fetchWorkOrder = async (db, id) =>
     LEFT JOIN users u_amend ON u_amend.id = w.amended_by
     WHERE w.id = ?
   `).bind(id).first();
+
+  if (!wo) return null;
+
+  const { results: childAssets } = await db.prepare(`
+    SELECT id, asset_code, name, asset_type, serial_no, model, location, status
+    FROM vcc_assets
+    WHERE parent_id = ?
+    ORDER BY asset_code ASC
+  `).bind(wo.asset_id).all().catch(() => ({ results: [] }));
+
+  return {
+    ...wo,
+    child_assets: childAssets || []
+  };
+};
 
 export const generateWorkOrdersForApprovedPlan = async (db, planId, actorId, audit) => {
   const maxRetries = 3;
@@ -1211,8 +1226,14 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
     if (existing.status === 'CLOSED' || existing.status === 'CANCELLED') {
       return c.json({ error: 'ไม่สามารถเลื่อนวันครบกำหนดของใบสั่งงานที่ปิดหรือยกเลิกแล้ว' }, 409);
     }
-    if (!isUserAuthorizedForPlanDept(user, existing.department)) {
-      return c.json({ error: 'ไม่มีสิทธิ์เลื่อนกำหนดใบสั่งงานของแผนกนี้' }, 403);
+    const isDccUser = Boolean(user.isDcc || user.is_dcc);
+    const isQmrUser = Boolean(user.isQmr || user.is_qmr);
+    const userLevel = Number(user.approval_level ?? user.approvalLevel ?? 0);
+    const inDept = getUserDepartments(user).includes(String(existing.department || '').toUpperCase());
+    const isAuthorized = isDccUser || isQmrUser || userLevel >= 6 || (userLevel >= 4 && inDept);
+
+    if (!isAuthorized) {
+      return c.json({ error: 'ไม่มีสิทธิ์เลื่อนกำหนดใบสั่งงาน: เฉพาะผู้มีอำนาจอนุมัติ (ระดับ L4 ขึ้นไป) หรือเจ้าหน้าที่ DCC เท่านั้นที่สามารถเลื่อนกำหนดวันของใบสั่งงานได้' }, 403);
     }
 
     const newDueDate = String(body.new_due_date || '').trim();
@@ -1246,10 +1267,13 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
         wo_id: id,
         wo_code: existing.wo_code,
         asset_id: existing.asset_id,
-        original_due_date: existing.original_due_date,
+        original_due_date: existing.original_due_date || existing.due_date,
+        current_due_date: existing.due_date,
+        proposed_due_date: newDueDate,
         before: { due_date: existing.due_date },
         after: { due_date: newDueDate },
-        reason
+        reason,
+        authorized_by: user.id
       })
     ]);
     if (conflict) return conflict;
@@ -1304,12 +1328,31 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
       return c.json({ error: 'กรุณาระบุเกณฑ์ยอมรับ (Acceptance Criteria) ที่ใช้ตรวจเทียบก่อนส่งตรวจรับ' }, 400);
     }
 
+    const rawVerifType = String(body.verification_type || existing.verification_type || 'QUANTITATIVE').trim().toUpperCase();
+    const verificationType = rawVerifType === 'QUALITATIVE' ? 'QUALITATIVE' : 'QUANTITATIVE';
+    const actualResult = body.actual_result !== undefined ? (String(body.actual_result || '').trim() || null) : (existing.actual_result || null);
+
+    if (verificationType === 'QUALITATIVE') {
+      if (!actualResult && !resultRemarks) {
+        return c.json({ error: 'สำหรับการทวนสอบเชิงคุณภาพ (Qualitative) กรุณาระบุผลการตรวจสอบจริง (Actual Result) เช่น ผ่านเกณฑ์ตามข้อกำหนด หรือสภาพสมบูรณ์' }, 400);
+      }
+    }
+
     const calibrationProviderName = body.calibration_provider_name !== undefined ? (String(body.calibration_provider_name || '').trim() || null) : existing.calibration_provider_name;
     const calibrationMethod = body.calibration_method !== undefined ? (String(body.calibration_method || '').trim() || null) : existing.calibration_method;
     const traceabilityRef = body.traceability_ref !== undefined ? (String(body.traceability_ref || '').trim() || null) : existing.traceability_ref;
     const environmentalConditions = body.environmental_conditions !== undefined ? (String(body.environmental_conditions || '').trim() || null) : existing.environmental_conditions;
-    const uncertaintyValue = body.uncertainty_value !== undefined ? (String(body.uncertainty_value || '').trim() || null) : existing.uncertainty_value;
-    const calibrationErrorValue = body.calibration_error_value !== undefined ? (String(body.calibration_error_value || '').trim() || null) : existing.calibration_error_value;
+    let uncertaintyValue = body.uncertainty_value !== undefined ? (String(body.uncertainty_value || '').trim() || null) : existing.uncertainty_value;
+    let calibrationErrorValue = body.calibration_error_value !== undefined ? (String(body.calibration_error_value || '').trim() || null) : existing.calibration_error_value;
+
+    if (verificationType === 'QUALITATIVE') {
+      if (!uncertaintyValue || !uncertaintyValue.trim()) {
+        uncertaintyValue = 'N/A (การทวนสอบเชิงคุณภาพ ไม่นำมาคำนวณ)';
+      }
+      if (!calibrationErrorValue || !calibrationErrorValue.trim()) {
+        calibrationErrorValue = 'N/A (การทวนสอบเชิงคุณภาพ)';
+      }
+    }
 
     let certificateIssueDate = existing.certificate_issue_date;
     if (body.certificate_issue_date !== undefined) {
@@ -1355,6 +1398,8 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
             certificate_valid_until = ?,
             performed_by = ?,
             nc_status = ?,
+            verification_type = ?,
+            actual_result = ?,
             rejected_reason = NULL,
             updated_at = ${NOW},
             updated_by = ?
@@ -1375,6 +1420,8 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
         certificateValidUntil,
         user.id,
         nextNcStatus,
+        verificationType,
+        actualResult,
         user.id,
         id
       ),
@@ -1386,6 +1433,8 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
         asset_code: existing.asset_code,
         performed_at: performedAt,
         result_status: resultStatus,
+        verification_type: verificationType,
+        actual_result: actualResult,
         certificate_no: certificateNo,
         acceptance_criteria: acceptanceCriteria,
         calibration_provider_name: calibrationProviderName,
@@ -2214,6 +2263,8 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
     const calibrationErrorValue = proposed.calibration_error_value !== undefined ? proposed.calibration_error_value : existing.calibration_error_value;
     const certificateIssueDate = proposed.certificate_issue_date !== undefined ? proposed.certificate_issue_date : existing.certificate_issue_date;
     const certificateValidUntil = proposed.certificate_valid_until !== undefined ? proposed.certificate_valid_until : existing.certificate_valid_until;
+    const verificationType = proposed.verification_type !== undefined ? proposed.verification_type : (existing.verification_type || 'QUANTITATIVE');
+    const actualResult = proposed.actual_result !== undefined ? proposed.actual_result : (existing.actual_result || null);
 
     // Fetch next amendment sequence
     const seqRow = await db
@@ -2263,6 +2314,8 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
             calibration_error_value = ?,
             certificate_issue_date = ?,
             certificate_valid_until = ?,
+            verification_type = ?,
+            actual_result = ?,
             nc_status = ?,
             is_amended = 1,
             amended_at = ${NOW},
@@ -2285,6 +2338,8 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
         calibrationErrorValue,
         certificateIssueDate,
         certificateValidUntil,
+        verificationType,
+        actualResult,
         nextNcStatus,
         user.id,
         reason,

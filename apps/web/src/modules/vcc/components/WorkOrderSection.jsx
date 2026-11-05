@@ -138,6 +138,8 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
   const [resultForm, setResultForm] = useState({
     performed_at: getBangkokDate(),
     result_status: 'PASS',
+    verification_type: 'QUANTITATIVE',
+    actual_result: '',
     certificate_no: '',
     acceptance_criteria: '',
     result_remarks: '',
@@ -413,6 +415,8 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
     setResultForm({
       performed_at: wo.performed_at || getBangkokDate(),
       result_status: wo.result_status === 'PENDING' ? 'PASS' : wo.result_status,
+      verification_type: wo.verification_type || 'QUANTITATIVE',
+      actual_result: wo.actual_result || '',
       certificate_no: wo.certificate_no || '',
       acceptance_criteria: wo.acceptance_criteria || woSettings.default_acceptance_criteria?.[0] || '',
       result_remarks: wo.result_remarks || '',

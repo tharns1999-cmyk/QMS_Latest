@@ -179,6 +179,11 @@ export const DigitalRecordModal = ({
               <div>
                 <span className="text-slate-400 block text-xs">ชื่อเครื่องมือ:</span>
                 <span className="font-semibold text-slate-900">{workOrder.asset_name || '-'}</span>
+                {workOrder.group_nature === 'COMPOSITE_SET' && (
+                  <span className="inline-block mt-0.5 px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-200 text-[10px] font-bold">
+                    ชุดเครื่องมือผสม (Composite Set)
+                  </span>
+                )}
               </div>
               <div>
                 <span className="text-slate-400 block text-xs">แผนกผู้ครอบครอง:</span>
@@ -190,6 +195,61 @@ export const DigitalRecordModal = ({
               </div>
             </div>
           </div>
+
+          {/* Section 1.1: Composite Equipment Set Breakdown (DEC-04) */}
+          {(workOrder.group_nature === 'COMPOSITE_SET' || workOrder.is_group || (workOrder.child_assets && workOrder.child_assets.length > 0) || workOrder.composite_details) && (
+            <div className="space-y-2 vcc-print-section" data-testid="vcc-composite-breakdown-section">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-slate-900 flex items-center gap-1.5">
+                <Layers size={14} className="text-indigo-600" />
+                <span>รายการอุปกรณ์ในชุดเครื่องมือผสม (Composite Equipment Set Breakdown)</span>
+              </h2>
+              <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-2.5 text-xs">
+                {workOrder.composite_details && (
+                  <div className="p-2.5 rounded-lg bg-white border border-slate-200">
+                    <span className="font-semibold text-slate-700 block mb-1">รายละเอียดรายการประกอบชุด (Specification / Items):</span>
+                    <p className="text-slate-800 whitespace-pre-line leading-relaxed font-sans">{workOrder.composite_details}</p>
+                  </div>
+                )}
+                {Array.isArray(workOrder.child_assets) && workOrder.child_assets.length > 0 && (
+                  <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
+                        <tr>
+                          <th className="py-2 px-3">รหัสเครื่องมือย่อย</th>
+                          <th className="py-2 px-3">ชื่ออุปกรณ์</th>
+                          <th className="py-2 px-3">Serial No. / Model</th>
+                          <th className="py-2 px-3">ตำแหน่งจัดเก็บ</th>
+                          <th className="py-2 px-3 text-center">สถานะ</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {workOrder.child_assets.map((child) => (
+                          <tr key={child.id || child.asset_code} className="hover:bg-slate-50/60">
+                            <td className="py-2 px-3 font-mono font-bold text-indigo-700">{child.asset_code}</td>
+                            <td className="py-2 px-3 font-medium text-slate-800">{child.name}</td>
+                            <td className="py-2 px-3 text-slate-600 font-mono">{child.serial_no || child.model || '-'}</td>
+                            <td className="py-2 px-3 text-slate-600">{child.location || '-'}</td>
+                            <td className="py-2 px-3 text-center">
+                              <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                child.status === 'ACTIVE'
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : 'bg-slate-100 text-slate-700'
+                              }`}>
+                                {child.status || 'ACTIVE'}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+                <span className="text-[10px] text-slate-400 block">
+                  * ข้อมูลเครื่องมือย่อยถูกบันทึกเป็นหลักฐานดิจิทัล ณ วันที่ออกใบบันทึกผลการทวนสอบ/สอบเทียบ
+                </span>
+              </div>
+            </div>
+          )}
 
           {/* Section 2: Calibration Execution & Acceptance Result */}
           <div className="space-y-2 vcc-print-section">
@@ -238,13 +298,25 @@ export const DigitalRecordModal = ({
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                 <div>
+                  <span className="text-slate-400 block text-xs">ประเภทการทวนสอบ (Verification Type):</span>
+                  <span className="font-semibold text-slate-900">
+                    {workOrder.verification_type === 'QUALITATIVE' ? 'การตรวจสอบเชิงคุณภาพ (Qualitative)' : 'การวัดเชิงปริมาณ (Quantitative)'}
+                  </span>
+                </div>
+                <div>
                   <span className="text-slate-400 block text-xs">เลขที่ใบรับรอง (Certificate No.):</span>
                   <span className="font-mono font-bold text-slate-900">{workOrder.certificate_no || '-'}</span>
                 </div>
-                <div>
+                <div className="sm:col-span-2">
                   <span className="text-slate-400 block text-xs">เกณฑ์ยอมรับ (Acceptance Criteria):</span>
                   <span className="font-semibold text-slate-900">{workOrder.acceptance_criteria || '-'}</span>
                 </div>
+                {workOrder.actual_result && (
+                  <div className="sm:col-span-2 p-2.5 rounded-lg bg-slate-50 border border-slate-200">
+                    <span className="text-slate-500 font-semibold block text-xs mb-0.5">ผลการตรวจสอบจริง (Actual Result):</span>
+                    <span className="text-slate-900 font-medium">{workOrder.actual_result}</span>
+                  </div>
+                )}
                 {workOrder.result_remarks && (
                   <div className="sm:col-span-2">
                     <span className="text-slate-400 block text-xs">หมายเหตุ / ผลการสังเกต:</span>

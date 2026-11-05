@@ -86,7 +86,7 @@ export const runVccNotificationSweep = async (db, options = {}) => {
   const l3EscalationDays = Number(settings.overdue_escalation_days_l3 || 14);
   const onHoldEscalationDays = Number(settings.on_hold_escalation_days || 14);
   const graceDays = Number(settings.acknowledgement_grace_days || 3);
-  const certExpiringDays = [...(settings.cert_expiring_days || [60, 30])].sort((a, b) => a - b);
+  const certExpiringDays = [...(settings.cert_expiring_days || [60, 30, 15])].sort((a, b) => a - b);
 
   // ─────────────────────────────────────────────────────────────────────────────
   // 1. WORK ORDERS: Due Soon & Overdue Lifecycle (with Overdue Invariance)
@@ -292,11 +292,26 @@ export const runVccNotificationSweep = async (db, options = {}) => {
       title = `[ใบรับรองหมดอายุ] เครื่องมือ ${row.asset_code} ใบรับรองหมดอายุแล้ว`;
       message = `เครื่องมือ ${row.asset_code} (${row.asset_name}) ใบรับรองเลขที่ ${row.certificate_no} หมดอายุเมื่อวันที่ ${validUntil} (หมดอายุมาแล้ว ${Math.abs(certDiff)} วัน) ห้ามนำเครื่องมือไปใช้งานในกระบวนการผลิต`;
     } else {
-      for (const t of certExpiringDays) {
+      const activeCertExpiringDays = (settings.department_cert_expiring_days && settings.department_cert_expiring_days[row.department])
+        ? [...settings.department_cert_expiring_days[row.department]].sort((a, b) => a - b)
+        : certExpiringDays;
+
+      for (const t of activeCertExpiringDays) {
         if (certDiff <= t) {
           notifType = `CERT_EXPIRING_${t}`;
-          severity = t <= 30 ? 'WARNING' : 'INFO';
-          title = `[ใบรับรองใกล้หมดอายุ ${t} วัน] เครื่องมือ ${row.asset_code} เหลือ ${certDiff} วัน`;
+          if (t <= 15) {
+            severity = 'CRITICAL';
+            escalationLevel = 2;
+            title = `[ใบรับรองใกล้หมดอายุ ${t} วัน - เร่งด่วน] เครื่องมือ ${row.asset_code} เหลือ ${certDiff} วัน`;
+          } else if (t <= 30) {
+            severity = 'WARNING';
+            escalationLevel = 1;
+            title = `[ใบรับรองใกล้หมดอายุ ${t} วัน] เครื่องมือ ${row.asset_code} เหลือ ${certDiff} วัน`;
+          } else {
+            severity = 'INFO';
+            escalationLevel = 1;
+            title = `[ใบรับรองใกล้หมดอายุ ${t} วัน] เครื่องมือ ${row.asset_code} เหลือ ${certDiff} วัน`;
+          }
           message = `เครื่องมือ ${row.asset_code} (${row.asset_name}) ใบรับรองเลขที่ ${row.certificate_no} จะหมดอายุในวันที่ ${validUntil} (เหลือเวลาอีก ${certDiff} วัน) กรุณาประสานงานส่งสอบเทียบ`;
           break;
         }
