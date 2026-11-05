@@ -22,7 +22,15 @@ import {
 import { fetchVccWorkOrderDetail } from '../api/vccWorkOrderApi';
 import { WorkOrderAmendmentRequests } from './WorkOrderAmendmentRequests';
 import useStore from '../../../store/useStore';
-import { canReviewWorkOrder, canReleaseWorkOrderHold, canCancelWorkOrder, canApproveReschedule } from '../utils/workOrderPermissions';
+import {
+  canReviewWorkOrder,
+  canReleaseWorkOrderHold,
+  canCancelWorkOrder,
+  canApproveReschedule,
+  canRequestReschedule,
+  canDirectReschedule,
+  getReschedulePermissionReason
+} from '../utils/workOrderPermissions';
 import { WORK_ORDER_STATUS_LABELS, getWorkOrderStatusLabel } from '../utils/statusLabels';
 import { formatVccDueDate, formatVccDate, formatVccDateTime } from '../utils/vccDateUtils';
 import { useVccModalAccessibility } from '../hooks/useVccModalAccessibility';
@@ -631,17 +639,30 @@ export const WorkOrderSideDrawer = ({
                     </button>
                   )
                 ) : (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onClose();
-                      onReschedule(currentWo);
-                    }}
-                    className="min-h-[44px] sm:min-h-[38px] sm:h-9 w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 sm:px-3.5 rounded-xl border border-slate-300 text-slate-700 text-xs sm:text-sm font-semibold hover:bg-slate-100 motion-safe:active:scale-[0.98] transition-all cursor-pointer select-none"
-                  >
-                    <CalendarClock size={15} />
-                    <span>ขอเลื่อนวันครบกำหนด</span>
-                  </button>
+                  (() => {
+                    const allowed = canRequestReschedule(currentUser, currentWo) || canDirectReschedule(currentUser, currentWo);
+                    const reason = !allowed ? getReschedulePermissionReason(currentUser, currentWo) : '';
+                    return (
+                      <button
+                        type="button"
+                        disabled={!allowed}
+                        title={reason || 'ขอเลื่อนวันครบกำหนด'}
+                        onClick={() => {
+                          if (!allowed) return;
+                          onClose();
+                          onReschedule(currentWo);
+                        }}
+                        className={`min-h-[44px] sm:min-h-[38px] sm:h-9 w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 sm:px-3.5 rounded-xl border text-xs sm:text-sm font-semibold transition-all select-none ${
+                          allowed
+                            ? 'border-slate-300 text-slate-700 hover:bg-slate-100 motion-safe:active:scale-[0.98] cursor-pointer'
+                            : 'border-slate-200 text-slate-400 bg-slate-50 opacity-60 cursor-not-allowed'
+                        }`}
+                      >
+                        <CalendarClock size={15} />
+                        <span>ขอเลื่อนวันครบกำหนด</span>
+                      </button>
+                    );
+                  })()
                 )}
               </>
             )}

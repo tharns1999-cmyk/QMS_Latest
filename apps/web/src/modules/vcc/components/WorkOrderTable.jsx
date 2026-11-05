@@ -17,7 +17,15 @@ import {
 } from 'lucide-react';
 import { FloatingOverlay } from '../../../shared/components/ui/FloatingOverlay';
 import useStore from '../../../store/useStore';
-import { canReviewWorkOrder, canReleaseWorkOrderHold, canCancelWorkOrder, canApproveReschedule } from '../utils/workOrderPermissions';
+import {
+  canReviewWorkOrder,
+  canReleaseWorkOrderHold,
+  canCancelWorkOrder,
+  canApproveReschedule,
+  canRequestReschedule,
+  canDirectReschedule,
+  getReschedulePermissionReason
+} from '../utils/workOrderPermissions';
 import { WORK_ORDER_STATUS_LABELS, RESULT_STATUS_LABELS, getWorkOrderStatusLabel, getResultStatusLabel } from '../utils/statusLabels';
 import { formatVccDueDate } from '../utils/vccDateUtils';
 
@@ -145,19 +153,30 @@ export const WorkOrderRowActions = ({
             </button>
           )
         ) : (
-          (wo.status === 'OPEN' || wo.status === 'SCHEDULED' || wo.status === 'REJECTED') && (
-            <button
-              type="button"
-              onClick={() => {
-                handleClose();
-                onReschedule(wo);
-              }}
-              className="w-full text-left px-3.5 sm:px-3 py-3 sm:py-2 min-h-[44px] sm:min-h-[36px] text-xs font-semibold text-slate-700 hover:bg-slate-50 flex items-center gap-2 transition-colors cursor-pointer motion-safe:active:bg-slate-100 select-none"
-            >
-              <CalendarClock size={13} className="text-slate-500" />
-              <span>ขอเลื่อนวันครบกำหนด</span>
-            </button>
-          )
+          (wo.status === 'OPEN' || wo.status === 'SCHEDULED' || wo.status === 'REJECTED') && (() => {
+            const allowed = canRequestReschedule(currentUser, wo) || canDirectReschedule(currentUser, wo);
+            const reason = !allowed ? getReschedulePermissionReason(currentUser, wo) : '';
+            return (
+              <button
+                type="button"
+                disabled={!allowed}
+                title={reason || 'ขอเลื่อนวันครบกำหนด'}
+                onClick={() => {
+                  if (!allowed) return;
+                  handleClose();
+                  onReschedule(wo);
+                }}
+                className={`w-full text-left px-3.5 sm:px-3 py-3 sm:py-2 min-h-[44px] sm:min-h-[36px] text-xs font-semibold flex items-center gap-2 transition-colors select-none ${
+                  allowed
+                    ? 'text-slate-700 hover:bg-slate-50 cursor-pointer motion-safe:active:bg-slate-100'
+                    : 'text-slate-400 opacity-60 cursor-not-allowed bg-slate-50/50'
+                }`}
+              >
+                <CalendarClock size={13} className={allowed ? 'text-slate-500' : 'text-slate-400'} />
+                <span>ขอเลื่อนวันครบกำหนด</span>
+              </button>
+            );
+          })()
         )}
 
         {wo.status === 'PENDING_REVIEW' && canReview && wo.result_status !== 'INCONCLUSIVE' && (

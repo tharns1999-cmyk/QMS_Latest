@@ -33,6 +33,7 @@ describe('VCC Pre-UAT Product Hardening & Refinement Decisions (DEC-01 to DEC-04
       env.DB.prepare("INSERT OR IGNORE INTO departments (code, name_th, status) VALUES ('QA', 'แผนกประกันคุณภาพ', 'ACTIVE')"),
       ...[
         ['u-hdcc', 'H-DCC Officer', 'hdcc@vcc.local', 3, 'LB', 1],
+        ['u-hl1', 'H-Clerk L1', 'hl1@vcc.local', 1, 'LB', 0],
         ['u-hl2', 'H-Operator L2', 'hl2@vcc.local', 2, 'LB', 0],
         ['u-hl3', 'H-Senior L3', 'hl3@vcc.local', 3, 'LB', 0],
         ['u-hl4', 'H-Lead L4', 'hl4@vcc.local', 4, 'LB', 0],
@@ -50,6 +51,7 @@ describe('VCC Pre-UAT Product Hardening & Refinement Decisions (DEC-01 to DEC-04
 
     for (const [key, email] of [
       ['DCC', 'hdcc@vcc.local'],
+      ['L1', 'hl1@vcc.local'],
       ['L2', 'hl2@vcc.local'],
       ['L3', 'hl3@vcc.local'],
       ['L4', 'hl4@vcc.local'],
@@ -400,6 +402,48 @@ describe('VCC Pre-UAT Product Hardening & Refinement Decisions (DEC-01 to DEC-04
       expect(peerApproveRes.body.workOrder.reschedule_status).toBe('APPROVED');
       expect(peerApproveRes.body.workOrder.reschedule_approved_by).toBe('u-hl4b');
       expect(peerApproveRes.body.workOrder.due_date).toBe('2026-10-20');
+    });
+
+    it('9. Requester Authorization Matrix: Enforces L2+ and Owning Department for request-reschedule', async () => {
+      const woMatrixId = 'wo-matrix-auth-01';
+      await env.DB.prepare(`
+        INSERT OR REPLACE INTO vcc_work_orders (
+          id, wo_code, asset_id, provider_name, status, due_date, original_due_date, scheduled_date, created_by, updated_by
+        ) VALUES (?, 'WO-MTX-01', 'ast-resched', 'NIMT', 'OPEN', '2026-11-01', '2026-11-01', '2026-11-01', 'u-hdcc', 'u-hdcc')
+      `).bind(woMatrixId).run();
+
+      // Matrix 1: L1 in same department (LB) -> 403 Forbidden (requires L2+)
+      const l1Res = await call('POST', `/api/vcc/work-orders/${woMatrixId}/request-reschedule`, 'L1', {
+        proposed_due_date: '2026-11-15',
+        reason: 'L1 ขอเลื่อนกำหนด'
+      });
+      expect(l1Res.status).toBe(403);
+      expect(l1Res.body.error).toContain('ผู้ยื่นคำขอต้องมีระดับสิทธิ์ตั้งแต่ L2');
+
+      // Matrix 2: L4 cross-department (QA trying on LB) -> 403 Forbidden (must be in owning department)
+      const crossDeptRes = await call('POST', `/api/vcc/work-orders/${woMatrixId}/request-reschedule`, 'OTHER4', {
+        proposed_due_date: '2026-11-15',
+        reason: 'ข้ามแผนกขอเลื่อนกำหนด'
+      });
+      expect(crossDeptRes.status).toBe(403);
+      expect(crossDeptRes.body.error).toContain('ผู้ยื่นคำขอต้องสังกัดแผนกเจ้าของเครื่องมือ');
+
+      // Matrix 3: QMR/L6 cross-department (QA trying on LB) -> 403 Forbidden (no global QMR/L6 bypass for requesting)
+      const qmrCrossRes = await call('POST', `/api/vcc/work-orders/${woMatrixId}/request-reschedule`, 'QMR', {
+        proposed_due_date: '2026-11-15',
+        reason: 'QMR ข้ามแผนกยื่นขอเลื่อนกำหนด'
+      });
+      expect(qmrCrossRes.status).toBe(403);
+      expect(qmrCrossRes.body.error).toContain('สิทธิ์ผู้บริหาร QMR/L6 ไม่สามารถยื่นขอข้ามแผนกได้');
+
+      // Matrix 4: L3 in same department (LB) -> 200 OK
+      const l3Res = await call('POST', `/api/vcc/work-orders/${woMatrixId}/request-reschedule`, 'L3', {
+        proposed_due_date: '2026-11-15',
+        reason: 'L3 ในแผนกขอเลื่อนกำหนด'
+      });
+      expect(l3Res.status).toBe(200);
+      expect(l3Res.body.workOrder.reschedule_status).toBe('REQUESTED');
+      expect(l3Res.body.workOrder.reschedule_requested_by).toBe('u-hl3');
     });
   });
 

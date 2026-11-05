@@ -1327,8 +1327,16 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
     if (existing.status === 'CLOSED' || existing.status === 'CANCELLED') {
       return c.json({ error: 'ไม่สามารถขอเลื่อนวันครบกำหนดของใบสั่งงานที่ปิดหรือยกเลิกแล้ว' }, 409);
     }
-    if (!isUserAuthorizedForPlanDept(user, existing.department)) {
-      return c.json({ error: 'ไม่มีสิทธิ์ขอเลื่อนวันครบกำหนดของใบสั่งงานในแผนกนี้' }, 403);
+    const userLevel = Number(user.approval_level ?? user.approvalLevel ?? user.level ?? 0);
+    if (userLevel < 2) {
+      return c.json({ error: 'ไม่มีสิทธิ์ขอเลื่อนวันครบกำหนด: ผู้ยื่นคำขอต้องมีระดับสิทธิ์ตั้งแต่ L2 (ระดับเจ้าหน้าที่/ผู้ปฏิบัติงาน) ขึ้นไป' }, 403);
+    }
+    const isDccUser = Boolean(user.isDcc || user.is_dcc);
+    const woDept = String(existing.department || '').toUpperCase().trim();
+    const userDepts = getUserDepartments(user).map((d) => String(d).toUpperCase().trim());
+    const inOwningDept = userDepts.includes(woDept);
+    if (!inOwningDept && !isDccUser) {
+      return c.json({ error: `ไม่มีสิทธิ์ขอเลื่อนวันครบกำหนดของใบสั่งงานในแผนก ${woDept}: ผู้ยื่นคำขอต้องสังกัดแผนกเจ้าของเครื่องมือ (สิทธิ์ผู้บริหาร QMR/L6 ไม่สามารถยื่นขอข้ามแผนกได้)` }, 403);
     }
     if (existing.reschedule_status === 'REQUESTED') {
       return c.json({ error: 'มีคำขอเลื่อนวันครบกำหนดรอการอนุมัติอยู่แล้ว กรุณารอการพิจารณาคำขอเดิม' }, 409);
