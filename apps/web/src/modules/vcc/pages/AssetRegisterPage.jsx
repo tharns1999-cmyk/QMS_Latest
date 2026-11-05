@@ -88,12 +88,12 @@ const AssetRegisterPageInner = () => {
   const [localModuleView, setLocalModuleView] = useState('ASSETS');
   const moduleView = routeView || localModuleView;
 
-  const setModuleView = useCallback((nextView) => {
+  const setModuleView = useCallback((nextView, targetWoId = null) => {
     setLocalModuleView(nextView);
     if (navigate && location?.pathname && location.pathname.startsWith('/vcc')) {
       const targetPath =
         nextView === 'TASKS' ? '/vcc/tasks' :
-        nextView === 'WORK_ORDERS' ? '/vcc/work-orders' :
+        nextView === 'WORK_ORDERS' ? (targetWoId ? `/vcc/work-orders?wo=${encodeURIComponent(targetWoId)}` : '/vcc/work-orders') :
         nextView === 'ANNUAL_PLAN' ? '/vcc/plans' :
         nextView === 'ASSETS' ? '/vcc/assets' : '/vcc/dashboard';
       if (location.pathname !== targetPath) {
@@ -448,7 +448,7 @@ const AssetRegisterPageInner = () => {
       ) : moduleView === 'WORK_ORDERS' ? (
         <WorkOrderSection activeDepartments={activeDepartments} />
       ) : moduleView === 'DASHBOARD' ? (
-        <VccDashboardSection onNavigateToWorkOrders={() => setModuleView('WORK_ORDERS')} />
+        <VccDashboardSection onNavigateToWorkOrders={(woId) => setModuleView('WORK_ORDERS', woId)} />
       ) : (
         <>
           {hasTestData && (
@@ -618,7 +618,7 @@ const AssetRegisterPageInner = () => {
             ) : displayedAssets.length === 0 ? (
               <div className="p-12 text-center space-y-2">
                 <div className="text-slate-700 font-bold text-base">
-                  ไม่พบรายการเครื่องมือในสถานะ {activeTab === 'ACTIVE' ? 'ใช้งานปกติ' : 'ปลดออกแล้ว'}
+                  ไม่พบรายการเครื่องมือในสถานะ {getAssetStatusLabel(activeTab)}
                 </div>
                 <p className="text-slate-500 text-sm">
                   {canAddAsset ? 'ลองปรับเงื่อนไขการค้นหา หรือกดปุ่ม “เพิ่มเครื่องมือ” ด้านบน' : 'ลองปรับเงื่อนไขการค้นหา'}

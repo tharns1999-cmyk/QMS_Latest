@@ -129,17 +129,21 @@ export const CreateWorkOrderModal = ({
           )}
 
           <div className="flex gap-3 p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-sm font-semibold">
-            <label className="inline-flex items-center gap-2 cursor-pointer">
+            <label htmlFor="wo-mode-adhoc" className="inline-flex items-center gap-2 cursor-pointer">
               <input
+                id="wo-mode-adhoc"
                 type="radio"
+                name="wo_mode"
                 checked={form.mode === 'ADHOC'}
                 onChange={() => setForm({ ...form, mode: 'ADHOC', plan_id: '', plan_item_id: '' })}
               />
               <span>ใบสั่งงานนอกแผน (Ad-hoc)</span>
             </label>
-            <label className="inline-flex items-center gap-2 cursor-pointer">
+            <label htmlFor="wo-mode-plan" className="inline-flex items-center gap-2 cursor-pointer">
               <input
+                id="wo-mode-plan"
                 type="radio"
+                name="wo_mode"
                 checked={form.mode === 'PLAN'}
                 onChange={() => setForm({ ...form, mode: 'PLAN', plan_id: approvedPlans[0]?.id || '' })}
               />
@@ -254,12 +258,20 @@ export const CreateWorkOrderModal = ({
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                 <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">หน่วยงานที่ทวนสอบ</label>
+                  <label htmlFor="create-wo-provider-name" className="block text-sm font-semibold text-slate-700 mb-1.5">
+                    หน่วยงานที่ทวนสอบ <span className="text-rose-600">*</span>
+                  </label>
                   <select
+                    id="create-wo-provider-name"
+                    required
+                    aria-label="หน่วยงานที่ทวนสอบ"
                     value={form.provider_name}
                     onChange={(e) => setForm({ ...form, provider_name: e.target.value })}
                     className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium bg-white"
                   >
+                    {!providers.includes(form.provider_name) && (
+                      <option value="" disabled>-- เลือกหน่วยงานที่ทวนสอบ --</option>
+                    )}
                     {providers.map((p) => (
                       <option key={p} value={p}>{p}</option>
                     ))}

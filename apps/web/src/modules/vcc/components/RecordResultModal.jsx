@@ -46,7 +46,8 @@ export const RecordResultModal = ({
   error,
   saving,
   onSubmit,
-  criteriaOptions = []
+  criteriaOptions = [],
+  providers = []
 }) => {
   const titleId = useId();
   const [fileError, setFileError] = useState('');
@@ -558,16 +559,47 @@ export const RecordResultModal = ({
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wide">
+                  <label htmlFor="record-provider-input" className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wide">
                     สถาบัน / ห้องปฏิบัติการสอบเทียบ (Provider)
                   </label>
                   <input
+                    id="record-provider-input"
                     type="text"
+                    list="vcc-record-providers-list"
                     value={form.calibration_provider_name || ''}
                     onChange={(e) => setForm({ ...form, calibration_provider_name: e.target.value })}
                     placeholder="เช่น สถาบันมาตรวิทยาแห่งชาติ (NIMT) หรือ Lab ภายนอก"
                     className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium focus:outline-none focus:border-indigo-600 shadow-2xs"
                   />
+                  {providers.length > 0 && (
+                    <datalist id="vcc-record-providers-list">
+                      {providers.map((p) => (
+                        <option key={p} value={p} />
+                      ))}
+                    </datalist>
+                  )}
+                  {providers.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mt-2" data-testid="record-provider-quick-chips">
+                      {providers.map((p) => {
+                        const isSelected = form.calibration_provider_name === p;
+                        return (
+                          <button
+                            key={p}
+                            type="button"
+                            onClick={() => setForm({ ...form, calibration_provider_name: p })}
+                            className={`min-h-[32px] px-2.5 py-1 rounded-lg text-xs font-semibold cursor-pointer transition-colors motion-safe:active:scale-[0.98] select-none ${
+                              isSelected
+                                ? 'bg-indigo-100 text-indigo-800 border border-indigo-300 font-bold'
+                                : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200/80'
+                            }`}
+                            aria-label={`เลือกหน่วยงาน ${p}`}
+                          >
+                            {p}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
 
                 <div>

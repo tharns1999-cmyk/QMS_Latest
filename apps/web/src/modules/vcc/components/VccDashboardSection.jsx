@@ -454,7 +454,7 @@ export default function VccDashboardSection({ onNavigateToWorkOrders }) {
                       {onNavigateToWorkOrders && (
                         <button
                           type="button"
-                          onClick={onNavigateToWorkOrders}
+                          onClick={() => onNavigateToWorkOrders(alert.wo_id || alert.work_order_id)}
                           className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 whitespace-nowrap inline-flex items-center gap-1 cursor-pointer"
                         >
                           จัดการใบงาน <ArrowRight size={12} />

@@ -245,10 +245,14 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
   const deepLinkedWoId = searchParams.get('wo');
   useEffect(() => {
     if (!deepLinkedWoId || loading || fetchError) return;
-    const tab = Object.keys(rawWosByTab).find((key) => rawWosByTab[key].some((w) => w.id === deepLinkedWoId));
+    const tab = Object.keys(rawWosByTab).find((key) =>
+      rawWosByTab[key].some((w) => w.id === deepLinkedWoId || w.wo_code === deepLinkedWoId)
+    );
     if (tab) {
       setActiveTab(tab);
-      setSelectedDrawerWo(rawWosByTab[tab].find((w) => w.id === deepLinkedWoId));
+      setSelectedDrawerWo(
+        rawWosByTab[tab].find((w) => w.id === deepLinkedWoId || w.wo_code === deepLinkedWoId)
+      );
     } else {
       toast.error('ไม่พบใบสั่งงานที่ระบุ หรือคุณไม่มีสิทธิ์ดูใบสั่งงานนี้');
     }
@@ -323,6 +327,24 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
     setSavingCreate(true);
     setCreateError('');
     try {
+      if (createForm.mode !== 'PLAN') {
+        if (!createForm.asset_id) {
+          setCreateError('กรุณาเลือกเครื่องมือวัด');
+          setSavingCreate(false);
+          return;
+        }
+        if (!createForm.provider_name || !createForm.provider_name.trim()) {
+          setCreateError('กรุณาระบุสถาบัน/หน่วยงานที่ทวนสอบ');
+          setSavingCreate(false);
+          return;
+        }
+        if (!createForm.due_date || !createForm.due_date.trim()) {
+          setCreateError('กรุณาระบุวันครบกำหนด');
+          setSavingCreate(false);
+          return;
+        }
+      }
+
       const payload =
         createForm.mode === 'PLAN'
           ? {
@@ -333,8 +355,8 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
             }
           : {
               asset_id: createForm.asset_id,
-              provider_name: createForm.provider_name,
-              due_date: createForm.due_date
+              provider_name: createForm.provider_name.trim(),
+              due_date: createForm.due_date.trim()
             };
       const created = await createVccWorkOrder(payload);
       toast.success(`สร้างใบสั่งงาน ${created.wo_code} แล้ว`);
@@ -765,6 +787,7 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
         saving={savingResult}
         onSubmit={handleResultSubmit}
         criteriaOptions={woSettings.default_acceptance_criteria}
+        providers={providers}
       />
 
       <AmendmentModal
