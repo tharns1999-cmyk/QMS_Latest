@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { MemoryRouter, useLocation } from 'react-router-dom';
+import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import useStore from '../../../store/useStore';
 import AssetRegisterPage from '../pages/AssetRegisterPage';
 import WorkOrderSection from '../components/WorkOrderSection';
-import { resetVccLocalStore } from '../api/vccApi';
+import { resetVccLocalStore, getLocalAssets, setLocalAssets } from '../api/vccApi';
 import * as dashApi from '../api/vccDashboardApi';
 import { AssetFormModal } from '../components/AssetRegisterModals';
 import { RecordResultModal } from '../components/RecordResultModal';
@@ -24,6 +24,18 @@ let currentTestLocation = null;
 const LocationTracker = () => {
   currentTestLocation = useLocation();
   return null;
+};
+
+const NavigationController = () => {
+  const navigate = useNavigate();
+  return (
+    <div data-testid="nav-controller">
+      <button type="button" onClick={() => navigate(-1)} aria-label="Go Back">Back</button>
+      <button type="button" onClick={() => navigate(1)} aria-label="Go Forward">Forward</button>
+      <button type="button" onClick={() => navigate('/vcc/work-orders?wo=WO-2026-001')} aria-label="Open WO1">WO1</button>
+      <button type="button" onClick={() => navigate('/vcc/work-orders?wo=vcc-wo-seed-st002')} aria-label="Open WO2">WO2</button>
+    </div>
+  );
 };
 
 // Harness for AssetFormModal to test dirty tracking on existing vs modified asset
@@ -443,6 +455,195 @@ describe('VCC Refinement Round E1 — Quick Wins Integration & Quality Fixes', (
 
       // Must NOT display "ปลดออกแล้ว" in ON_HOLD tab
       expect(screen.queryByText(/ไม่พบรายการเครื่องมือในสถานะ ปลดออกแล้ว/i)).not.toBeInTheDocument();
+    });
+  });
+
+  describe('P3: Comprehensive Deep-Link & Browser Navigation Matrix', () => {
+    it('Asset Deep-link: opens history modal for ACTIVE asset by UUID and retains ?asset param in URL', async () => {
+      render(
+        <MemoryRouter initialEntries={['/vcc/assets?asset=vcc-seed-st002']}>
+          <LocationTracker />
+          <AssetRegisterPage />
+        </MemoryRouter>
+      );
+
+      // Modal opens directly
+      expect(await screen.findByRole('heading', { name: /รายละเอียดและประวัติการแก้ไข \(Audit Log\)/i })).toBeInTheDocument();
+      const modal = screen.getByRole('dialog');
+      expect(within(modal).getByText(/ST002/)).toBeInTheDocument();
+      expect(within(modal).getByText(/Testo 176T4/i)).toBeInTheDocument();
+
+      // Param is kept in URL
+      expect(currentTestLocation.search).toBe('?asset=vcc-seed-st002');
+
+      // Closing modal cleans up query param
+      const closeBtn = within(modal).getByRole('button', { name: /ปิดหน้าต่าง/i });
+      fireEvent.click(closeBtn);
+
+      await waitFor(() => {
+        expect(screen.queryByRole('heading', { name: /รายละเอียดและประวัติการแก้ไข/i })).not.toBeInTheDocument();
+      });
+      expect(currentTestLocation.search).toBe('');
+    });
+
+    it('Asset Deep-link: opens history modal for RETIRED asset directly even though background table starts on ACTIVE tab', async () => {
+      render(
+        <MemoryRouter initialEntries={['/vcc/assets?asset=vcc-seed-retired']}>
+          <LocationTracker />
+          <AssetRegisterPage />
+        </MemoryRouter>
+      );
+
+      // Modal loads and displays the retired asset details
+      expect(await screen.findByRole('heading', { name: /รายละเอียดและประวัติการแก้ไข \(Audit Log\)/i })).toBeInTheDocument();
+      const modal = screen.getByRole('dialog');
+      expect(within(modal).getByText(/T-OLD-01/)).toBeInTheDocument();
+      expect(within(modal).getByText(/เทอร์โมมิเตอร์รุ่นเก่า/i)).toBeInTheDocument();
+
+      expect(currentTestLocation.search).toBe('?asset=vcc-seed-retired');
+    });
+
+    it('Asset Deep-link: opens history modal for ON_HOLD asset directly', async () => {
+      const existing = getLocalAssets();
+      setLocalAssets([
+        ...existing,
+        {
+          id: 'vcc-asset-hld-99',
+          asset_code: 'HLD-99',
+          name: '[ข้อมูลทดสอบ] เครื่องมือทดสอบสถานะ ON_HOLD',
+          asset_type: 'เครื่องชั่ง',
+          model: 'OHAUS Ranger',
+          location: 'Lab Room 2',
+          department: 'QC',
+          is_group: 0,
+          status: 'ON_HOLD',
+          created_at: '2026-10-28T02:00:00.000Z',
+          created_by: 'dc4'
+        }
+      ]);
+
+      render(
+        <MemoryRouter initialEntries={['/vcc/assets?asset=vcc-asset-hld-99']}>
+          <LocationTracker />
+          <AssetRegisterPage />
+        </MemoryRouter>
+      );
+
+      expect(await screen.findByRole('heading', { name: /รายละเอียดและประวัติการแก้ไข \(Audit Log\)/i })).toBeInTheDocument();
+      const modal = screen.getByRole('dialog');
+      expect(within(modal).getByText(/HLD-99/)).toBeInTheDocument();
+      expect(within(modal).getByText(/เครื่องมือทดสอบสถานะ ON_HOLD/i)).toBeInTheDocument();
+    });
+
+    it('Asset Deep-link: opens history modal for asset even when filtered out by department', async () => {
+      // vcc-seed-sc001 belongs to department WH
+      render(
+        <MemoryRouter initialEntries={['/vcc/assets?asset=vcc-seed-sc001']}>
+          <LocationTracker />
+          <AssetRegisterPage />
+        </MemoryRouter>
+      );
+
+      expect(await screen.findByRole('heading', { name: /รายละเอียดและประวัติการแก้ไข \(Audit Log\)/i })).toBeInTheDocument();
+      const modal = screen.getByRole('dialog');
+      expect(within(modal).getByText(/SC-WH-001/)).toBeInTheDocument();
+      expect(within(modal).getByText(/จุดรับวัตถุดิบ WH/i)).toBeInTheDocument();
+    });
+
+    it('Asset Deep-link: supports opening by asset_code directly (e.g. ?asset=ST002)', async () => {
+      render(
+        <MemoryRouter initialEntries={['/vcc/assets?asset=ST002']}>
+          <LocationTracker />
+          <AssetRegisterPage />
+        </MemoryRouter>
+      );
+
+      expect(await screen.findByRole('heading', { name: /รายละเอียดและประวัติการแก้ไข \(Audit Log\)/i })).toBeInTheDocument();
+      const modal = screen.getByRole('dialog');
+      expect(within(modal).getByText(/ST002/)).toBeInTheDocument();
+    });
+
+    it('Asset Deep-link: cleans up query param and shows toast on non-existent asset ID', async () => {
+      const toastSpy = vi.spyOn(toast, 'error');
+      render(
+        <MemoryRouter initialEntries={['/vcc/assets?asset=non-existent-asset-404']}>
+          <LocationTracker />
+          <AssetRegisterPage />
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        expect(toastSpy).toHaveBeenCalledWith('ไม่พบเครื่องมือ');
+        expect(currentTestLocation.search).toBe('');
+      });
+      expect(screen.queryByRole('heading', { name: /รายละเอียดและประวัติการแก้ไข/i })).not.toBeInTheDocument();
+    });
+
+    it('Asset Deep-link: enforces department isolation for non-DCC user', async () => {
+      useStore.setState({
+        currentUser: {
+          id: 'qc1',
+          name: 'QC Staff 1',
+          email: 'qc1@qms.local',
+          role: 'STAFF',
+          department: 'QC',
+          departments: ['QC'],
+          approval_level: 2,
+          isDcc: false,
+          isQmr: false
+        }
+      });
+      const toastSpy = vi.spyOn(toast, 'error');
+
+      // Asset vcc-seed-sc001 is in department WH
+      render(
+        <MemoryRouter initialEntries={['/vcc/assets?asset=vcc-seed-sc001']}>
+          <LocationTracker />
+          <AssetRegisterPage />
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        expect(toastSpy).toHaveBeenCalledWith('ไม่มีสิทธิ์เข้าถึงเครื่องมือของแผนกนี้');
+        expect(currentTestLocation.search).toBe('');
+      });
+      expect(screen.queryByRole('heading', { name: /รายละเอียดและประวัติการแก้ไข/i })).not.toBeInTheDocument();
+    });
+
+    it('Work Order Deep-link: correctly manages Browser Back and Forward navigation', async () => {
+      render(
+        <MemoryRouter
+          initialEntries={['/vcc/work-orders', '/vcc/work-orders?wo=vcc-wo-seed-st002']}
+          initialIndex={1}
+        >
+          <LocationTracker />
+          <NavigationController />
+          <WorkOrderSection activeDepartments={SAMPLE_DEPTS} />
+        </MemoryRouter>
+      );
+
+      // Initial state: deep linked to WO-2026-001 -> drawer is open
+      expect(await screen.findByRole('heading', { name: 'WO-2026-001' })).toBeInTheDocument();
+      expect(currentTestLocation.search).toBe('?wo=vcc-wo-seed-st002');
+
+      // Click Browser Back
+      const backBtn = screen.getByRole('button', { name: 'Go Back' });
+      fireEvent.click(backBtn);
+
+      // Drawer closes, URL reverts to /vcc/work-orders
+      await waitFor(() => {
+        expect(screen.queryByRole('heading', { name: 'WO-2026-001' })).not.toBeInTheDocument();
+      });
+      expect(currentTestLocation.pathname).toBe('/vcc/work-orders');
+      expect(currentTestLocation.search).toBe('');
+
+      // Click Browser Forward
+      const forwardBtn = screen.getByRole('button', { name: 'Go Forward' });
+      fireEvent.click(forwardBtn);
+
+      // Drawer re-opens for the exact same work order
+      expect(await screen.findByRole('heading', { name: 'WO-2026-001' })).toBeInTheDocument();
+      expect(currentTestLocation.search).toBe('?wo=vcc-wo-seed-st002');
     });
   });
 });

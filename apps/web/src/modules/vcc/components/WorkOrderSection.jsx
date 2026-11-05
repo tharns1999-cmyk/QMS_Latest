@@ -273,14 +273,14 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
   useEffect(() => {
     if (loading || fetchError) return;
     if (deepLinkedWoId) {
-      if (selectedDrawerWo && (selectedDrawerWo.id === deepLinkedWoId || selectedDrawerWo.wo_code === deepLinkedWoId)) {
+      if (selectedDrawerWo && (selectedDrawerWo.id === deepLinkedWoId || selectedDrawerWo.wo_code === deepLinkedWoId || selectedDrawerWo.wo_number === deepLinkedWoId)) {
         return;
       }
       const tab = Object.keys(rawWosByTab).find((key) =>
-        rawWosByTab[key].some((w) => w.id === deepLinkedWoId || w.wo_code === deepLinkedWoId)
+        rawWosByTab[key].some((w) => w.id === deepLinkedWoId || w.wo_code === deepLinkedWoId || w.wo_number === deepLinkedWoId)
       );
       if (tab) {
-        const matched = rawWosByTab[tab].find((w) => w.id === deepLinkedWoId || w.wo_code === deepLinkedWoId);
+        const matched = rawWosByTab[tab].find((w) => w.id === deepLinkedWoId || w.wo_code === deepLinkedWoId || w.wo_number === deepLinkedWoId);
         setActiveTab(tab);
         setSelectedDrawerWo(matched);
       } else {

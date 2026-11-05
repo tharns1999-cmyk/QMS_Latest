@@ -1,8 +1,8 @@
 import { apiGet, apiPost, apiPut, isApiMode } from '../../../api/client';
 import useStore from '../../../store/useStore';
-import { canManageVccAsset, manageableVccDepartments } from '../utils/departmentScope';
+import { canManageVccAsset, manageableVccDepartments, canReadAllVccDepartments, getUserDeptCodes } from '../utils/departmentScope';
 
-const STORAGE_ASSETS_KEY = 'qms-vcc-local-assets-v1';
+export const STORAGE_ASSETS_KEY = 'qms-vcc-local-assets-v1';
 const STORAGE_TYPES_KEY = 'qms-vcc-local-types-v1';
 const STORAGE_AUDIT_KEY = 'qms-vcc-local-audit-v1';
 
@@ -293,7 +293,7 @@ const buildSeedAudit = () =>
   });
 
 export const getLocalAssets = () => readJson(STORAGE_ASSETS_KEY, () => [...INITIAL_LOCAL_ASSETS]);
-const setLocalAssets = (list) => writeJson(STORAGE_ASSETS_KEY, list);
+export const setLocalAssets = (list) => writeJson(STORAGE_ASSETS_KEY, list);
 const getLocalTypes = () => readJson(STORAGE_TYPES_KEY, () => [...DEFAULT_VCC_ASSET_TYPES]);
 const setLocalTypes = (list) => writeJson(STORAGE_TYPES_KEY, list);
 export const getLocalAudit = () => readJson(STORAGE_AUDIT_KEY, buildSeedAudit);
@@ -462,18 +462,24 @@ export const fetchVccAssetDetail = async (id) => {
   if (isApiMode) {
     return apiGet(`/api/vcc/assets/${encodeURIComponent(id)}`);
   }
-  assertLocalVccAccess();
+  const user = assertLocalVccAccess();
   const all = getLocalAssets();
   const deptMap = getDepartmentMap();
-  const target = all.find((a) => a.id === id);
+  const target = all.find((a) => a.id === id || a.asset_code === id);
   if (!target) throw new Error('ไม่พบเครื่องมือ');
+  if (!canReadAllVccDepartments(user)) {
+    const own = getUserDeptCodes(user);
+    if (target.department && !own.includes(String(target.department).toUpperCase())) {
+      throw new Error('ไม่มีสิทธิ์เข้าถึงเครื่องมือของแผนกนี้');
+    }
+  }
   const asset = enrichLocalAsset(target, all, deptMap);
   const children = all
-    .filter((c) => c.parent_id === id)
+    .filter((c) => c.parent_id === target.id)
     .map((c) => enrichLocalAsset(c, all, deptMap))
     .sort((a, b) => a.asset_code.localeCompare(b.asset_code));
   const history = getLocalAudit()
-    .filter((h) => String(h.action || '').startsWith('VCC_ASSET_') && h.details?.asset_id === id)
+    .filter((h) => String(h.action || '').startsWith('VCC_ASSET_') && h.details?.asset_id === target.id)
     .sort((a, b) => b.id - a.id);
   return { asset, children, history };
 };

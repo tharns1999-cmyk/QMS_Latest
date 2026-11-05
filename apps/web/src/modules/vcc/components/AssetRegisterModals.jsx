@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import {
   AlertTriangle,
   X,
@@ -501,8 +502,9 @@ export const AssetDetailHistoryModal = ({
   });
 
   if (!detailModalOpen) return null;
+  if (typeof document === 'undefined') return null;
 
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4"
       onClick={handleBackdropClick}
@@ -636,7 +638,8 @@ export const AssetDetailHistoryModal = ({
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 

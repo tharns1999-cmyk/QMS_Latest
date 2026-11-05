@@ -55,7 +55,7 @@ const loadAssetImpact = async (db, id) => {
 };
 
 const fetchAsset = (db, id) =>
-  db.prepare(`${ASSET_SELECT} WHERE a.id = ?`).bind(id).first();
+  db.prepare(`${ASSET_SELECT} WHERE a.id = ? OR a.asset_code = ?`).bind(id, id).first();
 
 export const registerVccRoutes = (app, { requireAuth, audit }) => {
   app.get('/api/vcc/asset-types', requireAuth, requireVccAccess, async (c) => {
@@ -147,7 +147,7 @@ export const registerVccRoutes = (app, { requireAuth, audit }) => {
 
     const { results: children } = await db.prepare(
       `${ASSET_SELECT} WHERE a.parent_id = ? ORDER BY a.asset_code ASC`
-    ).bind(id).all();
+    ).bind(asset.id).all();
 
     const { results: rawHistory } = await db.prepare(
       `SELECT a.id, a.at, a.actor_id, u.name AS actor_name, u.email AS actor_email, a.action, a.details
@@ -155,7 +155,7 @@ export const registerVccRoutes = (app, { requireAuth, audit }) => {
        LEFT JOIN users u ON u.id = a.actor_id
        WHERE a.action GLOB 'VCC_ASSET_*' AND json_extract(a.details, '$.asset_id') = ?
        ORDER BY a.id DESC`
-    ).bind(id).all();
+    ).bind(asset.id).all();
 
     const history = rawHistory.map((row) => ({
       ...row,

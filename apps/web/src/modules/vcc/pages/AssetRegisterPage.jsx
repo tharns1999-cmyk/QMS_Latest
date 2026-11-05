@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useInRouterContext, useLocation, useNavigate, useSearchParams, MemoryRouter } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import {
@@ -140,32 +140,80 @@ const AssetRegisterPageInner = () => {
 
   // History / Detail Modal
   const [detailModalOpen, setDetailModalOpen] = useState(false);
+  const [detailData, setDetailData] = useState(null);
+  const [loadingDetail, setLoadingDetail] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   const deepLinkedAssetId = searchParams.get('asset');
+  const activeAssetLookupRef = useRef(null);
+  const failedAssetLookupRef = useRef(null);
 
-  useEffect(() => {
-    if (!deepLinkedAssetId || loading || moduleView !== 'ASSETS') return;
-    const found = assets.find((a) => a.id === deepLinkedAssetId || a.asset_code === deepLinkedAssetId);
-    if (found) {
-      openHistoryModal(found.id);
+  const openHistoryModal = useCallback(async (assetId, updateUrl = true) => {
+    if (!assetId) return;
+    setDetailModalOpen(true);
+    setLoadingDetail(true);
+    setDetailData(null);
+    try {
+      const detail = await fetchVccAssetDetail(assetId);
+      setDetailData(detail);
+      activeAssetLookupRef.current = String(assetId);
+      failedAssetLookupRef.current = null;
+      if (updateUrl) {
+        setSearchParams((prev) => {
+          if (prev.get('asset') === String(assetId)) return prev;
+          const next = new URLSearchParams(prev);
+          next.set('asset', assetId);
+          return next;
+        }, { replace: false });
+      }
+    } catch (err) {
+      const msg = err.message || 'ไม่พบข้อมูลเครื่องมือหรือไม่มีสิทธิ์เข้าถึง';
+      toast.error(msg);
+      setDetailModalOpen(false);
+      setDetailData(null);
+      activeAssetLookupRef.current = null;
+      failedAssetLookupRef.current = String(assetId);
+      setSearchParams((prev) => {
+        if (!prev.has('asset')) return prev;
+        const next = new URLSearchParams(prev);
+        next.delete('asset');
+        return next;
+      }, { replace: true });
+    } finally {
+      setLoadingDetail(false);
     }
-  }, [deepLinkedAssetId, loading, moduleView, assets]);
+  }, [setSearchParams]);
 
-  const handleCloseDetailModal = (nextOpen) => {
+  // Synchronize deep link (?asset=<id>) with History Modal directly without waiting for active tab list
+  useEffect(() => {
+    if (moduleView !== 'ASSETS') return;
+    if (!deepLinkedAssetId) {
+      activeAssetLookupRef.current = null;
+      failedAssetLookupRef.current = null;
+      if (detailModalOpen) {
+        setDetailModalOpen(false);
+        setDetailData(null);
+      }
+      return;
+    }
+    if (activeAssetLookupRef.current === deepLinkedAssetId || failedAssetLookupRef.current === deepLinkedAssetId) {
+      return;
+    }
+    activeAssetLookupRef.current = deepLinkedAssetId;
+    openHistoryModal(deepLinkedAssetId, false);
+  }, [deepLinkedAssetId, moduleView, openHistoryModal]);
+
+  const handleCloseDetailModal = useCallback((nextOpen) => {
     setDetailModalOpen(nextOpen);
     if (!nextOpen) {
       setDetailData(null);
-      if (searchParams.has('asset')) {
-        setSearchParams((prev) => {
-          const next = new URLSearchParams(prev);
-          next.delete('asset');
-          return next;
-        }, { replace: true });
-      }
+      setSearchParams((prev) => {
+        if (!prev.has('asset')) return prev;
+        const next = new URLSearchParams(prev);
+        next.delete('asset');
+        return next;
+      }, { replace: true });
     }
-  };
-  const [detailData, setDetailData] = useState(null);
-  const [loadingDetail, setLoadingDetail] = useState(false);
+  }, [setSearchParams]);
 
   // Asset Types Settings Modal
   const [typesModalOpen, setTypesModalOpen] = useState(false);
@@ -300,20 +348,6 @@ const AssetRegisterPageInner = () => {
     }
   };
 
-  const openHistoryModal = async (assetId) => {
-    setDetailModalOpen(true);
-    setLoadingDetail(true);
-    setDetailData(null);
-    try {
-      const detail = await fetchVccAssetDetail(assetId);
-      setDetailData(detail);
-    } catch (err) {
-      toast.error(err.message || 'ไม่สามารถดึงประวัติการแก้ไขได้');
-      setDetailModalOpen(false);
-    } finally {
-      setLoadingDetail(false);
-    }
-  };
 
   const openTypesSettings = () => {
     setDraftTypes([...assetTypes]);
