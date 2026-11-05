@@ -29,15 +29,15 @@ describe('VCC Pre-UAT Product Hardening & Refinement Decisions (DEC-01 to DEC-04
     const hash = await hashPassword(PASSWORD);
 
     await env.DB.batch([
-      env.DB.prepare("INSERT OR IGNORE INTO departments (code, name_th, status) VALUES ('QC', 'แผนกควบคุมคุณภาพ', 'ACTIVE')"),
+      env.DB.prepare("INSERT OR IGNORE INTO departments (code, name_th, status) VALUES ('LB', 'ห้องปฏิบัติการสอบเทียบ', 'ACTIVE')"),
       env.DB.prepare("INSERT OR IGNORE INTO departments (code, name_th, status) VALUES ('QA', 'แผนกประกันคุณภาพ', 'ACTIVE')"),
       ...[
-        ['u-hdcc', 'H-DCC Officer', 'hdcc@vcc.local', 3, 'QC', 1],
-        ['u-hl2', 'H-Operator L2', 'hl2@vcc.local', 2, 'QC', 0],
-        ['u-hl3', 'H-Senior L3', 'hl3@vcc.local', 3, 'QC', 0],
-        ['u-hl4', 'H-Lead L4', 'hl4@vcc.local', 4, 'QC', 0],
-        ['u-hl4b', 'H-Lead L4B', 'hl4b@vcc.local', 4, 'QC', 0],
-        ['u-hl5', 'H-Manager L5', 'hl5@vcc.local', 5, 'QC', 0],
+        ['u-hdcc', 'H-DCC Officer', 'hdcc@vcc.local', 3, 'LB', 1],
+        ['u-hl2', 'H-Operator L2', 'hl2@vcc.local', 2, 'LB', 0],
+        ['u-hl3', 'H-Senior L3', 'hl3@vcc.local', 3, 'LB', 0],
+        ['u-hl4', 'H-Lead L4', 'hl4@vcc.local', 4, 'LB', 0],
+        ['u-hl4b', 'H-Lead L4B', 'hl4b@vcc.local', 4, 'LB', 0],
+        ['u-hl5', 'H-Manager L5', 'hl5@vcc.local', 5, 'LB', 0],
         ['u-hqmr', 'H-QMR Exec L6', 'hqmr@vcc.local', 6, 'QA', 0],
         ['u-hother4', 'H-Other L4', 'hother4@vcc.local', 4, 'QA', 0]
       ].map(([id, name, email, level, dept, dcc]) =>
@@ -81,13 +81,13 @@ describe('VCC Pre-UAT Product Hardening & Refinement Decisions (DEC-01 to DEC-04
       const putRes = await call('PUT', '/api/vcc/notification-settings', 'DCC', {
         cert_expiring_days: [60, 30, 15],
         department_cert_expiring_days: {
-          QC: [60, 30, 15],
+          LB: [60, 30, 15],
           QA: [45, 15]
         }
       });
       expect(putRes.status).toBe(200);
       expect(putRes.body.settings.cert_expiring_days).toEqual([60, 30, 15]);
-      expect(putRes.body.settings.department_cert_expiring_days.QC).toEqual([60, 30, 15]);
+      expect(putRes.body.settings.department_cert_expiring_days.LB).toEqual([60, 30, 15]);
       expect(putRes.body.settings.department_cert_expiring_days.QA).toEqual([45, 15]);
     });
 
@@ -100,15 +100,15 @@ describe('VCC Pre-UAT Product Hardening & Refinement Decisions (DEC-01 to DEC-04
       await env.DB.batch([
         env.DB.prepare(`
           INSERT OR REPLACE INTO vcc_assets (id, asset_code, name, asset_type, department, status, is_group, created_by, updated_by)
-          VALUES ('id-ast-60', ?, 'Test Gauge 60', 'GAUGE', 'QC', 'ACTIVE', 0, 'u-hdcc', 'u-hdcc')
+          VALUES ('id-ast-60', ?, 'Test Gauge 60', 'GAUGE', 'LB', 'ACTIVE', 0, 'u-hdcc', 'u-hdcc')
         `).bind(asset60),
         env.DB.prepare(`
           INSERT OR REPLACE INTO vcc_assets (id, asset_code, name, asset_type, department, status, is_group, created_by, updated_by)
-          VALUES ('id-ast-30', ?, 'Test Gauge 30', 'GAUGE', 'QC', 'ACTIVE', 0, 'u-hdcc', 'u-hdcc')
+          VALUES ('id-ast-30', ?, 'Test Gauge 30', 'GAUGE', 'LB', 'ACTIVE', 0, 'u-hdcc', 'u-hdcc')
         `).bind(asset30),
         env.DB.prepare(`
           INSERT OR REPLACE INTO vcc_assets (id, asset_code, name, asset_type, department, status, is_group, created_by, updated_by)
-          VALUES ('id-ast-15', ?, 'Test Gauge 15', 'GAUGE', 'QC', 'ACTIVE', 0, 'u-hdcc', 'u-hdcc')
+          VALUES ('id-ast-15', ?, 'Test Gauge 15', 'GAUGE', 'LB', 'ACTIVE', 0, 'u-hdcc', 'u-hdcc')
         `).bind(asset15),
 
         env.DB.prepare(`
@@ -189,7 +189,7 @@ describe('VCC Pre-UAT Product Hardening & Refinement Decisions (DEC-01 to DEC-04
     beforeAll(async () => {
       await env.DB.prepare(`
         INSERT OR REPLACE INTO vcc_assets (id, asset_code, name, asset_type, department, status, is_group, created_by, updated_by)
-        VALUES ('ast-resched', 'AST-RS-01', 'Scale for Reschedule Test', 'SCALE', 'QC', 'ACTIVE', 0, 'u-hdcc', 'u-hdcc')
+        VALUES ('ast-resched', 'AST-RS-01', 'Scale for Reschedule Test', 'SCALE', 'LB', 'ACTIVE', 0, 'u-hdcc', 'u-hdcc')
       `).run();
 
       testWoId = 'wo-resched-01';
@@ -409,7 +409,7 @@ describe('VCC Pre-UAT Product Hardening & Refinement Decisions (DEC-01 to DEC-04
     beforeAll(async () => {
       await env.DB.prepare(`
         INSERT OR REPLACE INTO vcc_assets (id, asset_code, name, asset_type, department, status, is_group, created_by, updated_by)
-        VALUES ('ast-qual', 'AST-QL-01', 'Go/No-Go Gauge Set', 'GAUGE', 'QC', 'ACTIVE', 0, 'u-hdcc', 'u-hdcc')
+        VALUES ('ast-qual', 'AST-QL-01', 'Go/No-Go Gauge Set', 'GAUGE', 'LB', 'ACTIVE', 0, 'u-hdcc', 'u-hdcc')
       `).run();
 
       qualWoId = 'wo-qual-01';
@@ -493,17 +493,17 @@ describe('VCC Pre-UAT Product Hardening & Refinement Decisions (DEC-01 to DEC-04
         env.DB.prepare(`
           INSERT OR REPLACE INTO vcc_assets (
             id, asset_code, name, asset_type, department, status, is_group, group_nature, composite_details, created_by, updated_by
-          ) VALUES (?, 'SET-CAL-01', 'ชุดเครื่องมือสอบเทียบอุณหภูมิ', 'COMPOSITE', 'QC', 'ACTIVE', 1, 'COMPOSITE_SET', '1. Temp Dry-well (SN: DW-901)\n2. Reference Thermometer (SN: RT-882)', 'u-hdcc', 'u-hdcc')
+          ) VALUES (?, 'SET-CAL-01', 'ชุดเครื่องมือสอบเทียบอุณหภูมิ', 'COMPOSITE', 'LB', 'ACTIVE', 1, 'COMPOSITE_SET', '1. Temp Dry-well (SN: DW-901)\n2. Reference Thermometer (SN: RT-882)', 'u-hdcc', 'u-hdcc')
         `).bind(parentAssetId),
         env.DB.prepare(`
           INSERT OR REPLACE INTO vcc_assets (
             id, asset_code, name, asset_type, department, status, is_group, parent_id, serial_no, model, location, created_by, updated_by
-          ) VALUES (?, 'CHILD-DW-01', 'Dry-well Block', 'BLOCK', 'QC', 'ACTIVE', 0, ?, 'DW-901', 'DW-100', 'Lab 2', 'u-hdcc', 'u-hdcc')
+          ) VALUES (?, 'CHILD-DW-01', 'Dry-well Block', 'BLOCK', 'LB', 'ACTIVE', 0, ?, 'DW-901', 'DW-100', 'Lab 2', 'u-hdcc', 'u-hdcc')
         `).bind(child1Id, parentAssetId),
         env.DB.prepare(`
           INSERT OR REPLACE INTO vcc_assets (
             id, asset_code, name, asset_type, department, status, is_group, parent_id, serial_no, model, location, created_by, updated_by
-          ) VALUES (?, 'CHILD-RT-01', 'Reference Probe', 'PROBE', 'QC', 'ACTIVE', 0, ?, 'RT-882', 'RT-200', 'Lab 2', 'u-hdcc', 'u-hdcc')
+          ) VALUES (?, 'CHILD-RT-01', 'Reference Probe', 'PROBE', 'LB', 'ACTIVE', 0, ?, 'RT-882', 'RT-200', 'Lab 2', 'u-hdcc', 'u-hdcc')
         `).bind(child2Id, parentAssetId)
       ]);
 
@@ -552,7 +552,7 @@ describe('VCC Pre-UAT Product Hardening & Refinement Decisions (DEC-01 to DEC-04
         env.DB.prepare(`
           INSERT INTO vcc_assets (
             id, asset_code, name, asset_type, department, status, is_group, parent_id, serial_no, model, location, created_by, updated_by
-          ) VALUES ('ast-child-new', 'CHILD-NEW-99', 'New Block Added Later', 'BLOCK', 'QC', 'ACTIVE', 0, ?, 'NEW-999', 'M99', 'Lab 2', 'u-hdcc', 'u-hdcc')
+          ) VALUES ('ast-child-new', 'CHILD-NEW-99', 'New Block Added Later', 'BLOCK', 'LB', 'ACTIVE', 0, ?, 'NEW-999', 'M99', 'Lab 2', 'u-hdcc', 'u-hdcc')
         `).bind(parentAssetId)
       ]);
 
