@@ -8,6 +8,7 @@ const serializeSettings = (props) => JSON.stringify({
   monthlyOverdueText: String(props.monthlyOverdueText ?? ''),
   annualDueSoonText: String(props.annualDueSoonText ?? ''),
   annualOverdueText: String(props.annualOverdueText ?? ''),
+  certExpiringDaysText: String(props.certExpiringDaysText ?? ''),
   reviewSlaDays: String(props.reviewSlaDays ?? ''),
   escalationL1Days: Number(props.escalationL1Days ?? 1),
   escalationL2Days: Number(props.escalationL2Days ?? 7),
@@ -31,6 +32,8 @@ export default function VccNotificationSettingsModal({
   setAnnualDueSoonText,
   annualOverdueText,
   setAnnualOverdueText,
+  certExpiringDaysText,
+  setCertExpiringDaysText,
   reviewSlaDays,
   setReviewSlaDays,
   escalationL1Days = 1,
@@ -51,6 +54,7 @@ export default function VccNotificationSettingsModal({
     monthlyOverdueText,
     annualDueSoonText,
     annualOverdueText,
+    certExpiringDaysText,
     reviewSlaDays,
     escalationL1Days,
     escalationL2Days,
@@ -75,6 +79,7 @@ export default function VccNotificationSettingsModal({
     monthlyOverdueText,
     annualDueSoonText,
     annualOverdueText,
+    certExpiringDaysText,
     reviewSlaDays,
     escalationL1Days,
     escalationL2Days,
@@ -192,6 +197,23 @@ export default function VccNotificationSettingsModal({
               placeholder="เช่น 1, 7, 14"
               className="w-full h-9 rounded-xl border border-slate-200 px-3 text-sm font-medium text-slate-900 focus:outline-hidden focus-visible:ring-2 focus-visible:ring-indigo-500 bg-white"
             />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              ใบรับรองใกล้หมดอายุ — แจ้งเตือนล่วงหน้า (วัน คั่นด้วยจุลภาค เช่น 60, 30, 15)
+            </label>
+            <input
+              type="text"
+              aria-label="แจ้งเตือนใบรับรองใกล้หมดอายุ"
+              value={certExpiringDaysText || ''}
+              onChange={(e) => setCertExpiringDaysText && setCertExpiringDaysText(e.target.value)}
+              placeholder="เช่น 60, 30, 15"
+              className="w-full h-9 rounded-xl border border-slate-200 px-3 text-sm font-medium text-slate-900 focus:outline-hidden focus-visible:ring-2 focus-visible:ring-indigo-500 bg-white"
+            />
+            <span className="text-[11px] text-slate-500 mt-1 block">
+              ระบบแจ้งเตือน 3 ลำดับ: 60 วัน (Early Warning) • 30 วัน (Approaching Expiry) • 15 วัน (Critical Reminder - ยกระดับเร่งด่วน)
+            </span>
           </div>
 
           <div>

@@ -30,3 +30,22 @@ export const canCancelWorkOrder = (user, workOrder) =>
   !['CLOSED', 'CANCELLED'].includes(workOrder.status) &&
   workOrder.nc_status !== 'OPEN' &&
   canManageVccAsset(user, workOrder.department);
+
+// Mirrors POST /request-reschedule: User authorized for department, WO is active, and no pending request
+export const canRequestReschedule = (user, workOrder) => {
+  if (!user || !workOrder) return false;
+  if (['CLOSED', 'CANCELLED'].includes(workOrder.status)) return false;
+  if (workOrder.reschedule_status === 'REQUESTED') return false;
+  return inDepartment(user, workOrder);
+};
+
+// Mirrors POST /approve-reschedule & /reject-reschedule: L4+ in dept, DCC/QMR, or L6+
+export const canApproveReschedule = (user, workOrder) => {
+  if (!user || !workOrder) return false;
+  if (['CLOSED', 'CANCELLED'].includes(workOrder.status)) return false;
+  if (workOrder.reschedule_status !== 'REQUESTED') return false;
+  const isDccUser = Boolean(user.isDcc || user.is_dcc);
+  const isQmrUser = Boolean(user.isQmr || user.is_qmr);
+  const userLevel = levelOf(user);
+  return isDccUser || isQmrUser || userLevel >= 6 || (userLevel >= 4 && inDepartment(user, workOrder));
+};

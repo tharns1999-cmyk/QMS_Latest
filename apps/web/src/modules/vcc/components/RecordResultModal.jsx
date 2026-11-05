@@ -23,6 +23,8 @@ const MAX_PDF_BYTES = 25 * 1024 * 1024; // 25 MB
 const serializeResultForm = (f) => JSON.stringify({
   performed_at: f?.performed_at || '',
   result_status: f?.result_status || '',
+  verification_type: f?.verification_type || 'QUANTITATIVE',
+  actual_result: f?.actual_result || '',
   certificate_no: f?.certificate_no || '',
   certificate_issue_date: f?.certificate_issue_date || '',
   certificate_valid_until: f?.certificate_valid_until || '',
@@ -301,6 +303,47 @@ export const RecordResultModal = ({
 
           {activeTab === 'MAIN' && (
             <div className="space-y-4">
+              {/* Verification Type Selection (Quantitative vs Qualitative) */}
+              <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide">
+                  ประเภทการวัด/ทวนสอบ (Verification Type) <span className="text-rose-600">*</span>
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setForm({ ...form, verification_type: 'QUANTITATIVE' })}
+                    className={`min-h-[38px] px-3 py-2 rounded-xl text-xs font-bold border transition-all text-center cursor-pointer select-none ${
+                      (form.verification_type || 'QUANTITATIVE') === 'QUANTITATIVE'
+                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                        : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    การวัดเชิงปริมาณ (Quantitative)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setForm({
+                      ...form,
+                      verification_type: 'QUALITATIVE',
+                      uncertainty_value: form.uncertainty_value || 'N/A (การทวนสอบเชิงคุณภาพ ไม่นำมาคำนวณ)',
+                      calibration_error_value: form.calibration_error_value || 'N/A (การทวนสอบเชิงคุณภาพ)'
+                    })}
+                    className={`min-h-[38px] px-3 py-2 rounded-xl text-xs font-bold border transition-all text-center cursor-pointer select-none ${
+                      form.verification_type === 'QUALITATIVE'
+                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                        : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    การตรวจสอบเชิงคุณภาพ (Qualitative)
+                  </button>
+                </div>
+                {form.verification_type === 'QUALITATIVE' && (
+                  <p className="text-[11px] text-slate-500 leading-relaxed">
+                    * การทวนสอบเชิงคุณภาพ (เช่น ตรวจสอบด้วยสายตา, Go/No-Go Gauge, Leak Test): ไม่บังคับ Uncertainty และ Error แต่ต้องระบุเกณฑ์ยอมรับ, ผลการตรวจจริง (Actual Result) และตัดสินผล PASS/FAIL
+                  </p>
+                )}
+              </div>
+
               {/* Row 1: Execution Date & Result Status */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                 <div>
@@ -434,6 +477,26 @@ export const RecordResultModal = ({
                     ))}
                   </div>
                 )}
+              </div>
+
+              {/* Actual Result Input */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wide">
+                  ผลการตรวจสอบจริง (Actual Result) {form.verification_type === 'QUALITATIVE' && <span className="text-rose-600">*</span>}
+                </label>
+                <input
+                  type="text"
+                  required={form.verification_type === 'QUALITATIVE'}
+                  aria-label="ผลการตรวจสอบจริง"
+                  value={form.actual_result || ''}
+                  onChange={(e) => setForm({ ...form, actual_result: e.target.value })}
+                  placeholder={
+                    form.verification_type === 'QUALITATIVE'
+                      ? 'เช่น สภาพสมบูรณ์ไม่มีรอยรั่ว หรือ สอดคล้องตามเกณฑ์ Go ผ่าน No-Go ไม่ผ่าน'
+                      : 'เช่น ค่าที่วัดได้ 100.02 °C (อยู่ในเกณฑ์ ± 0.5 °C)'
+                  }
+                  className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium focus:outline-none focus:border-indigo-600 shadow-2xs"
+                />
               </div>
 
               {/* Digital PDF Upload Area */}
@@ -687,7 +750,12 @@ export const RecordResultModal = ({
               </button>
               <button
                 type="submit"
-                disabled={saving || !form.certificate_no?.trim() || !form.acceptance_criteria?.trim()}
+                disabled={
+                  saving ||
+                  !form.certificate_no?.trim() ||
+                  !form.acceptance_criteria?.trim() ||
+                  (form.verification_type === 'QUALITATIVE' && !form.actual_result?.trim() && !form.result_remarks?.trim())
+                }
                 className="w-full sm:w-auto min-h-[44px] sm:min-h-[40px] px-5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 motion-safe:active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none transition-all cursor-pointer shadow-2xs flex items-center justify-center gap-2 select-none order-2 sm:order-2"
               >
                 {saving && <span className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" />}

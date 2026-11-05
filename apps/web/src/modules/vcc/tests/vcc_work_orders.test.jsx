@@ -63,6 +63,11 @@ describe('VCC Phase 3 — Work Orders, Execution, Review, Close & Hold/NC Contro
     fireEvent.change(screen.getByLabelText(/วันครบกำหนดใหม่/i), { target: { value: '2026-04-15' } });
     fireEvent.change(screen.getByPlaceholderText(/ระบุรายละเอียด/i), { target: { value: 'รอคิวสอบเทียบจากห้องแล็บ' } });
     expect(confirmBtn).not.toBeDisabled();
+
+    // Check DCC Direct Override checkbox to test immediate due date update
+    const overrideChk = screen.queryByRole('checkbox', { name: /ดำเนินการเลื่อนทันที/i });
+    if (overrideChk) fireEvent.click(overrideChk);
+
     fireEvent.click(confirmBtn);
 
     // Must display new due date and preserve original_due_date (2026-03-31)

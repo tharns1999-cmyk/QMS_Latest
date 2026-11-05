@@ -91,6 +91,7 @@ export default function VccDashboardSection({ onNavigateToWorkOrders, onNavigate
   const [monthlyOverdueText, setMonthlyOverdueText] = useState('1, 3, 7');
   const [annualDueSoonText, setAnnualDueSoonText] = useState('30, 14, 7');
   const [annualOverdueText, setAnnualOverdueText] = useState('1, 7, 14');
+  const [certExpiringDaysText, setCertExpiringDaysText] = useState('60, 30, 15');
   const [reviewSlaDays, setReviewSlaDays] = useState(3);
   const [escalationL1Days, setEscalationL1Days] = useState(1);
   const [escalationL2Days, setEscalationL2Days] = useState(7);
@@ -110,6 +111,7 @@ export default function VccDashboardSection({ onNavigateToWorkOrders, onNavigate
         setMonthlyOverdueText((s.monthly_overdue_days || [1, 3, 7]).join(', '));
         setAnnualDueSoonText((s.annual_due_soon_days || [30, 14, 7]).join(', '));
         setAnnualOverdueText((s.annual_overdue_days || [1, 7, 14]).join(', '));
+        setCertExpiringDaysText((s.cert_expiring_days || [60, 30, 15]).join(', '));
         setReviewSlaDays(s.review_sla_days || 3);
         setEscalationL1Days(s.escalation_l1_days ?? 1);
         setEscalationL2Days(s.escalation_l2_days ?? 7);
@@ -138,6 +140,7 @@ export default function VccDashboardSection({ onNavigateToWorkOrders, onNavigate
         monthly_overdue_days: parseDaysInput(monthlyOverdueText),
         annual_due_soon_days: parseDaysInput(annualDueSoonText),
         annual_overdue_days: parseDaysInput(annualOverdueText),
+        cert_expiring_days: parseDaysInput(certExpiringDaysText),
         review_sla_days: Number(reviewSlaDays),
         escalation_l1_days: Number(escalationL1Days),
         escalation_l2_days: Number(escalationL2Days),
@@ -512,6 +515,8 @@ export default function VccDashboardSection({ onNavigateToWorkOrders, onNavigate
             setAnnualDueSoonText={setAnnualDueSoonText}
             annualOverdueText={annualOverdueText}
             setAnnualOverdueText={setAnnualOverdueText}
+            certExpiringDaysText={certExpiringDaysText}
+            setCertExpiringDaysText={setCertExpiringDaysText}
             reviewSlaDays={reviewSlaDays}
             setReviewSlaDays={setReviewSlaDays}
             escalationL1Days={escalationL1Days}

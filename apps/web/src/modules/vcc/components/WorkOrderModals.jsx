@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useId } from 'react';
 import { AlertTriangle, Trash2, X } from 'lucide-react';
-import { formatVccDueDate } from '../utils/vccDateUtils';
+import { formatVccDueDate, formatVccDate } from '../utils/vccDateUtils';
 import { useVccModalAccessibility } from '../hooks/useVccModalAccessibility';
 import { useVccMobileViewport } from '../hooks/useVccMobileViewport';
 import { VccDiscardConfirmDialog } from './VccDiscardConfirmDialog';
@@ -337,7 +337,10 @@ export const WorkOrderActionModal = ({
   setForm,
   error,
   saving,
-  onConfirm
+  currentUser,
+  onConfirm,
+  onApproveReschedule,
+  onRejectReschedule
 }) => {
   const mode = modal?.mode;
   const workOrder = modal?.workOrder;
@@ -379,6 +382,12 @@ export const WorkOrderActionModal = ({
   const requiresText = mode !== 'APPROVE';
   const missingReason = mode === 'RELEASE_HOLD' && !form.reason?.trim();
 
+  const isSelfRequester = Boolean(
+    currentUser?.id &&
+    workOrder?.reschedule_requested_by &&
+    (currentUser.id === workOrder.reschedule_requested_by || currentUser.username === workOrder.reschedule_requested_by)
+  );
+
   return (
     <>
       <div
@@ -409,6 +418,7 @@ export const WorkOrderActionModal = ({
           <div className="px-5 sm:px-6 py-3.5 sm:py-4.5 border-b border-slate-200 flex items-center justify-between shrink-0">
             <h2 id="wo-action-modal-title" className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">
               {mode === 'RESCHEDULE' && `เลื่อนวันครบกำหนด (${workOrder?.wo_code})`}
+              {mode === 'REVIEW_RESCHEDULE' && `พิจารณาคำขอเลื่อนวันครบกำหนด (${workOrder?.wo_code})`}
               {mode === 'APPROVE' && `ตรวจรับผลและอนุมัติปิดใบงาน (${workOrder?.wo_code})`}
               {mode === 'REJECT' && `ส่งกลับแก้ไขผลทวนสอบ (${workOrder?.wo_code})`}
               {mode === 'RELEASE_HOLD' && `อนุมัติปลดระงับเครื่องมือ (${workOrder?.asset_code})`}
@@ -433,19 +443,100 @@ export const WorkOrderActionModal = ({
             )}
 
             {mode === 'RESCHEDULE' && (
-              <div>
-                <div className="text-xs sm:text-sm text-slate-600 font-medium mb-2">
-                  วันครบกำหนดเดิม (เก็บไว้ในประวัติ): <span className="font-semibold text-slate-900 font-sans" title={`ค.ศ. ${workOrder.original_due_date}`}>{formatVccDueDate(workOrder.original_due_date)}</span>
+              <div className="space-y-3">
+                <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 grid grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <span className="text-slate-500 block mb-0.5">วันครบกำหนดเริ่มแรก (Original Due Date):</span>
+                    <span className="font-semibold text-slate-900 font-sans" title={`ค.ศ. ${workOrder.original_due_date || workOrder.due_date}`}>
+                      {formatVccDueDate(workOrder.original_due_date || workOrder.due_date)}
+                    </span>
+                    <span className="text-[10px] text-slate-400 block mt-0.5">(เก็บรักษาถาวรตามนโยบายตรวจสอบย้อนกลับ)</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block mb-0.5">วันครบกำหนดปัจจุบัน (Current Due Date):</span>
+                    <span className="font-semibold text-indigo-700 font-sans" title={`ค.ศ. ${workOrder.due_date}`}>
+                      {formatVccDueDate(workOrder.due_date)}
+                    </span>
+                  </div>
                 </div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1.5">วันครบกำหนดใหม่ <span className="text-rose-600">*</span></label>
-                <input
-                  type="date"
-                  required
-                  aria-label="วันครบกำหนดใหม่"
-                  value={form.new_due_date}
-                  onChange={(e) => setForm({ ...form, new_due_date: e.target.value })}
-                  className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium"
-                />
+
+                <div>
+                  <label htmlFor="wo-reschedule-new-date" className="block text-sm font-semibold text-slate-700 mb-1.5">
+                    วันครบกำหนดใหม่ที่เสนอ (Proposed Due Date) <span className="text-rose-600">*</span>
+                  </label>
+                  <input
+                    id="wo-reschedule-new-date"
+                    type="date"
+                    required
+                    aria-label="วันครบกำหนดใหม่ที่เสนอ"
+                    value={form.new_due_date}
+                    onChange={(e) => setForm({ ...form, new_due_date: e.target.value })}
+                    className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium"
+                  />
+                </div>
+
+                {Boolean(currentUser?.isDcc || currentUser?.is_dcc) && (
+                  <div className="p-3 rounded-xl bg-indigo-50/70 border border-indigo-200 text-xs">
+                    <label className="flex items-center gap-2 cursor-pointer font-semibold text-indigo-900">
+                      <input
+                        type="checkbox"
+                        id="wo-reschedule-override-chk"
+                        checked={Boolean(form.is_direct_override)}
+                        onChange={(e) => setForm({ ...form, is_direct_override: e.target.checked })}
+                        className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4 cursor-pointer"
+                      />
+                      <span>ดำเนินการเลื่อนทันที (DCC Administrative Direct Override)</span>
+                    </label>
+                    <span className="block text-[11px] text-indigo-700 mt-1 pl-6">
+                      สิทธิ์เฉพาะ DCC: ข้ามขั้นตอนขออนุมัติและปรับวันครบกำหนดทันที พร้อมบันทึกหลักฐานใน Audit Trail
+                    </span>
+                  </div>
+                )}
+
+                <div className="p-2.5 rounded-lg bg-indigo-50/60 border border-indigo-100 text-[11px] text-indigo-900 leading-relaxed">
+                  * การขอเลื่อนกำหนดต้องได้รับความเห็นชอบจากผู้มีอำนาจ (หัวหน้าฝ่าย L4 ขึ้นไป หรือเจ้าหน้าที่ DCC) และจะถูกบันทึกประวัติการเปลี่ยนแปลงอย่างถาวรใน Audit Trail
+                </div>
+              </div>
+            )}
+
+            {mode === 'REVIEW_RESCHEDULE' && (
+              <div className="space-y-3">
+                <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-2 text-xs">
+                  <div className="grid grid-cols-2 gap-3 pb-2 border-b border-slate-200">
+                    <div>
+                      <span className="text-slate-500 block mb-0.5">วันครบกำหนดเดิม:</span>
+                      <span className="font-semibold text-slate-800 font-sans">
+                        {formatVccDueDate(workOrder.original_due_date || workOrder.due_date)}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 block mb-0.5">วันใหม่ที่ขอเสนอ:</span>
+                      <span className="font-bold text-indigo-700 font-sans">
+                        {formatVccDueDate(workOrder.proposed_due_date)}
+                      </span>
+                    </div>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block mb-0.5">เหตุผลในการขอเลื่อน:</span>
+                    <span className="font-medium text-slate-900 leading-relaxed block">
+                      {workOrder.reschedule_reason || '-'}
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-slate-500 pt-1 border-t border-slate-200">
+                    ยื่นคำขอโดย: <span className="font-semibold text-slate-700">{workOrder.reschedule_requested_by_name || workOrder.reschedule_requested_by || '-'}</span>
+                    {workOrder.reschedule_requested_at && ` • ${formatVccDate(workOrder.reschedule_requested_at)}`}
+                  </div>
+                </div>
+
+                {isSelfRequester && (
+                  <div role="alert" className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-start gap-2">
+                    <AlertTriangle size={16} className="text-amber-600 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-bold block">การคัดแยกหน้าที่ (Segregation of Duties)</span>
+                      <span>ท่านเป็นผู้ยื่นคำขอเลื่อนกำหนดนี้ ระบบไม่อนุญาตให้อนุมัติตนเองได้ ต้องให้หัวหน้างานฝ่ายหรือ DCC เป็นผู้อนุมัติ</span>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -487,39 +578,70 @@ export const WorkOrderActionModal = ({
             <div>
               <label htmlFor="wo-action-text" className="block text-sm font-semibold text-slate-700 mb-1.5">
                 {mode === 'RESCHEDULE' && 'เหตุผลในการขอเลื่อนวันครบกำหนด'}
+                {mode === 'REVIEW_RESCHEDULE' && 'ความเห็นหรือเหตุผลการพิจารณา'}
                 {mode === 'APPROVE' && 'ความเห็นผู้ตรวจรับผล (ถ้ามี)'}
                 {mode === 'REJECT' && (workOrder.result_status === 'INCONCLUSIVE' ? 'สิ่งที่ต้องตรวจซ้ำ' : 'เหตุผลในการส่งกลับแก้ไขผล')}
                 {mode === 'RELEASE_HOLD' && 'ผลการประเมินผลกระทบและการแก้ไข (NC Impact Assessment)'}
                 {mode === 'CANCEL' && 'เหตุผลในการยกเลิก'}
-                {requiresText && <span className="text-rose-600"> *</span>}
+                {requiresText && mode !== 'REVIEW_RESCHEDULE' && <span className="text-rose-600"> *</span>}
+                {mode === 'REVIEW_RESCHEDULE' && <span className="text-slate-400 font-normal text-xs"> (จำเป็นกรณีไม่อนุมัติ)</span>}
               </label>
               <textarea
                 id="wo-action-text"
                 rows={3}
-                required={requiresText}
+                required={requiresText && mode !== 'REVIEW_RESCHEDULE'}
                 value={form.text}
                 onChange={(e) => setForm({ ...form, text: e.target.value })}
-                placeholder="ระบุรายละเอียด..."
+                placeholder={mode === 'REVIEW_RESCHEDULE' ? 'ระบุความเห็น หรือเหตุผลประกอบกรณีไม่อนุมัติ...' : 'ระบุรายละเอียด...'}
                 className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-medium"
               />
             </div>
 
-            <div className="pt-3 sm:pt-2 flex flex-col sm:flex-row justify-end gap-2.5 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] sm:pb-0">
-              <button
-                type="button"
-                onClick={requestClose}
-                className="order-1 sm:order-1 w-full sm:w-auto min-h-[44px] h-11 sm:h-10 px-4 rounded-xl border border-slate-300 text-sm font-semibold hover:bg-slate-50 transition-colors cursor-pointer motion-safe:active:scale-[0.98] select-none"
-              >
-                ปิด
-              </button>
-              <button
-                type="submit"
-                disabled={saving || (requiresText && !form.text.trim()) || missingReason}
-                className="order-2 sm:order-2 w-full sm:w-auto min-h-[44px] h-11 sm:h-10 px-5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 transition-colors cursor-pointer shadow-2xs motion-safe:active:scale-[0.98] select-none"
-              >
-                {saving ? 'กำลังบันทึก...' : 'ยืนยันการดำเนินการ'}
-              </button>
-            </div>
+            {mode === 'REVIEW_RESCHEDULE' ? (
+              <div className="pt-3 sm:pt-2 flex flex-col sm:flex-row justify-end gap-2.5 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] sm:pb-0">
+                <button
+                  type="button"
+                  onClick={requestClose}
+                  className="order-1 sm:order-1 w-full sm:w-auto min-h-[44px] h-11 sm:h-10 px-4 rounded-xl border border-slate-300 text-sm font-semibold hover:bg-slate-50 transition-colors cursor-pointer motion-safe:active:scale-[0.98] select-none"
+                >
+                  ปิด
+                </button>
+                <button
+                  type="button"
+                  disabled={saving || !form.text?.trim()}
+                  onClick={(e) => onRejectReschedule ? onRejectReschedule(e, workOrder, form.text) : onConfirm(e, 'REJECT')}
+                  className="order-2 sm:order-2 w-full sm:w-auto min-h-[44px] h-11 sm:h-10 px-4 rounded-xl bg-rose-50 border border-rose-300 text-rose-700 text-sm font-semibold hover:bg-rose-100 disabled:opacity-50 transition-colors cursor-pointer motion-safe:active:scale-[0.98] select-none"
+                >
+                  {saving ? 'กำลังประมวลผล...' : 'ไม่อนุมัติ (ปฏิเสธ)'}
+                </button>
+                <button
+                  type="button"
+                  disabled={saving || isSelfRequester}
+                  title={isSelfRequester ? 'ไม่สามารถอนุมัติตนเองได้ (Segregation of Duties)' : 'อนุมัติการขอเลื่อนกำหนด'}
+                  onClick={(e) => onApproveReschedule ? onApproveReschedule(e, workOrder, form.text) : onConfirm(e, 'APPROVE')}
+                  className="order-3 sm:order-3 w-full sm:w-auto min-h-[44px] h-11 sm:h-10 px-5 rounded-xl bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer shadow-2xs motion-safe:active:scale-[0.98] select-none"
+                >
+                  {saving ? 'กำลังบันทึก...' : 'อนุมัติการเลื่อนกำหนด'}
+                </button>
+              </div>
+            ) : (
+              <div className="pt-3 sm:pt-2 flex flex-col sm:flex-row justify-end gap-2.5 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] sm:pb-0">
+                <button
+                  type="button"
+                  onClick={requestClose}
+                  className="order-1 sm:order-1 w-full sm:w-auto min-h-[44px] h-11 sm:h-10 px-4 rounded-xl border border-slate-300 text-sm font-semibold hover:bg-slate-50 transition-colors cursor-pointer motion-safe:active:scale-[0.98] select-none"
+                >
+                  ปิด
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving || (requiresText && !form.text.trim()) || missingReason}
+                  className="order-2 sm:order-2 w-full sm:w-auto min-h-[44px] h-11 sm:h-10 px-5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 transition-colors cursor-pointer shadow-2xs motion-safe:active:scale-[0.98] select-none"
+                >
+                  {saving ? 'กำลังบันทึก...' : 'ยืนยันการดำเนินการ'}
+                </button>
+              </div>
+            )}
           </form>
         </div>
       </div>

@@ -24,7 +24,8 @@ export const DEFAULT_NOTIFICATION_SETTINGS = {
   overdue_escalation_days_l3: 14,
   on_hold_escalation_days: 14,
   acknowledgement_grace_days: 3,
-  cert_expiring_days: [60, 30]
+  cert_expiring_days: [60, 30, 15],
+  department_cert_expiring_days: {}
 };
 
 export const loadNotificationSettings = async (db) => {
@@ -94,7 +95,24 @@ export const registerVccDashboardRoutes = (app, { requireAuth, audit }) => {
     const graceDays = body.acknowledgement_grace_days !== undefined ? Number(body.acknowledgement_grace_days) : (before.acknowledgement_grace_days || 3);
     const certExpiring = body.cert_expiring_days !== undefined
       ? sanitizeDaysArray(body.cert_expiring_days)
-      : (before.cert_expiring_days || [60, 30]);
+      : (before.cert_expiring_days || [60, 30, 15]);
+
+    let deptCertExpiring = before.department_cert_expiring_days || {};
+    if (body.department_cert_expiring_days !== undefined) {
+      if (typeof body.department_cert_expiring_days !== 'object' || body.department_cert_expiring_days === null) {
+        return c.json({ error: 'การตั้งค่าแจ้งเตือนใบรับรองแยกตามแผนกไม่ถูกต้อง' }, 400);
+      }
+      deptCertExpiring = {};
+      for (const [deptCode, rawDays] of Object.entries(body.department_cert_expiring_days)) {
+        const cleanDept = String(deptCode || '').trim().toUpperCase();
+        if (!cleanDept) continue;
+        const sanitizedDeptDays = sanitizeDaysArray(rawDays);
+        if (!sanitizedDeptDays) {
+          return c.json({ error: `รายการวันแจ้งเตือนใบรับรองสำหรับแผนก ${cleanDept} ไม่ถูกต้อง` }, 400);
+        }
+        deptCertExpiring[cleanDept] = sanitizedDeptDays;
+      }
+    }
 
     if (!monthlyDueSoon || !monthlyOverdue || !annualDueSoon || !annualOverdue || !certExpiring) {
       return c.json({ error: 'รายการวันแจ้งเตือนต้องเป็นตัวเลขจำนวนเต็มระหว่าง 1 ถึง 365 วัน' }, 400);
@@ -125,7 +143,8 @@ export const registerVccDashboardRoutes = (app, { requireAuth, audit }) => {
       overdue_escalation_days_l3: l3Escalation,
       on_hold_escalation_days: onHoldEscalation,
       acknowledgement_grace_days: graceDays,
-      cert_expiring_days: certExpiring
+      cert_expiring_days: certExpiring,
+      department_cert_expiring_days: deptCertExpiring
     };
 
     await db.batch([
