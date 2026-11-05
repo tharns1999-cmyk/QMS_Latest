@@ -28,9 +28,12 @@ test.describe('VCC task inbox: work-order tasks', () => {
     await expect(page.getByTestId('vcc-work-task-REVIEW_RESULT:wo-e2e-pend')).toHaveCount(0);
 
     await page.getByTestId('vcc-work-task-open-RECORD_RESULT:wo-e2e-open').click();
-    await expect(page).toHaveURL(/\/vcc\/work-orders$/); // the ?wo= link is consumed once it has opened the work order
+    await expect(page).toHaveURL(/\/vcc\/work-orders\?wo=wo-e2e-open$/);
     await expect(page.getByText('WO-E2E-OPEN').first()).toBeVisible();
-    await expect(page.getByRole('button', { name: /ปิดหน้าต่างรายละเอียด|ปิด/ }).first()).toBeVisible();
+    const closeBtn = page.getByRole('button', { name: /ปิดหน้าต่างรายละเอียด|ปิด/ }).first();
+    await expect(closeBtn).toBeVisible();
+    await closeBtn.click();
+    await expect(page).toHaveURL(/\/vcc\/work-orders$/);
   });
 
   test('phone width: the inbox fits the screen without sideways scrolling', async ({ page }) => {
