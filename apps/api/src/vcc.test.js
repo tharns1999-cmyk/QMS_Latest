@@ -274,6 +274,16 @@ describe('VCC Phase 1: Asset Register', () => {
     for (const entry of detail.body.history) {
       expect(entry.details.asset_id).toBe(id);
     }
+
+    // Detail endpoint also resolves asset by asset_code directly
+    const detailByCode = await call('GET', '/api/vcc/assets/TC001', 'VCC-DCC');
+    expect(detailByCode.status).toBe(200);
+    expect(detailByCode.body.asset.id).toBe(id);
+    expect(detailByCode.body.asset.asset_code).toBe('TC001');
+
+    // Non-existent returns 404
+    const notFound = await call('GET', '/api/vcc/assets/NON_EXISTENT_999', 'VCC-DCC');
+    expect(notFound.status).toBe(404);
   });
 
   it('seeds default asset types via migration, lets DCC edit them, and removing a type does not break existing assets using it', async () => {

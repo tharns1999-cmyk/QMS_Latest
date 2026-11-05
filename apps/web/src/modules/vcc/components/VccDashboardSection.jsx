@@ -69,7 +69,7 @@ const triggerCsvDownload = (csvText, filename) => {
  * VccDashboardSection
  * Clean, Minimal, Professional Enterprise SaaS QMS Dashboard for VCC (Phase 3.3).
  */
-export default function VccDashboardSection({ onNavigateToWorkOrders }) {
+export default function VccDashboardSection({ onNavigateToWorkOrders, onNavigateToAsset }) {
   const [mainTab, setMainTab] = useState('OVERVIEW');
   const currentYear = useMemo(() => new Date().getFullYear(), []);
   const [year, setYear] = useState(currentYear);
@@ -188,9 +188,11 @@ export default function VccDashboardSection({ onNavigateToWorkOrders }) {
 
   const countByAlertTab = useCallback(
     (tabKey) =>
-      allAlerts.filter((a) =>
-        tabKey === 'DUE_SOON' ? a.alert_type === 'DUE_SOON' || a.alert_type === 'DUE_TODAY' : a.alert_type === tabKey
-      ).length,
+      allAlerts.filter((a) => {
+        if (tabKey === 'DUE_SOON') return a.alert_type === 'DUE_SOON' || a.alert_type === 'DUE_TODAY' || a.alert_type === 'CERT_EXPIRING';
+        if (tabKey === 'OVERDUE') return a.alert_type === 'OVERDUE' || a.alert_type === 'CERT_EXPIRED';
+        return a.alert_type === tabKey;
+      }).length,
     [allAlerts]
   );
 
@@ -199,7 +201,8 @@ export default function VccDashboardSection({ onNavigateToWorkOrders }) {
 
   const filteredAlerts = useMemo(() => {
     return allAlerts.filter((a) => {
-      if (alertTab === 'DUE_SOON') return a.alert_type === 'DUE_SOON' || a.alert_type === 'DUE_TODAY';
+      if (alertTab === 'DUE_SOON') return a.alert_type === 'DUE_SOON' || a.alert_type === 'DUE_TODAY' || a.alert_type === 'CERT_EXPIRING';
+      if (alertTab === 'OVERDUE') return a.alert_type === 'OVERDUE' || a.alert_type === 'CERT_EXPIRED';
       return a.alert_type === alertTab;
     });
   }, [allAlerts, alertTab]);
@@ -451,14 +454,26 @@ export default function VccDashboardSection({ onNavigateToWorkOrders }) {
                           </span>
                         )}
                       </div>
-                      {onNavigateToWorkOrders && (
-                        <button
-                          type="button"
-                          onClick={onNavigateToWorkOrders}
-                          className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 whitespace-nowrap inline-flex items-center gap-1 cursor-pointer"
-                        >
-                          จัดการใบงาน <ArrowRight size={12} />
-                        </button>
+                      {alert.wo_id || alert.work_order_id ? (
+                        onNavigateToWorkOrders && (
+                          <button
+                            type="button"
+                            onClick={() => onNavigateToWorkOrders(alert.wo_id || alert.work_order_id)}
+                            className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 whitespace-nowrap inline-flex items-center gap-1 cursor-pointer"
+                          >
+                            จัดการใบงาน <ArrowRight size={12} />
+                          </button>
+                        )
+                      ) : (
+                        onNavigateToAsset ? (
+                          <button
+                            type="button"
+                            onClick={() => onNavigateToAsset(alert.asset_id || alert.asset_code)}
+                            className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 whitespace-nowrap inline-flex items-center gap-1 cursor-pointer"
+                          >
+                            ดูข้อมูลเครื่องมือ <ArrowRight size={12} />
+                          </button>
+                        ) : null
                       )}
                     </div>
                   </div>

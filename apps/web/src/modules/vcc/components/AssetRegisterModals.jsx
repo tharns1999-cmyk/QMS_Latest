@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import {
   AlertTriangle,
   X,
@@ -45,6 +46,19 @@ const formatThaiDateTime = (iso) => {
   }
 };
 
+const serializeAssetForm = (f) => JSON.stringify({
+  asset_code: (f?.asset_code || '').trim().toUpperCase(),
+  name: (f?.name || '').trim(),
+  asset_type: f?.asset_type || '',
+  serial_no: (f?.serial_no || '').trim(),
+  model: (f?.model || '').trim(),
+  location: (f?.location || '').trim(),
+  department: f?.department || '',
+  is_group: Boolean(f?.is_group),
+  group_nature: f?.group_nature || 'LOGICAL_GROUP',
+  composite_details: (f?.composite_details || '').trim()
+});
+
 export const AssetFormModal = ({
   formOpen,
   setFormOpen,
@@ -54,18 +68,26 @@ export const AssetFormModal = ({
   formError,
   savingForm,
   handleSaveAsset,
-  formTypeOptions,
-  assetTypes,
-  activeDepartments,
+  formTypeOptions = [],
+  assetTypes = [],
+  activeDepartments = [],
   canTransfer = true
 }) => {
-  const isDirty = Boolean(
-    form?.asset_code?.trim() ||
-    form?.name?.trim() ||
-    form?.serial_no?.trim() ||
-    form?.model?.trim() ||
-    form?.composite_details?.trim()
-  );
+  const isCurrentlyOpen = Boolean(formOpen);
+  const [prevOpen, setPrevOpen] = React.useState(isCurrentlyOpen);
+  const [prevAssetId, setPrevAssetId] = React.useState(editingAsset?.id ?? null);
+  const [initialSnapshot, setInitialSnapshot] = React.useState(() => (isCurrentlyOpen && form ? serializeAssetForm(form) : null));
+
+  if (isCurrentlyOpen !== prevOpen || (editingAsset?.id ?? null) !== prevAssetId) {
+    setPrevOpen(isCurrentlyOpen);
+    setPrevAssetId(editingAsset?.id ?? null);
+    setInitialSnapshot(isCurrentlyOpen && form ? serializeAssetForm(form) : null);
+  }
+
+  const isDirty = React.useMemo(() => {
+    if (!isCurrentlyOpen || !initialSnapshot || !form || savingForm) return false;
+    return serializeAssetForm(form) !== initialSnapshot;
+  }, [isCurrentlyOpen, form, initialSnapshot, savingForm]);
 
   const {
     dialogRef,
@@ -77,7 +99,9 @@ export const AssetFormModal = ({
   } = useVccModalAccessibility({
     isOpen: formOpen,
     onClose: () => setFormOpen(false),
-    isDirty
+    isDirty,
+    discardTitle: 'ข้อมูลเครื่องมือวัดยังไม่ได้บันทึก',
+    discardMessage: 'คุณมีข้อมูลเครื่องมือวัดที่กำลังจัดทำ ต้องการยกเลิกและปิดหน้าต่างใช่หรือไม่?'
   });
 
   if (!formOpen) return null;
@@ -302,6 +326,8 @@ export const AssetFormModal = ({
 
     <VccDiscardConfirmDialog
       isOpen={showConfirmDiscard}
+      title="ข้อมูลเครื่องมือวัดยังไม่ได้บันทึก"
+      message="คุณมีข้อมูลเครื่องมือวัดที่กำลังจัดทำ ต้องการยกเลิกและปิดหน้าต่างใช่หรือไม่?"
       onConfirm={confirmDiscard}
       onCancel={cancelDiscard}
     />
@@ -476,8 +502,9 @@ export const AssetDetailHistoryModal = ({
   });
 
   if (!detailModalOpen) return null;
+  if (typeof document === 'undefined') return null;
 
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4"
       onClick={handleBackdropClick}
@@ -611,7 +638,8 @@ export const AssetDetailHistoryModal = ({
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 

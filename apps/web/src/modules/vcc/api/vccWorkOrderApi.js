@@ -299,7 +299,8 @@ export const createVccWorkOrder = async (payload) => {
   if (openHold) {
     throw new Error(`เครื่องมือ ${asset.asset_code} อยู่ระหว่างระงับใช้งาน (ON_HOLD จากใบงาน ${openHold.wo_code}) ต้องปลดระงับก่อนเปิดใบงานใหม่`);
   }
-  if (!providerName) throw new Error('กรุณาระบุสถาบัน/หน่วยงานที่ทวนสอบ');
+  const PLACEHOLDER_PROVIDER = '-- เลือกหน่วยงานที่ทวนสอบ --';
+  if (!providerName || providerName === PLACEHOLDER_PROVIDER) throw new Error('กรุณาระบุสถาบัน/หน่วยงานที่ทวนสอบ');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) throw new Error('กรุณาระบุวันครบกำหนดในรูปแบบ YYYY-MM-DD');
 
   const seq = String(allWos.length + 1).padStart(3, '0');
