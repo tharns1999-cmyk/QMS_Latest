@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useInRouterContext, useLocation, useNavigate, MemoryRouter } from 'react-router-dom';
+import { useInRouterContext, useLocation, useNavigate, useSearchParams, MemoryRouter } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import {
   Wrench,
@@ -88,19 +88,21 @@ const AssetRegisterPageInner = () => {
   const [localModuleView, setLocalModuleView] = useState('ASSETS');
   const moduleView = routeView || localModuleView;
 
-  const setModuleView = useCallback((nextView, targetWoId = null) => {
+  const setModuleView = useCallback((nextView, targetWoId = null, targetAssetId = null) => {
     setLocalModuleView(nextView);
     if (navigate && location?.pathname && location.pathname.startsWith('/vcc')) {
       const targetPath =
         nextView === 'TASKS' ? '/vcc/tasks' :
         nextView === 'WORK_ORDERS' ? (targetWoId ? `/vcc/work-orders?wo=${encodeURIComponent(targetWoId)}` : '/vcc/work-orders') :
         nextView === 'ANNUAL_PLAN' ? '/vcc/plans' :
-        nextView === 'ASSETS' ? '/vcc/assets' : '/vcc/dashboard';
-      if (location.pathname !== targetPath) {
+        nextView === 'ASSETS' ? (targetAssetId ? `/vcc/assets?asset=${encodeURIComponent(targetAssetId)}` : '/vcc/assets') :
+        '/vcc/dashboard';
+      const currentFullPath = (location.pathname || '') + (location.search || '');
+      if (currentFullPath !== targetPath) {
         navigate(targetPath);
       }
     }
-  }, [navigate, location?.pathname]);
+  }, [navigate, location?.pathname, location?.search]);
 
   // Separate status tabs: ACTIVE and RETIRED are never mixed in one list.
   const [activeTab, setActiveTab] = useState('ACTIVE');
@@ -138,6 +140,30 @@ const AssetRegisterPageInner = () => {
 
   // History / Detail Modal
   const [detailModalOpen, setDetailModalOpen] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const deepLinkedAssetId = searchParams.get('asset');
+
+  useEffect(() => {
+    if (!deepLinkedAssetId || loading || moduleView !== 'ASSETS') return;
+    const found = assets.find((a) => a.id === deepLinkedAssetId || a.asset_code === deepLinkedAssetId);
+    if (found) {
+      openHistoryModal(found.id);
+    }
+  }, [deepLinkedAssetId, loading, moduleView, assets]);
+
+  const handleCloseDetailModal = (nextOpen) => {
+    setDetailModalOpen(nextOpen);
+    if (!nextOpen) {
+      setDetailData(null);
+      if (searchParams.has('asset')) {
+        setSearchParams((prev) => {
+          const next = new URLSearchParams(prev);
+          next.delete('asset');
+          return next;
+        }, { replace: true });
+      }
+    }
+  };
   const [detailData, setDetailData] = useState(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
 
@@ -448,7 +474,10 @@ const AssetRegisterPageInner = () => {
       ) : moduleView === 'WORK_ORDERS' ? (
         <WorkOrderSection activeDepartments={activeDepartments} />
       ) : moduleView === 'DASHBOARD' ? (
-        <VccDashboardSection onNavigateToWorkOrders={(woId) => setModuleView('WORK_ORDERS', woId)} />
+        <VccDashboardSection
+          onNavigateToWorkOrders={(woId) => setModuleView('WORK_ORDERS', woId)}
+          onNavigateToAsset={(assetId) => setModuleView('ASSETS', null, assetId)}
+        />
       ) : (
         <>
           {hasTestData && (
@@ -803,7 +832,7 @@ const AssetRegisterPageInner = () => {
 
       <AssetDetailHistoryModal
         detailModalOpen={detailModalOpen}
-        setDetailModalOpen={setDetailModalOpen}
+        setDetailModalOpen={handleCloseDetailModal}
         loadingDetail={loadingDetail}
         detailData={detailData}
       />

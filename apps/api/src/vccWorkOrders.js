@@ -1128,7 +1128,10 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
       return c.json({ error: `ไม่สามารถเปิดใบสั่งงานให้เครื่องมือที่มีสถานะ ${asset.status}` }, 409);
     }
 
-    if (!providerName) return c.json({ error: 'กรุณาระบุสถาบัน/หน่วยงานที่ทวนสอบ' }, 400);
+    const PLACEHOLDER_PROVIDER = '-- เลือกหน่วยงานที่ทวนสอบ --';
+    if (!providerName || providerName === PLACEHOLDER_PROVIDER) {
+      return c.json({ error: 'กรุณาระบุสถาบัน/หน่วยงานที่ทวนสอบ' }, 400);
+    }
     if (!DATE_RE.test(dueDate)) return c.json({ error: 'กรุณาระบุวันครบกำหนดในรูปแบบ YYYY-MM-DD' }, 400);
 
     const countRow = await db.prepare('SELECT COUNT(*) AS cnt FROM vcc_work_orders').first();

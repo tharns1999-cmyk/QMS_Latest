@@ -269,8 +269,9 @@ export const CreateWorkOrderModal = ({
                     onChange={(e) => setForm({ ...form, provider_name: e.target.value })}
                     className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium bg-white"
                   >
-                    {!providers.includes(form.provider_name) && (
-                      <option value="" disabled>-- เลือกหน่วยงานที่ทวนสอบ --</option>
+                    <option value="" disabled>-- เลือกหน่วยงานที่ทวนสอบ --</option>
+                    {form.provider_name && !providers.includes(form.provider_name) && form.provider_name !== '-- เลือกหน่วยงานที่ทวนสอบ --' && (
+                      <option value={form.provider_name}>{form.provider_name}</option>
                     )}
                     {providers.map((p) => (
                       <option key={p} value={p}>{p}</option>

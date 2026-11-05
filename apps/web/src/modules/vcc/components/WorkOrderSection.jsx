@@ -243,24 +243,60 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
   // Deep link from the task inbox / notifications: /vcc/work-orders?wo=<id> opens that work order's drawer on its own tab
   const [searchParams, setSearchParams] = useSearchParams();
   const deepLinkedWoId = searchParams.get('wo');
-  useEffect(() => {
-    if (!deepLinkedWoId || loading || fetchError) return;
-    const tab = Object.keys(rawWosByTab).find((key) =>
-      rawWosByTab[key].some((w) => w.id === deepLinkedWoId || w.wo_code === deepLinkedWoId)
-    );
-    if (tab) {
-      setActiveTab(tab);
-      setSelectedDrawerWo(
-        rawWosByTab[tab].find((w) => w.id === deepLinkedWoId || w.wo_code === deepLinkedWoId)
-      );
-    } else {
-      toast.error('ไม่พบใบสั่งงานที่ระบุ หรือคุณไม่มีสิทธิ์ดูใบสั่งงานนี้');
+
+  const handleOpenDrawer = useCallback((wo) => {
+    setSelectedDrawerWo(wo);
+    if (wo?.id) {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        if (next.get('wo') !== wo.id && next.get('wo') !== wo.wo_code) {
+          next.set('wo', wo.id);
+          return next;
+        }
+        return prev;
+      });
     }
+  }, [setSearchParams]);
+
+  const handleCloseDrawer = useCallback(() => {
+    setSelectedDrawerWo(null);
     setSearchParams((prev) => {
-      const next = new URLSearchParams(prev);
-      next.delete('wo');
-      return next;
+      if (prev.has('wo')) {
+        const next = new URLSearchParams(prev);
+        next.delete('wo');
+        return next;
+      }
+      return prev;
     }, { replace: true });
+  }, [setSearchParams]);
+
+  useEffect(() => {
+    if (loading || fetchError) return;
+    if (deepLinkedWoId) {
+      if (selectedDrawerWo && (selectedDrawerWo.id === deepLinkedWoId || selectedDrawerWo.wo_code === deepLinkedWoId)) {
+        return;
+      }
+      const tab = Object.keys(rawWosByTab).find((key) =>
+        rawWosByTab[key].some((w) => w.id === deepLinkedWoId || w.wo_code === deepLinkedWoId)
+      );
+      if (tab) {
+        const matched = rawWosByTab[tab].find((w) => w.id === deepLinkedWoId || w.wo_code === deepLinkedWoId);
+        setActiveTab(tab);
+        setSelectedDrawerWo(matched);
+      } else {
+        toast.error('ไม่พบใบสั่งงานที่ระบุ หรือคุณไม่มีสิทธิ์ดูใบสั่งงานนี้');
+        setSearchParams((prev) => {
+          if (!prev.has('wo')) return prev;
+          const next = new URLSearchParams(prev);
+          next.delete('wo');
+          return next;
+        }, { replace: true });
+      }
+    } else {
+      if (selectedDrawerWo) {
+        setSelectedDrawerWo(null);
+      }
+    }
   }, [deepLinkedWoId, loading, fetchError, rawWosByTab, setSearchParams]);
 
   useEffect(() => {
@@ -315,8 +351,8 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
       plan_item_id: '',
       planned_month: 1,
       child_asset_id: '',
-      asset_id: individualAssets[0]?.id || '',
-      provider_name: providers[0] || 'ห้องปฏิบัติการภายนอก',
+      asset_id: '',
+      provider_name: '',
       due_date: getDefaultAdHocDueDate()
     });
     setCreateOpen(true);
@@ -333,7 +369,8 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
           setSavingCreate(false);
           return;
         }
-        if (!createForm.provider_name || !createForm.provider_name.trim()) {
+        const trimmedProvider = String(createForm.provider_name || '').trim();
+        if (!trimmedProvider || trimmedProvider === '-- เลือกหน่วยงานที่ทวนสอบ --') {
           setCreateError('กรุณาระบุสถาบัน/หน่วยงานที่ทวนสอบ');
           setSavingCreate(false);
           return;
@@ -406,7 +443,7 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
       toast.success(`ส่งผลใบสั่งงาน ${updated.wo_code} เข้าสู่คิวตรวจรับแล้ว`);
       setResultWo(null);
       if (selectedDrawerWo?.id === resultWo.id) {
-        setSelectedDrawerWo(null);
+        handleCloseDrawer();
       }
       setActiveTab('PENDING_REVIEW');
       await loadData();
@@ -454,7 +491,7 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
       );
       setAmendWo(null);
       if (selectedDrawerWo?.id === amendWo.id) {
-        setSelectedDrawerWo(null);
+        handleCloseDrawer();
       }
       await loadData();
     } catch (err) {
@@ -503,7 +540,7 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
         toast.success(`ตรวจรับและปิดใบสั่งงาน ${workOrder.wo_code} แล้ว`);
         setActionModal(null);
         if (selectedDrawerWo?.id === workOrder.id) {
-          setSelectedDrawerWo(null);
+          handleCloseDrawer();
         }
         setActiveTab('CLOSED');
         await loadData();
@@ -512,7 +549,7 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
         toast.success(`ส่งใบสั่งงาน ${workOrder.wo_code} กลับไปแก้ไขแล้ว`);
         setActionModal(null);
         if (selectedDrawerWo?.id === workOrder.id) {
-          setSelectedDrawerWo(null);
+          handleCloseDrawer();
         }
         setActiveTab('REJECTED');
         await loadData();
@@ -521,7 +558,7 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
         toast.success(`ปลดระงับเครื่องมือ ${workOrder.asset_code} แล้ว`);
         setActionModal(null);
         if (selectedDrawerWo?.id === workOrder.id) {
-          setSelectedDrawerWo(null);
+          handleCloseDrawer();
         }
         await loadData();
       } else if (mode === 'CANCEL') {
@@ -529,7 +566,7 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
         toast.success(`ยกเลิกใบสั่งงาน ${workOrder.wo_code} แล้ว`);
         setActionModal(null);
         if (selectedDrawerWo?.id === workOrder.id) {
-          setSelectedDrawerWo(null);
+          handleCloseDrawer();
         }
         await loadData();
       }
@@ -733,7 +770,7 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
         searchTerm={searchTerm}
         filterDept={filterDept}
         thresholds={thresholds}
-        onRowClick={(wo) => setSelectedDrawerWo(wo)}
+        onRowClick={handleOpenDrawer}
         onRecordResult={openRecordResult}
         onReschedule={(wo) => openAction('RESCHEDULE', wo)}
         onApprove={(wo) => openAction('APPROVE', wo)}
@@ -749,7 +786,7 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
       {/* 5. Side Drawer for Work Order Details */}
       <WorkOrderSideDrawer
         workOrder={selectedDrawerWo}
-        onClose={() => setSelectedDrawerWo(null)}
+        onClose={handleCloseDrawer}
         thresholds={thresholds}
         onRecordResult={openRecordResult}
         onReschedule={(wo) => openAction('RESCHEDULE', wo)}

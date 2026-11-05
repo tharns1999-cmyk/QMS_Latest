@@ -250,7 +250,22 @@ describe('VCC Phase 3: Work Orders, Execution, Review, Close & Hold/NC Control',
       is_group: false
     });
 
-    // Ad-hoc work order
+    // Ad-hoc work order with empty or placeholder provider is rejected (400)
+    const emptyProviderWo = await call('POST', '/api/vcc/work-orders', 'VWO-DCC', {
+      asset_id: asset.body.asset.id,
+      provider_name: '',
+      due_date: '2026-05-31'
+    });
+    expect(emptyProviderWo.status).toBe(400);
+
+    const placeholderProviderWo = await call('POST', '/api/vcc/work-orders', 'VWO-DCC', {
+      asset_id: asset.body.asset.id,
+      provider_name: '-- เลือกหน่วยงานที่ทวนสอบ --',
+      due_date: '2026-05-31'
+    });
+    expect(placeholderProviderWo.status).toBe(400);
+
+    // Ad-hoc work order with valid provider
     const woRes = await call('POST', '/api/vcc/work-orders', 'VWO-DCC', {
       asset_id: asset.body.asset.id,
       provider_name: 'ห้องปฏิบัติการภายนอก',
