@@ -365,10 +365,17 @@ export const rescheduleVccWorkOrder = async (id, { new_due_date, reason }) => {
     return workOrder;
   }
   const user = assertLocalVccAccess();
+  const isDccUser = Boolean(user.isDcc || user.is_dcc);
+  if (!isDccUser) {
+    throw new Error('ไม่มีสิทธิ์ปรับเปลี่ยนวันกำหนดการโดยตรง: การเลื่อนกำหนดโดยตรง (Direct Override) สงวนสิทธิ์สำหรับเจ้าหน้าที่ DCC เท่านั้น สำหรับแผนกอื่นโปรดยื่นคำขอเลื่อนกำหนด (Request Reschedule)');
+  }
   const allWos = getLocalWos();
   const idx = allWos.findIndex((w) => w.id === id);
   if (idx === -1) throw new Error('ไม่พบใบสั่งงานทวนสอบ/สอบเทียบ');
   const existing = allWos[idx];
+  if (existing.reschedule_status === 'REQUESTED') {
+    throw new Error('ไม่สามารถปรับเปลี่ยนวันกำหนดการโดยตรงได้เนื่องจากมีคำขอเลื่อนกำหนดรอการพิจารณาอยู่ กรุณาพิจารณาอนุมัติหรือไม่อนุมัติคำขอเดิมผ่านกระบวนการพิจารณา');
+  }
   const trimmedReason = String(reason || '').trim();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(new_due_date || '').trim())) {
     throw new Error('กรุณาระบุวันครบกำหนดใหม่ในรูปแบบ YYYY-MM-DD');

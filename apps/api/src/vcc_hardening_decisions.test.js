@@ -34,8 +34,11 @@ describe('VCC Pre-UAT Product Hardening & Refinement Decisions (DEC-01 to DEC-04
       ...[
         ['u-hdcc', 'H-DCC Officer', 'hdcc@vcc.local', 3, 'QC', 1],
         ['u-hl2', 'H-Operator L2', 'hl2@vcc.local', 2, 'QC', 0],
+        ['u-hl3', 'H-Senior L3', 'hl3@vcc.local', 3, 'QC', 0],
         ['u-hl4', 'H-Lead L4', 'hl4@vcc.local', 4, 'QC', 0],
+        ['u-hl4b', 'H-Lead L4B', 'hl4b@vcc.local', 4, 'QC', 0],
         ['u-hl5', 'H-Manager L5', 'hl5@vcc.local', 5, 'QC', 0],
+        ['u-hqmr', 'H-QMR Exec L6', 'hqmr@vcc.local', 6, 'QA', 0],
         ['u-hother4', 'H-Other L4', 'hother4@vcc.local', 4, 'QA', 0]
       ].map(([id, name, email, level, dept, dcc]) =>
         env.DB.prepare(`
@@ -48,8 +51,11 @@ describe('VCC Pre-UAT Product Hardening & Refinement Decisions (DEC-01 to DEC-04
     for (const [key, email] of [
       ['DCC', 'hdcc@vcc.local'],
       ['L2', 'hl2@vcc.local'],
+      ['L3', 'hl3@vcc.local'],
       ['L4', 'hl4@vcc.local'],
+      ['L4B', 'hl4b@vcc.local'],
       ['L5', 'hl5@vcc.local'],
+      ['QMR', 'hqmr@vcc.local'],
       ['OTHER4', 'hother4@vcc.local']
     ]) {
       const res = await app.request('/api/auth/login', {
@@ -271,6 +277,129 @@ describe('VCC Pre-UAT Product Hardening & Refinement Decisions (DEC-01 to DEC-04
         WHERE action = 'VCC_WO_RESCHEDULE_REJECTED' AND json_extract(details, '$.wo_id') = ?
       `).bind(woRejectId).first();
       expect(auditRow).toBeDefined();
+    });
+
+    it('6. Direct Reschedule API Security: Blocks non-DCC (L2, L3, L4, QMR) with 403; allows DCC with audit', async () => {
+      const woDirectId = 'wo-resched-direct-sec';
+      await env.DB.prepare(`
+        INSERT OR REPLACE INTO vcc_work_orders (
+          id, wo_code, asset_id, provider_name, status, due_date, original_due_date, scheduled_date, created_by, updated_by
+        ) VALUES (?, 'WO-RS-DIR', 'ast-resched', 'NIMT', 'OPEN', '2026-08-01', '2026-08-01', '2026-08-01', 'u-hdcc', 'u-hdcc')
+      `).bind(woDirectId).run();
+
+      // L2 fails direct override
+      const l2Direct = await call('POST', `/api/vcc/work-orders/${woDirectId}/reschedule`, 'L2', {
+        new_due_date: '2026-08-20',
+        reason: 'L2 bypass attempt'
+      });
+      expect(l2Direct.status).toBe(403);
+      expect(l2Direct.body.error).toContain('สงวนสิทธิ์สำหรับเจ้าหน้าที่ DCC เท่านั้น');
+
+      // L3 fails direct override
+      const l3Direct = await call('POST', `/api/vcc/work-orders/${woDirectId}/reschedule`, 'L3', {
+        new_due_date: '2026-08-20',
+        reason: 'L3 bypass attempt'
+      });
+      expect(l3Direct.status).toBe(403);
+      expect(l3Direct.body.error).toContain('สงวนสิทธิ์สำหรับเจ้าหน้าที่ DCC เท่านั้น');
+
+      // L4 in dept fails direct override
+      const l4Direct = await call('POST', `/api/vcc/work-orders/${woDirectId}/reschedule`, 'L4', {
+        new_due_date: '2026-08-20',
+        reason: 'L4 bypass attempt'
+      });
+      expect(l4Direct.status).toBe(403);
+      expect(l4Direct.body.error).toContain('สงวนสิทธิ์สำหรับเจ้าหน้าที่ DCC เท่านั้น');
+
+      // QMR fails direct override (must use workflow or DCC)
+      const qmrDirect = await call('POST', `/api/vcc/work-orders/${woDirectId}/reschedule`, 'QMR', {
+        new_due_date: '2026-08-20',
+        reason: 'QMR direct attempt'
+      });
+      expect(qmrDirect.status).toBe(403);
+      expect(qmrDirect.body.error).toContain('สงวนสิทธิ์สำหรับเจ้าหน้าที่ DCC เท่านั้น');
+
+      // DCC succeeds direct override
+      const dccDirect = await call('POST', `/api/vcc/work-orders/${woDirectId}/reschedule`, 'DCC', {
+        new_due_date: '2026-08-25',
+        reason: 'DCC administrative override per urgent audit policy'
+      });
+      expect(dccDirect.status).toBe(200);
+      expect(dccDirect.body.workOrder.due_date).toBe('2026-08-25');
+      expect(dccDirect.body.workOrder.original_due_date).toBe('2026-08-01');
+
+      const auditRow = await env.DB.prepare(`
+        SELECT * FROM audit_log
+        WHERE action = 'VCC_WO_RESCHEDULED' AND json_extract(details, '$.wo_id') = ?
+      `).bind(woDirectId).first();
+      expect(auditRow).toBeDefined();
+      const details = JSON.parse(auditRow.details);
+      expect(details.is_direct_override).toBe(true);
+      expect(details.original_due_date).toBe('2026-08-01');
+    });
+
+    it('7. Direct Reschedule Guard: Blocks DCC direct override when request is already pending (409)', async () => {
+      const woPendingDirectId = 'wo-resched-pending-dir';
+      await env.DB.prepare(`
+        INSERT OR REPLACE INTO vcc_work_orders (
+          id, wo_code, asset_id, provider_name, status, due_date, original_due_date, scheduled_date, created_by, updated_by
+        ) VALUES (?, 'WO-RS-PDIR', 'ast-resched', 'NIMT', 'OPEN', '2026-09-01', '2026-09-01', '2026-09-01', 'u-hdcc', 'u-hdcc')
+      `).bind(woPendingDirectId).run();
+
+      // Submit request first
+      await call('POST', `/api/vcc/work-orders/${woPendingDirectId}/request-reschedule`, 'L2', {
+        proposed_due_date: '2026-09-15',
+        reason: 'ขอย้ายวัน'
+      });
+
+      // DCC tries to bypass pending request with direct reschedule -> 409
+      const bypassRes = await call('POST', `/api/vcc/work-orders/${woPendingDirectId}/reschedule`, 'DCC', {
+        new_due_date: '2026-09-20',
+        reason: 'DCC bypass attempt'
+      });
+      expect(bypassRes.status).toBe(409);
+      expect(bypassRes.body.error).toContain('มีคำขอเลื่อนกำหนดรอการพิจารณาอยู่');
+
+      // Duplicate request also rejected with 409
+      const dupReq = await call('POST', `/api/vcc/work-orders/${woPendingDirectId}/request-reschedule`, 'L2', {
+        proposed_due_date: '2026-09-18',
+        reason: 'ขอย้ำอีกรอบ'
+      });
+      expect(dupReq.status).toBe(409);
+      expect(dupReq.body.error).toContain('มีคำขอเลื่อนวันครบกำหนดรอการอนุมัติอยู่แล้ว');
+    });
+
+    it('8. Segregation of Duties Proof: L4 requester CANNOT self-approve, but peer L4B can approve', async () => {
+      const woL4SodId = 'wo-resched-l4-sod';
+      await env.DB.prepare(`
+        INSERT OR REPLACE INTO vcc_work_orders (
+          id, wo_code, asset_id, provider_name, status, due_date, original_due_date, scheduled_date, created_by, updated_by
+        ) VALUES (?, 'WO-RS-L4SOD', 'ast-resched', 'NIMT', 'OPEN', '2026-10-01', '2026-10-01', '2026-10-01', 'u-hdcc', 'u-hdcc')
+      `).bind(woL4SodId).run();
+
+      // L4 requests reschedule
+      const reqRes = await call('POST', `/api/vcc/work-orders/${woL4SodId}/request-reschedule`, 'L4', {
+        proposed_due_date: '2026-10-20',
+        reason: 'หัวหน้างาน L4 ยื่นคำขอเลื่อนเอง'
+      });
+      expect(reqRes.status).toBe(200);
+      expect(reqRes.body.workOrder.reschedule_requested_by).toBe('u-hl4');
+
+      // L4 tries to approve their own request -> 403 Forbidden
+      const selfApproveRes = await call('POST', `/api/vcc/work-orders/${woL4SodId}/approve-reschedule`, 'L4', {
+        comment: 'พยายามอนุมัติงานตัวเอง'
+      });
+      expect(selfApproveRes.status).toBe(403);
+      expect(selfApproveRes.body.error).toContain('ผู้ขอเลื่อนกำหนดวันไม่สามารถอนุมัติการขอเลื่อนของตนเองได้');
+
+      // Peer L4B in same department approves -> 200 OK
+      const peerApproveRes = await call('POST', `/api/vcc/work-orders/${woL4SodId}/approve-reschedule`, 'L4B', {
+        comment: 'หัวหน้างานอีกท่าน (L4B) ตรวจสอบและอนุมัติให้ตามระเบียบ'
+      });
+      expect(peerApproveRes.status).toBe(200);
+      expect(peerApproveRes.body.workOrder.reschedule_status).toBe('APPROVED');
+      expect(peerApproveRes.body.workOrder.reschedule_approved_by).toBe('u-hl4b');
+      expect(peerApproveRes.body.workOrder.due_date).toBe('2026-10-20');
     });
   });
 

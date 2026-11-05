@@ -521,13 +521,12 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
   const openAction = (mode, workOrder) => {
     setActionModal({ mode, workOrder });
     setActionError('');
-    const isDccUser = Boolean(currentUser?.isDcc || currentUser?.is_dcc);
     setActionForm({
       new_due_date: workOrder.proposed_due_date || workOrder.due_date,
       text: '',
       reason: '',
       category: 'MISTAKE_CREATION',
-      is_direct_override: isDccUser
+      is_direct_override: false
     });
   };
 

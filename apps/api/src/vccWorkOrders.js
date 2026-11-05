@@ -1252,13 +1252,15 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
       return c.json({ error: 'ไม่สามารถเลื่อนวันครบกำหนดของใบสั่งงานที่ปิดหรือยกเลิกแล้ว' }, 409);
     }
     const isDccUser = Boolean(user.isDcc || user.is_dcc);
-    const isQmrUser = Boolean(user.isQmr || user.is_qmr);
-    const userLevel = Number(user.approval_level ?? user.approvalLevel ?? 0);
-    const inDept = getUserDepartments(user).includes(String(existing.department || '').toUpperCase());
-    const isAuthorized = isDccUser || isQmrUser || userLevel >= 6 || (userLevel >= 4 && inDept);
-
-    if (!isAuthorized) {
-      return c.json({ error: 'ไม่มีสิทธิ์เลื่อนกำหนดใบสั่งงาน: เฉพาะผู้มีอำนาจอนุมัติ (ระดับ L4 ขึ้นไป) หรือเจ้าหน้าที่ DCC เท่านั้นที่สามารถเลื่อนกำหนดวันของใบสั่งงานได้' }, 403);
+    if (!isDccUser) {
+      return c.json({
+        error: 'ไม่มีสิทธิ์ปรับเปลี่ยนวันกำหนดการโดยตรง: การเลื่อนกำหนดโดยตรง (Direct Override) สงวนสิทธิ์สำหรับเจ้าหน้าที่ DCC เท่านั้น สำหรับแผนกอื่นโปรดยื่นคำขอเลื่อนกำหนด (Request Reschedule)'
+      }, 403);
+    }
+    if (existing.reschedule_status === 'REQUESTED') {
+      return c.json({
+        error: 'ไม่สามารถปรับเปลี่ยนวันกำหนดการโดยตรงได้เนื่องจากมีคำขอเลื่อนกำหนดรอการพิจารณาอยู่ กรุณาพิจารณาอนุมัติหรือไม่อนุมัติคำขอเดิมผ่านกระบวนการพิจารณา'
+      }, 409);
     }
 
     const newDueDate = String(body.new_due_date || '').trim();
@@ -1304,7 +1306,8 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
         before: { due_date: existing.due_date },
         after: { due_date: newDueDate },
         reason,
-        authorized_by: user.id
+        authorized_by: user.id,
+        is_direct_override: true
       })
     ]);
     if (conflict) return conflict;
