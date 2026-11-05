@@ -285,6 +285,10 @@ export const runVccNotificationSweep = async (db, options = {}) => {
     let title = '';
     let message = '';
 
+    const activeCertExpiringDays = (settings.department_cert_expiring_days && settings.department_cert_expiring_days[row.department])
+      ? [...settings.department_cert_expiring_days[row.department]].sort((a, b) => a - b)
+      : certExpiringDays;
+
     if (certDiff < 0) {
       notifType = 'CERT_EXPIRED';
       severity = 'CRITICAL';
@@ -292,10 +296,6 @@ export const runVccNotificationSweep = async (db, options = {}) => {
       title = `[ใบรับรองหมดอายุ] เครื่องมือ ${row.asset_code} ใบรับรองหมดอายุแล้ว`;
       message = `เครื่องมือ ${row.asset_code} (${row.asset_name}) ใบรับรองเลขที่ ${row.certificate_no} หมดอายุเมื่อวันที่ ${validUntil} (หมดอายุมาแล้ว ${Math.abs(certDiff)} วัน) ห้ามนำเครื่องมือไปใช้งานในกระบวนการผลิต`;
     } else {
-      const activeCertExpiringDays = (settings.department_cert_expiring_days && settings.department_cert_expiring_days[row.department])
-        ? [...settings.department_cert_expiring_days[row.department]].sort((a, b) => a - b)
-        : certExpiringDays;
-
       for (const t of activeCertExpiringDays) {
         if (certDiff <= t) {
           notifType = `CERT_EXPIRING_${t}`;
@@ -333,9 +333,9 @@ export const runVccNotificationSweep = async (db, options = {}) => {
         }
         await db.prepare(`
           UPDATE vcc_notifications
-          SET days_offset = ?, due_date = ?, status = ?, title = ?, message = ?, updated_at = ${NOW}
+          SET department = ?, days_offset = ?, due_date = ?, status = ?, title = ?, message = ?, updated_at = ${NOW}
           WHERE dedup_key = ?
-        `).bind(certDiff, validUntil, nextStatus, title, message, dedupKey).run();
+        `).bind(row.department, certDiff, validUntil, nextStatus, title, message, dedupKey).run();
         summary.updated++;
       } else {
         const notifId = `NTF-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
@@ -346,6 +346,7 @@ export const runVccNotificationSweep = async (db, options = {}) => {
             severity, title, message, due_date, days_offset, status
           ) VALUES (?, ?, ?, 'VCC_ASSET', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING')
           ON CONFLICT(dedup_key) DO UPDATE SET
+            department = excluded.department,
             days_offset = excluded.days_offset,
             due_date = excluded.due_date,
             title = excluded.title,
@@ -367,8 +368,9 @@ export const runVccNotificationSweep = async (db, options = {}) => {
         `).bind(row.asset_id, notifType).run();
       }
     } else {
-      // If certificate is renewed (> 60 days remaining), auto-resolve old cert alerts
-      if (certDiff > Math.max(...certExpiringDays)) {
+      // If certificate is renewed (> threshold days remaining), auto-resolve old cert alerts
+      const maxCertThreshold = Math.max(...activeCertExpiringDays);
+      if (certDiff > maxCertThreshold) {
         const res = await db.prepare(`
           UPDATE vcc_notifications
           SET status = 'RESOLVED', resolved_at = ${NOW}, resolved_reason = 'CERTIFICATE_RENEWED', updated_at = ${NOW}

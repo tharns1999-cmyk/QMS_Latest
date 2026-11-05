@@ -124,16 +124,26 @@ const fetchWorkOrder = async (db, id) => {
 
   if (!wo) return null;
 
-  const { results: childAssets } = await db.prepare(`
-    SELECT id, asset_code, name, asset_type, serial_no, model, location, status
-    FROM vcc_assets
-    WHERE parent_id = ?
-    ORDER BY asset_code ASC
-  `).bind(wo.asset_id).all().catch(() => ({ results: [] }));
+  let childAssets = [];
+  if (wo.child_assets_snapshot) {
+    try {
+      childAssets = JSON.parse(wo.child_assets_snapshot);
+    } catch {
+      childAssets = [];
+    }
+  } else {
+    const { results } = await db.prepare(`
+      SELECT id, asset_code, name, asset_type, serial_no, model, location, status
+      FROM vcc_assets
+      WHERE parent_id = ?
+      ORDER BY asset_code ASC
+    `).bind(wo.asset_id).all().catch(() => ({ results: [] }));
+    childAssets = results || [];
+  }
 
   return {
     ...wo,
-    child_assets: childAssets || []
+    child_assets: Array.isArray(childAssets) ? childAssets : []
   };
 };
 
@@ -1259,9 +1269,15 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
     const conflict = await runTransition(c, db, [
       db.prepare(`
         UPDATE vcc_work_orders
-        SET scheduled_date = ?, due_date = ?, reschedule_reason = ?, updated_at = ${NOW}, updated_by = ?
+        SET scheduled_date = ?, due_date = ?, reschedule_reason = ?,
+            reschedule_status = 'APPROVED',
+            proposed_due_date = ?,
+            reschedule_requested_by = COALESCE(reschedule_requested_by, ?),
+            reschedule_approved_by = ?,
+            reschedule_approved_at = ${NOW},
+            updated_at = ${NOW}, updated_by = ?
         WHERE id = ? AND status = ? AND due_date IS ?
-      `).bind(newDueDate, newDueDate, reason, user.id, id, existing.status, existing.due_date),
+      `).bind(newDueDate, newDueDate, reason, newDueDate, user.id, user.id, user.id, id, existing.status, existing.due_date),
       assertRowUpdated(db),
       audit(db, user.id, 'VCC_WO_RESCHEDULED', {
         wo_id: id,
@@ -1274,6 +1290,202 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
         after: { due_date: newDueDate },
         reason,
         authorized_by: user.id
+      })
+    ]);
+    if (conflict) return conflict;
+
+    return c.json({ workOrder: await fetchWorkOrder(db, id) });
+  });
+
+  // 2-Step Reschedule Workflow Step 1: Request Reschedule (due_date unchanged until approved)
+  app.post('/api/vcc/work-orders/:id/request-reschedule', requireAuth, requireVccAccess, async (c) => {
+    const db = c.env.DB;
+    const user = c.get('user');
+    const id = c.req.param('id');
+    const body = await c.req.json().catch(() => ({}));
+
+    const existing = await fetchWorkOrder(db, id);
+    if (!existing) return c.json({ error: 'ไม่พบใบสั่งงานทวนสอบ/สอบเทียบ' }, 404);
+    if (existing.status === 'CLOSED' || existing.status === 'CANCELLED') {
+      return c.json({ error: 'ไม่สามารถขอเลื่อนวันครบกำหนดของใบสั่งงานที่ปิดหรือยกเลิกแล้ว' }, 409);
+    }
+    if (!isUserAuthorizedForPlanDept(user, existing.department)) {
+      return c.json({ error: 'ไม่มีสิทธิ์ขอเลื่อนวันครบกำหนดของใบสั่งงานในแผนกนี้' }, 403);
+    }
+    if (existing.reschedule_status === 'REQUESTED') {
+      return c.json({ error: 'มีคำขอเลื่อนวันครบกำหนดรอการอนุมัติอยู่แล้ว กรุณารอการพิจารณาคำขอเดิม' }, 409);
+    }
+
+    const proposedDueDate = String(body.proposed_due_date || body.new_due_date || '').trim();
+    const reason = String(body.reason || '').trim();
+    if (!DATE_RE.test(proposedDueDate)) return c.json({ error: 'กรุณาระบุวันครบกำหนดใหม่ในรูปแบบ YYYY-MM-DD' }, 400);
+    const [dYear, dMonth, dDay] = proposedDueDate.split('-').map(Number);
+    const checkD = new Date(Date.UTC(dYear, dMonth - 1, dDay));
+    if (
+      isNaN(checkD.getTime()) ||
+      checkD.getUTCFullYear() !== dYear ||
+      checkD.getUTCMonth() + 1 !== dMonth ||
+      checkD.getUTCDate() !== dDay
+    ) {
+      return c.json({ error: 'วันครบกำหนดใหม่ไม่ถูกต้องตามปฏิทิน' }, 400);
+    }
+    if (!reason) return c.json({ error: 'กรุณาระบุเหตุผลในการขอเลื่อนวันครบกำหนด' }, 400);
+    if (proposedDueDate === existing.due_date) {
+      return c.json({ error: 'วันครบกำหนดใหม่ตรงกับวันครบกำหนดปัจจุบัน ไม่มีการเปลี่ยนแปลง' }, 400);
+    }
+
+    // Due date remains strictly UNCHANGED until approved!
+    const conflict = await runTransition(c, db, [
+      db.prepare(`
+        UPDATE vcc_work_orders
+        SET reschedule_status = 'REQUESTED',
+            proposed_due_date = ?,
+            reschedule_reason = ?,
+            reschedule_requested_by = ?,
+            reschedule_requested_at = ${NOW},
+            updated_at = ${NOW},
+            updated_by = ?
+        WHERE id = ? AND status = ? AND (reschedule_status IS NULL OR reschedule_status != 'REQUESTED')
+      `).bind(proposedDueDate, reason, user.id, user.id, id, existing.status),
+      assertRowUpdated(db),
+      audit(db, user.id, 'VCC_WO_RESCHEDULE_REQUESTED', {
+        wo_id: id,
+        wo_code: existing.wo_code,
+        asset_id: existing.asset_id,
+        original_due_date: existing.original_due_date || existing.due_date,
+        current_due_date: existing.due_date,
+        proposed_due_date: proposedDueDate,
+        reason,
+        requested_by: user.id,
+        requested_by_name: user.name
+      })
+    ]);
+    if (conflict) return conflict;
+
+    return c.json({ workOrder: await fetchWorkOrder(db, id) });
+  });
+
+  // 2-Step Reschedule Workflow Step 2A: Approve Reschedule (Separation of Duties enforced)
+  app.post('/api/vcc/work-orders/:id/approve-reschedule', requireAuth, requireVccAccess, async (c) => {
+    const db = c.env.DB;
+    const user = c.get('user');
+    const id = c.req.param('id');
+    const body = await c.req.json().catch(() => ({}));
+
+    const existing = await fetchWorkOrder(db, id);
+    if (!existing) return c.json({ error: 'ไม่พบใบสั่งงานทวนสอบ/สอบเทียบ' }, 404);
+    if (existing.status === 'CLOSED' || existing.status === 'CANCELLED') {
+      return c.json({ error: 'ไม่สามารถอนุมัติเลื่อนวันครบกำหนดของใบสั่งงานที่ปิดหรือยกเลิกแล้ว' }, 409);
+    }
+    if (existing.reschedule_status !== 'REQUESTED') {
+      return c.json({ error: 'ไม่มีคำขอเลื่อนวันครบกำหนดที่รอการอนุมัติสำหรับใบสั่งงานนี้' }, 409);
+    }
+
+    const isDccUser = Boolean(user.isDcc || user.is_dcc);
+    const isQmrUser = Boolean(user.isQmr || user.is_qmr);
+    const userLevel = Number(user.approval_level ?? user.approvalLevel ?? 0);
+    const inDept = getUserDepartments(user).includes(String(existing.department || '').toUpperCase());
+    const isAuthorized = isDccUser || isQmrUser || userLevel >= 6 || (userLevel >= 4 && inDept);
+
+    if (!isAuthorized) {
+      return c.json({ error: 'ไม่มีสิทธิ์อนุมัติการเลื่อนกำหนดใบสั่งงาน: เฉพาะผู้มีอำนาจอนุมัติ (ระดับ L4 ขึ้นไป) หรือเจ้าหน้าที่ DCC เท่านั้น' }, 403);
+    }
+
+    // Segregation of Duties: Prevent Self-Approval
+    if (existing.reschedule_requested_by && (user.id === existing.reschedule_requested_by || user.username === existing.reschedule_requested_by)) {
+      return c.json({ error: 'การคัดแยกหน้าที่ (Segregation of Duties): ผู้ขอเลื่อนกำหนดวันไม่สามารถอนุมัติการขอเลื่อนของตนเองได้ (ป้องกัน Self-Approval) ต้องให้หัวหน้างานหรือเจ้าหน้าที่อื่นเป็นผู้อนุมัติ' }, 403);
+    }
+
+    const targetDueDate = existing.proposed_due_date;
+    if (!targetDueDate) {
+      return c.json({ error: 'ไม่พบวันครบกำหนดที่เสนอเลื่อน' }, 400);
+    }
+
+    const comment = String(body.comment || '').trim();
+
+    const conflict = await runTransition(c, db, [
+      db.prepare(`
+        UPDATE vcc_work_orders
+        SET due_date = ?,
+            scheduled_date = ?,
+            reschedule_status = 'APPROVED',
+            reschedule_approved_by = ?,
+            reschedule_approved_at = ${NOW},
+            updated_at = ${NOW},
+            updated_by = ?
+        WHERE id = ? AND status = ? AND reschedule_status = 'REQUESTED'
+      `).bind(targetDueDate, targetDueDate, user.id, user.id, id, existing.status),
+      assertRowUpdated(db),
+      audit(db, user.id, 'VCC_WO_RESCHEDULE_APPROVED', {
+        wo_id: id,
+        wo_code: existing.wo_code,
+        asset_id: existing.asset_id,
+        original_due_date: existing.original_due_date || existing.due_date,
+        previous_due_date: existing.due_date,
+        approved_due_date: targetDueDate,
+        reason: existing.reschedule_reason,
+        requested_by: existing.reschedule_requested_by,
+        approved_by: user.id,
+        approved_by_name: user.name,
+        comment
+      })
+    ]);
+    if (conflict) return conflict;
+
+    return c.json({ workOrder: await fetchWorkOrder(db, id) });
+  });
+
+  // 2-Step Reschedule Workflow Step 2B: Reject Reschedule (Maintains original due date)
+  app.post('/api/vcc/work-orders/:id/reject-reschedule', requireAuth, requireVccAccess, async (c) => {
+    const db = c.env.DB;
+    const user = c.get('user');
+    const id = c.req.param('id');
+    const body = await c.req.json().catch(() => ({}));
+
+    const existing = await fetchWorkOrder(db, id);
+    if (!existing) return c.json({ error: 'ไม่พบใบสั่งงานทวนสอบ/สอบเทียบ' }, 404);
+    if (existing.reschedule_status !== 'REQUESTED') {
+      return c.json({ error: 'ไม่มีคำขอเลื่อนวันครบกำหนดที่รอการอนุมัติสำหรับใบสั่งงานนี้' }, 409);
+    }
+
+    const isDccUser = Boolean(user.isDcc || user.is_dcc);
+    const isQmrUser = Boolean(user.isQmr || user.is_qmr);
+    const userLevel = Number(user.approval_level ?? user.approvalLevel ?? 0);
+    const inDept = getUserDepartments(user).includes(String(existing.department || '').toUpperCase());
+    const isAuthorized = isDccUser || isQmrUser || userLevel >= 6 || (userLevel >= 4 && inDept);
+
+    if (!isAuthorized) {
+      return c.json({ error: 'ไม่มีสิทธิ์ปฏิเสธการขอเลื่อนกำหนดใบสั่งงาน: เฉพาะผู้มีอำนาจอนุมัติ (ระดับ L4 ขึ้นไป) หรือเจ้าหน้าที่ DCC เท่านั้น' }, 403);
+    }
+
+    const rejectReason = String(body.reject_reason || body.reason || '').trim();
+    if (!rejectReason) {
+      return c.json({ error: 'กรุณาระบุเหตุผลในการปฏิเสธการขอเลื่อนวันครบกำหนด' }, 400);
+    }
+
+    // Due date remains strictly UNCHANGED!
+    const conflict = await runTransition(c, db, [
+      db.prepare(`
+        UPDATE vcc_work_orders
+        SET reschedule_status = 'REJECTED',
+            reschedule_rejected_reason = ?,
+            reschedule_approved_by = ?,
+            reschedule_approved_at = ${NOW},
+            updated_at = ${NOW},
+            updated_by = ?
+        WHERE id = ? AND status = ? AND reschedule_status = 'REQUESTED'
+      `).bind(rejectReason, user.id, user.id, id, existing.status),
+      assertRowUpdated(db),
+      audit(db, user.id, 'VCC_WO_RESCHEDULE_REJECTED', {
+        wo_id: id,
+        wo_code: existing.wo_code,
+        asset_id: existing.asset_id,
+        current_due_date: existing.due_date,
+        proposed_due_date: existing.proposed_due_date,
+        requested_by: existing.reschedule_requested_by,
+        rejected_by: user.id,
+        rejected_by_name: user.name,
+        reject_reason: rejectReason
       })
     ]);
     if (conflict) return conflict;
@@ -1328,15 +1540,12 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
       return c.json({ error: 'กรุณาระบุเกณฑ์ยอมรับ (Acceptance Criteria) ที่ใช้ตรวจเทียบก่อนส่งตรวจรับ' }, 400);
     }
 
-    const rawVerifType = String(body.verification_type || existing.verification_type || 'QUANTITATIVE').trim().toUpperCase();
-    const verificationType = rawVerifType === 'QUALITATIVE' ? 'QUALITATIVE' : 'QUANTITATIVE';
-    const actualResult = body.actual_result !== undefined ? (String(body.actual_result || '').trim() || null) : (existing.actual_result || null);
-
-    if (verificationType === 'QUALITATIVE') {
-      if (!actualResult && !resultRemarks) {
-        return c.json({ error: 'สำหรับการทวนสอบเชิงคุณภาพ (Qualitative) กรุณาระบุผลการตรวจสอบจริง (Actual Result) เช่น ผ่านเกณฑ์ตามข้อกำหนด หรือสภาพสมบูรณ์' }, 400);
-      }
+    const rawVerifType = body.verification_type !== undefined ? String(body.verification_type).trim().toUpperCase() : (existing.verification_type || 'QUANTITATIVE');
+    if (rawVerifType !== 'QUANTITATIVE' && rawVerifType !== 'QUALITATIVE') {
+      return c.json({ error: 'ประเภทการวัด/ทวนสอบต้องเป็น QUANTITATIVE หรือ QUALITATIVE เท่านั้น' }, 400);
     }
+    const verificationType = rawVerifType;
+    const actualResult = body.actual_result !== undefined ? (String(body.actual_result || '').trim() || null) : (existing.actual_result || null);
 
     const calibrationProviderName = body.calibration_provider_name !== undefined ? (String(body.calibration_provider_name || '').trim() || null) : existing.calibration_provider_name;
     const calibrationMethod = body.calibration_method !== undefined ? (String(body.calibration_method || '').trim() || null) : existing.calibration_method;
@@ -1346,11 +1555,32 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
     let calibrationErrorValue = body.calibration_error_value !== undefined ? (String(body.calibration_error_value || '').trim() || null) : existing.calibration_error_value;
 
     if (verificationType === 'QUALITATIVE') {
+      if (!actualResult) {
+        return c.json({ error: 'สำหรับการทวนสอบเชิงคุณภาพ (Qualitative) จำเป็นต้องระบุผลการตรวจสอบจริง (Actual Result) เช่น ผ่านเกณฑ์ตามข้อกำหนด หรือสภาพสมบูรณ์' }, 400);
+      }
       if (!uncertaintyValue || !uncertaintyValue.trim()) {
         uncertaintyValue = 'N/A (การทวนสอบเชิงคุณภาพ ไม่นำมาคำนวณ)';
       }
       if (!calibrationErrorValue || !calibrationErrorValue.trim()) {
         calibrationErrorValue = 'N/A (การทวนสอบเชิงคุณภาพ)';
+      }
+    } else {
+      if (uncertaintyValue && uncertaintyValue.includes('การทวนสอบเชิงคุณภาพ')) {
+        return c.json({ error: 'การทวนสอบเชิงปริมาณ (Quantitative) ไม่อนุญาตให้ใช้ข้อยกเว้น N/A ของการทวนสอบเชิงคุณภาพ กรุณาระบุค่าความไม่แน่นอนจริงหรือเลือกประเภทการทวนสอบเชิงคุณภาพ' }, 400);
+      }
+    }
+
+    // Capture child assets snapshot for composite sets (DEC-04)
+    let childAssetsSnapshot = existing.child_assets_snapshot;
+    if (!childAssetsSnapshot) {
+      const { results: currentChildAssets } = await db.prepare(`
+        SELECT id, asset_code, name, asset_type, serial_no, model, location, status
+        FROM vcc_assets
+        WHERE parent_id = ?
+        ORDER BY asset_code ASC
+      `).bind(existing.asset_id).all().catch(() => ({ results: [] }));
+      if (currentChildAssets && currentChildAssets.length > 0) {
+        childAssetsSnapshot = JSON.stringify(currentChildAssets);
       }
     }
 
@@ -1400,6 +1630,7 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
             nc_status = ?,
             verification_type = ?,
             actual_result = ?,
+            child_assets_snapshot = COALESCE(?, child_assets_snapshot),
             rejected_reason = NULL,
             updated_at = ${NOW},
             updated_by = ?
@@ -1422,6 +1653,7 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
         nextNcStatus,
         verificationType,
         actualResult,
+        childAssetsSnapshot,
         user.id,
         id
       ),
@@ -1503,6 +1735,19 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
       );
     }
 
+    let childAssetsSnapshot = existing.child_assets_snapshot;
+    if (!childAssetsSnapshot) {
+      const { results: currentChildAssets } = await db.prepare(`
+        SELECT id, asset_code, name, asset_type, serial_no, model, location, status
+        FROM vcc_assets
+        WHERE parent_id = ?
+        ORDER BY asset_code ASC
+      `).bind(existing.asset_id).all().catch(() => ({ results: [] }));
+      if (currentChildAssets && currentChildAssets.length > 0) {
+        childAssetsSnapshot = JSON.stringify(currentChildAssets);
+      }
+    }
+
     const conflict = await runTransition(c, db, [
       db.prepare(`
         UPDATE vcc_work_orders
@@ -1510,10 +1755,11 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
             reviewed_by = ?,
             reviewed_at = ${NOW},
             review_comment = ?,
+            child_assets_snapshot = COALESCE(?, child_assets_snapshot),
             updated_at = ${NOW},
             updated_by = ?
         WHERE id = ? AND status = 'PENDING_REVIEW' AND result_status IS NOT 'INCONCLUSIVE'
-      `).bind(user.id, comment, user.id, id),
+      `).bind(user.id, comment, childAssetsSnapshot, user.id, id),
       assertRowUpdated(db),
       audit(db, user.id, 'VCC_WO_APPROVED', {
         wo_id: id,
@@ -2127,7 +2373,9 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
       uncertainty_value: body.uncertainty_value !== undefined ? (String(body.uncertainty_value || '').trim() || null) : existing.uncertainty_value,
       calibration_error_value: body.calibration_error_value !== undefined ? (String(body.calibration_error_value || '').trim() || null) : existing.calibration_error_value,
       certificate_issue_date: certificateIssueDate,
-      certificate_valid_until: certificateValidUntil
+      certificate_valid_until: certificateValidUntil,
+      verification_type: body.verification_type !== undefined ? String(body.verification_type).trim().toUpperCase() : (existing.verification_type || 'QUANTITATIVE'),
+      actual_result: body.actual_result !== undefined ? (String(body.actual_result).trim() || null) : (existing.actual_result || null)
     };
 
     const requestId = crypto.randomUUID();
