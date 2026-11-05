@@ -439,5 +439,25 @@ describe('VCC Pre-UAT Product Hardening & Refinement Decisions (DEC-01 to DEC-04
       expect(wo.child_assets[1].asset_code).toBe('CHILD-RT-01'); // Preserved even though deleted from register!
       expect(wo.child_assets.some((c) => c.asset_code === 'CHILD-NEW-99')).toBe(false); // New equipment not leaked into old record
     });
+
+    it('3. Legacy CLOSED work orders with child_assets_snapshot IS NULL do not query live register and report is_legacy_without_snapshot', async () => {
+      const legacyWoId = 'wo-legacy-closed-01';
+      await env.DB.prepare(`
+        INSERT INTO vcc_work_orders (
+          id, wo_code, asset_id, provider_name, due_date, original_due_date, status, result_status, child_assets_snapshot, created_by, updated_by
+        ) VALUES (
+          ?, 'WO-LEGACY-001', ?, 'Lab External', '2026-03-31', '2026-03-31', 'CLOSED', 'PASS', NULL, 'u-hdcc', 'u-hdcc'
+        )
+      `).bind(legacyWoId, parentAssetId).run();
+
+      const res = await call('GET', `/api/vcc/work-orders/${legacyWoId}`, 'L2');
+      expect(res.status).toBe(200);
+      const wo = res.body.workOrder;
+      expect(wo.status).toBe('CLOSED');
+      expect(wo.child_assets_snapshot).toBeNull();
+      // Must not query live register and claim it as historical snapshot
+      expect(wo.child_assets).toEqual([]);
+      expect(wo.is_legacy_without_snapshot).toBe(true);
+    });
   });
 });

@@ -22,7 +22,7 @@ import {
 import { fetchVccWorkOrderDetail } from '../api/vccWorkOrderApi';
 import { WorkOrderAmendmentRequests } from './WorkOrderAmendmentRequests';
 import useStore from '../../../store/useStore';
-import { canReviewWorkOrder, canReleaseWorkOrderHold, canCancelWorkOrder } from '../utils/workOrderPermissions';
+import { canReviewWorkOrder, canReleaseWorkOrderHold, canCancelWorkOrder, canApproveReschedule } from '../utils/workOrderPermissions';
 import { WORK_ORDER_STATUS_LABELS, getWorkOrderStatusLabel } from '../utils/statusLabels';
 import { formatVccDueDate, formatVccDate, formatVccDateTime } from '../utils/vccDateUtils';
 import { useVccModalAccessibility } from '../hooks/useVccModalAccessibility';
@@ -34,6 +34,7 @@ export const WorkOrderSideDrawer = ({
   thresholds = {},
   onRecordResult,
   onReschedule,
+  onReviewReschedule,
   onApprove,
   onReject,
   onReleaseHold,
@@ -287,11 +288,52 @@ export const WorkOrderSideDrawer = ({
                     )}
                   </div>
                 </div>
-                {currentWo.due_date !== currentWo.original_due_date && (
+                {currentWo.reschedule_status === 'REQUESTED' && (
+                  <div className="col-span-2 p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900 space-y-1.5">
+                    <div className="flex items-center gap-1.5 font-bold text-amber-800">
+                      <CalendarClock size={14} className="text-amber-700" />
+                      <span>มีคำขอเลื่อนวันครบกำหนด (รอการพิจารณาอนุมัติ)</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-slate-700 pt-1">
+                      <div>
+                        <span className="text-slate-500 block text-[11px]">วันครบกำหนดเดิม:</span>
+                        <span className="font-semibold text-slate-900 font-sans">{formatVccDueDate(currentWo.original_due_date || currentWo.due_date)}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 block text-[11px]">วันใหม่ที่เสนอ:</span>
+                        <span className="font-bold text-indigo-700 font-sans">{formatVccDueDate(currentWo.proposed_due_date)}</span>
+                      </div>
+                    </div>
+                    <div className="pt-1 border-t border-amber-200/60">
+                      <span className="text-slate-500 text-[11px]">เหตุผล: </span>
+                      <span className="font-medium text-slate-800">{currentWo.reschedule_reason}</span>
+                    </div>
+                    {(currentWo.reschedule_requested_by_name || currentWo.reschedule_requested_at) && (
+                      <div className="text-[10px] text-slate-500">
+                        ยื่นโดย: {currentWo.reschedule_requested_by_name || currentWo.reschedule_requested_by} • {formatVccDateTime(currentWo.reschedule_requested_at)}
+                      </div>
+                    )}
+                  </div>
+                )}
+                {currentWo.reschedule_status === 'REJECTED' && (
+                  <div className="col-span-2 p-2.5 rounded-lg bg-rose-50 border border-rose-200 text-xs text-rose-900 space-y-1">
+                    <div className="flex items-center gap-1 font-semibold text-rose-800">
+                      <XCircle size={13} className="text-rose-600" />
+                      <span>คำขอเลื่อนกำหนดถูกปฏิเสธ (คงวันเดิม):</span>
+                    </div>
+                    <div>เหตุผล: <span className="font-medium">{currentWo.reschedule_rejected_reason || '-'}</span></div>
+                    {currentWo.reschedule_approved_by_name && (
+                      <div className="text-[10px] text-slate-500">
+                        โดย: {currentWo.reschedule_approved_by_name} • {formatVccDateTime(currentWo.reschedule_approved_at)}
+                      </div>
+                    )}
+                  </div>
+                )}
+                {currentWo.due_date !== currentWo.original_due_date && currentWo.reschedule_status !== 'REQUESTED' && (
                   <div className="col-span-2 p-2.5 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-900 space-y-1">
                     <div className="flex items-center gap-1 font-semibold">
                       <Clock size={12} className="text-amber-700" />
-                      <span>มีการเลื่อนวันครบกำหนด:</span>
+                      <span>มีการเลื่อนวันครบกำหนด (อนุมัติแล้ว):</span>
                     </div>
                     <div>
                       วันเดิม:{' '}
@@ -305,6 +347,11 @@ export const WorkOrderSideDrawer = ({
                       )}
                     </div>
                     <div>เหตุผล: <span className="font-medium">{currentWo.reschedule_reason}</span></div>
+                    {currentWo.reschedule_approved_by_name && (
+                      <div className="text-[10px] text-slate-500">
+                        อนุมัติโดย: {currentWo.reschedule_approved_by_name} • {formatVccDateTime(currentWo.reschedule_approved_at)}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -568,17 +615,34 @@ export const WorkOrderSideDrawer = ({
                   <FileCheck2 size={15} />
                   <span>บันทึกผลและใบรับรอง</span>
                 </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    onClose();
-                    onReschedule(currentWo);
-                  }}
-                  className="min-h-[44px] sm:min-h-[38px] sm:h-9 w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 sm:px-3.5 rounded-xl border border-slate-300 text-slate-700 text-xs sm:text-sm font-semibold hover:bg-slate-100 motion-safe:active:scale-[0.98] transition-all cursor-pointer select-none"
-                >
-                  <CalendarClock size={15} />
-                  <span>เลื่อนวันครบกำหนด</span>
-                </button>
+                {currentWo.reschedule_status === 'REQUESTED' ? (
+                  canApproveReschedule(currentUser, currentWo) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onClose();
+                        if (onReviewReschedule) onReviewReschedule(currentWo);
+                        else onReschedule(currentWo);
+                      }}
+                      className="min-h-[44px] sm:min-h-[38px] sm:h-9 w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 sm:px-3.5 rounded-xl bg-amber-600 text-white text-xs sm:text-sm font-semibold hover:bg-amber-700 motion-safe:active:scale-[0.98] transition-all cursor-pointer shadow-2xs select-none"
+                    >
+                      <CalendarClock size={15} />
+                      <span>พิจารณาคำขอเลื่อนกำหนด</span>
+                    </button>
+                  )
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      onReschedule(currentWo);
+                    }}
+                    className="min-h-[44px] sm:min-h-[38px] sm:h-9 w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 sm:px-3.5 rounded-xl border border-slate-300 text-slate-700 text-xs sm:text-sm font-semibold hover:bg-slate-100 motion-safe:active:scale-[0.98] transition-all cursor-pointer select-none"
+                  >
+                    <CalendarClock size={15} />
+                    <span>ขอเลื่อนวันครบกำหนด</span>
+                  </button>
+                )}
               </>
             )}
 

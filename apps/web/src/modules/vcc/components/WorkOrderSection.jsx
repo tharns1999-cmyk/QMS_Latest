@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
+import useStore from '../../../store/useStore';
 import {
   Plus,
   SlidersHorizontal,
@@ -16,6 +17,9 @@ import {
   fetchVccWorkOrders,
   createVccWorkOrder,
   rescheduleVccWorkOrder,
+  requestRescheduleVccWorkOrder,
+  approveRescheduleVccWorkOrder,
+  rejectRescheduleVccWorkOrder,
   submitVccWorkOrderResult,
   approveVccWorkOrder,
   rejectVccWorkOrder,
@@ -84,6 +88,7 @@ const getDefaultAdHocDueDate = (d = new Date()) => {
 };
 
 const WorkOrderSection = ({ activeDepartments = [] }) => {
+  const currentUser = useStore((s) => s.currentUser);
   const [activeTab, setActiveTab] = useState('OPEN');
   const [filterDept, setFilterDept] = useState('');
   const [filterResult, setFilterResult] = useState('');
@@ -516,12 +521,52 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
   const openAction = (mode, workOrder) => {
     setActionModal({ mode, workOrder });
     setActionError('');
+    const isDccUser = Boolean(currentUser?.isDcc || currentUser?.is_dcc);
     setActionForm({
-      new_due_date: workOrder.due_date,
+      new_due_date: workOrder.proposed_due_date || workOrder.due_date,
       text: '',
       reason: '',
-      category: 'MISTAKE_CREATION'
+      category: 'MISTAKE_CREATION',
+      is_direct_override: isDccUser
     });
+  };
+
+  const handleApproveReschedule = async (e, workOrder, comment) => {
+    if (e && e.preventDefault) e.preventDefault();
+    setSavingAction(true);
+    setActionError('');
+    try {
+      await approveRescheduleVccWorkOrder(workOrder.id, { comment });
+      toast.success(`อนุมัติคำขอเลื่อนวันครบกำหนดของ ${workOrder.wo_code} แล้ว`);
+      setActionModal(null);
+      if (selectedDrawerWo?.id === workOrder.id) {
+        handleCloseDrawer();
+      }
+      await loadData();
+    } catch (err) {
+      setActionError(err.message || 'ไม่สามารถอนุมัติการเลื่อนวันครบกำหนดได้');
+    } finally {
+      setSavingAction(false);
+    }
+  };
+
+  const handleRejectReschedule = async (e, workOrder, rejectReason) => {
+    if (e && e.preventDefault) e.preventDefault();
+    setSavingAction(true);
+    setActionError('');
+    try {
+      await rejectRescheduleVccWorkOrder(workOrder.id, { reject_reason: rejectReason });
+      toast.success(`ปฏิเสธคำขอเลื่อนวันครบกำหนดของ ${workOrder.wo_code} แล้ว (คงวันเดิม)`);
+      setActionModal(null);
+      if (selectedDrawerWo?.id === workOrder.id) {
+        handleCloseDrawer();
+      }
+      await loadData();
+    } catch (err) {
+      setActionError(err.message || 'ไม่สามารถปฏิเสธคำขอได้');
+    } finally {
+      setSavingAction(false);
+    }
   };
 
   const handleActionConfirm = async (e) => {
@@ -531,12 +576,20 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
     setSavingAction(true);
     setActionError('');
     try {
-      if (mode === 'RESCHEDULE') {
-        await rescheduleVccWorkOrder(workOrder.id, {
-          new_due_date: actionForm.new_due_date,
-          reason: actionForm.text
-        });
-        toast.success(`เลื่อนวันครบกำหนดของ ${workOrder.wo_code} แล้ว`);
+      if (mode === 'RESCHEDULE' || mode === 'REQUEST_RESCHEDULE') {
+        if (actionForm.is_direct_override) {
+          await rescheduleVccWorkOrder(workOrder.id, {
+            new_due_date: actionForm.new_due_date,
+            reason: actionForm.text
+          });
+          toast.success(`ดำเนินการเลื่อนวันครบกำหนดทันทีแล้ว (DCC Override) ของ ${workOrder.wo_code}`);
+        } else {
+          await requestRescheduleVccWorkOrder(workOrder.id, {
+            proposed_due_date: actionForm.new_due_date,
+            reason: actionForm.text
+          });
+          toast.success(`ยื่นคำขอเลื่อนวันครบกำหนดของ ${workOrder.wo_code} แล้ว (รอการอนุมัติ)`);
+        }
         setActionModal(null);
         await loadData();
       } else if (mode === 'APPROVE') {
@@ -777,6 +830,7 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
         onRowClick={handleOpenDrawer}
         onRecordResult={openRecordResult}
         onReschedule={(wo) => openAction('RESCHEDULE', wo)}
+        onReviewReschedule={(wo) => openAction('REVIEW_RESCHEDULE', wo)}
         onApprove={(wo) => openAction('APPROVE', wo)}
         onReject={(wo) => openAction('REJECT', wo)}
         onReleaseHold={(wo) => openAction('RELEASE_HOLD', wo)}
@@ -794,6 +848,7 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
         thresholds={thresholds}
         onRecordResult={openRecordResult}
         onReschedule={(wo) => openAction('RESCHEDULE', wo)}
+        onReviewReschedule={(wo) => openAction('REVIEW_RESCHEDULE', wo)}
         onApprove={(wo) => openAction('APPROVE', wo)}
         onReject={(wo) => openAction('REJECT', wo)}
         onReleaseHold={(wo) => openAction('RELEASE_HOLD', wo)}
@@ -855,7 +910,10 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
         setForm={setActionForm}
         error={actionError}
         saving={savingAction}
+        currentUser={currentUser}
         onConfirm={handleActionConfirm}
+        onApproveReschedule={handleApproveReschedule}
+        onRejectReschedule={handleRejectReschedule}
       />
 
       <WorkOrderSettingsModal

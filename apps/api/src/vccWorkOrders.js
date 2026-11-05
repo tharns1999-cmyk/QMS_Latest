@@ -107,7 +107,9 @@ const fetchWorkOrder = async (db, id) => {
       u_rel.name AS hold_released_by_name,
       u_canc.name AS cancelled_by_name,
       u_cert.name AS certificate_uploaded_by_name,
-      u_amend.name AS amended_by_name
+      u_amend.name AS amended_by_name,
+      u_resq.name AS reschedule_requested_by_name,
+      u_resapp.name AS reschedule_approved_by_name
     FROM vcc_work_orders w
     JOIN vcc_assets a ON a.id = w.asset_id
     LEFT JOIN vcc_assets p ON p.id = a.parent_id
@@ -119,18 +121,26 @@ const fetchWorkOrder = async (db, id) => {
     LEFT JOIN users u_canc ON u_canc.id = w.cancelled_by
     LEFT JOIN users u_cert ON u_cert.id = w.certificate_uploaded_by
     LEFT JOIN users u_amend ON u_amend.id = w.amended_by
+    LEFT JOIN users u_resq ON u_resq.id = w.reschedule_requested_by
+    LEFT JOIN users u_resapp ON u_resapp.id = w.reschedule_approved_by
     WHERE w.id = ?
   `).bind(id).first();
 
   if (!wo) return null;
 
   let childAssets = [];
+  let isLegacyWithoutSnapshot = false;
   if (wo.child_assets_snapshot) {
     try {
       childAssets = JSON.parse(wo.child_assets_snapshot);
     } catch {
       childAssets = [];
     }
+  } else if (wo.status === 'CLOSED') {
+    // For legacy closed work orders predating snapshot capture:
+    // Do NOT query live register and claim it as a verified historical snapshot.
+    childAssets = [];
+    isLegacyWithoutSnapshot = true;
   } else {
     const { results } = await db.prepare(`
       SELECT id, asset_code, name, asset_type, serial_no, model, location, status
@@ -143,7 +153,8 @@ const fetchWorkOrder = async (db, id) => {
 
   return {
     ...wo,
-    child_assets: Array.isArray(childAssets) ? childAssets : []
+    child_assets: Array.isArray(childAssets) ? childAssets : [],
+    is_legacy_without_snapshot: isLegacyWithoutSnapshot
   };
 };
 
@@ -834,7 +845,9 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
         pl.plan_year,
         u_perf.name AS performed_by_name,
         u_rev.name AS reviewed_by_name,
-        u_rel.name AS hold_released_by_name
+        u_rel.name AS hold_released_by_name,
+        u_resq.name AS reschedule_requested_by_name,
+        u_resapp.name AS reschedule_approved_by_name
       FROM vcc_work_orders w
       JOIN vcc_assets a ON a.id = w.asset_id
       LEFT JOIN vcc_assets p ON p.id = a.parent_id
@@ -843,6 +856,8 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
       LEFT JOIN users u_perf ON u_perf.id = w.performed_by
       LEFT JOIN users u_rev ON u_rev.id = w.reviewed_by
       LEFT JOIN users u_rel ON u_rel.id = w.hold_released_by
+      LEFT JOIN users u_resq ON u_resq.id = w.reschedule_requested_by
+      LEFT JOIN users u_resapp ON u_resapp.id = w.reschedule_approved_by
       WHERE ${where.join(' AND ')}
       ORDER BY w.due_date ASC, w.wo_code ASC
     `).bind(...params).all();

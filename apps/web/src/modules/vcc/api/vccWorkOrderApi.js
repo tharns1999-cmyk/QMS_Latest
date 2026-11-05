@@ -12,7 +12,7 @@ import {
 } from './vccApi';
 import { computeDueDateForMonth, getLocalPlans, getLocalPlanItems, syncVccTasks as syncVccPlanTasks, isUserAuthorizedForPlanDept } from './vccPlanApi';
 import { canManageVccAsset } from '../utils/departmentScope';
-import { canReviewWorkOrder, canReleaseWorkOrderHold } from '../utils/workOrderPermissions';
+import { canReviewWorkOrder, canReleaseWorkOrderHold, canApproveReschedule } from '../utils/workOrderPermissions';
 
 const STORAGE_WO_KEY = 'qms-vcc-local-work-orders-v1';
 const STORAGE_WO_SETTINGS_KEY = 'qms-vcc-local-wo-settings-v1';
@@ -113,6 +113,9 @@ export const fetchVccWorkTasks = async () => {
       if (canReviewWorkOrder(user, wo, thresholds)) add('REVIEW_RESULT');
     } else if (wo.status === 'CLOSED' && wo.nc_status === 'OPEN') {
       if (canReleaseWorkOrderHold(user, wo, thresholds)) add('RELEASE_HOLD');
+    }
+    if (wo.reschedule_status === 'REQUESTED' && canApproveReschedule(user, wo) && user.id !== wo.reschedule_requested_by) {
+      add('APPROVE_RESCHEDULE', { reason: wo.reschedule_reason, proposed_due_date: wo.proposed_due_date });
     }
   }
   // shortcut: demo mode keeps no amendment requests (its amend flow is applied directly), so it has no APPROVE_AMENDMENT tasks
@@ -392,6 +395,141 @@ export const rescheduleVccWorkOrder = async (id, { new_due_date, reason }) => {
     before: { due_date: existing.due_date },
     after: { due_date: updated.due_date },
     reason: trimmedReason
+  });
+  return enrichLocalWo(updated, getLocalAssets(), getDepartmentMap(), getLocalPlans());
+};
+
+export const requestRescheduleVccWorkOrder = async (id, { proposed_due_date, reason }) => {
+  if (isApiMode) {
+    const { workOrder } = await apiPost(`/api/vcc/work-orders/${encodeURIComponent(id)}/request-reschedule`, { proposed_due_date, reason });
+    return workOrder;
+  }
+  const user = assertLocalVccAccess();
+  const allWos = getLocalWos();
+  const idx = allWos.findIndex((w) => w.id === id);
+  if (idx === -1) throw new Error('ไม่พบใบสั่งงานทวนสอบ/สอบเทียบ');
+  const existing = allWos[idx];
+  if (['CLOSED', 'CANCELLED'].includes(existing.status)) {
+    throw new Error('ไม่สามารถขอเลื่อนวันครบกำหนดของใบสั่งงานที่ปิดหรือยกเลิกแล้ว');
+  }
+  if (existing.reschedule_status === 'REQUESTED') {
+    throw new Error('มีคำขอเลื่อนวันครบกำหนดที่รอการพิจารณาอยู่แล้ว ไม่สามารถส่งซ้ำได้');
+  }
+  const trimmedDate = String(proposed_due_date || '').trim();
+  const trimmedReason = String(reason || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmedDate)) {
+    throw new Error('กรุณาระบุวันครบกำหนดที่เสนอเลื่อนในรูปแบบ YYYY-MM-DD');
+  }
+  if (!trimmedReason) throw new Error('กรุณาระบุเหตุผลในการขอเลื่อนวันครบกำหนด');
+  if (trimmedDate === existing.due_date) {
+    throw new Error('วันครบกำหนดใหม่ตรงกับวันครบกำหนดปัจจุบัน ไม่มีการเปลี่ยนแปลง');
+  }
+
+  const updated = {
+    ...existing,
+    reschedule_status: 'REQUESTED',
+    proposed_due_date: trimmedDate,
+    reschedule_reason: trimmedReason,
+    reschedule_requested_by: user.id,
+    reschedule_requested_by_name: user.name || user.username,
+    reschedule_requested_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    updated_by: user.id
+  };
+  const next = [...allWos];
+  next[idx] = updated;
+  setLocalWos(next);
+  appendLocalAudit('VCC_WO_RESCHEDULE_REQUESTED', {
+    wo_id: id,
+    wo_code: existing.wo_code,
+    original_due_date: existing.original_due_date || existing.due_date,
+    current_due_date: existing.due_date,
+    proposed_due_date: trimmedDate,
+    reason: trimmedReason,
+    requested_by: user.id
+  });
+  return enrichLocalWo(updated, getLocalAssets(), getDepartmentMap(), getLocalPlans());
+};
+
+export const approveRescheduleVccWorkOrder = async (id, { comment } = {}) => {
+  if (isApiMode) {
+    const { workOrder } = await apiPost(`/api/vcc/work-orders/${encodeURIComponent(id)}/approve-reschedule`, { comment });
+    return workOrder;
+  }
+  const user = assertLocalVccAccess();
+  const allWos = getLocalWos();
+  const idx = allWos.findIndex((w) => w.id === id);
+  if (idx === -1) throw new Error('ไม่พบใบสั่งงานทวนสอบ/สอบเทียบ');
+  const existing = allWos[idx];
+  if (existing.reschedule_status !== 'REQUESTED') {
+    throw new Error('ไม่มีคำขอเลื่อนวันครบกำหนดที่รอการอนุมัติสำหรับใบสั่งงานนี้');
+  }
+  if (existing.reschedule_requested_by && (user.id === existing.reschedule_requested_by || user.username === existing.reschedule_requested_by)) {
+    throw new Error('การคัดแยกหน้าที่ (Segregation of Duties): ผู้ขอเลื่อนกำหนดวันไม่สามารถอนุมัติการขอเลื่อนของตนเองได้ (ป้องกัน Self-Approval) ต้องให้หัวหน้างานหรือเจ้าหน้าที่อื่นเป็นผู้อนุมัติ');
+  }
+
+  const updated = {
+    ...existing,
+    due_date: existing.proposed_due_date,
+    reschedule_status: 'APPROVED',
+    reschedule_approved_by: user.id,
+    reschedule_approved_by_name: user.name || user.username,
+    reschedule_approved_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    updated_by: user.id
+  };
+  const next = [...allWos];
+  next[idx] = updated;
+  setLocalWos(next);
+  appendLocalAudit('VCC_WO_RESCHEDULE_APPROVED', {
+    wo_id: id,
+    wo_code: existing.wo_code,
+    original_due_date: existing.original_due_date,
+    new_due_date: existing.proposed_due_date,
+    approved_by: user.id,
+    comment: String(comment || '').trim()
+  });
+  return enrichLocalWo(updated, getLocalAssets(), getDepartmentMap(), getLocalPlans());
+};
+
+export const rejectRescheduleVccWorkOrder = async (id, { reject_reason } = {}) => {
+  if (isApiMode) {
+    const { workOrder } = await apiPost(`/api/vcc/work-orders/${encodeURIComponent(id)}/reject-reschedule`, { reject_reason });
+    return workOrder;
+  }
+  const user = assertLocalVccAccess();
+  const allWos = getLocalWos();
+  const idx = allWos.findIndex((w) => w.id === id);
+  if (idx === -1) throw new Error('ไม่พบใบสั่งงานทวนสอบ/สอบเทียบ');
+  const existing = allWos[idx];
+  if (existing.reschedule_status !== 'REQUESTED') {
+    throw new Error('ไม่มีคำขอเลื่อนวันครบกำหนดที่รอการอนุมัติสำหรับใบสั่งงานนี้');
+  }
+  const trimmedReason = String(reject_reason || '').trim();
+  if (!trimmedReason) {
+    throw new Error('กรุณาระบุเหตุผลในการปฏิเสธการขอเลื่อนวันครบกำหนด');
+  }
+
+  const updated = {
+    ...existing,
+    reschedule_status: 'REJECTED',
+    reschedule_rejected_reason: trimmedReason,
+    reschedule_approved_by: user.id,
+    reschedule_approved_by_name: user.name || user.username,
+    reschedule_approved_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    updated_by: user.id
+  };
+  const next = [...allWos];
+  next[idx] = updated;
+  setLocalWos(next);
+  appendLocalAudit('VCC_WO_RESCHEDULE_REJECTED', {
+    wo_id: id,
+    wo_code: existing.wo_code,
+    current_due_date: existing.due_date,
+    proposed_due_date: existing.proposed_due_date,
+    rejected_by: user.id,
+    reject_reason: trimmedReason
   });
   return enrichLocalWo(updated, getLocalAssets(), getDepartmentMap(), getLocalPlans());
 };

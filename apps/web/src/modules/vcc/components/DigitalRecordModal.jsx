@@ -10,7 +10,8 @@ import {
   Layers,
   Hash,
   History,
-  Building2
+  Building2,
+  Info
 } from 'lucide-react';
 import { formatVccDate, formatVccDateTime } from '../utils/vccDateUtils';
 import { useVccModalAccessibility } from '../hooks/useVccModalAccessibility';
@@ -204,6 +205,12 @@ export const DigitalRecordModal = ({
                 <span>รายการอุปกรณ์ในชุดเครื่องมือผสม (Composite Equipment Set Breakdown)</span>
               </h2>
               <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-2.5 text-xs">
+                {workOrder.is_legacy_without_snapshot && (
+                  <div className="p-2.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-start gap-2">
+                    <Info size={15} className="text-amber-700 shrink-0 mt-0.5" />
+                    <span>ใบบันทึกนี้เป็นข้อมูลประวัติเดิมก่อนระบบจัดเก็บภาพถ่ายรายการเครื่องมือย่อย (Historical Record Predates Child Snapshot) โดยอ้างอิงตามรายละเอียดรายการที่บันทึกไว้ในสเปกเครื่องมือ</span>
+                  </div>
+                )}
                 {workOrder.composite_details && (
                   <div className="p-2.5 rounded-lg bg-white border border-slate-200">
                     <span className="font-semibold text-slate-700 block mb-1">รายละเอียดรายการประกอบชุด (Specification / Items):</span>

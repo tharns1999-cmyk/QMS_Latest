@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { FloatingOverlay } from '../../../shared/components/ui/FloatingOverlay';
 import useStore from '../../../store/useStore';
-import { canReviewWorkOrder, canReleaseWorkOrderHold, canCancelWorkOrder } from '../utils/workOrderPermissions';
+import { canReviewWorkOrder, canReleaseWorkOrderHold, canCancelWorkOrder, canApproveReschedule } from '../utils/workOrderPermissions';
 import { WORK_ORDER_STATUS_LABELS, RESULT_STATUS_LABELS, getWorkOrderStatusLabel, getResultStatusLabel } from '../utils/statusLabels';
 import { formatVccDueDate } from '../utils/vccDateUtils';
 
@@ -33,6 +33,7 @@ export const WorkOrderRowActions = ({
   onApprove,
   onReleaseHold,
   onReschedule,
+  onReviewReschedule,
   onReject,
   onRowClick,
   onAmend,
@@ -128,18 +129,35 @@ export const WorkOrderRowActions = ({
         keepMounted={true}
         className="min-w-[170px] bg-white rounded-xl shadow-xl border border-slate-200 py-1 text-left animate-in fade-in zoom-in-95 duration-100"
       >
-        {(wo.status === 'OPEN' || wo.status === 'SCHEDULED' || wo.status === 'REJECTED') && (
-          <button
-            type="button"
-            onClick={() => {
-              handleClose();
-              onReschedule(wo);
-            }}
-            className="w-full text-left px-3.5 sm:px-3 py-3 sm:py-2 min-h-[44px] sm:min-h-[36px] text-xs font-semibold text-slate-700 hover:bg-slate-50 flex items-center gap-2 transition-colors cursor-pointer motion-safe:active:bg-slate-100 select-none"
-          >
-            <CalendarClock size={13} className="text-slate-500" />
-            <span>เลื่อนวันครบกำหนด</span>
-          </button>
+        {wo.reschedule_status === 'REQUESTED' ? (
+          canApproveReschedule(currentUser, wo) && (
+            <button
+              type="button"
+              onClick={() => {
+                handleClose();
+                if (onReviewReschedule) onReviewReschedule(wo);
+                else onReschedule(wo);
+              }}
+              className="w-full text-left px-3.5 sm:px-3 py-3 sm:py-2 min-h-[44px] sm:min-h-[36px] text-xs font-semibold text-amber-800 hover:bg-amber-50 flex items-center gap-2 transition-colors cursor-pointer motion-safe:active:bg-amber-100 select-none"
+            >
+              <CalendarClock size={13} className="text-amber-600" />
+              <span>พิจารณาคำขอเลื่อนกำหนด</span>
+            </button>
+          )
+        ) : (
+          (wo.status === 'OPEN' || wo.status === 'SCHEDULED' || wo.status === 'REJECTED') && (
+            <button
+              type="button"
+              onClick={() => {
+                handleClose();
+                onReschedule(wo);
+              }}
+              className="w-full text-left px-3.5 sm:px-3 py-3 sm:py-2 min-h-[44px] sm:min-h-[36px] text-xs font-semibold text-slate-700 hover:bg-slate-50 flex items-center gap-2 transition-colors cursor-pointer motion-safe:active:bg-slate-100 select-none"
+            >
+              <CalendarClock size={13} className="text-slate-500" />
+              <span>ขอเลื่อนวันครบกำหนด</span>
+            </button>
+          )
         )}
 
         {wo.status === 'PENDING_REVIEW' && canReview && wo.result_status !== 'INCONCLUSIVE' && (
@@ -225,6 +243,7 @@ export const WorkOrderTable = ({
   onRowClick,
   onRecordResult,
   onReschedule,
+  onReviewReschedule,
   onApprove,
   onReject,
   onReleaseHold,
@@ -431,7 +450,26 @@ export const WorkOrderTable = ({
                       (<span>{wo.due_date}</span>)
                     </span>
                   </div>
-                  {wo.due_date !== wo.original_due_date && (
+                  {wo.reschedule_status === 'REQUESTED' && (
+                    <div className="text-xs text-amber-900 bg-amber-50 p-1.5 rounded-lg border border-amber-200 font-medium mt-1 leading-tight flex flex-col gap-0.5">
+                      <div className="flex items-center gap-1 font-bold text-amber-800">
+                        <CalendarClock size={12} className="shrink-0" />
+                        <span>รออนุมัติเลื่อนกำหนด</span>
+                      </div>
+                      <div className="text-[11px] text-slate-700">
+                        เสนอ:{' '}
+                        <span className="font-semibold text-amber-900" title={`เสนอเลื่อนเป็น: ${wo.proposed_due_date}`}>
+                          {formatVccDueDate(wo.proposed_due_date)}
+                        </span>
+                      </div>
+                      {wo.reschedule_reason && (
+                        <div className="truncate max-w-[140px] text-[10px] text-slate-500" title={wo.reschedule_reason}>
+                          เหตุผล: {wo.reschedule_reason}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {wo.due_date !== wo.original_due_date && wo.reschedule_status !== 'REQUESTED' && (
                     <div className="text-xs text-amber-900 bg-amber-50 p-1 rounded border border-amber-200 font-medium mt-1 leading-tight">
                       <div>
                         วันเดิม:{' '}
@@ -512,6 +550,7 @@ export const WorkOrderTable = ({
                     onApprove={onApprove}
                     onReleaseHold={onReleaseHold}
                     onReschedule={onReschedule}
+                    onReviewReschedule={onReviewReschedule}
                     onReject={onReject}
                     onRowClick={onRowClick}
                     onAmend={onAmend}
