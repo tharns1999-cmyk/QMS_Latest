@@ -1,10 +1,16 @@
 import React, { useState } from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
+import useStore from '../../../store/useStore';
 import { RecordResultModal } from '../components/RecordResultModal';
 import { WorkOrderActionModal, DigitalRecordModal } from '../components/WorkOrderModals';
 import { WorkOrderTable } from '../components/WorkOrderTable';
 import VccNotificationSettingsModal from '../components/VccNotificationSettingsModal';
+import {
+  canRequestReschedule,
+  canDirectReschedule,
+  getReschedulePermissionReason
+} from '../utils/workOrderPermissions';
 
 describe('VCC Pre-UAT Product Hardening UI Tests (DEC-01 to DEC-04)', () => {
   // Test Harness for RecordResultModal
@@ -342,6 +348,103 @@ describe('VCC Pre-UAT Product Hardening UI Tests (DEC-01 to DEC-04)', () => {
       expect(screen.getByText(/ใบบันทึกนี้เป็นข้อมูลประวัติเดิมก่อนระบบจัดเก็บภาพถ่ายรายการเครื่องมือย่อย/i)).toBeInTheDocument();
       // Verify composite details are still rendered
       expect(screen.getByText(/ประกอบด้วยบีกเกอร์และฟลาสค์ 10 ชิ้น/i)).toBeInTheDocument();
+    });
+  });
+
+  describe('E1.1 Requester Authorization Alignment (DEC-02 Refinement)', () => {
+    const qcWorkOrder = {
+      id: 'wo-qc-01',
+      wo_code: 'WO-QC-2026-001',
+      asset_code: 'QC-CAL-01',
+      asset_name: 'QC Micrometer',
+      department: 'QC',
+      status: 'OPEN',
+      due_date: '2026-11-20',
+      original_due_date: '2026-11-20'
+    };
+
+    it('validates canRequestReschedule permission matrix correctly', () => {
+      // 1. L1 in same department -> false
+      const userL1SameDept = { id: 'u1', approval_level: 1, department: 'QC' };
+      expect(canRequestReschedule(userL1SameDept, qcWorkOrder)).toBe(false);
+      expect(getReschedulePermissionReason(userL1SameDept, qcWorkOrder)).toContain('ผู้ยื่นคำขอต้องมีระดับสิทธิ์ตั้งแต่ L2');
+
+      // 2. L2 in same department -> true
+      const userL2SameDept = { id: 'u2', approval_level: 2, department: 'QC' };
+      expect(canRequestReschedule(userL2SameDept, qcWorkOrder)).toBe(true);
+
+      // 3. L3 in same department -> true
+      const userL3SameDept = { id: 'u3', approval_level: 3, department: 'QC' };
+      expect(canRequestReschedule(userL3SameDept, qcWorkOrder)).toBe(true);
+
+      // 4. L2/L4 in other department (QA) -> false
+      const userL4OtherDept = { id: 'u4', approval_level: 4, department: 'QA' };
+      expect(canRequestReschedule(userL4OtherDept, qcWorkOrder)).toBe(false);
+      expect(getReschedulePermissionReason(userL4OtherDept, qcWorkOrder)).toContain('เฉพาะผู้ปฏิบัติงานในแผนก QC');
+
+      // 5. QMR / L6 in other department (QA) -> false (cannot bypass department boundary to request)
+      const userQmrOtherDept = { id: 'uqmr', approval_level: 6, isQmr: true, department: 'QA' };
+      expect(canRequestReschedule(userQmrOtherDept, qcWorkOrder)).toBe(false);
+      expect(getReschedulePermissionReason(userQmrOtherDept, qcWorkOrder)).toContain('สิทธิ์ผู้บริหาร QMR/L6 ไม่สามารถยื่นขอข้ามแผนกได้');
+
+      // 6. DCC user -> true
+      const userDcc = { id: 'udcc', approval_level: 3, isDcc: true, department: 'LB' };
+      expect(canRequestReschedule(userDcc, qcWorkOrder)).toBe(true);
+      expect(canDirectReschedule(userDcc, qcWorkOrder)).toBe(true);
+
+      // 7. Non-DCC user cannot direct reschedule
+      expect(canDirectReschedule(userL3SameDept, qcWorkOrder)).toBe(false);
+    });
+
+    it('disables reschedule button with informative tooltip in WorkOrderTable when user is unauthorized', () => {
+      useStore.setState({
+        currentUser: { id: 'u-unauth', approval_level: 1, department: 'QC', isDcc: false }
+      });
+
+      render(
+        <WorkOrderTable
+          workOrders={[qcWorkOrder]}
+          loading={false}
+          error={null}
+          activeTab="OPEN"
+          onRowClick={vi.fn()}
+          onReschedule={vi.fn()}
+        />
+      );
+
+      // Open the overflow menu
+      const moreBtn = screen.getByRole('button', { name: /การจัดการเพิ่มเติมสำหรับ WO-QC-2026-001/i });
+      fireEvent.click(moreBtn);
+
+      // The reschedule button should be disabled with tooltip explaining L2 requirement
+      const rescheduleBtn = screen.getByRole('button', { name: /ขอเลื่อนวันครบกำหนด/i });
+      expect(rescheduleBtn).toBeDisabled();
+      expect(rescheduleBtn).toHaveAttribute('title', expect.stringContaining('ผู้ยื่นคำขอต้องมีระดับสิทธิ์ตั้งแต่ L2'));
+    });
+
+    it('enables reschedule button in WorkOrderTable when user has L2+ in department', () => {
+      useStore.setState({
+        currentUser: { id: 'u-auth-l2', approval_level: 2, department: 'QC', isDcc: false }
+      });
+
+      render(
+        <WorkOrderTable
+          workOrders={[qcWorkOrder]}
+          loading={false}
+          error={null}
+          activeTab="OPEN"
+          onRowClick={vi.fn()}
+          onReschedule={vi.fn()}
+        />
+      );
+
+      // Open the overflow menu
+      const moreBtn = screen.getByRole('button', { name: /การจัดการเพิ่มเติมสำหรับ WO-QC-2026-001/i });
+      fireEvent.click(moreBtn);
+
+      // The reschedule button should be enabled
+      const rescheduleBtn = screen.getByRole('button', { name: /ขอเลื่อนวันครบกำหนด/i });
+      expect(rescheduleBtn).not.toBeDisabled();
     });
   });
 });

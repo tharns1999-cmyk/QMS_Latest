@@ -31,12 +31,51 @@ export const canCancelWorkOrder = (user, workOrder) =>
   workOrder.nc_status !== 'OPEN' &&
   canManageVccAsset(user, workOrder.department);
 
-// Mirrors POST /request-reschedule: User authorized for department, WO is active, and no pending request
+export const isUserInWorkOrderDepartment = (user, workOrder) => {
+  if (!user || !workOrder) return false;
+  const userDepts = [
+    user.department,
+    user.primary_department,
+    user.dept,
+    ...(Array.isArray(user.depts) ? user.depts : []),
+    ...(Array.isArray(user.departments) ? user.departments : [])
+  ]
+    .filter(Boolean)
+    .map((d) => String(d).toUpperCase().trim());
+  const woDept = String(workOrder.department || '').toUpperCase().trim();
+  return userDepts.includes(woDept);
+};
+
+// Mirrors POST /request-reschedule: Requester must be L2+ in owning department, WO active, no pending request
 export const canRequestReschedule = (user, workOrder) => {
   if (!user || !workOrder) return false;
   if (['CLOSED', 'CANCELLED'].includes(workOrder.status)) return false;
   if (workOrder.reschedule_status === 'REQUESTED') return false;
-  return inDepartment(user, workOrder);
+  if (levelOf(user) < 2) return false;
+  const isDccUser = Boolean(user.isDcc || user.is_dcc);
+  return isDccUser || isUserInWorkOrderDepartment(user, workOrder);
+};
+
+// Returns clear explanation why user cannot request reschedule (for tooltip/badge)
+export const getReschedulePermissionReason = (user, workOrder) => {
+  if (!user) return 'กรุณาเข้าสู่ระบบ';
+  if (!workOrder) return '';
+  if (['CLOSED', 'CANCELLED'].includes(workOrder.status)) return 'ไม่สามารถขอเลื่อนวันสำหรับใบสั่งงานที่ปิดหรือยกเลิกแล้ว';
+  if (workOrder.reschedule_status === 'REQUESTED') return 'มีคำขอเลื่อนกำหนดการรอการพิจารณาอยู่';
+  if (levelOf(user) < 2) return 'ผู้ยื่นคำขอต้องมีระดับสิทธิ์ตั้งแต่ L2 (ระดับเจ้าหน้าที่/ผู้ปฏิบัติงาน) ขึ้นไป';
+  const isDccUser = Boolean(user.isDcc || user.is_dcc);
+  if (!isDccUser && !isUserInWorkOrderDepartment(user, workOrder)) {
+    return `เฉพาะผู้ปฏิบัติงานในแผนก ${workOrder.department || ''} หรือ DCC เท่านั้นที่สามารถยื่นขอเลื่อนกำหนดได้ (สิทธิ์ผู้บริหาร QMR/L6 ไม่สามารถยื่นขอข้ามแผนกได้)`;
+  }
+  return '';
+};
+
+// Mirrors POST /reschedule: DCC Direct Override only
+export const canDirectReschedule = (user, workOrder) => {
+  if (!user || !workOrder) return false;
+  if (['CLOSED', 'CANCELLED'].includes(workOrder.status)) return false;
+  if (workOrder.reschedule_status === 'REQUESTED') return false;
+  return Boolean(user.isDcc || user.is_dcc);
 };
 
 // Mirrors POST /approve-reschedule & /reject-reschedule: L4+ in dept, DCC/QMR, or L6+
