@@ -28,6 +28,7 @@ import {
 } from '../utils/workOrderPermissions';
 import { WORK_ORDER_STATUS_LABELS, RESULT_STATUS_LABELS, getWorkOrderStatusLabel, getResultStatusLabel } from '../utils/statusLabels';
 import { formatVccDueDate } from '../utils/vccDateUtils';
+import { useVccMobileViewport } from '../hooks/useVccMobileViewport';
 
 /**
  * WorkOrderRowActions - Renders primary action and floating overflow menu for each row
@@ -273,6 +274,7 @@ export const WorkOrderTable = ({
   onViewDigitalRecord
 }) => {
   const reqApproverLevel = thresholds.required_approver_level ?? 5;
+  const { isMobile } = useVccMobileViewport();
 
   if (loading) {
     return (
@@ -404,6 +406,147 @@ export const WorkOrderTable = ({
         return <span className="inline-block px-2.5 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200 text-xs font-semibold">{getWorkOrderStatusLabel(status)}</span>;
     }
   };
+
+  if (isMobile) {
+    return (
+      <div className="space-y-3 p-1 sm:p-0" data-testid="vcc-wo-mobile-card-list">
+        {workOrders.map((wo) => (
+          <div
+            key={wo.id}
+            onClick={() => onRowClick && onRowClick(wo)}
+            className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-4 space-y-3 transition-colors active:bg-slate-50 cursor-pointer"
+          >
+            {/* Header: WO Code + Plan/Ad-hoc + Status Badge */}
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <div className="font-mono font-bold text-slate-900 text-sm">
+                  {wo.wo_code}
+                </div>
+                <div className="text-xs text-slate-500 font-medium mt-0.5">
+                  {wo.plan_year ? (
+                    <span className="text-slate-600">แผนปี {wo.plan_year} (ด.{wo.planned_month})</span>
+                  ) : (
+                    <span className="text-amber-800 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200 font-medium text-xs">
+                      นอกแผน (Ad-hoc)
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div className="flex flex-col items-end gap-1">
+                {getStatusBadge(wo.status)}
+                {wo.nc_status === 'OPEN' && (
+                  <div data-testid="wo-hold-badge" className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-300 text-[11px] font-bold">
+                    <ShieldAlert size={12} />
+                    <span>{WORK_ORDER_STATUS_LABELS.ON_HOLD}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Instrument Context */}
+            <div className="pt-2 border-t border-slate-100">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="font-mono font-bold text-indigo-700 text-sm">{wo.asset_code}</span>
+                <span className="bg-slate-100 text-slate-700 px-1.5 py-0.2 rounded text-[11px] font-semibold">
+                  {wo.department}
+                </span>
+              </div>
+              <div className="font-semibold text-slate-800 text-sm mt-0.5">{wo.asset_name}</div>
+              <div className="text-xs text-slate-500 mt-0.5">
+                ผู้ดำเนินการ: <span className="text-slate-700 font-medium">{wo.provider_name}</span>
+              </div>
+            </div>
+
+            {/* Due Date & Result */}
+            <div className="grid grid-cols-2 gap-2 text-xs pt-2 border-t border-slate-100">
+              <div>
+                <span className="text-slate-500 block text-[11px]">วันครบกำหนด:</span>
+                <span className="font-semibold text-slate-900 font-sans" title={`วันครบกำหนด: ${wo.due_date}`}>
+                  {formatVccDueDate(wo.due_date)}
+                </span>
+                {wo.reschedule_status === 'REQUESTED' && (
+                  <div className="text-[11px] text-amber-900 bg-amber-50 p-1.5 rounded-lg border border-amber-200 font-medium mt-1 leading-tight flex flex-col gap-0.5">
+                    <div className="flex items-center gap-1 font-bold text-amber-800">
+                      <CalendarClock size={11} className="shrink-0" />
+                      <span>รออนุมัติเลื่อนกำหนด</span>
+                    </div>
+                    <div className="text-[10px] text-slate-700">
+                      เสนอ: <span className="font-semibold text-amber-900" title={`เสนอเลื่อนเป็น: ${wo.proposed_due_date}`}>{formatVccDueDate(wo.proposed_due_date)}</span>
+                    </div>
+                    {wo.reschedule_reason && (
+                      <div className="truncate max-w-[140px] text-[10px] text-slate-500" title={wo.reschedule_reason}>
+                        เหตุผล: {wo.reschedule_reason}
+                      </div>
+                    )}
+                  </div>
+                )}
+                {wo.due_date !== wo.original_due_date && wo.reschedule_status !== 'REQUESTED' && (
+                  <div className="text-[11px] text-amber-900 bg-amber-50 p-1 rounded border border-amber-200 font-medium mt-1 leading-tight">
+                    <div>
+                      วันเดิม: <span className="line-through text-slate-400 font-sans" title={`วันครบกำหนดเดิม: ${wo.original_due_date}`}>{formatVccDueDate(wo.original_due_date)}</span>
+                    </div>
+                    <div className="truncate max-w-[130px]" title={wo.reschedule_reason}>
+                      ({wo.reschedule_reason})
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div>
+                <span className="text-slate-500 block text-[11px]">ผลตรวจ / รับรอง:</span>
+                <div className="mt-0.5">{getResultBadge(wo.result_status)}</div>
+                {wo.certificate_no && (
+                  <div className="font-mono text-slate-800 font-semibold text-[11px] mt-1 flex items-center gap-1 flex-wrap">
+                    <span>{wo.certificate_no}</span>
+                    {wo.certificate_file_name && (
+                      <span className="text-[10px] text-indigo-700 font-bold bg-indigo-50 px-1 rounded border border-indigo-200">
+                        PDF v{wo.certificate_version || 1}
+                      </span>
+                    )}
+                    {Boolean(wo.is_amended) && (
+                      <span className="text-[10px] text-amber-800 font-bold bg-amber-100 px-1 rounded border border-amber-300">
+                        AMENDED
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {wo.acceptance_criteria && (
+              <div className="text-xs text-slate-600 line-clamp-1 pt-1 border-t border-slate-50" title={wo.acceptance_criteria}>
+                <span className="text-slate-400 font-medium">เกณฑ์:</span> {wo.acceptance_criteria}
+              </div>
+            )}
+
+            {wo.rejected_reason && (
+              <div className="p-2 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 font-medium text-xs">
+                <span className="font-bold">ส่งกลับ:</span> {wo.rejected_reason}
+              </div>
+            )}
+
+            {/* Action Row */}
+            <div className="pt-2 border-t border-slate-100 flex items-center justify-end" onClick={(e) => e.stopPropagation()}>
+              <WorkOrderRowActions
+                wo={wo}
+                reqApproverLevel={reqApproverLevel}
+                thresholds={thresholds}
+                onRecordResult={onRecordResult}
+                onApprove={onApprove}
+                onReleaseHold={onReleaseHold}
+                onReschedule={onReschedule}
+                onReviewReschedule={onReviewReschedule}
+                onReject={onReject}
+                onRowClick={onRowClick}
+                onAmend={onAmend}
+                onCancel={onCancel}
+                onViewDigitalRecord={onViewDigitalRecord}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div className="w-full bg-white rounded-xl border border-slate-200 shadow-2xs overflow-x-auto min-h-[300px]">

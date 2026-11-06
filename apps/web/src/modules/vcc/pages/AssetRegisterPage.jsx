@@ -41,6 +41,7 @@ import WorkOrderSection from '../components/WorkOrderSection';
 import VccDashboardSection from '../components/VccDashboardSection';
 import VccTaskInboxSection from '../components/VccTaskInboxSection';
 import MobileCollapsible from '../components/MobileCollapsible';
+import { useVccMobileViewport } from '../hooks/useVccMobileViewport';
 import { getAssetStatusLabel } from '../utils/statusLabels';
 
 const EMPTY_FORM = {
@@ -57,6 +58,7 @@ const EMPTY_FORM = {
 
 const AssetRegisterPageInner = () => {
   const { departments: storeDepts, masterDepartments, currentUser } = useStore();
+  const { isMobile } = useVccMobileViewport();
 
   const activeDepartments = useMemo(() => {
     const raw = masterDepartments?.length ? masterDepartments : storeDepts || [];
@@ -686,6 +688,120 @@ const AssetRegisterPageInner = () => {
                 <p className="text-slate-500 text-sm">
                   {canAddAsset ? 'ลองปรับเงื่อนไขการค้นหา หรือกดปุ่ม “เพิ่มเครื่องมือ” ด้านบน' : 'ลองปรับเงื่อนไขการค้นหา'}
                 </p>
+              </div>
+            ) : isMobile ? (
+              <div className="p-3 space-y-3" data-testid="vcc-asset-mobile-card-list">
+                {displayedAssets.map((asset) => {
+                  const isComposite = asset.group_nature === 'COMPOSITE_SET';
+                  const mine = myDepts.includes(String(asset.department).toUpperCase());
+                  const canManage = canManageVccAsset(currentUser, asset.department);
+
+                  return (
+                    <div
+                      key={asset.id}
+                      className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-4 space-y-3"
+                    >
+                      {/* Header: Code & Type & Status */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <div className="font-mono font-bold text-sm text-slate-900">{asset.asset_code}</div>
+                          <span className="inline-flex px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-xs font-medium mt-1">
+                            {asset.asset_type}
+                          </span>
+                          {isComposite && (
+                            <span className="block mt-1 text-[11px] font-semibold text-teal-800 bg-teal-50 border border-teal-200 rounded px-1.5 py-0.5">
+                              ชุดเครื่องมือ (Composite Set)
+                            </span>
+                          )}
+                        </div>
+                        <div>
+                          {asset.status === 'ACTIVE' ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-bold">
+                              <CheckCircle2 size={12} />
+                              ใช้งานปกติ
+                            </span>
+                          ) : asset.status !== 'RETIRED' ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-300 text-xs font-bold">
+                              ระงับใช้
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-rose-50 text-rose-800 border border-rose-200 text-xs font-bold">
+                              <Archive size={12} />
+                              ปลดออกแล้ว
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Body: Name & Model & Location */}
+                      <div className="pt-2 border-t border-slate-100">
+                        <div className="font-semibold text-slate-900 text-sm">{asset.name}</div>
+                        {asset.model && <div className="text-xs text-slate-600 mt-0.5">รุ่น: {asset.model}</div>}
+                        <div className="text-xs text-slate-500 mt-1 flex items-center gap-2 flex-wrap">
+                          <span>แผนก: <strong className="text-slate-700">{asset.department}</strong></span>
+                          <span>•</span>
+                          <span>Serial: <strong className="font-mono text-slate-700">{asset.serial_no || '-'}</strong></span>
+                        </div>
+                        {asset.location && (
+                          <div className="text-xs text-slate-500 mt-0.5">
+                            ที่ตั้ง: <span className="text-slate-700">{asset.location}</span>
+                          </div>
+                        )}
+                        <div className="mt-1.5">
+                          <span
+                            data-testid="asset-ownership"
+                            className={`inline-flex px-2 py-0.5 rounded-md border text-[11px] font-semibold ${
+                              canManage ? 'bg-indigo-50 text-indigo-800 border-indigo-200' : 'bg-slate-50 text-slate-600 border-slate-200'
+                            }`}
+                          >
+                            {canManage ? (mine ? 'แผนกของฉัน • จัดการได้' : 'จัดการได้ (DCC)') : mine ? 'แผนกของฉัน • ดูอย่างเดียว' : 'แผนกอื่น • ดูอย่างเดียว'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Actions with min-h-[44px] touch targets */}
+                      <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => openHistoryModal(asset)}
+                          className="min-h-[44px] sm:min-h-[32px] inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-300 bg-white text-slate-700 text-xs font-semibold hover:bg-slate-50 transition-colors shadow-2xs cursor-pointer select-none"
+                        >
+                          <History size={13} />
+                          <span>ประวัติ</span>
+                        </button>
+                        {asset.status === 'ACTIVE' && canManage ? (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => openEditModal(asset)}
+                              className="min-h-[44px] sm:min-h-[32px] inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700 text-xs font-semibold hover:bg-indigo-100 cursor-pointer select-none"
+                            >
+                              <Edit3 size={13} />
+                              <span>แก้ไข</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => openRetireModal(asset)}
+                              className="min-h-[44px] sm:min-h-[32px] inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-rose-200 bg-rose-50 text-rose-700 text-xs font-semibold hover:bg-rose-100 cursor-pointer select-none"
+                            >
+                              <Archive size={13} />
+                              <span>ปลดออกจากทะเบียน</span>
+                            </button>
+                          </>
+                        ) : asset.status === 'RETIRED' && canManage ? (
+                          <button
+                            type="button"
+                            onClick={() => openReactivateModal(asset)}
+                            className="min-h-[44px] sm:min-h-[32px] inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-amber-300 bg-amber-50 text-amber-800 text-xs font-semibold hover:bg-amber-100 cursor-pointer select-none"
+                          >
+                            <RotateCcw size={13} />
+                            <span>นำกลับมาใช้ (Reactivate)</span>
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             ) : (
               <div className="overflow-x-auto">
