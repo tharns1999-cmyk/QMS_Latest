@@ -202,7 +202,7 @@ export const AnnualPlanMatrixTable = ({
 
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-hidden">
+    <div data-testid="annual-plan-matrix-table" className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-hidden">
       {/* Table Control Toolbar */}
       <div className="px-4 py-2.5 bg-slate-50/80 border-b border-slate-200/80 flex flex-wrap items-center justify-between gap-3 text-sm">
         <div className="flex flex-wrap items-center gap-2.5">

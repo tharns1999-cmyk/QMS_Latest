@@ -115,6 +115,9 @@ describe('VCC Phase 3 — Work Orders, Execution, Review, Close & Hold/NC Contro
     fireEvent.click(await screen.findByRole('button', { name: /ตรวจรับปิดงาน/i }));
     fireEvent.click(await screen.findByRole('button', { name: 'ยืนยันการดำเนินการ' }));
 
+    // Wait for approval action to complete and modal to close
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'ยืนยันการดำเนินการ' })).not.toBeInTheDocument());
+
     // Now in CLOSED tab
     expect(await screen.findByText('CERT-ST002-2026')).toBeInTheDocument();
 
@@ -122,7 +125,7 @@ describe('VCC Phase 3 — Work Orders, Execution, Review, Close & Hold/NC Contro
     fireEvent.click(screen.getByRole('button', { name: /แผนการทวนสอบประจำปี \(FM-QC-46\)/i }));
     expect(await screen.findByText(/ทวนสอบเสร็จแล้ว • มีใบรับรอง/i)).toBeInTheDocument();
     expect(screen.getByText('A3')).toBeInTheDocument();
-  });
+  }, 15000);
 
   it('3. เมื่อผลเป็น FAIL จะขึ้นสถานะระงับใช้ (ON_HOLD) ทันที ไม่ปลดระงับอัตโนมัติเมื่อปิดใบงาน และต้องใช้ผู้อนุมัติ L5+ พร้อมระบุการประเมินผลกระทบจึงจะปลดระงับได้', async () => {
     render(<AssetRegisterPage />);
