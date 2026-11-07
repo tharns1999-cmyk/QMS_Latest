@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { AlertTriangle, CheckCircle2, FolderTree, Trash2, X, Send, UserCheck, ShieldCheck } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, FolderTree, Trash2, X, Send, UserCheck, ShieldCheck, Calendar, FileText, Clock, Lock } from 'lucide-react';
 import { computeDueDates, computeDueDateForMonth } from '../api/vccPlanApi';
 import { formatVccDateTime, formatVccDueDatesList } from '../utils/vccDateUtils';
 import { useVccModalAccessibility } from '../hooks/useVccModalAccessibility';
@@ -102,126 +102,158 @@ export const PlanFormModal = ({
             </div>
           )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label htmlFor="plan_year" className="block text-sm font-semibold text-slate-700 mb-1.5">
-                ปี ค.ศ. ของแผน <span className="text-rose-600">*</span>
-              </label>
-              <input
-                id="plan_year"
-                type="number"
-                required
-                min={2000}
-                max={2100}
-                disabled={Boolean(editingPlan)}
-                value={form.plan_year || ''}
-                onChange={(e) => {
-                  const yr = Number(e.target.value);
-                  const isDefaultTitle = !form.title || form.title.startsWith('แผนการทวนสอบเครื่องมือประจำปี');
-                  setForm({
-                    ...form,
-                    plan_year: yr,
-                    title: isDefaultTitle && yr ? `แผนการทวนสอบเครื่องมือประจำปี ${yr}` : form.title
-                  });
-                }}
-                className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium disabled:bg-slate-100"
-              />
-              <p className="mt-1 text-xs text-slate-500 font-medium">
-                {form.plan_year && Number.isInteger(Number(form.plan_year)) && Number(form.plan_year) >= 2000 && Number(form.plan_year) <= 2100
-                  ? `ตรงกับ พ.ศ. ${Number(form.plan_year) + 543}`
-                  : 'รองรับ ค.ศ. 2000–2100'}
-              </p>
-            </div>
-
-            <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-                แผนกเจ้าของแผน (Master Data) <span className="text-rose-600">*</span>
-              </label>
-              <select
-                required
-                disabled={Boolean(editingPlan) || activeDepartments.length === 0}
-                value={form.department}
-                onChange={(e) => setForm({ ...form, department: e.target.value })}
-                className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium bg-white disabled:bg-slate-100"
-              >
-                <option value="" disabled>
-                  {activeDepartments.length === 0 ? '-- โหลดแผนกไม่ได้ --' : '-- เลือกแผนก --'}
-                </option>
-                {activeDepartments.map((d) => (
-                  <option key={d.code} value={d.code}>
-                    {d.code} — {d.nameTh}
-                  </option>
-                ))}
-              </select>
-              {activeDepartments.length === 0 && (
-                <p className="mt-1.5 text-xs text-rose-600 font-semibold">
-                  ไม่สามารถโหลดแผนกจาก Master Data ได้ กรุณาตรวจสอบข้อมูลแผนกก่อนบันทึก
-                </p>
+          {/* Section 1: ข้อมูลพื้นฐานแผนประจำปี */}
+          <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 space-y-3">
+            <div className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center justify-between">
+              <span className="flex items-center gap-1.5">
+                <Calendar size={13} className="text-indigo-600 shrink-0" />
+                <span>1. ข้อมูลพื้นฐานแผนประจำปี</span>
+              </span>
+              {editingPlan && (
+                <span className="inline-flex items-center gap-1 text-[10px] text-slate-500 font-medium bg-slate-200/80 px-1.5 py-0.5 rounded">
+                  <Lock size={10} />
+                  <span>ล็อกอัตโนมัติ</span>
+                </span>
               )}
             </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+              <div>
+                <label htmlFor="plan_year" className="block text-xs font-semibold text-slate-700 mb-1">
+                  ปี ค.ศ. ของแผน <span className="text-rose-600">*</span>
+                </label>
+                <input
+                  id="plan_year"
+                  type="number"
+                  required
+                  min={2000}
+                  max={2100}
+                  disabled={Boolean(editingPlan)}
+                  value={form.plan_year || ''}
+                  onChange={(e) => {
+                    const yr = Number(e.target.value);
+                    const isDefaultTitle = !form.title || form.title.startsWith('แผนการทวนสอบเครื่องมือประจำปี');
+                    setForm({
+                      ...form,
+                      plan_year: yr,
+                      title: isDefaultTitle && yr ? `แผนการทวนสอบเครื่องมือประจำปี ${yr}` : form.title
+                    });
+                  }}
+                  className="w-full h-9.5 px-3 rounded-lg border border-slate-300 text-xs font-semibold disabled:bg-slate-100/90 text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600"
+                />
+                <p className="mt-1 text-[11px] text-slate-500 font-medium">
+                  {form.plan_year && Number.isInteger(Number(form.plan_year)) && Number(form.plan_year) >= 2000 && Number(form.plan_year) <= 2100
+                    ? `ตรงกับ พ.ศ. ${Number(form.plan_year) + 543}`
+                    : 'รองรับ ค.ศ. 2000–2100'}
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  แผนกเจ้าของแผน (Master Data) <span className="text-rose-600">*</span>
+                </label>
+                <select
+                  required
+                  disabled={Boolean(editingPlan) || activeDepartments.length === 0}
+                  value={form.department}
+                  onChange={(e) => setForm({ ...form, department: e.target.value })}
+                  className="w-full h-9.5 px-3 rounded-lg border border-slate-300 text-xs font-medium bg-white disabled:bg-slate-100/90 text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600"
+                >
+                  <option value="" disabled>
+                    {activeDepartments.length === 0 ? '-- โหลดแผนกไม่ได้ --' : '-- เลือกแผนก --'}
+                  </option>
+                  {activeDepartments.map((d) => (
+                    <option key={d.code} value={d.code}>
+                      {d.code} — {d.nameTh}
+                    </option>
+                  ))}
+                </select>
+                {activeDepartments.length === 0 && (
+                  <p className="mt-1 text-[11px] text-rose-600 font-semibold">
+                    ไม่สามารถโหลดแผนกจาก Master Data ได้ กรุณาตรวจสอบข้อมูลแผนกก่อนบันทึก
+                  </p>
+                )}
+              </div>
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-1.5">รหัสแบบฟอร์มเอกสาร</label>
-              <input
-                type="text"
-                required
-                value={form.document_code}
-                onChange={(e) => setForm({ ...form, document_code: e.target.value })}
-                className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-mono font-medium"
-              />
+          {/* Section 2: ข้อมูลเอกสารคุณภาพ (QMS) */}
+          <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 space-y-3">
+            <div className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+              <FileText size={13} className="text-indigo-600 shrink-0" />
+              <span>2. ข้อมูลเอกสารคุณภาพ (QMS)</span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">รหัสแบบฟอร์มเอกสาร</label>
+                <input
+                  type="text"
+                  required
+                  value={form.document_code}
+                  onChange={(e) => setForm({ ...form, document_code: e.target.value })}
+                  className="w-full h-9.5 px-3 rounded-lg border border-slate-300 text-xs font-mono font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Revision (ครั้งที่แก้ไข)</label>
+                <input
+                  type="text"
+                  required
+                  value={form.revision}
+                  onChange={(e) => setForm({ ...form, revision: e.target.value })}
+                  className="w-full h-9.5 px-3 rounded-lg border border-slate-300 text-xs font-mono font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600"
+                />
+              </div>
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-1.5">Revision (ครั้งที่แก้ไข)</label>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">ชื่อแผนประจำปี</label>
               <input
                 type="text"
                 required
-                value={form.revision}
-                onChange={(e) => setForm({ ...form, revision: e.target.value })}
-                className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-mono font-medium"
+                value={form.title}
+                onChange={(e) => setForm({ ...form, title: e.target.value })}
+                className="w-full h-9.5 px-3 rounded-lg border border-slate-300 text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600"
               />
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-semibold text-slate-700 mb-1.5">ชื่อแผนประจำปี</label>
-            <input
-              type="text"
-              required
-              value={form.title}
-              onChange={(e) => setForm({ ...form, title: e.target.value })}
-              className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium"
-            />
-          </div>
+          {/* Section 3: กติกาคำนวณวันครบกำหนด */}
+          <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 space-y-2.5">
+            <div className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+              <Clock size={13} className="text-indigo-600 shrink-0" />
+              <span>3. กติกาคำนวณวันครบกำหนด</span>
+            </div>
 
-          <div>
-            <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-              กติกาคำนวณวันครบกำหนด (เมื่อแผนระบุเฉพาะเดือน)
-            </label>
-            <select
-              value={form.due_date_rule}
-              onChange={(e) => setForm({ ...form, due_date_rule: e.target.value })}
-              className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium bg-white"
-            >
-              <option value="END_OF_MONTH">วันสิ้นเดือนของเดือนที่วางแผน (เช่น {endOfMonthPreview})</option>
-              <option value="START_OF_MONTH">วันที่ 1 ของเดือนที่วางแผน (เช่น {startOfMonthPreview})</option>
-            </select>
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                กำหนดวันครบกำหนด (เมื่อแผนระบุเฉพาะเดือน)
+              </label>
+              <select
+                value={form.due_date_rule}
+                onChange={(e) => setForm({ ...form, due_date_rule: e.target.value })}
+                className="w-full h-9.5 px-3 rounded-lg border border-slate-300 text-xs font-medium bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600"
+              >
+                <option value="END_OF_MONTH">วันสิ้นเดือนของเดือนที่วางแผน (เช่น {endOfMonthPreview})</option>
+                <option value="START_OF_MONTH">วันที่ 1 ของเดือนที่วางแผน (เช่น {startOfMonthPreview})</option>
+              </select>
+            </div>
           </div>
 
           <div className="pt-2 flex justify-end gap-2.5">
             <button
               type="button"
               onClick={requestClose}
-              className="h-10 px-4 rounded-xl border border-slate-300 text-sm font-semibold hover:bg-slate-50 transition-colors cursor-pointer"
+              className="h-9.5 px-4 rounded-xl border border-slate-300 text-xs font-semibold hover:bg-slate-50 transition-colors cursor-pointer"
             >
               ยกเลิก
             </button>
             <button
               type="submit"
               disabled={saving || activeDepartments.length === 0}
-              className="h-10 px-5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 transition-colors cursor-pointer"
+              className="h-9.5 px-5 rounded-xl bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700 disabled:opacity-50 shadow-2xs transition-colors cursor-pointer"
             >
               {saving ? 'กำลังบันทึก...' : 'บันทึกแผนประจำปี'}
             </button>

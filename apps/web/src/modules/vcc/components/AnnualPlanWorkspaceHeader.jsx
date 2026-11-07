@@ -268,13 +268,13 @@ export const AnnualPlanWorkspaceHeader = ({
       className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs p-3.5 sm:p-4 space-y-3"
     >
       {/* ─────────────────────────────────────────────────────────────
-          TIER 1: Primary Identity & Context (ซ้าย) + Plan Switcher & Actions (ขวา)
+          TIER 1: Plan Context & Metadata (ซ้าย) + Plan Selector (ขวา)
           ───────────────────────────────────────────────────────────── */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
         {/* ฝั่งซ้าย: ชื่อแผน + รหัสเอกสาร + แผนก + สถานะ + กติกาวันครบกำหนด */}
         <div className="min-w-0">
           {activePlan ? (
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <div className="flex items-center gap-2 flex-wrap">
                 <h2
                   className="text-sm sm:text-base font-bold text-slate-900 tracking-tight flex items-center gap-1.5 flex-wrap"
@@ -338,53 +338,68 @@ export const AnnualPlanWorkspaceHeader = ({
           )}
         </div>
 
-        {/* ฝั่งขวา: เปลี่ยนแผน + ตัวกรองสถานะ + Primary CTA + Secondary Actions */}
-        <div className="flex items-center gap-2 flex-wrap shrink-0 justify-start lg:justify-end">
-          {/* Plan Switcher Dropdown (with dedicated label and generous width) */}
-          <div className="flex items-center gap-1.5 w-full sm:w-auto">
-            <label htmlFor="vcc-annual-plan-select" className="text-xs font-medium text-slate-500 whitespace-nowrap hidden sm:inline">
-              แผนที่ดู:
-            </label>
-            <select
-              id="vcc-annual-plan-select"
-              aria-label="เลือกแผนประจำปี"
-              value={selectedPlanId || ''}
-              onChange={(e) => onSelectPlan && onSelectPlan(e.target.value)}
-              disabled={effectivePlans.length === 0}
-              className="h-8 px-2.5 rounded-lg border border-slate-300 text-xs font-semibold bg-white text-slate-800 shadow-2xs hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 cursor-pointer w-full sm:w-64 md:w-72 lg:w-80 truncate"
-            >
-              {effectivePlans.length === 0 && <option value="">ไม่มีแผนในสถานะนี้</option>}
-              {effectivePlans.map((p) => (
-                <option key={p.id} value={p.id}>
-                  ปี {p.plan_year} · แผนก {p.department} · {p.document_code} Rev.{p.revision}
-                </option>
-              ))}
-            </select>
-          </div>
+        {/* ฝั่งขวา: กล่องเปลี่ยนแผน (Plan Switcher) แยกอิสระ ชัดเจน กว้างอ่านง่าย */}
+        <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto">
+          <label htmlFor="vcc-annual-plan-select" className="text-xs font-semibold text-slate-600 whitespace-nowrap">
+            แผนที่ดู:
+          </label>
+          <select
+            id="vcc-annual-plan-select"
+            aria-label="เลือกแผนประจำปี"
+            value={selectedPlanId || ''}
+            onChange={(e) => onSelectPlan && onSelectPlan(e.target.value)}
+            disabled={effectivePlans.length === 0}
+            className="h-8.5 px-3 rounded-xl border border-slate-300 text-xs font-semibold bg-white text-slate-800 shadow-2xs hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 cursor-pointer w-full sm:w-72 md:w-80 truncate"
+          >
+            {effectivePlans.length === 0 && <option value="">ไม่มีแผนในสถานะนี้</option>}
+            {effectivePlans.map((p) => (
+              <option key={p.id} value={p.id}>
+                ปี {p.plan_year} · แผนก {p.department} · {p.document_code} Rev.{p.revision}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
 
-          {/* Quick Status Filter (distinct filter pill styling to avoid confusion with plan status) */}
-          <div className="flex items-center gap-1 bg-slate-50 border border-slate-200/80 rounded-lg px-2 py-0.5 shadow-2xs">
-            <Filter size={12} className="text-slate-400 shrink-0" />
+      {/* ─────────────────────────────────────────────────────────────
+          TIER 2: Filter Toolbar (ซ้าย) + Primary & Secondary Actions (ขวา)
+          ───────────────────────────────────────────────────────────── */}
+      <div className="pt-2.5 border-t border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-2.5">
+        {/* ฝั่งซ้าย: ตัวกรองสถานะแผน (แยกอิสระจากกล่องเลือกแผน เพื่อไม่ให้ผู้ใช้สับสน) */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs font-semibold text-slate-500 flex items-center gap-1.5">
+            <Filter size={13} className="text-slate-400" />
+            <span>กรองตามสถานะ:</span>
+          </span>
+          <div className="inline-flex items-center gap-1 bg-slate-50 border border-slate-200/90 rounded-lg px-2.5 py-1 shadow-2xs">
             <select
               aria-label="กรองตามสถานะแผน"
               value={statusTab}
               onChange={(e) => setStatusTab && setStatusTab(e.target.value)}
-              className="h-7 bg-transparent border-0 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-0 cursor-pointer"
+              className="bg-transparent border-0 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-0 cursor-pointer"
             >
               {PLAN_STATUS_OPTIONS.map((s) => (
                 <option key={s.key} value={s.key}>
-                  สถานะ: {s.label}
+                  {s.label}
                 </option>
               ))}
             </select>
           </div>
+          {effectivePlans.length > 0 && (
+            <span className="text-[11px] text-slate-400 hidden sm:inline">
+              ({effectivePlans.length} แผน)
+            </span>
+          )}
+        </div>
 
+        {/* ฝั่งขวา: Action Buttons (Primary CTA + สร้างแผนใหม่ + ผู้เกี่ยวข้อง + ...) */}
+        <div className="flex items-center gap-2 flex-wrap justify-start md:justify-end">
           {/* Primary Action CTA (Planning Only: Submit or Resubmit) */}
           {activePlan && canEditPlan && activePlan.status === 'DRAFT' && onSubmitPlan && (
             <button
               type="button"
               onClick={onSubmitPlan}
-              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-semibold text-xs shadow-2xs transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-semibold text-xs shadow-2xs transition-colors cursor-pointer"
             >
               <Send size={12} />
               <span>ส่งทบทวนแผน</span>

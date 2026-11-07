@@ -43,6 +43,9 @@ describe('VCC Interactive Planning Board (FM-QC-46 Redesign)', () => {
     fireEvent.click(await screen.findByRole('button', { name: /แผนการทวนสอบประจำปี \(FM-QC-46\)/i }));
     expect(await screen.findByText('V001')).toBeInTheDocument();
 
+    // Switch to 12-Month Matrix View to test interactive planning board features
+    fireEvent.click(screen.getByRole('button', { name: /ตารางแผน 12 เดือน/i }));
+
     // Toggle Density
     const compactBtn = screen.getByRole('button', { name: 'กะทัดรัด' });
     const comfortableBtn = screen.getByRole('button', { name: 'สบายตา' });
@@ -73,6 +76,9 @@ describe('VCC Interactive Planning Board (FM-QC-46 Redesign)', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: /แผนการทวนสอบประจำปี \(FM-QC-46\)/i }));
     expect(await screen.findByText('V001')).toBeInTheDocument();
+
+    // Switch to 12-Month Matrix View to test cell popovers
+    fireEvent.click(screen.getByRole('button', { name: /ตารางแผน 12 เดือน/i }));
 
     // V001 is planned in month 2 (P2)
     const p2Btns = screen.getAllByRole('button', { name: /P2/i });

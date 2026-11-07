@@ -35,6 +35,10 @@ import {
 } from './AnnualPlanModals';
 import AnnualPlanWorkspaceHeader from './AnnualPlanWorkspaceHeader';
 import AnnualPlanMatrixTable from './AnnualPlanMatrixTable';
+import AnnualPlanEquipmentListView from './AnnualPlanEquipmentListView';
+import AnnualPlanQuarterlyView from './AnnualPlanQuarterlyView';
+import AnnualPlanViewSwitcher from './AnnualPlanViewSwitcher';
+import AnnualPlanOverviewCards from './AnnualPlanOverviewCards';
 import SmartAssetImportModal from './SmartAssetImportModal';
 import useStore from '../../../store/useStore';
 
@@ -88,6 +92,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
 
   const [plans, setPlans] = useState([]);
   const [selectedPlanId, setSelectedPlanId] = useState('');
+  const [viewMode, setViewMode] = useState('LIST');
   const [planDetail, setPlanDetail] = useState(null);
   const [planWorkOrders, setPlanWorkOrders] = useState([]);
   const [activeAssets, setActiveAssets] = useState([]);
@@ -768,26 +773,83 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
           </div>
         </div>
       ) : (
-        <div className="space-y-2.5">
-          <AnnualPlanMatrixTable
+        <div className="space-y-3">
+          {/* Plan Overview KPI Cards */}
+          <AnnualPlanOverviewCards
             planItems={planItems}
             activePlan={activePlan}
-            workOrders={planWorkOrders}
+            activeAssets={activeAssets}
             canEditPlan={canEditPlan}
-            filterYear={filterYear}
-            setFilterYear={setFilterYear}
-            availableYears={availableYears}
-            filterDept={filterDept}
-            setFilterDept={setFilterDept}
-            activeDepartments={activeDepartments}
-            onOpenAddItem={openAddItem}
-            onDeleteItem={handleDeleteItem}
-            onOpenGroupWorkOrderCheck={openGroupWorkOrderCheck}
+            onOpenJustificationModal={() => setJustificationModalOpen(true)}
             onOpenSmartImport={() => setSmartImportOpen(true)}
-            onQuickAddMonth={handleQuickAddMonth}
-            onQuickRemoveMonth={handleQuickRemoveMonth}
-            onCreateWorkOrder={handleCreateWorkOrder}
           />
+
+          {/* Segmented View Switcher */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-0.5">
+            <AnnualPlanViewSwitcher
+              viewMode={viewMode}
+              onViewModeChange={setViewMode}
+            />
+          </div>
+
+          {/* View 1: Equipment List View (Default) */}
+          {viewMode === 'LIST' && (
+            <AnnualPlanEquipmentListView
+              planItems={planItems}
+              activePlan={activePlan}
+              workOrders={planWorkOrders}
+              canEditPlan={canEditPlan}
+              filterYear={filterYear}
+              setFilterYear={setFilterYear}
+              availableYears={availableYears}
+              filterDept={filterDept}
+              setFilterDept={setFilterDept}
+              activeDepartments={activeDepartments}
+              onOpenAddItem={openAddItem}
+              onDeleteItem={handleDeleteItem}
+              onOpenGroupWorkOrderCheck={openGroupWorkOrderCheck}
+              onOpenSmartImport={() => setSmartImportOpen(true)}
+              onQuickAddMonth={handleQuickAddMonth}
+              onQuickRemoveMonth={handleQuickRemoveMonth}
+              onCreateWorkOrder={handleCreateWorkOrder}
+              onOpenJustificationModal={() => setJustificationModalOpen(true)}
+            />
+          )}
+
+          {/* View 2: Quarterly Grouped View */}
+          {viewMode === 'QUARTERLY' && (
+            <AnnualPlanQuarterlyView
+              planItems={planItems}
+              activePlan={activePlan}
+              workOrders={planWorkOrders}
+              canEditPlan={canEditPlan}
+              onCreateWorkOrder={handleCreateWorkOrder}
+              onOpenJustificationModal={() => setJustificationModalOpen(true)}
+            />
+          )}
+
+          {/* View 3: 12-Month Matrix View */}
+          {viewMode === 'MATRIX' && (
+            <AnnualPlanMatrixTable
+              planItems={planItems}
+              activePlan={activePlan}
+              workOrders={planWorkOrders}
+              canEditPlan={canEditPlan}
+              filterYear={filterYear}
+              setFilterYear={setFilterYear}
+              availableYears={availableYears}
+              filterDept={filterDept}
+              setFilterDept={setFilterDept}
+              activeDepartments={activeDepartments}
+              onOpenAddItem={openAddItem}
+              onDeleteItem={handleDeleteItem}
+              onOpenGroupWorkOrderCheck={openGroupWorkOrderCheck}
+              onOpenSmartImport={() => setSmartImportOpen(true)}
+              onQuickAddMonth={handleQuickAddMonth}
+              onQuickRemoveMonth={handleQuickRemoveMonth}
+              onCreateWorkOrder={handleCreateWorkOrder}
+            />
+          )}
         </div>
       )}
 
