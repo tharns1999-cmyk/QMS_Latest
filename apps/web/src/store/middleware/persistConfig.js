@@ -8,6 +8,7 @@ import { resolveReceiptTaskDepartment, sanitizeControlledCopies } from '../../mo
 import { syncCompletedDarToMasterDocuments } from '../../modules/dcc/store/darSlice';
 import { sanitizeExternalDocReviewStatus } from '../../modules/dcc/store/periodicReviewSlice';
 import { getDocCode, getCleanRev } from '../../modules/dcc/utils/domainNormalizer';
+import { isDarDraft } from '../../modules/dcc/utils/darHelper';
 
 let _storeInstance = null;
 
@@ -251,6 +252,51 @@ export const runSinglePassStorageSelfHealing = () => {
 
 // Run the single-pass self-healing immediately upon loading this module
 runSinglePassStorageSelfHealing();
+
+// API mode: server data must not outlive the sign-in. The token lives in sessionStorage (it dies with the tab, which suits
+// shared shop-floor PCs), so the persisted store does too. Only DAR drafts, which the person typed and the server has never
+// seen, are also kept in localStorage, as before, so closing the tab does not throw them away.
+const keepDraftsOnly = (raw) => {
+  try {
+    const parsed = JSON.parse(raw);
+    const drafts = (parsed?.state?.dars || []).filter(isDarDraft);
+    return JSON.stringify({ state: { dars: drafts, darRequests: drafts }, version: parsed?.version });
+  } catch {
+    return null;
+  }
+};
+
+export const createApiModeStorage = (local, session) => {
+  const memory = new Map();
+  const readSession = (name) => { try { return session.getItem(name); } catch { return memory.get(name) ?? null; } };
+  const writeSession = (name, value) => { try { session.setItem(name, value); } catch { memory.set(name, value); } };
+  return {
+    getItem: (name) => {
+      const current = readSession(name);
+      if (current !== null && current !== undefined) return current;
+      // A new tab or a browser restart: only drafts come back. Older builds kept everything here, so scrub it now.
+      const stored = local.getItem(name);
+      if (stored === null || stored === undefined) return null;
+      const drafts = keepDraftsOnly(stored);
+      if (drafts === null) {
+        local.removeItem(name);
+        return null;
+      }
+      if (drafts !== stored) local.setItem(name, drafts);
+      return drafts;
+    },
+    setItem: (name, value) => {
+      writeSession(name, value);
+      const drafts = keepDraftsOnly(value);
+      if (drafts !== null) local.setItem(name, drafts);
+    },
+    removeItem: (name) => {
+      try { session.removeItem(name); } catch { /* memory only */ }
+      memory.delete(name);
+      local.removeItem(name);
+    }
+  };
+};
 
 /**
  * Persistence configuration for Zustand persist middleware
@@ -778,7 +824,7 @@ export const persistConfig = {
   },
   storage: createJSONStorage(() => {
     if (typeof window !== 'undefined' && window.localStorage) {
-      return {
+      const local = {
         getItem: (name) => {
           try {
             return window.localStorage.getItem(name);
@@ -814,6 +860,7 @@ export const persistConfig = {
           } catch { /* ignore */ }
         },
       };
+      return isApiMode ? createApiModeStorage(local, window.sessionStorage) : local;
     }
     const memStore = new Map();
     return {
