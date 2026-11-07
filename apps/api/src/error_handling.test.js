@@ -76,6 +76,18 @@ describe('unexpected errors', () => {
     expect(line.error).toBeTruthy();
   });
 
+  it('sends CORS headers on the 500 too, so a browser on another origin can read the message and the reference id', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const res = await app.request('/api/auth/login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Origin: ORIGIN },
+      body: JSON.stringify({ email: 'x@test.local', password: 'whatever' })
+    }, { ...env, DB: undefined });
+    expect(res.status).toBe(500);
+    expect(res.headers.get('Access-Control-Allow-Origin')).toBe(ORIGIN);
+    expect(res.headers.get('Access-Control-Expose-Headers')).toContain('X-Request-Id');
+    expect(res.headers.get('X-Request-Id')).toBeTruthy();
+  });
+
   it('keeps the messages of errors that handlers already answer (no change to 4xx)', async () => {
     const res = await app.request('/api/auth/login', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({})
