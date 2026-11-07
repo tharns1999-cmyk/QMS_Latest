@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest';
 import { getPlatformProxy } from 'wrangler';
-import app from './index.js';
+import app, { redactSecrets } from './index.js';
 import { hashPassword } from './password.js';
 
 let proxy;
@@ -131,5 +131,50 @@ describe('POST /api/client-errors (web error tracking)', () => {
   it('rejects oversized reports', async () => {
     const res = await report({ kind: 'error', message: 'x', stack: 'y'.repeat(9000) });
     expect(res.status).toBe(413);
+  });
+});
+
+describe('log redaction (no secrets in logs)', () => {
+  it('masks JWTs, Bearer values and secret-named fields but keeps the rest of the message', () => {
+    const jwt = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJVMSJ9.c2lnbmF0dXJlLXBhcnQ';
+    const out = redactSecrets(`invalid JWT token: ${jwt}; Authorization: Bearer abc.def password=hunter2 {"new_password":"S3cret!","token":"t-1"} otp=123456 at Page`);
+    expect(out).not.toContain(jwt);
+    for (const secret of ['abc.def', 'hunter2', 'S3cret!', 't-1', '123456']) expect(out).not.toContain(secret);
+    expect(out).toContain('invalid JWT token');
+    expect(out).toContain('at Page');
+  });
+
+  it('leaves ordinary error text untouched', () => {
+    const msg = "Cannot read properties of undefined (reading 'doc_code') at /vcc/work-orders";
+    expect(redactSecrets(msg)).toBe(msg);
+  });
+
+  it('a client report carrying a token and a password is logged masked', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const res = await app.request('/api/client-errors', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ kind: 'error', message: `request failed with ${token}`, stack: 'body {"password":"error-handling-pass"}' })
+    }, env);
+    expect(res.status).toBe(204);
+    const raw = spy.mock.calls.map(([line]) => String(line)).join(' ');
+    expect(raw).toContain('client_error');
+    expect(raw).not.toContain(token);
+    expect(raw).not.toContain(PASSWORD);
+  });
+
+  it('an unexpected server error never logs the token or password of the caller', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    // A database that fails with a message quoting the secrets: the worst case for what reaches the log.
+    const failingDb = { prepare: () => { throw new Error(`boom with ${token} and password=${PASSWORD}`); } };
+    const res = await app.request('/api/auth/login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ email: 'error-handling@test.local', password: PASSWORD })
+    }, { ...env, DB: failingDb });
+    expect(res.status).toBe(500);
+    const raw = spy.mock.calls.map(([line]) => String(line)).join(' ');
+    expect(raw).toContain('unhandled_error');
+    expect(raw).not.toContain(token);
+    expect(raw).not.toContain(PASSWORD);
   });
 });

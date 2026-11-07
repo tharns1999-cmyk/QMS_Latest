@@ -33,9 +33,19 @@ const requestIdOf = (c) => {
   const ray = c.req.header('cf-ray');
   return ray && /^[A-Za-z0-9-]{1,64}$/.test(ray) ? ray : crypto.randomUUID();
 };
+// Error messages and stacks (ours and the browser's) are free text, so anything shaped like a token or a password is
+// masked before it reaches the log: JWTs, Bearer values, and name=value / "name":"value" pairs for secret-looking names.
+const SECRET_NAMES = 'password|passwd|pwd|secret|token|otp|recovery_code|authorization|api[_-]?key';
+const SECRET_PATTERNS = [
+  [/eyJ[\w-]{4,}\.[\w-]{4,}\.[\w-]*/g, '[REDACTED_JWT]'],
+  [/\bBearer\s+[^\s"',;]+/gi, 'Bearer [REDACTED]'],
+  [new RegExp(`("?\\b[\\w-]*(?:${SECRET_NAMES})[\\w-]*"?\\s*[:=]\\s*)("[^"]*"|[^\\s",&;]+)`, 'gi'), '$1[REDACTED]']
+];
+export const redactSecrets = (text) => SECRET_PATTERNS.reduce((out, [re, to]) => out.replace(re, to), text);
 // One JSON object per line, so Workers Logs can filter by level, request_id or user_id. No secrets or request bodies.
 export const logEvent = (level, msg, fields = {}) => {
-  const line = JSON.stringify({ level, msg, at: new Date().toISOString(), ...fields });
+  const safe = Object.fromEntries(Object.entries(fields).map(([k, v]) => [k, typeof v === 'string' ? redactSecrets(v) : v]));
+  const line = JSON.stringify({ level, msg, at: new Date().toISOString(), ...safe });
   if (level === 'error') console.error(line); else console.log(line);
 };
 app.use('*', async (c, next) => {
