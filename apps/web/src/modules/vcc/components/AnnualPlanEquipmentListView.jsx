@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Search,
   Plus,
@@ -17,7 +17,8 @@ import {
   ChevronUp,
   FileText,
   ShieldAlert,
-  ListFilter
+  ListFilter,
+  X
 } from 'lucide-react';
 import { computeDueDateForMonth } from '../api/vccPlanApi';
 import { isSavedPlanItem } from '../utils/planLabels';
@@ -66,7 +67,20 @@ export const AnnualPlanEquipmentListView = ({
   const [savingKey, setSavingKey] = useState('');
   const [expandedItemId, setExpandedItemId] = useState(null);
   const [filterOpen, setFilterOpen] = useState(false);
+  const [bottomSheetItem, setBottomSheetItem] = useState(null);
   const extraFilterCount = (filterYear ? 1 : 0) + (filterDept ? 1 : 0);
+
+  // Close bottom sheet on Escape
+  useEffect(() => {
+    if (!bottomSheetItem) return undefined;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setBottomSheetItem(null);
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [bottomSheetItem]);
 
   // Extract unique categories
   const categories = useMemo(() => {
@@ -488,7 +502,8 @@ export const AnnualPlanEquipmentListView = ({
                       {/* 4. Interactive 12-Month Pill Bar */}
                       <td className="py-2.5 px-3 align-top">
                         <div className="space-y-1.5">
-                          <div className="flex items-center gap-1 flex-wrap">
+                          {/* Desktop Pill Bar (12 Months) */}
+                          <div className="hidden sm:flex items-center gap-1 flex-wrap">
                             {MONTH_NUMBERS.map((m) => {
                               const isSelected = plannedMonths.includes(m);
                               const isSaving = savingKey === `${item.id}-${m}`;
@@ -510,19 +525,39 @@ export const AnnualPlanEquipmentListView = ({
                                   disabled={!canEditPlan || isSaving}
                                   onClick={() => handleToggleMonth(item, m)}
                                   aria-label={`${item.asset_code} ${MONTH_NAMES[m - 1]} ${isSelected ? 'ยกเลิกกำหนดการ' : 'กำหนดการ'}`}
-                                  title={`${item.asset_code} - ${MONTH_NAMES[m - 1]} — ${isSelected ? 'คลิกเพื่อยกเลิก' : 'คลิกเพื่อกำหนดรอบ'}`}
+                                  title={`${item.asset_code} - ${MONTH_NAMES[m - 1]} (รอบ P${m}) — ${isSelected ? 'คลิกเพื่อยกเลิก' : 'คลิกเพื่อกำหนดรอบ'}`}
                                   className={`w-7 h-6 rounded text-[10px] font-semibold transition-all flex items-center justify-center cursor-pointer ${
                                     isSelected
-                                      ? 'bg-indigo-600 text-white font-bold shadow-2xs hover:bg-indigo-700'
+                                      ? 'bg-indigo-600 text-white font-bold border border-indigo-600 shadow-2xs hover:bg-indigo-700'
                                       : canEditPlan
-                                      ? 'bg-slate-100 hover:bg-slate-200 text-slate-600'
-                                      : 'bg-slate-50 text-slate-300 cursor-not-allowed'
+                                      ? 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 hover:border-slate-300 font-medium'
+                                      : 'bg-slate-50 text-slate-300 border border-slate-100 cursor-not-allowed'
                                   }`}
                                 >
                                   {isSaving ? '...' : MONTH_NAMES[m - 1]}
                                 </button>
                               );
                             })}
+                          </div>
+
+                          {/* Mobile Touch Action Button (min-h-[44px] for Touch Targets) */}
+                          <div className="sm:hidden">
+                            <button
+                              type="button"
+                              onClick={() => setBottomSheetItem(item)}
+                              aria-label={`กำหนดเดือนสำหรับ ${item.asset_code}`}
+                              className="w-full min-h-[44px] inline-flex items-center justify-between px-3 py-2 rounded-xl bg-slate-50 hover:bg-indigo-50/60 border border-slate-200 active:bg-indigo-100 text-slate-800 font-semibold text-xs transition-colors cursor-pointer"
+                            >
+                              <div className="flex items-center gap-1.5">
+                                <Calendar size={14} className="text-indigo-600 shrink-0" />
+                                <span>กำหนดเดือน:</span>
+                              </div>
+                              <span className="font-bold text-indigo-700">
+                                {plannedMonths.length > 0
+                                  ? plannedMonths.map((m) => MONTH_NAMES[m - 1]).join(', ')
+                                  : 'ยังไม่กำหนด'}
+                              </span>
+                            </button>
                           </div>
 
                           {/* Compliance Status Notice */}
@@ -678,6 +713,106 @@ export const AnnualPlanEquipmentListView = ({
           workOrders={workOrders}
           onClose={() => setInspectorItem(null)}
         />
+      )}
+
+      {/* Mobile Bottom Sheet for Month Selection */}
+      {bottomSheetItem && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={`กำหนดเดือนทวนสอบ ${bottomSheetItem.asset_code}`}
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
+        >
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-slate-900/50 backdrop-blur-2xs transition-opacity cursor-pointer"
+            onClick={() => setBottomSheetItem(null)}
+            aria-hidden="true"
+          />
+
+          {/* Sheet Container */}
+          <div className="relative w-full sm:max-w-md bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl p-4 sm:p-5 max-h-[90vh] overflow-y-auto space-y-4 z-10">
+            {/* Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div>
+                <div className="text-xs font-bold text-indigo-700 font-mono">
+                  {bottomSheetItem.asset_code}
+                </div>
+                <h3 className="text-sm font-bold text-slate-900">
+                  กำหนดเดือนทวนสอบประจำปี {activePlan?.plan_year}
+                </h3>
+                <p className="text-xs text-slate-500 truncate max-w-[240px]">
+                  {bottomSheetItem.asset_name}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setBottomSheetItem(null)}
+                aria-label="ปิดหน้าต่างกำหนดเดือน"
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center cursor-pointer transition-colors"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* 12-Month Grid (3 cols x 4 rows) with touch targets >= 48px */}
+            <div className="grid grid-cols-3 gap-2">
+              {MONTH_NUMBERS.map((m) => {
+                const currentMonths = bottomSheetItem.planned_months || [];
+                const isSelected = currentMonths.includes(m);
+                const isSaving = savingKey === `${bottomSheetItem.id}-${m}`;
+                const due = computeDueDateForMonth(
+                  activePlan?.plan_year || new Date().getFullYear(),
+                  m,
+                  activePlan?.due_date_rule || 'END_OF_MONTH'
+                );
+
+                return (
+                  <button
+                    key={m}
+                    type="button"
+                    disabled={!canEditPlan || isSaving}
+                    onClick={async () => {
+                      await handleToggleMonth(bottomSheetItem, m);
+                      setBottomSheetItem((prev) => {
+                        if (!prev) return prev;
+                        const curr = prev.planned_months || [];
+                        const next = curr.includes(m)
+                          ? curr.filter((x) => x !== m)
+                          : [...curr, m].sort((a, b) => a - b);
+                        return { ...prev, planned_months: next };
+                      });
+                    }}
+                    className={`min-h-[52px] p-2.5 rounded-xl border text-left flex flex-col justify-between transition-all cursor-pointer ${
+                      isSelected
+                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                        : 'bg-white hover:bg-slate-50 text-slate-800 border-slate-200'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-xs">{MONTH_NAMES[m - 1]}</span>
+                      {isSelected && <Check size={14} className="text-white" />}
+                    </div>
+                    <span className={`text-[10px] font-mono ${isSelected ? 'text-indigo-100' : 'text-slate-400'}`}>
+                      {due}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Bottom Sheet Close Button */}
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={() => setBottomSheetItem(null)}
+                className="w-full min-h-[44px] rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs shadow-2xs transition-colors cursor-pointer flex items-center justify-center"
+              >
+                เสร็จสิ้น
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

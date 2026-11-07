@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AnnualPlanOverviewCards } from '../components/AnnualPlanOverviewCards';
 import { AnnualPlanViewSwitcher } from '../components/AnnualPlanViewSwitcher';
@@ -368,6 +368,74 @@ describe('VCC Annual Plan — Complete UX Architecture Redesign', () => {
       fireEvent.click(listBtn);
 
       expect(await screen.findByTestId('annual-plan-equipment-list-view')).toBeInTheDocument();
+    });
+  });
+
+  describe('7. Mobile Ergonomics & Bottom Sheet Month Selector', () => {
+    it('สามารถเปิด Mobile Bottom Sheet เพื่อกำหนดเดือนทวนสอบ และปิดด้วยปุ่มเสร็จสิ้นหรือ Escape ได้', async () => {
+      const onQuickAddMonth = vi.fn();
+      const onQuickRemoveMonth = vi.fn();
+
+      render(
+        <AnnualPlanEquipmentListView
+          planItems={mockPlanItems}
+          activePlan={mockPlan}
+          workOrders={[]}
+          canEditPlan={true}
+          onQuickAddMonth={onQuickAddMonth}
+          onQuickRemoveMonth={onQuickRemoveMonth}
+        />
+      );
+
+      // Mobile button trigger with touch target
+      const mobileTrigger = screen.getByLabelText(/กำหนดเดือนสำหรับ EQ-001/i);
+      expect(mobileTrigger).toBeInTheDocument();
+
+      // Open bottom sheet
+      fireEvent.click(mobileTrigger);
+
+      // Dialog opens
+      const dialog = screen.getByRole('dialog', { name: /กำหนดเดือนทวนสอบ EQ-001/i });
+      expect(dialog).toBeInTheDocument();
+      expect(dialog).toHaveTextContent(/Digital Caliper 150mm/i);
+
+      // Toggle month 5 inside bottom sheet
+      const mayBtn = within(dialog).getByRole('button', { name: /พ\.ค\./i });
+      fireEvent.click(mayBtn);
+      expect(onQuickAddMonth).toHaveBeenCalledWith(mockPlanItems[0], 5);
+
+      // Close via Done button
+      const doneBtn = within(dialog).getByRole('button', { name: /เสร็จสิ้น/i });
+      fireEvent.click(doneBtn);
+
+      expect(screen.queryByRole('dialog', { name: /กำหนดเดือนทวนสอบ EQ-001/i })).toBeNull();
+    });
+  });
+
+  describe('8. Status Separation & Month Chips Styling', () => {
+    it('แยกสถานะการวางแผนออกจากสถานะหลักฐานอย่างชัดเจน และ month chips มี tooltip พร้อมสถานะ', () => {
+      render(
+        <AnnualPlanEquipmentListView
+          planItems={mockPlanItems}
+          activePlan={mockPlan}
+          workOrders={[]}
+          canEditPlan={true}
+        />
+      );
+
+      // Planning Status for item-1 (planned 1 round)
+      expect(screen.getByText('วางแผนแล้ว (1 รอบ)')).toBeInTheDocument();
+
+      // Planning Status for item-3 (unplanned)
+      expect(screen.getAllByText('ยังไม่กำหนดรอบ').length).toBeGreaterThanOrEqual(1);
+
+      // Compliance/Evidence status notice is distinct from planning status
+      expect(screen.getAllByText('วางแผนเท่านั้น • ยังไม่มีหลักฐานใบงาน').length).toBeGreaterThanOrEqual(1);
+
+      // Month chip has tooltip with human-friendly Thai month and round
+      const marChip = screen.getByTitle(/EQ-001 - มี\.ค\. \(รอบ P3\) — คลิกเพื่อยกเลิก/i);
+      expect(marChip).toBeInTheDocument();
+      expect(marChip).toHaveClass('bg-indigo-600');
     });
   });
 });

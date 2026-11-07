@@ -281,7 +281,7 @@ export const AnnualPlanMonthCell = ({
             }}
             title={`คลิกเพื่อกำหนดเป้าหมายทวนสอบเดือน ${month}`}
             aria-label={`กำหนดเป้าหมายเดือน ${month}`}
-            className="min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 sm:w-5 sm:h-5 rounded-lg sm:rounded flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 hover:border hover:border-indigo-200 transition-all opacity-60 sm:opacity-40 hover:opacity-100 cursor-pointer motion-safe:active:scale-95"
+            className="min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 sm:w-5 sm:h-5 rounded-lg sm:rounded flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 hover:border hover:border-indigo-200 transition-all opacity-0 group-hover:opacity-100 focus:opacity-100 hover:opacity-100 cursor-pointer motion-safe:active:scale-95"
           >
             <Plus size={14} className="sm:w-3 sm:h-3" />
           </button>

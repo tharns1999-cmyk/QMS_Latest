@@ -197,45 +197,73 @@ export const AnnualPlanProgressStepper = ({
         })}
       </div>
 
-      {/* Mobile: Compact Horizontal Stepper Pills */}
-      <div className="flex sm:hidden items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar text-xs">
-        {steps.map((step) => {
-          const isStepCurrent = step.state === 'CURRENT' || step.state === 'RETURNED_EDIT';
-          const isStepCompleted = step.state === 'COMPLETED';
-          const isStepReturned = step.state === 'RETURNED' || step.state === 'RETURNED_EDIT';
+      {/* Mobile: Compact Horizontal Stepper Pills & Current Step Card */}
+      <div className="sm:hidden space-y-2">
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar text-xs">
+          {steps.map((step) => {
+            const isStepCurrent = step.state === 'CURRENT' || step.state === 'RETURNED_EDIT';
+            const isStepCompleted = step.state === 'COMPLETED';
+            const isStepReturned = step.state === 'RETURNED' || step.state === 'RETURNED_EDIT';
 
-          const StepIcon = step.icon;
+            const StepIcon = step.icon;
 
-          return (
-            <div
-              key={step.id}
-              className={`shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs transition-all ${
-                isStepReturned
-                  ? 'bg-rose-50 border-rose-200 text-rose-800 font-bold'
-                  : isStepCurrent
-                  ? 'bg-white border-indigo-300 text-indigo-900 font-bold shadow-2xs ring-2 ring-indigo-500/10'
-                  : isStepCompleted
-                  ? 'bg-emerald-50/70 border-emerald-200 text-emerald-800 font-medium'
-                  : 'bg-white/80 border-slate-200 text-slate-500 font-normal'
-              }`}
-            >
-              <span
-                className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 text-[10px] ${
+            return (
+              <div
+                key={step.id}
+                aria-current={isStepCurrent ? 'step' : undefined}
+                className={`shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs transition-all ${
                   isStepReturned
-                    ? 'bg-rose-600 text-white'
+                    ? 'bg-rose-50 border-rose-200 text-rose-800 font-bold'
                     : isStepCurrent
-                    ? 'bg-indigo-600 text-white'
+                    ? 'bg-white border-indigo-300 text-indigo-900 font-bold shadow-2xs ring-2 ring-indigo-500/10'
                     : isStepCompleted
-                    ? 'bg-emerald-600 text-white'
-                    : 'bg-slate-200 text-slate-600'
+                    ? 'bg-emerald-50/70 border-emerald-200 text-emerald-800 font-medium'
+                    : 'bg-white/80 border-slate-200 text-slate-500 font-normal'
                 }`}
               >
-                {isStepCompleted ? <Check size={10} strokeWidth={3} /> : <StepIcon size={10} />}
-              </span>
-              <span className="whitespace-nowrap">{step.title}</span>
+                <span
+                  className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 text-[10px] ${
+                    isStepReturned
+                      ? 'bg-rose-600 text-white'
+                      : isStepCurrent
+                      ? 'bg-indigo-600 text-white'
+                      : isStepCompleted
+                      ? 'bg-emerald-600 text-white'
+                      : 'bg-slate-200 text-slate-600'
+                  }`}
+                >
+                  {isStepCompleted ? <Check size={10} strokeWidth={3} /> : <StepIcon size={10} />}
+                </span>
+                <span className="whitespace-nowrap">{step.title}</span>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Mobile: Current Step Context Badge */}
+        {(() => {
+          const activeStep = steps.find((s) => s.state === 'CURRENT' || s.state === 'RETURNED_EDIT') || steps[steps.length - 1];
+          if (!activeStep) return null;
+          return (
+            <div className="p-2.5 bg-white rounded-lg border border-slate-200/80 text-xs flex items-center justify-between gap-2 shadow-2xs">
+              <div className="flex items-center gap-2">
+                <span className="w-5 h-5 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-700 font-bold font-mono text-[11px] flex items-center justify-center shrink-0">
+                  {activeStep.stepNum}
+                </span>
+                <div>
+                  <div className="font-bold text-slate-800 leading-tight">
+                    {activeStep.title} <span className="font-normal text-slate-500 text-[11px]">({activeStep.role})</span>
+                  </div>
+                  {activeStep.actor && (
+                    <div className="text-[11px] text-slate-600 mt-0.5">
+                      ผู้รับผิดชอบ: {activeStep.actor}
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           );
-        })}
+        })()}
       </div>
     </div>
   );
