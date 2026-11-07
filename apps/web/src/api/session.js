@@ -121,7 +121,8 @@ export const clearSession = () => {
   const drafts = (useStore.getState().dars || []).filter(isDarDraft);
   clearExternal();
   clearReviews();
-  useStore.setState({ adminUsers: [], formerUsers: [], documents: [], periodicReviewSchedules: [], periodicReviewTasks: [], dars: drafts, darRequests: drafts, controlledCopyInstances: [], documentControlledCopies: [], timeline: [], tasks: [] });
+  // The people directory (names, emails, levels, signature images) is reloaded at the next sign-in, so it goes too.
+  useStore.setState({ adminUsers: [], formerUsers: [], masterUsers: [], requestUsers: [], reviewUsers: [], approveUsers: [], documents: [], periodicReviewSchedules: [], periodicReviewTasks: [], dars: drafts, darRequests: drafts, controlledCopyInstances: [], documentControlledCopies: [], timeline: [], tasks: [] });
 };
 
 export const logout = () => window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
