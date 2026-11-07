@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { secureHeaders } from 'hono/secure-headers';
 import { sign, verify } from 'hono/jwt';
+import { HTTPException } from 'hono/http-exception';
 import { hashPassword, verifyPassword } from './password.js';
 import { checkDecisionRights, getThresholds } from './approval.js';
 import { newSecret, verifyCode, otpauthUri } from './totp.js';
@@ -25,10 +26,47 @@ const DEFAULT_TRUST_DAYS = 30;
 
 const app = new Hono();
 
+// Every request gets a reference id: Cloudflare's cf-ray when present (it also finds the request in Cloudflare's logs),
+// otherwise a random one. It goes back in X-Request-Id and in every server-error message, so a tester can quote it.
+const REQUEST_ID_HEADER = 'X-Request-Id';
+const requestIdOf = (c) => {
+  const ray = c.req.header('cf-ray');
+  return ray && /^[A-Za-z0-9-]{1,64}$/.test(ray) ? ray : crypto.randomUUID();
+};
+// One JSON object per line, so Workers Logs can filter by level, request_id or user_id. No secrets or request bodies.
+export const logEvent = (level, msg, fields = {}) => {
+  const line = JSON.stringify({ level, msg, at: new Date().toISOString(), ...fields });
+  if (level === 'error') console.error(line); else console.log(line);
+};
+app.use('*', async (c, next) => {
+  c.set('requestId', requestIdOf(c));
+  await next();
+  try { c.res.headers.set(REQUEST_ID_HEADER, c.get('requestId')); } catch { /* immutable response headers: the id is still logged */ }
+});
+
 // This API only returns JSON and PDFs, so it needs no scripts, frames or subresources of its own.
 app.use('*', secureHeaders({ xFrameOptions: 'DENY', contentSecurityPolicy: { defaultSrc: ["'none'"], frameAncestors: ["'none'"] } }));
 
-app.use('/api/*', (c, next) => cors({ origin: c.env.ALLOWED_ORIGIN.split(',') })(c, next));
+app.use('/api/*', (c, next) => cors({ origin: c.env.ALLOWED_ORIGIN.split(','), exposeHeaders: [REQUEST_ID_HEADER] })(c, next));
+
+// Anything a handler did not expect: log it with the reference id and answer with a message that carries the id but no internals.
+app.onError((err, c) => {
+  if (err instanceof HTTPException) return err.getResponse();
+  const requestId = c.get('requestId') || crypto.randomUUID();
+  logEvent('error', 'unhandled_error', {
+    request_id: requestId,
+    method: c.req.method,
+    path: c.req.path,
+    user_id: c.get('user')?.id ?? null,
+    error: String(err?.message ?? err).slice(0, 500),
+    stack: String(err?.stack ?? '').slice(0, 2000)
+  });
+  return c.json(
+    { error: `เกิดข้อผิดพลาดในระบบ กรุณาแจ้งผู้ดูแลระบบพร้อมรหัสอ้างอิง ${requestId}`, code: 'INTERNAL_ERROR', requestId },
+    500,
+    { [REQUEST_ID_HEADER]: requestId }
+  );
+});
 
 const audit = (db, actorId, action, details) =>
   db.prepare('INSERT INTO audit_log (actor_id, action, details) VALUES (?, ?, ?)').bind(actorId, action, JSON.stringify(details));
@@ -1459,6 +1497,31 @@ app.get('/api/audit-log', requireAuth, async (c) => {
   return c.json({ entries: results, next_before_id: results.length === limit ? results.at(-1).id : null });
 });
 
+// Error tracking for the web app: a signed-in browser reports a crash or an unhandled error, and it is written to the
+// Workers log next to the server's own errors. Nothing is stored in the database (operational logs are not QMS records).
+const MAX_CLIENT_ERROR_BYTES = 8 * 1024;
+const CLIENT_ERROR_KINDS = ['error', 'unhandledrejection', 'render'];
+app.post('/api/client-errors', requireAuth, async (c) => {
+  if (Number(c.req.header('content-length')) > MAX_CLIENT_ERROR_BYTES) return c.json({ error: 'รายงานข้อผิดพลาดใหญ่เกินไป' }, 413);
+  const raw = await c.req.text();
+  if (raw.length > MAX_CLIENT_ERROR_BYTES) return c.json({ error: 'รายงานข้อผิดพลาดใหญ่เกินไป' }, 413);
+  let body;
+  try { body = JSON.parse(raw); } catch { return c.json({ error: 'รูปแบบรายงานไม่ถูกต้อง' }, 400); }
+  const text = (v, max) => (typeof v === 'string' ? v.slice(0, max) : '');
+  if (!CLIENT_ERROR_KINDS.includes(body?.kind) || !text(body.message, 500).trim()) return c.json({ error: 'รูปแบบรายงานไม่ถูกต้อง' }, 400);
+  logEvent('error', 'client_error', {
+    request_id: c.get('requestId'),
+    user_id: c.get('user').id,
+    kind: body.kind,
+    message: text(body.message, 500),
+    stack: text(body.stack, 2000),
+    page: text(body.page, 300),
+    client_request_id: text(body.requestId, 64) || null,
+    app_version: text(body.appVersion, 50) || null
+  });
+  return c.body(null, 204);
+});
+
 registerVccRoutes(app, { requireAuth, audit });
 
 // Workers calls scheduled() from the cron in wrangler.jsonc; tests call request() directly.
@@ -1470,13 +1533,15 @@ export default {
       (async () => {
         try {
           await activateDue(env.DB);
+          logEvent('info', 'cron_job_done', { job: 'activateDue' });
         } catch (err) {
-          console.error('activateDue cron error:', err);
+          logEvent('error', 'cron_job_failed', { job: 'activateDue', error: String(err?.message ?? err).slice(0, 500), stack: String(err?.stack ?? '').slice(0, 2000) });
         }
         try {
           await runVccNotificationSweep(env.DB);
+          logEvent('info', 'cron_job_done', { job: 'runVccNotificationSweep' });
         } catch (err) {
-          console.error('runVccNotificationSweep cron error:', err);
+          logEvent('error', 'cron_job_failed', { job: 'runVccNotificationSweep', error: String(err?.message ?? err).slice(0, 500), stack: String(err?.stack ?? '').slice(0, 2000) });
         }
       })()
     )
