@@ -30,9 +30,35 @@ const request = async (path, { method = 'GET', body, headers = {} } = {}) => {
   }
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `HTTP ${res.status}`);
+    // Server faults carry a reference id (X-Request-Id) so the person can quote it when reporting the problem.
+    const requestId = data.requestId || res.headers?.get?.('X-Request-Id') || null;
+    let message = data.error || `HTTP ${res.status}`;
+    if (res.status >= 500 && requestId && !message.includes(requestId)) message = `${message} (รหัสอ้างอิง: ${requestId})`;
+    const error = new Error(message);
+    error.status = res.status;
+    error.requestId = requestId;
+    if (data.code) error.code = data.code;
+    throw error;
   }
   return res;
+};
+
+// Fire-and-forget report for error tracking. It bypasses request() on purpose: a failed report must never sign the
+// person out or raise another error. Only in API mode and only when signed in.
+export const sendErrorReport = (body) => {
+  const token = getToken();
+  if (!isApiMode || !token) return false;
+  try {
+    fetch(`${API_URL}/api/client-errors`, {
+      method: 'POST',
+      keepalive: true,
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify(body)
+    }).catch(() => {});
+    return true;
+  } catch {
+    return false;
+  }
 };
 
 export const apiGet = async (path) => (await request(path)).json();
