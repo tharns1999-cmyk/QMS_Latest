@@ -5,6 +5,7 @@ import { loadCopies } from './copies';
 import { applyReviews, clearReviews, loadReviews } from './reviews';
 import { clearExternal, isExternalRow, setExternalSources } from './external';
 import { isDarDraft } from '../modules/dcc/utils/darHelper';
+import { deleteFile } from '../modules/dcc/utils/fileStorage';
 import { toStoreUser, loadUsers, loadMasterData, loadApprovalMatrix, loadDocumentTypes, loadSla, loadSignatures } from './masterData';
 
 export const toStoreDocument = (d) => ({
@@ -121,6 +122,12 @@ export const clearSession = () => {
   const drafts = (useStore.getState().dars || []).filter(isDarDraft);
   clearExternal();
   clearReviews();
+  // The admin page also caches signature images and the people list in IndexedDB. API mode never reads them back
+  // (the server owns both), so they are removed here instead of being left on a shared PC.
+  const { masterUsers = [], adminUsers = [], formerUsers = [] } = useStore.getState();
+  const userIds = new Set([...masterUsers, ...adminUsers, ...formerUsers].map((u) => u?.id).filter(Boolean));
+  [...userIds].forEach((id) => deleteFile(`user_sig_${id}`));
+  deleteFile('master_users_persistent_data');
   // The people directory (names, emails, levels, signature images) is reloaded at the next sign-in, so it goes too.
   useStore.setState({ adminUsers: [], formerUsers: [], masterUsers: [], requestUsers: [], reviewUsers: [], approveUsers: [], documents: [], periodicReviewSchedules: [], periodicReviewTasks: [], dars: drafts, darRequests: drafts, controlledCopyInstances: [], documentControlledCopies: [], timeline: [], tasks: [] });
 };
