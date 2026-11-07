@@ -37,8 +37,8 @@ scope: dcc | vcc | portal | shared | web | api | db
 
 1. ก่อนเปิด PR ให้รัน `pnpm run check` ที่ root ให้ผ่าน (lint + test + build)
 2. กรอก PR template และระบุ module ที่งานนั้นแตะ
-3. ต้องมี reviewer approve อย่างน้อย 1 คนก่อน merge ใช้ **Squash merge** เข้า `develop` และใช้ **Merge commit** เมื่อ merge `release/*` เข้า `main`
-4. ถ้ามีการเปลี่ยน database ต้องเพิ่ม migration ใหม่ใน `database/migrations/` พร้อมไฟล์ `_down.sql` ห้ามแก้ migration ที่เคยรันไปแล้ว
+3. ต้องมี reviewer approve อย่างน้อย 1 คนก่อน merge (หมายเหตุ: ruleset ปัจจุบันบังคับ PR และ CI แต่ยังไม่บังคับจำนวนผู้ตรวจ รอเจ้าของ repo ตัดสินใจ) ใช้ **Squash merge** เข้า `develop` และใช้ **Merge commit** เมื่อ merge `release/*` เข้า `main`
+4. ถ้ามีการเปลี่ยน database ต้องเพิ่ม migration ใหม่ใน `apps/api/migrations/` เลขต่อจากไฟล์ล่าสุด ห้ามแก้ migration ที่เคยรันไปแล้ว (D1 ไม่ใช้ไฟล์ `_down.sql` การย้อนกลับใช้ backup หรือ D1 Time Travel ตาม `docs/ops/backup-restore.md`)
 
 ## ตั้งค่า GitHub (ทำครั้งเดียว)
 

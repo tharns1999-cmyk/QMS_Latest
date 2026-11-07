@@ -1,6 +1,6 @@
 # QMS Portal
 
-Portal กลางของระบบบริหารคุณภาพ (ISO 9001) โดยแต่ละระบบย่อยจะเสียบเข้ามาเป็น module ของ Portal ตอนนี้มีโมดูล **DCC** (Document Control) ที่ใช้งานได้แล้ว
+Portal กลางของระบบบริหารคุณภาพ (ISO 9001) โดยแต่ละระบบย่อยจะเสียบเข้ามาเป็น module ของ Portal ตอนนี้มีโมดูล **DCC** (Document Control) และ **VCC** (Verify and Calibration Center) รวมถึงหน้า System Administration
 
 ## โครงสร้าง (Monorepo)
 
@@ -12,12 +12,17 @@ apps/
       modules/
         portal/        หน้า Portal + moduleRegistry (รายการ module บน Portal)
         dcc/           pages, components, services, utils, config, store slices, tests
+        vcc/           api, components, pages, utils, tests
+        admin/         System Administration
       shared/          UI/hook/util กลาง ที่ไม่ผูกกับ module ใด
       store/           Root Zustand store (รวม slice ของทุก module), persist, seed
       test/            Vitest setup + test utils
     e2e/               Playwright
-  api/                 Backend (Express + PostgreSQL), jest
-database/migrations/   SQL migration (ทุกไฟล์ up ต้องมีไฟล์ down คู่กัน)
+  api/                 Backend (Cloudflare Workers + Hono + D1 + R2), Vitest
+    src/               index.js (auth, DCC, master data), vcc*.js (VCC)
+    migrations/        D1 migration เรียงเลข (เพิ่มไฟล์ใหม่เท่านั้น ห้ามแก้ไฟล์เดิม)
+    scripts/           seed (local เท่านั้น), backup, preflight, deploy guard
+database/migrations/   ของเดิมยุค PostgreSQL ไม่ได้ใช้แล้ว (เก็บไว้อ้างอิง)
 docs/                  Handoff, UAT
 scripts/               สคริปต์ช่วยงาน (เช่น สร้างชุดเอกสาร UAT)
 ```
@@ -38,7 +43,7 @@ app  ──►  modules/*  ──►  shared
 ```bash
 pnpm run install:all   # ติดตั้ง dependency ของ apps/web และ apps/api
 pnpm run dev           # รัน frontend ที่ http://localhost:5173
-pnpm run dev:api       # รัน backend (ต้องตั้ง DATABASE_URL)
+pnpm run dev:api       # รัน API ด้วย wrangler dev (D1 ในเครื่อง)
 pnpm run check         # lint + test + build (ให้ผ่านก่อนเปิด PR)
 pnpm run test:e2e      # Playwright
 ```
@@ -52,6 +57,10 @@ pnpm run test:e2e      # Playwright
 3. เพิ่ม route ใต้ `<Route path="<name>">` ใน `app/App.jsx` (หน้าต่างๆ ให้ใช้ `lazy()`)
 4. ถ้า module มี state ของตัวเอง ให้สร้าง slice ใน `modules/<name>/store/` แล้วนำไปรวมใน `store/useStore.js`
 5. เพิ่ม override ของ `no-restricted-imports` ใน `apps/web/.oxlintrc.json` สำหรับ module ใหม่ โดยใช้ของ `dcc` เป็นแบบ
+
+## กติกาสำหรับ AI
+
+ดู [AGENTS.md](AGENTS.md) (ใช้ร่วมกันทุก AI) ก่อนแก้โค้ดให้ใช้ skill `qms-module-development`
 
 ## การทำงานเป็นทีม
 

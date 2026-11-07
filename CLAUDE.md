@@ -4,6 +4,11 @@ Claude follows the same rules as the coding agents in @AGENTS.md, including its 
 The user does not know git terms: map their plain words (เริ่มงาน, บันทึกงาน, ส่งงาน, รวมงาน, อัปเดตงาน) to the git steps in that table,
 never ask a git question, and explain each step in one plain Thai sentence.
 
+## Skills
+
+Before changing anything under `apps/`, invoke `qms-module-development` (project gate and router to the other `qms-*` skills).
+For general engineering depth or an audit, start with the global `eng-standards` router. Details: AGENTS.md "Skills และด่านตรวจก่อนพัฒนา".
+
 ## graphify
 
 This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.

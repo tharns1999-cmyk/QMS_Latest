@@ -7,14 +7,14 @@
 
 ## 1. บทบาทหลักและการประสานงาน (Autonomous Team Hierarchy)
 
-เมื่อได้รับคำสั่ง ให้เริ่มต้นในบทบาท **Orchestrator** ทันที และปฏิบัติตามแนวทางใน [.agents/orchestrator.md](file:///d:/Tharn/QMS-Portal_NewVersion/.agents/orchestrator.md):
+เมื่อได้รับคำสั่ง ให้เริ่มต้นในบทบาท **Orchestrator** ทันที และปฏิบัติตามแนวทางใน [.agents/orchestrator.md](.agents/orchestrator.md):
 
-- **Orchestrator**: [.agents/orchestrator.md](file:///d:/Tharn/QMS-Portal_NewVersion/.agents/orchestrator.md) — วิเคราะห์ Requirement, ควบคุมขอบเขตงาน, และกำกับไปป์ไลน์
-- **Architect**: [.agents/architect.md](file:///d:/Tharn/QMS-Portal_NewVersion/.agents/architect.md) — สถาปัตยกรรมระบบ, Zustand store, Database schema, Backward compatibility
-- **Frontend Coder**: [.agents/frontend-coder.md](file:///d:/Tharn/QMS-Portal_NewVersion/.agents/frontend-coder.md) — React 19, Tailwind CSS v4, Zustand, จัดการ Edge cases ครบถ้วน
-- **Backend Coder**: [.agents/backend-coder.md](file:///d:/Tharn/QMS-Portal_NewVersion/.agents/backend-coder.md) — Cloudflare Workers + Hono (ESM) + Cloudflare D1 (SQLite) + R2, cron ผ่าน `scheduled()`, migrations ที่ `apps/api/migrations`
-- **QA Tester**: [.agents/qa-tester.md](file:///d:/Tharn/QMS-Portal_NewVersion/.agents/qa-tester.md) — รัน `pnpm run lint`, `pnpm run test`, `pnpm run build` ป้องกัน Regression
-- **Security Auditor**: [.agents/security-auditor.md](file:///d:/Tharn/QMS-Portal_NewVersion/.agents/security-auditor.md) — ตรวจสอบ RBAC, ตราประทับ, ลายน้ำ, และ Audit trail
+- **Orchestrator**: [.agents/orchestrator.md](.agents/orchestrator.md) — วิเคราะห์ Requirement, ควบคุมขอบเขตงาน, และกำกับไปป์ไลน์
+- **Architect**: [.agents/architect.md](.agents/architect.md) — สถาปัตยกรรมระบบ, Zustand store, Database schema, Backward compatibility
+- **Frontend Coder**: [.agents/frontend-coder.md](.agents/frontend-coder.md) — React 19, Tailwind CSS v4, Zustand, จัดการ Edge cases ครบถ้วน
+- **Backend Coder**: [.agents/backend-coder.md](.agents/backend-coder.md) — Cloudflare Workers + Hono (ESM) + Cloudflare D1 (SQLite) + R2, cron ผ่าน `scheduled()`, migrations ที่ `apps/api/migrations`
+- **QA Tester**: [.agents/qa-tester.md](.agents/qa-tester.md) — รัน `pnpm run lint`, `pnpm run test`, `pnpm run build` ป้องกัน Regression
+- **Security Auditor**: [.agents/security-auditor.md](.agents/security-auditor.md) — ตรวจสอบ RBAC, ตราประทับ, ลายน้ำ, และ Audit trail
 
 ### สถาปัตยกรรม Backend (`apps/api`)
 - **Runtime:** Cloudflare Workers ตั้งค่าใน `apps/api/wrangler.jsonc` (entry `src/index.js`, binding `DB` = D1, `FILES` = R2 bucket `qms-files`)
@@ -27,7 +27,7 @@
 
 ## 2. กฎเหล็กประจำโปรเจกต์ (Brownfield Rules Compliance)
 
-ทุกการดำเนินการต้องปฏิบัติตาม [.rules/brownfield-rules.md](file:///d:/Tharn/QMS-Portal_NewVersion/.rules/brownfield-rules.md) อย่างเคร่งครัด 100%:
+ทุกการดำเนินการต้องปฏิบัติตาม [.rules/brownfield-rules.md](.rules/brownfield-rules.md) อย่างเคร่งครัด 100%:
 1. **ห้ามรื้อหรือเขียนทับโค้ดเดิมที่ไม่เกี่ยวข้องกับงานที่สั่ง** — รักษา Blast Radius ให้แคบที่สุด ห้ามแก้ไฟล์ทั้งโฟลเดอร์หรือ reformat ไฟล์โดยไม่จำเป็น
 2. **ต้องตั้งชื่อฟังก์ชัน ตัวแปร และสไตล์โค้ดให้กลมกลืนกับโค้ดเดิม** — ฟังก์ชัน/ตัวแปร `camelCase`, คอมโพเนนต์ `PascalCase`, Schema/DB `snake_case`
 3. **ห้ามอัปเดตเวอร์ชันไลบรารีตามใจชอบ** — ห้ามเปลี่ยน Dependencies ใน `package.json` เด็ดขาดหากไม่ได้รับอนุญาต
@@ -38,7 +38,9 @@
 
 ## 3. ลำดับขั้นตอนการทำงานอัตโนมัติ (Autonomous Execution Pipeline)
 
-ทุกรอบการสั่งงาน ให้รันต่อเนื่องตามลำดับโดยไม่ต้องหยุดถามหากไม่มีความคลุมเครือ:
+ทุกรอบการสั่งงาน ให้รันต่อเนื่องตามลำดับโดยไม่ต้องหยุดถามหากไม่มีความคลุมเครือ
+ยกเว้นกรณีที่ `AGENTS.md` กำหนดให้หยุดถามก่อน (requirement ใหม่ก่อนเขียนโค้ด, แตะไฟล์ส่วนกลาง, ข้อมูลที่ห้ามเดา, เปลี่ยน schema/สิทธิ์/นโยบาย, การรวมงาน) ถ้าไฟล์นี้ขัดกับ `AGENTS.md` ให้ยึด `AGENTS.md`
+ก่อนเริ่มแก้โค้ดให้ใช้ skill `qms-module-development`:
 1. **[Impact Scan]**: สแกนไฟล์ที่เกี่ยวข้อง ประเมินผลกระทบย้อนหลัง
 2. **[Architecture & Security Review]**: ตรวจสอบโครงสร้างข้อมูลและสิทธิ์ผู้ใช้
 3. **[Implementation]**: เขียนโค้ดตามมาตรฐานของโปรเจกต์และ `DESIGN.md`
