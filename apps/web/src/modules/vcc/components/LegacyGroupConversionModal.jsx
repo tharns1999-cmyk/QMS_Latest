@@ -83,8 +83,20 @@ export const LegacyGroupConversionModal = ({
   const [step, setStep] = useState('EDIT');
   const [validationError, setValidationError] = useState('');
 
+  // Start over only when the modal opens, another group is chosen, or the real candidates or their plan rows change.
+  // The parent passes new (equal) arrays on every render, so depending on their identity wiped the person's choices
+  // and validation message on any background re-render.
+  const resetKey = open && groupItem
+    ? JSON.stringify([
+      groupItem.id ?? targetGroupId,
+      usingDeptFallback,
+      candidateAssets.map((a) => a.id),
+      candidateAssets.map((a) => [existingByAssetId.get(a.id)?.id ?? null, existingByAssetId.get(a.id)?.planned_months ?? null, existingByAssetId.get(a.id)?.remarks ?? null])
+    ])
+    : null;
+
   useEffect(() => {
-    if (!open || !groupItem) return;
+    if (!resetKey) return;
     const defaultSelected = usingDeptFallback ? [] : candidateAssets.map((a) => a.id);
     const nextSchedules = {};
     for (const asset of candidateAssets) {
@@ -103,7 +115,9 @@ export const LegacyGroupConversionModal = ({
     setConfirmRemoveEmpty(false);
     setStep('EDIT');
     setValidationError('');
-  }, [open, groupItem, candidateAssets, existingByAssetId, usingDeptFallback]);
+    // resetKey holds exactly the values this reads; the arrays themselves are new on every parent render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resetKey]);
 
   const isDirty = selectedIds.length > 0;
 
