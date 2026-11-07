@@ -13,22 +13,22 @@ import {
 export const VCC_TOKENS = {
   button: {
     primary:
-      'inline-flex items-center justify-center gap-2 px-4 py-2 min-h-[44px] sm:min-h-[38px] text-xs sm:text-sm font-semibold rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 active:bg-indigo-800 shadow-xs hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all cursor-pointer select-none motion-safe:active:scale-[0.98]',
+      'inline-flex items-center justify-center gap-2 px-4 py-2 min-h-[44px] sm:min-h-[38px] text-xs sm:text-sm font-semibold rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 active:bg-indigo-800 shadow-xs hover:shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600 focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all cursor-pointer select-none motion-safe:active:scale-[0.98]',
     secondary:
-      'inline-flex items-center justify-center gap-2 px-4 py-2 min-h-[44px] sm:min-h-[38px] text-xs sm:text-sm font-semibold rounded-xl border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 hover:border-slate-400 active:bg-slate-100 shadow-2xs focus:outline-none focus:ring-2 focus:ring-indigo-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all cursor-pointer select-none motion-safe:active:scale-[0.98]',
+      'inline-flex items-center justify-center gap-2 px-4 py-2 min-h-[44px] sm:min-h-[38px] text-xs sm:text-sm font-semibold rounded-xl border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 hover:border-slate-400 active:bg-slate-100 shadow-2xs focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600 focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all cursor-pointer select-none motion-safe:active:scale-[0.98]',
     success:
-      'inline-flex items-center justify-center gap-2 px-4 py-2 min-h-[44px] sm:min-h-[38px] text-xs sm:text-sm font-semibold rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 active:bg-emerald-800 shadow-xs focus:outline-none focus:ring-2 focus:ring-emerald-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all cursor-pointer select-none motion-safe:active:scale-[0.98]',
+      'inline-flex items-center justify-center gap-2 px-4 py-2 min-h-[44px] sm:min-h-[38px] text-xs sm:text-sm font-semibold rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 active:bg-emerald-800 shadow-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all cursor-pointer select-none motion-safe:active:scale-[0.98]',
     danger:
-      'inline-flex items-center justify-center gap-2 px-4 py-2 min-h-[44px] sm:min-h-[38px] text-xs sm:text-sm font-semibold rounded-xl bg-rose-600 text-white hover:bg-rose-700 active:bg-rose-800 shadow-xs focus:outline-none focus:ring-2 focus:ring-rose-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all cursor-pointer select-none motion-safe:active:scale-[0.98]',
+      'inline-flex items-center justify-center gap-2 px-4 py-2 min-h-[44px] sm:min-h-[38px] text-xs sm:text-sm font-semibold rounded-xl bg-rose-600 text-white hover:bg-rose-700 active:bg-rose-800 shadow-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-600 focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all cursor-pointer select-none motion-safe:active:scale-[0.98]',
     ghost:
-      'inline-flex items-center justify-center gap-2 px-3 py-1.5 min-h-[44px] sm:min-h-[36px] text-xs sm:text-sm font-semibold rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 active:bg-slate-200 transition-colors cursor-pointer select-none',
+      'inline-flex items-center justify-center gap-2 px-3 py-1.5 min-h-[44px] sm:min-h-[36px] text-xs sm:text-sm font-semibold rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 active:bg-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 transition-colors cursor-pointer select-none',
     dangerGhost:
-      'inline-flex items-center justify-center gap-2 px-3 py-1.5 min-h-[44px] sm:min-h-[36px] text-xs sm:text-sm font-semibold rounded-xl text-rose-600 hover:text-rose-800 hover:bg-rose-50 active:bg-rose-100 transition-colors cursor-pointer select-none'
+      'inline-flex items-center justify-center gap-2 px-3 py-1.5 min-h-[44px] sm:min-h-[36px] text-xs sm:text-sm font-semibold rounded-xl text-rose-600 hover:text-rose-800 hover:bg-rose-50 active:bg-rose-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-600 focus-visible:ring-offset-2 transition-colors cursor-pointer select-none'
   },
   input:
-    'w-full h-10 sm:h-9 px-3.5 rounded-xl border border-slate-300 bg-white text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 transition-colors shadow-2xs',
+    'w-full h-10 sm:h-9 px-3.5 rounded-xl border border-slate-300 bg-white text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600 focus:border-indigo-600 transition-colors shadow-2xs',
   select:
-    'w-full h-10 sm:h-9 px-3 rounded-xl border border-slate-300 bg-white text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 transition-colors shadow-2xs cursor-pointer',
+    'w-full h-10 sm:h-9 px-3 rounded-xl border border-slate-300 bg-white text-sm text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600 focus:border-indigo-600 transition-colors shadow-2xs cursor-pointer',
   card:
     'bg-white rounded-2xl border border-slate-200/80 shadow-2xs p-4 sm:p-5 transition-shadow hover:shadow-xs'
 };
@@ -126,7 +126,7 @@ export const VccEmptyState = ({
  */
 export const VccSkeleton = ({ count = 3, type = 'card', className = '' }) => {
   return (
-    <div className={`space-y-3 animate-pulse ${className}`} role="status" aria-label="กำลังโหลดข้อมูล">
+    <div className={`space-y-3 animate-pulse motion-reduce:animate-none ${className}`} role="status" aria-label="กำลังโหลดข้อมูล">
       {Array.from({ length: count }).map((_, idx) => (
         <div
           key={idx}

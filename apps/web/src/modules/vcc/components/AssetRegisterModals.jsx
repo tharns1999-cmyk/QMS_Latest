@@ -109,7 +109,7 @@ export const AssetFormModal = ({
   return (
     <>
       <div
-        className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4"
+        className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-y-auto animate-in fade-in duration-150"
         onClick={handleBackdropClick}
       >
         <div
@@ -118,9 +118,9 @@ export const AssetFormModal = ({
           aria-modal="true"
           aria-labelledby="asset-form-title"
           tabIndex="-1"
-          className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-xl w-full overflow-hidden outline-none"
+          className="bg-white rounded-t-3xl sm:rounded-2xl border-t sm:border border-slate-200 shadow-2xl max-w-xl w-full max-h-[92dvh] sm:max-h-[90vh] flex flex-col overflow-hidden my-0 sm:my-auto outline-none transition-transform duration-100 ease-out"
         >
-          <div className="px-6 py-4.5 border-b border-slate-200 flex items-center justify-between">
+          <div className="px-6 py-4.5 border-b border-slate-200 flex items-center justify-between shrink-0 bg-slate-50/50">
             <h2 id="asset-form-title" className="text-xl font-bold text-slate-900 tracking-tight">
               {editingAsset ? `แก้ไขข้อมูลเครื่องมือ (${editingAsset.asset_code})` : 'เพิ่มเครื่องมือวัดใหม่'}
             </h2>
@@ -128,13 +128,13 @@ export const AssetFormModal = ({
               type="button"
               onClick={requestClose}
               aria-label="ปิดหน้าต่าง"
-              className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
+              className="min-w-[44px] min-h-[44px] flex items-center justify-center p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 motion-safe:active:bg-slate-300 transition-colors cursor-pointer select-none"
             >
               <X size={20} />
             </button>
           </div>
 
-        <form onSubmit={handleSaveAsset} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
+        <form onSubmit={handleSaveAsset} className="p-5 sm:p-6 space-y-4 overflow-y-auto flex-1 overscroll-y-contain">
           {formError && (
             <div role="alert" className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-sm font-semibold flex items-center gap-2">
               <AlertTriangle size={17} className="text-rose-600 shrink-0" />
@@ -304,18 +304,18 @@ export const AssetFormModal = ({
             </div>
           </div>
 
-          <div className="pt-3 border-t border-slate-200 flex items-center justify-end gap-2.5">
+          <div className="pt-4 pb-[max(1rem,env(safe-area-inset-bottom,0px))] sm:pb-0 border-t border-slate-200 flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2.5 shrink-0">
             <button
               type="button"
               onClick={requestClose}
-              className="h-10 px-4 rounded-xl border border-slate-300 text-slate-700 text-sm font-semibold hover:bg-slate-50 transition-colors cursor-pointer"
+              className="order-1 sm:order-1 w-full sm:w-auto min-h-[44px] sm:min-h-[40px] px-4 rounded-xl border border-slate-300 text-slate-700 text-sm font-semibold hover:bg-slate-50 transition-colors cursor-pointer select-none motion-safe:active:scale-[0.98]"
             >
               ยกเลิก
             </button>
             <button
               type="submit"
               disabled={savingForm || activeDepartments.length === 0}
-              className="h-10 px-5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 transition-colors cursor-pointer shadow-2xs"
+              className="order-2 sm:order-2 w-full sm:w-auto min-h-[44px] sm:min-h-[40px] px-5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 transition-colors cursor-pointer shadow-2xs select-none motion-safe:active:scale-[0.98]"
             >
               {savingForm ? 'กำลังบันทึก...' : 'บันทึกข้อมูล'}
             </button>
@@ -366,7 +366,7 @@ export const AssetStatusModal = ({
   return (
     <>
       <div
-        className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4"
+        className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-y-auto animate-in fade-in duration-150"
         onClick={handleBackdropClick}
       >
         <div
@@ -375,9 +375,9 @@ export const AssetStatusModal = ({
           aria-modal="true"
           aria-labelledby="asset-status-title"
           tabIndex="-1"
-          className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-md w-full overflow-hidden outline-none"
+          className="bg-white rounded-t-3xl sm:rounded-2xl border-t sm:border border-slate-200 shadow-2xl max-w-md w-full max-h-[92dvh] sm:max-h-[90vh] flex flex-col overflow-hidden my-0 sm:my-auto outline-none transition-transform duration-100 ease-out"
         >
-          <div className="px-6 py-4.5 border-b border-slate-200 flex items-center justify-between">
+          <div className="px-6 py-4.5 border-b border-slate-200 flex items-center justify-between shrink-0 bg-slate-50/50">
             <h2 id="asset-status-title" className="text-xl font-bold text-slate-900 tracking-tight">
               {statusModal.mode === 'RETIRE'
                 ? `ปลดออกจากทะเบียน (${statusModal.asset.asset_code})`
@@ -387,13 +387,13 @@ export const AssetStatusModal = ({
               type="button"
               onClick={requestClose}
               aria-label="ปิดหน้าต่าง"
-              className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
+              className="min-w-[44px] min-h-[44px] flex items-center justify-center p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 motion-safe:active:bg-slate-300 transition-colors cursor-pointer select-none"
             >
               <X size={20} />
             </button>
           </div>
 
-        <form onSubmit={handleConfirmStatusChange} className="p-6 space-y-4">
+        <form onSubmit={handleConfirmStatusChange} className="p-5 sm:p-6 space-y-4 overflow-y-auto flex-1 overscroll-y-contain">
           {statusError && (
             <div role="alert" className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-sm font-semibold flex items-center gap-2">
               <AlertTriangle size={17} className="text-rose-600 shrink-0" />
@@ -449,18 +449,18 @@ export const AssetStatusModal = ({
             />
           </div>
 
-          <div className="pt-2 flex items-center justify-end gap-2.5">
+          <div className="pt-3 pb-[max(1rem,env(safe-area-inset-bottom,0px))] sm:pb-0 border-t border-slate-200 flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2.5 shrink-0">
             <button
               type="button"
               onClick={requestClose}
-              className="h-10 px-4 rounded-xl border border-slate-300 text-slate-700 text-sm font-semibold hover:bg-slate-50 transition-colors cursor-pointer"
+              className="order-1 sm:order-1 w-full sm:w-auto min-h-[44px] sm:min-h-[40px] px-4 rounded-xl border border-slate-300 text-slate-700 text-sm font-semibold hover:bg-slate-50 transition-colors cursor-pointer select-none motion-safe:active:scale-[0.98]"
             >
               ยกเลิก
             </button>
             <button
               type="submit"
               disabled={savingStatus || !statusReason.trim()}
-              className={`h-10 px-5 rounded-xl text-white text-sm font-semibold disabled:opacity-50 transition-colors cursor-pointer shadow-2xs ${
+              className={`order-2 sm:order-2 w-full sm:w-auto min-h-[44px] sm:min-h-[40px] px-5 rounded-xl text-white text-sm font-semibold disabled:opacity-50 transition-colors cursor-pointer shadow-2xs select-none motion-safe:active:scale-[0.98] ${
                 statusModal.mode === 'RETIRE'
                   ? 'bg-rose-600 hover:bg-rose-700'
                   : 'bg-amber-600 hover:bg-amber-700'
@@ -506,7 +506,7 @@ export const AssetDetailHistoryModal = ({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-y-auto animate-in fade-in duration-150"
       onClick={handleBackdropClick}
     >
       <div
@@ -515,23 +515,24 @@ export const AssetDetailHistoryModal = ({
         aria-modal="true"
         aria-labelledby="asset-detail-history-title"
         tabIndex="-1"
-        className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-2xl w-full overflow-hidden outline-none"
+        className="bg-white rounded-t-3xl sm:rounded-2xl border-t sm:border border-slate-200 shadow-2xl max-w-2xl w-full max-h-[92dvh] sm:max-h-[90vh] flex flex-col overflow-hidden my-0 sm:my-auto outline-none transition-transform duration-100 ease-out"
       >
-        <div className="px-6 py-4.5 border-b border-slate-200 flex items-center justify-between">
+        <div className="px-6 py-4.5 border-b border-slate-200 flex items-center justify-between shrink-0 bg-slate-50/50">
           <h2 id="asset-detail-history-title" className="text-xl font-bold text-slate-900 tracking-tight">
             รายละเอียดและประวัติการแก้ไข (Audit Log)
           </h2>
           <button
             type="button"
             onClick={requestClose}
-            aria-label="ปิดหน้าต่าง"
-            className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
+            aria-label="ปิด"
+            title="ปิด"
+            className="min-w-[44px] min-h-[44px] flex items-center justify-center p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 motion-safe:active:bg-slate-300 transition-colors cursor-pointer select-none"
           >
             <X size={20} />
           </button>
         </div>
 
-        <div className="p-6 max-h-[80vh] overflow-y-auto space-y-5">
+        <div className="p-5 sm:p-6 overflow-y-auto flex-1 overscroll-y-contain space-y-5">
           {loadingDetail || !detailData ? (
             <div className="py-10 text-center text-sm text-slate-500 font-medium">
               กำลังโหลดประวัติการแก้ไข...
@@ -637,6 +638,16 @@ export const AssetDetailHistoryModal = ({
             </>
           )}
         </div>
+
+        <div className="px-5 sm:px-6 py-3.5 bg-slate-50 border-t border-slate-200 flex justify-end shrink-0 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] sm:pb-3.5">
+          <button
+            type="button"
+            onClick={requestClose}
+            className="w-full sm:w-auto min-h-[44px] sm:min-h-[38px] px-5 rounded-xl border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 text-xs sm:text-sm font-semibold cursor-pointer motion-safe:active:scale-[0.98] select-none text-center"
+          >
+            ปิดหน้าต่าง
+          </button>
+        </div>
       </div>
     </div>,
     document.body
@@ -674,7 +685,7 @@ export const AssetTypesModal = ({
   return (
     <>
       <div
-        className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4"
+        className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-y-auto animate-in fade-in duration-150"
         onClick={handleBackdropClick}
       >
         <div
@@ -683,21 +694,21 @@ export const AssetTypesModal = ({
           aria-modal="true"
           aria-labelledby="asset-types-title"
           tabIndex="-1"
-          className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-lg w-full overflow-hidden outline-none"
+          className="bg-white rounded-t-3xl sm:rounded-2xl border-t sm:border border-slate-200 shadow-2xl max-w-lg w-full max-h-[92dvh] sm:max-h-[90vh] flex flex-col overflow-hidden my-0 sm:my-auto outline-none transition-transform duration-100 ease-out"
         >
-          <div className="px-6 py-4.5 border-b border-slate-200 flex items-center justify-between">
+          <div className="px-6 py-4.5 border-b border-slate-200 flex items-center justify-between shrink-0 bg-slate-50/50">
             <h2 id="asset-types-title" className="text-xl font-bold text-slate-900 tracking-tight">ตั้งค่ารายการประเภทเครื่องมือ</h2>
             <button
               type="button"
               onClick={requestClose}
               aria-label="ปิดหน้าต่าง"
-              className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
+              className="min-w-[44px] min-h-[44px] flex items-center justify-center p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 motion-safe:active:bg-slate-300 transition-colors cursor-pointer select-none"
             >
               <X size={20} />
             </button>
           </div>
 
-        <div className="p-6 space-y-4">
+        <div className="p-5 sm:p-6 space-y-4 overflow-y-auto flex-1 overscroll-y-contain">
           <p className="text-sm text-slate-600 leading-relaxed font-medium">
             เพิ่มหรือลบตัวเลือกประเภทเครื่องมือสำหรับใช้ในหน้าทะเบียนเครื่องมือ การลบประเภทออกจากรายการนี้จะไม่ทำให้เครื่องมือเดิมที่ใช้ประเภทนั้นอยู่เสียหาย
           </p>
@@ -741,11 +752,11 @@ export const AssetTypesModal = ({
             ))}
           </div>
 
-          <div className="pt-2 flex items-center justify-end gap-2.5">
+          <div className="pt-3 pb-[max(1rem,env(safe-area-inset-bottom,0px))] sm:pb-0 border-t border-slate-200 flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2.5 shrink-0">
             <button
               type="button"
               onClick={requestClose}
-              className="h-10 px-4 rounded-xl border border-slate-300 text-slate-700 text-sm font-semibold hover:bg-slate-50 transition-colors cursor-pointer"
+              className="order-1 sm:order-1 w-full sm:w-auto min-h-[44px] sm:min-h-[40px] px-4 rounded-xl border border-slate-300 text-slate-700 text-sm font-semibold hover:bg-slate-50 transition-colors cursor-pointer select-none motion-safe:active:scale-[0.98]"
             >
               ยกเลิก
             </button>
@@ -753,7 +764,7 @@ export const AssetTypesModal = ({
               type="submit"
               disabled={savingTypes}
               onClick={handleSaveTypes}
-              className="h-10 px-5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 transition-colors cursor-pointer shadow-2xs"
+              className="order-2 sm:order-2 w-full sm:w-auto min-h-[44px] sm:min-h-[40px] px-5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 transition-colors cursor-pointer shadow-2xs select-none motion-safe:active:scale-[0.98]"
             >
               {savingTypes ? 'กำลังบันทึก...' : 'บันทึกรายการตั้งค่า'}
             </button>
