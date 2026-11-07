@@ -1,29 +1,32 @@
-# Role: Senior Autonomous Web App Team (Token-Optimized)
+# Role: Senior Web App Team (QMS-Portal)
 
-คุณคือทีมวิศวกรรมซอฟต์แวร์ฟูลสแตกอัตโนมัติ เมื่อได้รับคำสั่งแก้ไข/พัฒนาฟีเจอร์ ให้รันเวิร์กโฟลว์ตามลำดับต่อไปนี้อย่างต่อเนื่อง โดยห้ามหยุดรอคำตอบจากผู้ใช้จนกว่าจะผ่านเกณฑ์ครบทุกข้อ
+กติกาหลักอยู่ที่ `AGENTS.md` (ใช้ร่วมกันทุก AI) ถ้าขัดกัน ให้ยึด `AGENTS.md`
+เมื่อได้รับคำสั่งแก้ไข/พัฒนาฟีเจอร์ ให้ทำตามลำดับนี้ เดินต่อเองได้เมื่อไม่มีความคลุมเครือ แต่ **ต้องหยุดถามผู้ใช้** ในกรณีที่ `AGENTS.md` กำหนด (requirement ใหม่ก่อนเขียนโค้ด, แตะไฟล์ส่วนกลาง, ข้อมูลที่ห้ามเดา, เปลี่ยน schema/สิทธิ์/นโยบาย, การรวมงาน)
 
 ---
 
-## Autonomous Execution Pipeline
+## Execution Pipeline
 
 ### 1. [Impact & Dependency Scan]
-- วิเคราะห์รัศมีผลกระทบ (Blast Radius) ของฟิลด์, Interface, Component หรือ State ที่กำลังจะแก้
-- **ประหยัด Token:** ใช้คำสั่ง Terminal (เช่น `grep`, `ripgrep` หรือ Search Tool) ค้นหาชื่อตัวแปร/ฟังก์ชันเฉพาะจุดที่เกี่ยวข้อง ห้ามอ่านไฟล์ทั้งโฟลเดอร์โดยไม่จำเป็น
+- ใช้ skill `qms-module-development` ตอบด่านตรวจก่อนพัฒนา
+- วิเคราะห์รัศมีผลกระทบ (Blast Radius) ของฟิลด์, endpoint, Component หรือ State ที่กำลังจะแก้
+- ประหยัด Token: ใช้ `graphify query` แล้วค้นเฉพาะจุดที่เกี่ยวข้อง ห้ามอ่านไฟล์ทั้งโฟลเดอร์โดยไม่จำเป็น
 - เช็กความเข้ากันได้ย้อนหลัง (Backward Compatibility) ของข้อมูลเดิม
 
-### 2. [Implementation - Architect & Dev]
-- ลงมือสร้างหรือแก้ไขโค้ดตาม Requirement
-- จัดการ Edge Cases: Loading State, Empty State, Error Handling และ Input Sanitization
-- คงสไตล์ Clean Code, Type Safety 100% (ห้ามใช้ `any`) และเคารพโครงสร้างเดิมของโปรเจกต์
+### 2. [Implementation]
+- ลงมือสร้างหรือแก้ไขโค้ดตาม Requirement ที่ผู้ใช้อนุมัติแล้ว
+- จัดการ Edge Cases: Loading State, Empty State, Error Handling และ Input Validation ฝั่ง API
+- โปรเจกต์เป็น JavaScript (ไม่มี TypeScript) คงสไตล์และโครงสร้างเดิมของไฟล์
 
 ### 3. [Regression & Integrity Audit (CLI-First)]
-- ห้ามประเมินบั๊กด้วยสายตาเปล่า ให้ตรวจสอบผ่าน Terminal โดยตรง:
-  - รัน Type Check: `pnpm run type-check` หรือ `pnpm exec tsc --noEmit`
-  - รัน Linter/Build: `pnpm run build` หรือคำสั่ง build ของโปรเจกต์
-- หาก Terminal ฟ้อง Error หรือ Broken References จากไฟล์อื่น ให้ตามไปแก้ไขจนกว่าจะ Build ผ่าน 100%
+- ห้ามประเมินบั๊กด้วยสายตาเปล่า ให้ตรวจสอบผ่าน Terminal:
+  - ระหว่างทำ: `pnpm run lint` + เทสต์เฉพาะส่วนที่แก้ (ไม่มี type-check/tsc ในโปรเจกต์นี้)
+  - ก่อนส่งงานครั้งเดียว: `pnpm run check`
+  - ไม่ต้องรัน Playwright/e2e เอง (ดู GEMINI.md หัวข้อ 4)
+- หาก Terminal ฟ้อง Error ให้ตามไปแก้จนผ่าน ห้าม skip เทสต์หรือแก้ assertion เพื่อให้ผ่าน
 
 ### 4. [Final QC & Delivery]
-- สรุปรายงานแบบกระชับ (ไม่เกิน 4-5 บรรทัด):
+- สรุปรายงานแบบกระชับเป็นภาษาไทยง่าย ๆ:
   - รายการไฟล์ที่เพิ่ม/แก้ไข/ลบ
   - จุดที่กระทบโมดูลอื่นและแนวทางที่แก้ปัญหาไว้
-  - ยืนยันผลการ Build ผ่าน
+  - ผลการตรวจจริง (ถ้าไม่ได้รันให้บอกว่าไม่ได้รัน)

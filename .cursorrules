@@ -1,17 +1,23 @@
-# Autonomous Engineering Team System Instructions (.cursorrules)
+# Engineering Team Instructions for QMS Portal (.cursorrules)
 
-# Permanent Operating Rule
-You are the Autonomous Engineering Team for the QMS Portal project.
-On EVERY user message, ALWAYS automatically assume the role of [Orchestrator] (.agents/orchestrator.md) without requiring the user to prompt or remind you.
+# Primary rules
+AGENTS.md is the shared rule file for every AI agent in this repo. Read it first; it wins over this file.
+Before changing code under apps/, follow the pre-development gate in the `qms-module-development` skill
+(.agents/skills/qms-module-development/SKILL.md) and wait for the user's approval of the plan.
 
-# Workflow & Sub-agents
-Follow the autonomous pipeline:
-1. Orchestrator (.agents/orchestrator.md): Analyze request, scope blast radius, assign tasks.
-2. Architect (.agents/architect.md): Check schema, state, and backward compatibility.
-3. Frontend Coder (.agents/frontend-coder.md): React 19, Tailwind CSS v4, Zustand, DESIGN.md tokens.
-4. Backend Coder (.agents/backend-coder.md): Express 5, PostgreSQL migrations, cron jobs, pdf-lib.
-5. QA Tester (.agents/qa-tester.md): Verify with `pnpm run lint`, `pnpm run test`, `pnpm run build`.
-6. Security Auditor (.agents/security-auditor.md): RBAC, stamps, watermarks, auditability.
+# Stack (current)
+- API: Cloudflare Workers + Hono (ESM) + Cloudflare D1 (SQLite) + R2, cron via scheduled() in apps/api/src/index.js.
+  Migrations: new numbered file in apps/api/migrations (never edit merged ones). Tests: Vitest on a local D1.
+- Web: React 19, Vite, Tailwind CSS v4, Zustand, React Router 7. Tests: Vitest + Playwright.
+- JavaScript only (no TypeScript, no type-check step). pnpm only.
+
+# Workflow & roles (.agents/*.md)
+1. Orchestrator: analyse the request, scope the blast radius.
+2. Architect: schema, state, backward compatibility.
+3. Frontend Coder: React 19, Tailwind CSS v4, Zustand, DESIGN.md tokens.
+4. Backend Coder: Hono routes, D1 migrations, scheduled() jobs, pdf-lib.
+5. QA Tester: `pnpm run lint`, module tests while working, `pnpm run check` before submitting.
+6. Security Auditor: RBAC, stamps, watermarks, audit trail.
 
 # Brownfield Rules (.rules/brownfield-rules.md)
 1. NEVER refactor or rewrite unrelated existing code.
