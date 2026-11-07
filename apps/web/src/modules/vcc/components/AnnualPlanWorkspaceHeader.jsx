@@ -13,10 +13,12 @@ import {
   AlertTriangle,
   ChevronDown,
   ChevronUp,
-  Users
+  Users,
+  Filter
 } from 'lucide-react';
 import { PLAN_STATUS_OPTIONS, getPlanStatusLabel, getDueDateRuleLabel } from '../utils/planLabels';
 import AnnualPlanApprovalChain from './AnnualPlanApprovalChain';
+import AnnualPlanProgressStepper from './AnnualPlanProgressStepper';
 import { formatVccDateTime, toBuddhistYear } from '../utils/vccDateUtils';
 
 const useDismiss = (open, onClose) => {
@@ -114,9 +116,10 @@ const getShortPlanTitle = (plan) => {
 
 /**
  * Compact Executive Planning Header (FM-QC-46)
- * ออกแบบตามแนวคิด 2-Tier Compact Planning Header สไตล์ Enterprise SaaS
- * - Tier 1: Primary Identity & Context (ซ้าย) + Plan Switcher & Actions (ขวา)
- * - Tier 2: 4 Inline Metrics (ซ้าย) + Contextual Workflow Guidance (ขวา)
+ * ออกแบบตามแนวคิด Clean Minimal Luxury + Progress Stepper สไตล์ Enterprise SaaS
+ * - Tier 1: Primary Identity & Context (ซ้าย) + Plan Switcher, Filter & Actions (ขวา)
+ * - Tier 2: Visual Workflow Progress Stepper (4 ขั้นตอน ร่าง -> ทบทวน -> อนุมัติ -> บังคับใช้)
+ * - Tier 3: 4 Inline Metrics (ซ้าย) + Contextual Workflow Guidance (ขวา)
  * - Collapsible Drawers: สายการอนุมัติ 3 ขั้นตอน & ข้อกำหนดการใช้แผน
  */
 export const AnnualPlanWorkspaceHeader = ({
@@ -262,19 +265,19 @@ export const AnnualPlanWorkspaceHeader = ({
   return (
     <div
       data-testid="annual-plan-workspace-header"
-      className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs p-3.5 sm:p-4 space-y-2.5"
+      className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs p-3.5 sm:p-4 space-y-3"
     >
       {/* ─────────────────────────────────────────────────────────────
           TIER 1: Primary Identity & Context (ซ้าย) + Plan Switcher & Actions (ขวา)
           ───────────────────────────────────────────────────────────── */}
-      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-2.5">
-        {/* ฝั่งซ้าย: ชื่อแผนแบบสั้น + รหัสเอกสาร + แผนก + สถานะ + กติกาวันครบกำหนด */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+        {/* ฝั่งซ้าย: ชื่อแผน + รหัสเอกสาร + แผนก + สถานะ + กติกาวันครบกำหนด */}
         <div className="min-w-0">
           {activePlan ? (
             <div className="space-y-1">
               <div className="flex items-center gap-2 flex-wrap">
                 <h2
-                  className="text-sm sm:text-base font-bold text-slate-900 tracking-tight whitespace-nowrap flex items-center gap-1.5"
+                  className="text-sm sm:text-base font-bold text-slate-900 tracking-tight flex items-center gap-1.5 flex-wrap"
                   title={activePlan.title}
                 >
                   <span>{getShortPlanTitle(activePlan)}</span>
@@ -335,16 +338,20 @@ export const AnnualPlanWorkspaceHeader = ({
           )}
         </div>
 
-        {/* ฝั่งขวา: เปลี่ยนแผน + กรองสถานะ + Primary CTA + Secondary Actions */}
-        <div className="flex items-center gap-1.5 flex-wrap shrink-0 justify-start xl:justify-end">
-          {/* Plan Switcher Dropdown */}
-          <div className="flex items-center gap-1 text-xs w-full sm:w-auto">
+        {/* ฝั่งขวา: เปลี่ยนแผน + ตัวกรองสถานะ + Primary CTA + Secondary Actions */}
+        <div className="flex items-center gap-2 flex-wrap shrink-0 justify-start lg:justify-end">
+          {/* Plan Switcher Dropdown (with dedicated label and generous width) */}
+          <div className="flex items-center gap-1.5 w-full sm:w-auto">
+            <label htmlFor="vcc-annual-plan-select" className="text-xs font-medium text-slate-500 whitespace-nowrap hidden sm:inline">
+              แผนที่ดู:
+            </label>
             <select
+              id="vcc-annual-plan-select"
               aria-label="เลือกแผนประจำปี"
               value={selectedPlanId || ''}
               onChange={(e) => onSelectPlan && onSelectPlan(e.target.value)}
               disabled={effectivePlans.length === 0}
-              className="h-8 px-2.5 rounded-lg border border-slate-300 text-xs font-semibold bg-white text-slate-800 shadow-2xs hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 cursor-pointer w-full sm:w-48 truncate"
+              className="h-8 px-2.5 rounded-lg border border-slate-300 text-xs font-semibold bg-white text-slate-800 shadow-2xs hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 cursor-pointer w-full sm:w-64 md:w-72 lg:w-80 truncate"
             >
               {effectivePlans.length === 0 && <option value="">ไม่มีแผนในสถานะนี้</option>}
               {effectivePlans.map((p) => (
@@ -355,19 +362,22 @@ export const AnnualPlanWorkspaceHeader = ({
             </select>
           </div>
 
-          {/* Quick Status Selector */}
-          <select
-            aria-label="กรองตามสถานะแผน"
-            value={statusTab}
-            onChange={(e) => setStatusTab && setStatusTab(e.target.value)}
-            className="h-8 px-2 rounded-lg border border-slate-300 text-xs font-semibold bg-slate-50 hover:bg-white text-slate-700 shadow-2xs focus:outline-none focus:ring-2 focus:ring-indigo-500/20 cursor-pointer"
-          >
-            {PLAN_STATUS_OPTIONS.map((s) => (
-              <option key={s.key} value={s.key}>
-                สถานะ: {s.label}
-              </option>
-            ))}
-          </select>
+          {/* Quick Status Filter (distinct filter pill styling to avoid confusion with plan status) */}
+          <div className="flex items-center gap-1 bg-slate-50 border border-slate-200/80 rounded-lg px-2 py-0.5 shadow-2xs">
+            <Filter size={12} className="text-slate-400 shrink-0" />
+            <select
+              aria-label="กรองตามสถานะแผน"
+              value={statusTab}
+              onChange={(e) => setStatusTab && setStatusTab(e.target.value)}
+              className="h-7 bg-transparent border-0 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-0 cursor-pointer"
+            >
+              {PLAN_STATUS_OPTIONS.map((s) => (
+                <option key={s.key} value={s.key}>
+                  สถานะ: {s.label}
+                </option>
+              ))}
+            </select>
+          </div>
 
           {/* Primary Action CTA (Planning Only: Submit or Resubmit) */}
           {activePlan && canEditPlan && activePlan.status === 'DRAFT' && onSubmitPlan && (
@@ -507,7 +517,41 @@ export const AnnualPlanWorkspaceHeader = ({
       </div>
 
       {/* ─────────────────────────────────────────────────────────────
-          TIER 2: 4 Inline Metrics (ซ้าย) + Contextual Workflow Guidance (ขวา)
+          TIER 2: Visual Workflow Progress Stepper (Clean Minimal Luxury)
+          ───────────────────────────────────────────────────────────── */}
+      {activePlan && (
+        <AnnualPlanProgressStepper activePlan={activePlan} thresholds={thresholds} />
+      )}
+
+      {/* ─────────────────────────────────────────────────────────────
+          RETURN FOR REVISION CALLOUT: แสดงเหตุผลการส่งกลับแบบเต็ม ไม่ตัดข้อความ
+          ───────────────────────────────────────────────────────────── */}
+      {activePlan?.status === 'REJECTED' && activePlan?.rejected_reason && (
+        <div
+          role="status"
+          data-testid="plan-rejected-reason-banner"
+          className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-900 text-xs space-y-1 shadow-2xs"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 font-bold text-rose-900">
+              <AlertTriangle size={14} className="text-rose-600 shrink-0" />
+              <span>ส่งกลับแก้ไข — กรุณาปรับปรุงรายการในตารางแล้วกดปุ่ม &ldquo;ส่งทบทวนอีกครั้ง&rdquo;</span>
+            </div>
+            {(activePlan.rejected_by_name || activePlan.rejected_by) && (
+              <span className="text-rose-700 font-medium text-xs">
+                ผู้ส่งกลับ: {activePlan.rejected_by_name || activePlan.rejected_by}
+                {activePlan.rejected_at ? ` · ${formatVccDateTime(activePlan.rejected_at)}` : ''}
+              </span>
+            )}
+          </div>
+          <div className="pl-5 text-rose-800 font-medium whitespace-pre-wrap break-words leading-relaxed">
+            เหตุผลที่ส่งกลับ: {activePlan.rejected_reason}
+          </div>
+        </div>
+      )}
+
+      {/* ─────────────────────────────────────────────────────────────
+          TIER 3: 4 Inline Metrics (ซ้าย) + Contextual Workflow Guidance (ขวา)
           ───────────────────────────────────────────────────────────── */}
       {activePlan && (
         <div className="pt-2 border-t border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-2 text-xs">
@@ -610,33 +654,6 @@ export const AnnualPlanWorkspaceHeader = ({
                 <span className="text-slate-600">{getNextStepText(activePlan, thresholds)}</span>
               </div>
             ) : null}
-          </div>
-        </div>
-      )}
-
-      {/* ─────────────────────────────────────────────────────────────
-          RETURN FOR REVISION CALLOUT: แสดงเหตุผลการส่งกลับแบบเต็ม ไม่ตัดข้อความ
-          ───────────────────────────────────────────────────────────── */}
-      {activePlan?.status === 'REJECTED' && activePlan?.rejected_reason && (
-        <div
-          role="status"
-          data-testid="plan-rejected-reason-banner"
-          className="mt-2 p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-900 text-xs space-y-1 shadow-2xs"
-        >
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-1.5 font-bold text-rose-900">
-              <AlertTriangle size={14} className="text-rose-600 shrink-0" />
-              <span>ส่งกลับแก้ไข — กรุณาปรับปรุงรายการในตารางแล้วกดปุ่ม &ldquo;ส่งทบทวนอีกครั้ง&rdquo;</span>
-            </div>
-            {(activePlan.rejected_by_name || activePlan.rejected_by) && (
-              <span className="text-rose-700 font-medium text-xs">
-                ผู้ส่งกลับ: {activePlan.rejected_by_name || activePlan.rejected_by}
-                {activePlan.rejected_at ? ` · ${formatVccDateTime(activePlan.rejected_at)}` : ''}
-              </span>
-            )}
-          </div>
-          <div className="pl-5 text-rose-800 font-medium whitespace-pre-wrap break-words leading-relaxed">
-            เหตุผลที่ส่งกลับ: {activePlan.rejected_reason}
           </div>
         </div>
       )}
