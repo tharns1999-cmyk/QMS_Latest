@@ -618,7 +618,7 @@ export const WorkOrderSideDrawer = ({
                     onClose();
                     onRecordResult(currentWo);
                   }}
-                  className="min-h-[44px] sm:min-h-[38px] sm:h-9 w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 sm:px-3.5 rounded-xl bg-indigo-600 text-white text-xs sm:text-sm font-semibold hover:bg-indigo-700 motion-safe:active:scale-[0.98] transition-all cursor-pointer shadow-2xs select-none order-last sm:order-none"
+                  className="min-h-[44px] sm:min-h-[38px] sm:h-9 w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 sm:px-3.5 rounded-xl bg-indigo-600 text-white text-xs sm:text-sm font-semibold hover:bg-indigo-700 focus-visible:ring-2 focus-visible:ring-indigo-600 focus-visible:ring-offset-2 focus-visible:outline-none motion-safe:active:scale-[0.98] transition-all cursor-pointer shadow-2xs select-none order-last sm:order-none"
                 >
                   <FileCheck2 size={15} />
                   <span>บันทึกผลและใบรับรอง</span>
@@ -632,7 +632,7 @@ export const WorkOrderSideDrawer = ({
                         if (onReviewReschedule) onReviewReschedule(currentWo);
                         else onReschedule(currentWo);
                       }}
-                      className="min-h-[44px] sm:min-h-[38px] sm:h-9 w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 sm:px-3.5 rounded-xl bg-amber-600 text-white text-xs sm:text-sm font-semibold hover:bg-amber-700 motion-safe:active:scale-[0.98] transition-all cursor-pointer shadow-2xs select-none"
+                      className="min-h-[44px] sm:min-h-[38px] sm:h-9 w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 sm:px-3.5 rounded-xl bg-amber-600 text-white text-xs sm:text-sm font-semibold hover:bg-amber-700 focus-visible:ring-2 focus-visible:ring-amber-600 focus-visible:ring-offset-2 focus-visible:outline-none motion-safe:active:scale-[0.98] transition-all cursor-pointer shadow-2xs select-none"
                     >
                       <CalendarClock size={15} />
                       <span>พิจารณาคำขอเลื่อนกำหนด</span>
@@ -652,7 +652,7 @@ export const WorkOrderSideDrawer = ({
                           onClose();
                           onReschedule(currentWo);
                         }}
-                        className={`min-h-[44px] sm:min-h-[38px] sm:h-9 w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 sm:px-3.5 rounded-xl border text-xs sm:text-sm font-semibold transition-all select-none ${
+                        className={`min-h-[44px] sm:min-h-[38px] sm:h-9 w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 sm:px-3.5 rounded-xl border text-xs sm:text-sm font-semibold focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 focus-visible:outline-none transition-all select-none ${
                           allowed
                             ? 'border-slate-300 text-slate-700 hover:bg-slate-100 motion-safe:active:scale-[0.98] cursor-pointer'
                             : 'border-slate-200 text-slate-400 bg-slate-50 opacity-60 cursor-not-allowed'
@@ -680,7 +680,7 @@ export const WorkOrderSideDrawer = ({
                       onClose();
                       onApprove(currentWo);
                     }}
-                    className="min-h-[44px] sm:min-h-[38px] sm:h-9 w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 sm:px-3.5 rounded-xl bg-emerald-600 text-white text-xs sm:text-sm font-semibold hover:bg-emerald-700 motion-safe:active:scale-[0.98] transition-all cursor-pointer shadow-2xs select-none order-last sm:order-none"
+                    className="min-h-[44px] sm:min-h-[38px] sm:h-9 w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 sm:px-3.5 rounded-xl bg-emerald-600 text-white text-xs sm:text-sm font-semibold hover:bg-emerald-700 focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2 focus-visible:outline-none motion-safe:active:scale-[0.98] transition-all cursor-pointer shadow-2xs select-none order-last sm:order-none"
                   >
                     <CheckCircle2 size={15} />
                     <span>ตรวจรับปิดงาน</span>
@@ -692,7 +692,7 @@ export const WorkOrderSideDrawer = ({
                     onClose();
                     onReject(currentWo);
                   }}
-                  className="min-h-[44px] sm:min-h-[38px] sm:h-9 w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 sm:px-3.5 rounded-xl bg-rose-600 text-white text-xs sm:text-sm font-semibold hover:bg-rose-700 motion-safe:active:scale-[0.98] transition-all cursor-pointer shadow-2xs select-none"
+                  className="min-h-[44px] sm:min-h-[38px] sm:h-9 w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 sm:px-3.5 rounded-xl bg-rose-600 text-white text-xs sm:text-sm font-semibold hover:bg-rose-700 focus-visible:ring-2 focus-visible:ring-rose-600 focus-visible:ring-offset-2 focus-visible:outline-none motion-safe:active:scale-[0.98] transition-all cursor-pointer shadow-2xs select-none"
                 >
                   <XCircle size={15} />
                   <span>{currentWo.result_status === 'INCONCLUSIVE' ? 'ส่งกลับตรวจซ้ำ' : 'ส่งกลับแก้ไข'}</span>
@@ -707,7 +707,7 @@ export const WorkOrderSideDrawer = ({
                   onClose();
                   onCancel(currentWo);
                 }}
-                className="min-h-[44px] sm:min-h-[38px] sm:h-9 w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 sm:px-3.5 rounded-xl border border-rose-200 text-rose-700 text-xs sm:text-sm font-semibold hover:bg-rose-50 motion-safe:active:scale-[0.98] transition-all cursor-pointer select-none"
+                className="min-h-[44px] sm:min-h-[38px] sm:h-9 w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 sm:px-3.5 rounded-xl border border-rose-200 text-rose-700 text-xs sm:text-sm font-semibold hover:bg-rose-50 focus-visible:ring-2 focus-visible:ring-rose-600 focus-visible:ring-offset-2 focus-visible:outline-none motion-safe:active:scale-[0.98] transition-all cursor-pointer select-none"
               >
                 <Ban size={15} />
                 <span>ยกเลิกใบสั่งงาน</span>
@@ -721,7 +721,7 @@ export const WorkOrderSideDrawer = ({
                   onClose();
                   onReleaseHold(currentWo);
                 }}
-                className="min-h-[44px] sm:min-h-[38px] sm:h-9 w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 sm:px-3.5 rounded-xl bg-indigo-600 text-white text-xs sm:text-sm font-semibold hover:bg-indigo-700 motion-safe:active:scale-[0.98] transition-all cursor-pointer shadow-2xs select-none order-last sm:order-none"
+                className="min-h-[44px] sm:min-h-[38px] sm:h-9 w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 sm:px-3.5 rounded-xl bg-indigo-600 text-white text-xs sm:text-sm font-semibold hover:bg-indigo-700 focus-visible:ring-2 focus-visible:ring-indigo-600 focus-visible:ring-offset-2 focus-visible:outline-none motion-safe:active:scale-[0.98] transition-all cursor-pointer shadow-2xs select-none order-last sm:order-none"
               >
                 <ShieldAlert size={15} />
                 <span>ปลดระงับใช้ (L{reqApproverLevel}+)</span>
@@ -735,7 +735,7 @@ export const WorkOrderSideDrawer = ({
                   onClose();
                   onAmend?.(currentWo);
                 }}
-                className="min-h-[44px] sm:min-h-[38px] sm:h-9 w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 sm:px-3.5 rounded-xl bg-amber-600 text-white text-xs sm:text-sm font-semibold hover:bg-amber-700 motion-safe:active:scale-[0.98] transition-all cursor-pointer shadow-2xs select-none"
+                className="min-h-[44px] sm:min-h-[38px] sm:h-9 w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 sm:px-3.5 rounded-xl bg-amber-600 text-white text-xs sm:text-sm font-semibold hover:bg-amber-700 focus-visible:ring-2 focus-visible:ring-amber-600 focus-visible:ring-offset-2 focus-visible:outline-none motion-safe:active:scale-[0.98] transition-all cursor-pointer shadow-2xs select-none"
               >
                 <History size={15} />
                 <span>ขอแก้ไขผล (Amendment)</span>
@@ -746,7 +746,7 @@ export const WorkOrderSideDrawer = ({
               <button
                 type="button"
                 onClick={() => onViewDigitalRecord?.(currentWo)}
-                className="min-h-[44px] sm:min-h-[38px] sm:h-9 w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 sm:px-3.5 rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700 text-xs sm:text-sm font-semibold hover:bg-indigo-100 motion-safe:active:scale-[0.98] transition-all cursor-pointer shadow-2xs select-none"
+                className="min-h-[44px] sm:min-h-[38px] sm:h-9 w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 sm:px-3.5 rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700 text-xs sm:text-sm font-semibold hover:bg-indigo-100 focus-visible:ring-2 focus-visible:ring-indigo-600 focus-visible:ring-offset-2 focus-visible:outline-none motion-safe:active:scale-[0.98] transition-all cursor-pointer shadow-2xs select-none"
               >
                 <Printer size={15} />
                 <span>พิมพ์/ดูเอกสารดิจิทัล</span>
@@ -756,7 +756,7 @@ export const WorkOrderSideDrawer = ({
             <button
               type="button"
               onClick={requestClose}
-              className="min-h-[44px] sm:min-h-[38px] sm:h-9 w-full sm:w-auto px-4 rounded-xl border border-slate-300 text-slate-700 text-xs sm:text-sm font-semibold hover:bg-slate-100 motion-safe:active:scale-[0.98] transition-all cursor-pointer select-none order-first sm:order-last"
+              className="min-h-[44px] sm:min-h-[38px] sm:h-9 w-full sm:w-auto px-4 rounded-xl border border-slate-300 text-slate-700 text-xs sm:text-sm font-semibold hover:bg-slate-100 focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 focus-visible:outline-none motion-safe:active:scale-[0.98] transition-all cursor-pointer select-none order-first sm:order-last"
             >
               ปิดหน้าต่าง
             </button>

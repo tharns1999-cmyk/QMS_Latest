@@ -269,7 +269,7 @@ export const AnnualPlanMatrixTable = ({
                 <span>กรองปี/แผนก{extraFilterCount > 0 ? ` (${extraFilterCount})` : ''}</span>
               </button>
               {filterOpen && (
-                <div className="absolute left-0 top-full mt-1.5 z-40 w-64 bg-white rounded-xl border border-slate-200 shadow-lg p-3.5 space-y-2.5">
+                <div className="absolute left-0 top-full mt-1.5 z-40 w-64 max-w-[calc(100vw-2rem)] bg-white rounded-xl border border-slate-200 shadow-lg p-3.5 space-y-2.5">
                   <label className="block text-xs font-semibold text-slate-700">
                     ปีของแผน
                     <select
@@ -311,11 +311,12 @@ export const AnnualPlanMatrixTable = ({
         {/* View & Density Controls & Smart Import */}
         <div className="flex items-center gap-2">
           {/* Density Switcher */}
-          <div className="inline-flex items-center gap-1 bg-slate-200/70 p-1 rounded-xl text-xs">
+          <div className="inline-flex items-center gap-1 bg-slate-200/70 p-1 rounded-xl text-xs" role="group" aria-label="ระดับความแน่นของตาราง">
             <button
               type="button"
+              aria-pressed={density === 'comfortable'}
               onClick={() => setDensity('comfortable')}
-              className={`px-2.5 py-1 rounded-lg font-semibold transition-all cursor-pointer ${
+              className={`min-h-[32px] sm:min-h-[28px] px-2.5 py-1 rounded-lg font-semibold transition-all cursor-pointer ${
                 density === 'comfortable'
                   ? 'bg-white text-slate-900 shadow-2xs'
                   : 'text-slate-600 hover:text-slate-900'
@@ -325,8 +326,9 @@ export const AnnualPlanMatrixTable = ({
             </button>
             <button
               type="button"
+              aria-pressed={density === 'compact'}
               onClick={() => setDensity('compact')}
-              className={`px-2.5 py-1 rounded-lg font-semibold transition-all cursor-pointer ${
+              className={`min-h-[32px] sm:min-h-[28px] px-2.5 py-1 rounded-lg font-semibold transition-all cursor-pointer ${
                 density === 'compact'
                   ? 'bg-white text-slate-900 shadow-2xs'
                   : 'text-slate-600 hover:text-slate-900'
@@ -337,11 +339,12 @@ export const AnnualPlanMatrixTable = ({
           </div>
 
           {/* View Mode: 12 Months vs Quarterly */}
-          <div className="inline-flex items-center gap-1 bg-slate-200/70 p-1 rounded-xl text-xs">
+          <div className="inline-flex items-center gap-1 bg-slate-200/70 p-1 rounded-xl text-xs" role="group" aria-label="มุมมองตารางเวลา">
             <button
               type="button"
+              aria-pressed={viewMode === '12_MONTHS'}
               onClick={() => handleSetViewMode('12_MONTHS')}
-              className={`px-2.5 py-1 rounded-lg font-semibold transition-all cursor-pointer ${
+              className={`min-h-[32px] sm:min-h-[28px] px-2.5 py-1 rounded-lg font-semibold transition-all cursor-pointer ${
                 viewMode === '12_MONTHS'
                   ? 'bg-white text-slate-900 shadow-2xs'
                   : 'text-slate-600 hover:text-slate-900'
@@ -351,8 +354,9 @@ export const AnnualPlanMatrixTable = ({
             </button>
             <button
               type="button"
+              aria-pressed={viewMode === 'QUARTERLY'}
               onClick={() => handleSetViewMode('QUARTERLY')}
-              className={`px-2.5 py-1 rounded-lg font-semibold transition-all cursor-pointer ${
+              className={`min-h-[32px] sm:min-h-[28px] px-2.5 py-1 rounded-lg font-semibold transition-all cursor-pointer ${
                 viewMode === 'QUARTERLY'
                   ? 'bg-white text-slate-900 shadow-2xs'
                   : 'text-slate-600 hover:text-slate-900'
