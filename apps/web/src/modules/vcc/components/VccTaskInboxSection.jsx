@@ -920,7 +920,7 @@ export const VccTaskInboxSection = () => {
                       type="button"
                       data-testid={`vcc-work-task-open-${task.id}`}
                       onClick={() => navigate(task.link)}
-                      className="inline-flex items-center gap-1.5 h-9 px-4 rounded-xl text-xs font-semibold transition-colors cursor-pointer shadow-2xs bg-indigo-600 hover:bg-indigo-700 text-white"
+                      className="inline-flex items-center gap-1.5 min-h-[44px] sm:min-h-[36px] h-10 sm:h-9 px-4 rounded-xl text-xs font-semibold transition-colors cursor-pointer shadow-2xs bg-indigo-600 hover:bg-indigo-700 text-white select-none"
                     >
                       <span>{info.button}</span>
                       <ArrowRight size={13} />
@@ -1025,7 +1025,7 @@ export const VccTaskInboxSection = () => {
                       type="button"
                       data-testid={`vcc-inbox-open-${plan.id}`}
                       onClick={() => handleOpenTaskItem(plan, roleInfo)}
-                      className={`inline-flex items-center gap-1.5 h-9 px-4 rounded-xl text-xs font-semibold transition-colors cursor-pointer shadow-2xs ${
+                      className={`inline-flex items-center gap-1.5 min-h-[44px] sm:min-h-[36px] h-10 sm:h-9 px-4 rounded-xl text-xs font-semibold transition-colors cursor-pointer shadow-2xs select-none ${
                         roleInfo.isMyActionable
                           ? 'bg-indigo-600 hover:bg-indigo-700 text-white'
                           : 'border border-slate-300 bg-white hover:bg-slate-50 text-slate-700'

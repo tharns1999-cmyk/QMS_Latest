@@ -312,7 +312,7 @@ export const RecordResultModal = ({
                   <button
                     type="button"
                     onClick={() => setForm({ ...form, verification_type: 'QUANTITATIVE' })}
-                    className={`min-h-[38px] px-3 py-2 rounded-xl text-xs font-bold border transition-all text-center cursor-pointer select-none ${
+                    className={`min-h-[44px] sm:min-h-[38px] px-3 py-2 rounded-xl text-xs font-bold border transition-all text-center cursor-pointer select-none ${
                       (form.verification_type || 'QUANTITATIVE') === 'QUANTITATIVE'
                         ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
                         : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
@@ -328,7 +328,7 @@ export const RecordResultModal = ({
                       uncertainty_value: form.uncertainty_value || 'N/A (การทวนสอบเชิงคุณภาพ ไม่นำมาคำนวณ)',
                       calibration_error_value: form.calibration_error_value || 'N/A (การทวนสอบเชิงคุณภาพ)'
                     })}
-                    className={`min-h-[38px] px-3 py-2 rounded-xl text-xs font-bold border transition-all text-center cursor-pointer select-none ${
+                    className={`min-h-[44px] sm:min-h-[38px] px-3 py-2 rounded-xl text-xs font-bold border transition-all text-center cursor-pointer select-none ${
                       form.verification_type === 'QUALITATIVE'
                         ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
                         : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'

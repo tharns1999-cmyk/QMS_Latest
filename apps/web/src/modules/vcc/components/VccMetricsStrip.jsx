@@ -224,7 +224,7 @@ export default function VccMetricsStrip({ eq = {}, wo = {}, certKpi = {}, review
         </div>
 
         {/* 7. ปิดงานแล้ว / ทันกำหนด (Success Metric) */}
-        <div className="p-4 sm:p-5 flex flex-col justify-between hover:bg-slate-50/50 transition-colors">
+        <div className="p-4 sm:p-5 flex flex-col justify-between hover:bg-slate-50/50 transition-colors col-span-2 md:col-span-1">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
               ปิดงานแล้ว / ทันกำหนด

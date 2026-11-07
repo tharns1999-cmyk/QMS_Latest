@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import {
   FolderTree,
   CheckCircle2,
@@ -20,6 +20,7 @@ import AnnualPlanMonthCell from './AnnualPlanMonthCell';
 import { isSavedPlanItem } from '../utils/planLabels';
 import AnnualPlanSideInspector from './AnnualPlanSideInspector';
 import { formatVccDueDatesList } from '../utils/vccDateUtils';
+import { VccScrollIndicator } from './VccDesignSystem';
 
 const useDismiss = (open, onClose) => {
   const ref = useRef(null);
@@ -112,6 +113,17 @@ export const AnnualPlanMatrixTable = ({
   const extraFilterCount = (filterYear ? 1 : 0) + (filterDept ? 1 : 0);
   const activeCategory = (categoryFilter || selectedCategory || '').trim();
 
+  const tableContainerRef = useRef(null);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+
+  const checkScroll = useCallback(() => {
+    const el = tableContainerRef.current;
+    if (!el) return;
+    setCanScrollLeft(el.scrollLeft > 5);
+    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 5);
+  }, []);
+
   // 1 row = 1 Calibratable Instrument Unit (Flat Table)
   const flatInstrumentRows = useMemo(() => {
     const q = tableSearch.toLowerCase().trim();
@@ -180,6 +192,12 @@ export const AnnualPlanMatrixTable = ({
       setSavingCellKey('');
     }
   };
+
+  useEffect(() => {
+    checkScroll();
+    window.addEventListener('resize', checkScroll);
+    return () => window.removeEventListener('resize', checkScroll);
+  }, [checkScroll, flatInstrumentRows.length, viewMode]);
 
 
 
@@ -347,19 +365,24 @@ export const AnnualPlanMatrixTable = ({
       </div>
 
       {/* Main Single-Row Interactive Matrix Table */}
-      <div className="overflow-x-auto max-h-[calc(100vh-210px)]">
-        <table className="w-full text-left border-collapse text-sm">
-          <thead className="sticky top-0 z-20 bg-slate-50/95 backdrop-blur-xs shadow-2xs">
-            <tr className="border-b border-slate-200 text-slate-700 text-xs font-bold tracking-wider uppercase">
-              {/* Sticky Column: Asset Code & Name (absorbs excess space to keep instrument identification readable) */}
-              <th className="py-2.5 sm:py-3 px-2 sm:px-3.5 sticky left-0 z-30 bg-slate-50 shadow-[1px_0_0_0_#e2e8f0] w-[140px] min-w-[140px] max-w-[150px] sm:w-[220px] sm:min-w-[220px] md:min-w-[260px] md:w-auto">
-                รายการเครื่องมือวัด
-              </th>
+      <div className="relative">
+        <div
+          ref={tableContainerRef}
+          onScroll={checkScroll}
+          className="overflow-x-auto max-h-[calc(100vh-210px)]"
+        >
+          <table className="w-full text-left border-collapse text-sm">
+            <thead className="sticky top-0 z-20 bg-slate-50/95 backdrop-blur-xs shadow-2xs">
+              <tr className="border-b border-slate-200 text-slate-700 text-xs font-bold tracking-wider uppercase">
+                {/* Sticky Column: Asset Code & Name */}
+                <th className="py-2.5 sm:py-3 px-2 sm:px-3.5 sticky left-0 z-30 bg-slate-50 shadow-[1px_0_0_0_#e2e8f0] w-[130px] min-w-[130px] max-w-[140px] sm:w-[220px] sm:min-w-[220px] xl:min-w-[260px] xl:w-[260px]">
+                  รายการเครื่องมือวัด
+                </th>
 
-              {/* Due Date & Evidence Summary (Essential for audit & automated verification) */}
-              <th className="py-3 px-3.5 border-l border-slate-200/70 min-w-[180px] w-[180px] whitespace-nowrap">
-                วันครบกำหนด / สถานะหลักฐาน
-              </th>
+                {/* Due Date & Evidence Summary (Essential for audit & automated verification) */}
+                <th className="py-3 px-3.5 border-l border-slate-200/70 min-w-[180px] w-[180px] whitespace-nowrap xl:sticky xl:left-[260px] xl:z-30 xl:bg-slate-50 xl:shadow-[1px_0_0_0_#e2e8f0]">
+                  วันครบกำหนด / สถานะหลักฐาน
+                </th>
 
               {/* Month or Quarter Columns */}
               {viewMode === '12_MONTHS'
@@ -450,7 +473,7 @@ export const AnnualPlanMatrixTable = ({
                     }`}
                   >
                     {/* Sticky Left: Asset Code & Operation Context (Flat Row, Zero Indentation) */}
-                    <td className={`py-2 sm:py-2.5 px-2 sm:px-3.5 align-middle sticky left-0 z-10 shadow-[1px_0_0_0_#e2e8f0] w-[140px] min-w-[140px] max-w-[150px] sm:w-[220px] sm:min-w-[220px] md:min-w-[260px] md:w-auto ${
+                    <td className={`py-2 sm:py-2.5 px-2 sm:px-3.5 align-middle sticky left-0 z-10 shadow-[1px_0_0_0_#e2e8f0] w-[130px] min-w-[130px] max-w-[140px] sm:w-[220px] sm:min-w-[220px] xl:min-w-[260px] xl:w-[260px] ${
                       isLogicalGroup ? 'bg-slate-50 group-hover:bg-slate-100' : 'bg-white group-hover:bg-slate-50'
                     }`}>
                       <div className="flex items-start justify-between gap-1.5 sm:gap-2">
@@ -545,7 +568,9 @@ export const AnnualPlanMatrixTable = ({
                     </td>
 
                     {/* Due Dates & Completion Evidence Summary */}
-                    <td className="py-2.5 px-3.5 align-middle border-l border-slate-100 min-w-[180px]">
+                    <td className={`py-2.5 px-3.5 align-middle border-l border-slate-100 min-w-[180px] w-[180px] xl:sticky xl:left-[260px] xl:z-10 xl:shadow-[1px_0_0_0_#e2e8f0] ${
+                      isLogicalGroup ? 'xl:bg-slate-50 group-hover:xl:bg-slate-100' : 'xl:bg-white group-hover:xl:bg-slate-50'
+                    }`}>
                       <div className="font-semibold text-slate-900 text-xs sm:text-sm font-sans" title={(item.due_dates || []).join(', ')}>
                         {(item.due_dates || []).length > 0 ? (
                           <>
@@ -734,6 +759,8 @@ export const AnnualPlanMatrixTable = ({
             )}
           </tbody>
         </table>
+        </div>
+        <VccScrollIndicator canScrollLeft={canScrollLeft} canScrollRight={canScrollRight} />
       </div>
 
       {/* Discrete Table Footer with Legend & Summary (Linear style) */}
