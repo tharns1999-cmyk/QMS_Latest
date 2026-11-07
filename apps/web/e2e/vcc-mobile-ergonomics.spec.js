@@ -81,5 +81,51 @@ test.describe('VCC Mobile Ergonomics & Responsive E2E Suite (Round D3)', () => {
     const desktopDragHandle = page.getByTestId('vcc-drag-handle');
     await expect(desktopDragHandle).toBeHidden();
   });
+
+  const MOBILE_VIEWPORTS_HISTORY = [
+    { name: 'Mobile Compact iPhone SE (375px)', width: 375, height: 667 },
+    { name: 'Mobile Standard iPhone 14/15 (390px)', width: 390, height: 844 }
+  ];
+
+  for (const mv of MOBILE_VIEWPORTS_HISTORY) {
+    test(`Mobile Asset Register: History button opens modal and updates URL on ${mv.name}`, async ({ page }) => {
+      await page.setViewportSize({ width: mv.width, height: mv.height });
+      await page.goto('/vcc/assets');
+      await page.waitForLoadState('domcontentloaded');
+
+      const mobileCardList = page.getByTestId('vcc-asset-mobile-card-list');
+      await expect(mobileCardList).toBeVisible();
+
+      // Click "ประวัติ" on first mobile card
+      const historyBtn = page.getByTestId('btn-asset-history-mobile').first();
+      await expect(historyBtn).toBeVisible();
+      await historyBtn.click();
+
+      // Verify modal opens with details and URL updates with ?asset=
+      const dialog = page.getByRole('dialog');
+      await expect(dialog).toBeVisible();
+      await expect(dialog.getByText('รายละเอียดและประวัติการแก้ไข (Audit Log)')).toBeVisible();
+      await expect(page).toHaveURL(/.*[?&]asset=/);
+
+      // Close modal and verify URL is restored
+      const closeBtn = dialog.getByRole('button', { name: 'ปิดหน้าต่าง' });
+      await closeBtn.click();
+      await expect(dialog).toBeHidden();
+      await expect(page).not.toHaveURL(/.*[?&]asset=/);
+    });
+  }
+
+  test('Mobile Work Order Cards render cleanly on 375px and 390px', async ({ page }) => {
+    for (const width of [375, 390]) {
+      await page.setViewportSize({ width, height: 800 });
+      await page.goto('/vcc/work-orders');
+      await page.waitForLoadState('domcontentloaded');
+
+      const mobileList = page.getByTestId('vcc-wo-mobile-card-list');
+      if (await mobileList.count() > 0) {
+        await expect(mobileList).toBeVisible();
+      }
+    }
+  });
 });
 

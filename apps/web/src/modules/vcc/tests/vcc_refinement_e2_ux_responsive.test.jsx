@@ -1,11 +1,14 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import useStore from '../../../store/useStore';
-import { VccBadge, VccEmptyState, VccSkeleton } from '../components/VccDesignSystem';
+import { VccBadge, VccEmptyState, VccSkeleton, VccScrollIndicator } from '../components/VccDesignSystem';
 import { AnnualPlanMatrixTable } from '../components/AnnualPlanMatrixTable';
 import { WorkOrderTable } from '../components/WorkOrderTable';
 import VccMetricsStrip from '../components/VccMetricsStrip';
+import AssetRegisterPage from '../pages/AssetRegisterPage';
+import { resetVccLocalStore } from '../api/vccApi';
 
 describe('VCC Refinement Round E2 — UX/UI & Responsive Excellence Suite', () => {
   beforeEach(() => {
@@ -166,6 +169,144 @@ describe('VCC Refinement Round E2 — UX/UI & Responsive Excellence Suite', () =
       expect(completedCard).toBeInTheDocument();
       expect(completedCard).toHaveClass('col-span-2');
       expect(completedCard).toHaveClass('md:col-span-1');
+    });
+  });
+
+  describe('5. AssetRegisterPage — Mobile Card History & URL Sync (Viewport 375px & 390px)', () => {
+    const LocationWatcher = () => {
+      const location = useLocation();
+      return <div data-testid="current-search">{location.search}</div>;
+    };
+
+    beforeEach(() => {
+      resetVccLocalStore();
+      useStore.setState({
+        currentUser: { id: 'u-dcc-1', name: 'DCC Officer', department: 'DC', isDcc: true, level: 4 },
+        departments: [
+          { code: 'QC', name_th: 'ควบคุมคุณภาพ', status: 'ACTIVE' },
+          { code: 'WH', name_th: 'คลังสินค้า', status: 'ACTIVE' },
+          { code: 'DC', name_th: 'ควบคุมเอกสาร', status: 'ACTIVE' }
+        ],
+        masterDepartments: [
+          { code: 'QC', name_th: 'ควบคุมคุณภาพ', status: 'ACTIVE' },
+          { code: 'WH', name_th: 'คลังสินค้า', status: 'ACTIVE' },
+          { code: 'DC', name_th: 'ควบคุมเอกสาร', status: 'ACTIVE' }
+        ]
+      });
+    });
+
+    it('opens history modal with asset.id from mobile card on 375px viewport and synchronizes URL', async () => {
+      window.innerWidth = 375;
+
+      render(
+        <MemoryRouter initialEntries={['/vcc/assets']}>
+          <LocationWatcher />
+          <AssetRegisterPage />
+        </MemoryRouter>
+      );
+
+      // Verify mobile card list is rendered
+      const mobileList = await screen.findByTestId('vcc-asset-mobile-card-list');
+      expect(mobileList).toBeInTheDocument();
+
+      // Find mobile card history buttons
+      const historyButtons = await screen.findAllByTestId('btn-asset-history-mobile');
+      expect(historyButtons.length).toBeGreaterThan(0);
+
+      // Click the first history button on mobile card
+      fireEvent.click(historyButtons[0]);
+
+      // Verify modal opens and displays asset details
+      await waitFor(() => {
+        expect(screen.getByRole('dialog')).toBeInTheDocument();
+        expect(screen.getByText(/รายละเอียดและประวัติการแก้ไข/i)).toBeInTheDocument();
+      });
+
+      // Verify URL search has updated with asset ID
+      await waitFor(() => {
+        expect(screen.getByTestId('current-search')).toHaveTextContent(/asset=/i);
+      });
+
+      // Close the modal and verify URL search parameter is cleared
+      const closeButton = screen.getByRole('button', { name: /ปิดหน้าต่าง/i });
+      fireEvent.click(closeButton);
+
+      await waitFor(() => {
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+        expect(screen.getByTestId('current-search')).toHaveTextContent('');
+      });
+
+      window.innerWidth = 1024;
+    });
+
+    it('opens history modal from mobile card on 390px viewport with correct asset details', async () => {
+      window.innerWidth = 390;
+
+      render(
+        <MemoryRouter initialEntries={['/vcc/assets']}>
+          <LocationWatcher />
+          <AssetRegisterPage />
+        </MemoryRouter>
+      );
+
+      const mobileList = await screen.findByTestId('vcc-asset-mobile-card-list');
+      expect(mobileList).toBeInTheDocument();
+
+      const historyButtons = await screen.findAllByTestId('btn-asset-history-mobile');
+      fireEvent.click(historyButtons[0]);
+
+      await waitFor(() => {
+        expect(screen.getByRole('dialog')).toBeInTheDocument();
+      });
+
+      window.innerWidth = 1024;
+    });
+
+    it('supports opening history modal from mobile card across RETIRED tab', async () => {
+      window.innerWidth = 375;
+
+      render(
+        <MemoryRouter initialEntries={['/vcc/assets']}>
+          <LocationWatcher />
+          <AssetRegisterPage />
+        </MemoryRouter>
+      );
+
+      // Switch to RETIRED tab
+      const retiredTab = screen.getByRole('tab', { name: /ปลดออกแล้ว/i });
+      fireEvent.click(retiredTab);
+
+      // Find mobile card history button in RETIRED tab
+      const historyButtons = await screen.findAllByTestId('btn-asset-history-mobile');
+      expect(historyButtons.length).toBeGreaterThan(0);
+
+      fireEvent.click(historyButtons[0]);
+
+      await waitFor(() => {
+        expect(screen.getByRole('dialog')).toBeInTheDocument();
+        expect(screen.getByText(/รายละเอียดและประวัติการแก้ไข/i)).toBeInTheDocument();
+        expect(screen.getByTestId('current-search')).toHaveTextContent(/asset=/i);
+      });
+
+      window.innerWidth = 1024;
+    });
+
+    it('automatically opens history modal via direct deep-link (?asset=<id>) without errors', async () => {
+      window.innerWidth = 375;
+
+      render(
+        <MemoryRouter initialEntries={['/vcc/assets?asset=ST002']}>
+          <LocationWatcher />
+          <AssetRegisterPage />
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByRole('dialog')).toBeInTheDocument();
+        expect(screen.getByText('ST002')).toBeInTheDocument();
+      });
+
+      window.innerWidth = 1024;
     });
   });
 });

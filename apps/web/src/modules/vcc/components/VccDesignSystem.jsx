@@ -1,16 +1,5 @@
 import React from 'react';
-import {
-  CheckCircle2,
-  AlertTriangle,
-  Clock,
-  ShieldAlert,
-  Archive,
-  Wrench,
-  HelpCircle,
-  FileQuestion,
-  ChevronRight,
-  PackageOpen
-} from 'lucide-react';
+import { PackageOpen } from 'lucide-react';
 import {
   WORK_ORDER_STATUS_LABELS,
   RESULT_STATUS_LABELS,
@@ -161,6 +150,20 @@ export const VccSkeleton = ({ count = 3, type = 'card', className = '' }) => {
 export const VccScrollIndicator = ({ canScrollLeft, canScrollRight }) => {
   if (!canScrollLeft && !canScrollRight) return null;
   return (
-    <div className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-slate-900/10 to-transparent transition-opacity" />
+    <>
+      {canScrollLeft && (
+        <div
+          data-testid="vcc-scroll-cue-left"
+          className="pointer-events-none absolute inset-y-0 left-0 w-8 bg-gradient-to-r from-slate-900/10 to-transparent transition-opacity z-20"
+        />
+      )}
+      {canScrollRight && (
+        <div
+          data-testid="vcc-scroll-cue-right"
+          className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-slate-900/10 to-transparent transition-opacity z-20"
+        />
+      )}
+    </>
   );
 };
+

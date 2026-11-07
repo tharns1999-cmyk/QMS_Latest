@@ -20,6 +20,7 @@ import AnnualPlanMonthCell from './AnnualPlanMonthCell';
 import { isSavedPlanItem } from '../utils/planLabels';
 import AnnualPlanSideInspector from './AnnualPlanSideInspector';
 import { formatVccDueDatesList } from '../utils/vccDateUtils';
+import { VccScrollIndicator } from './VccDesignSystem';
 
 const useDismiss = (open, onClose) => {
   const ref = useRef(null);
@@ -759,12 +760,7 @@ export const AnnualPlanMatrixTable = ({
           </tbody>
         </table>
         </div>
-        {canScrollRight && (
-          <div className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-slate-900/10 to-transparent transition-opacity" />
-        )}
-        {canScrollLeft && (
-          <div className="pointer-events-none absolute inset-y-0 left-0 w-8 bg-gradient-to-r from-slate-900/10 to-transparent transition-opacity" />
-        )}
+        <VccScrollIndicator canScrollLeft={canScrollLeft} canScrollRight={canScrollRight} />
       </div>
 
       {/* Discrete Table Footer with Legend & Summary (Linear style) */}

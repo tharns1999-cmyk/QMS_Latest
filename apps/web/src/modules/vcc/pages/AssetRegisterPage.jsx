@@ -149,7 +149,8 @@ const AssetRegisterPageInner = () => {
   const activeAssetLookupRef = useRef(null);
   const failedAssetLookupRef = useRef(null);
 
-  const openHistoryModal = useCallback(async (assetId, updateUrl = true) => {
+  const openHistoryModal = useCallback(async (target, updateUrl = true) => {
+    const assetId = typeof target === 'object' && target !== null ? target.id : target;
     if (!assetId) return;
     setDetailModalOpen(true);
     setLoadingDetail(true);
@@ -191,10 +192,12 @@ const AssetRegisterPageInner = () => {
     if (!deepLinkedAssetId) {
       activeAssetLookupRef.current = null;
       failedAssetLookupRef.current = null;
-      if (detailModalOpen) {
-        setDetailModalOpen(false);
-        setDetailData(null);
-      }
+      setDetailModalOpen((prevOpen) => {
+        if (prevOpen) {
+          setDetailData(null);
+        }
+        return false;
+      });
       return;
     }
     if (activeAssetLookupRef.current === deepLinkedAssetId || failedAssetLookupRef.current === deepLinkedAssetId) {
@@ -763,7 +766,8 @@ const AssetRegisterPageInner = () => {
                       <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-end gap-2">
                         <button
                           type="button"
-                          onClick={() => openHistoryModal(asset)}
+                          data-testid="btn-asset-history-mobile"
+                          onClick={() => openHistoryModal(asset.id)}
                           className="min-h-[44px] sm:min-h-[32px] inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-300 bg-white text-slate-700 text-xs font-semibold hover:bg-slate-50 transition-colors shadow-2xs cursor-pointer select-none"
                         >
                           <History size={13} />
