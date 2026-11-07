@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { AlertTriangle, CheckCircle2, Eye, ArrowLeft, X } from 'lucide-react';
 import { useVccModalAccessibility } from '../hooks/useVccModalAccessibility';
 import { VccDiscardConfirmDialog } from './VccDiscardConfirmDialog';
@@ -95,7 +95,12 @@ export const LegacyGroupConversionModal = ({
     ])
     : null;
 
+  // The first open needs no reset: the useState initialisers above already built this state from the same props. Resetting
+  // anyway ran a moment after the modal appeared and wiped a click made in between (slow device, busy machine).
+  const lastResetKey = useRef(resetKey);
   useEffect(() => {
+    if (resetKey === lastResetKey.current) return;
+    lastResetKey.current = resetKey;
     if (!resetKey) return;
     const defaultSelected = usingDeptFallback ? [] : candidateAssets.map((a) => a.id);
     const nextSchedules = {};

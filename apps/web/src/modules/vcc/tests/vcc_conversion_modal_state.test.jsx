@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
+import { createRoot } from 'react-dom/client';
 import useStore from '../../../store/useStore';
 import { DraftGroupConversionModal } from '../components/AnnualPlanModals';
 import { resetVccLocalStore } from '../api/vccApi';
@@ -62,5 +63,36 @@ describe('Legacy group conversion modal keeps the person\'s work across parent r
     const otherGroup = { ...draftGroup, id: 'PI-GRP-OTHER' };
     rerender(modal({ groupItem: otherGroup, existingPlanItems: [otherGroup, existingPlanItems[1]] }));
     expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  // Regression 2: the "start over" effect also ran once right after the modal opened. React runs that effect a moment after
+  // the modal is on screen, so a click made in between (a slow device, or a busy CI machine) was wiped by the late reset.
+  // This was the remaining cause of the flaky vcc_flat_architecture_e2e AC 5-9.
+  it('keeps a click made before the opening effects have run', async () => {
+    const previousActEnvironment = globalThis.IS_REACT_ACT_ENVIRONMENT;
+    globalThis.IS_REACT_ACT_ENVIRONMENT = false; // render like the real app, where effects run after the screen updates
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    try {
+      const clicked = new Promise((resolve) => {
+        const observer = new MutationObserver(() => {
+          const preview = [...document.body.querySelectorAll('button')].find((b) => /ดูตัวอย่างก่อนยืนยัน/.test(b.textContent));
+          if (!preview) return;
+          observer.disconnect();
+          preview.click(); // runs right after the modal appears, before React has run the opening effects
+          resolve();
+        });
+        observer.observe(document.body, { childList: true, subtree: true });
+      });
+      root.render(modal()); // a normal (not synchronous) update, like the parent opening the modal after loading data
+      await clicked;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(document.body.querySelector('[role="alert"]')?.textContent).toMatch(/V002/);
+    } finally {
+      root.unmount();
+      container.remove();
+      globalThis.IS_REACT_ACT_ENVIRONMENT = previousActEnvironment;
+    }
   });
 });
