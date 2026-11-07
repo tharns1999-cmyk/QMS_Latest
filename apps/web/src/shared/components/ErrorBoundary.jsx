@@ -13,6 +13,10 @@ export class ErrorBoundary extends React.Component {
   componentDidCatch(error, errorInfo) {
     this.setState({ error, errorInfo });
     console.error("ErrorBoundary caught an error", error, errorInfo);
+    // Error tracking listens for this (src/api/errorReporter.js); shared/ stays free of API imports.
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('qms:client-error', { detail: { error, componentStack: errorInfo?.componentStack } }));
+    }
   }
 
   render() {
