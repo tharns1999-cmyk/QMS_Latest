@@ -43,11 +43,21 @@ import AnnualPlanOverviewCards from './AnnualPlanOverviewCards';
 import SmartAssetImportModal from './SmartAssetImportModal';
 import useStore from '../../../store/useStore';
 
-const AnnualPlanMatrixSection = ({ activeDepartments }) => {
+const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
   const { currentUser, masterUsers, tasks } = useStore();
   const [searchParams] = useSearchParams();
   const queryTab = searchParams.get('tab');
   const queryId = searchParams.get('id');
+
+  const userDept = useMemo(() => {
+    return String(currentUser?.department || currentUser?.dept || '').toUpperCase();
+  }, [currentUser]);
+
+  const canReadAll = useMemo(() => {
+    if (!currentUser) return false;
+    const lvl = Number(currentUser.approval_level ?? currentUser.approvalLevel ?? 1);
+    return Boolean(currentUser.isDcc || currentUser.isQmr || lvl >= 6);
+  }, [currentUser]);
 
   const initialTab = useMemo(() => {
     if (queryTab) return queryTab;
@@ -75,7 +85,13 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
 
   const [statusTab, setStatusTab] = useState(queryTab || initialTab);
   const [filterYear, setFilterYear] = useState('');
-  const [filterDept, setFilterDept] = useState('');
+  const [filterDept, setFilterDept] = useState(() => (!canReadAll && userDept ? userDept : ''));
+
+  useEffect(() => {
+    if (!canReadAll && userDept) {
+      setFilterDept(userDept);
+    }
+  }, [canReadAll, userDept]);
 
   useEffect(() => {
     if (queryTab) {
@@ -99,7 +115,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
   const [activeAssets, setActiveAssets] = useState([]);
   const [providers, setProviders] = useState([]);
   const [planSettings, setPlanSettings] = useState({
-    default_doc_code: 'FM-QC-46',
+    default_doc_code: 'VCC-PLAN',
     approval_doc_type: 'FM',
     due_date_rule: 'END_OF_MONTH'
   });
@@ -117,7 +133,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
   const [planForm, setPlanForm] = useState({
     plan_year: new Date().getFullYear(),
     department: '',
-    document_code: 'FM-QC-46',
+    document_code: 'VCC-PLAN',
     revision: '01',
     title: '',
     due_date_rule: 'END_OF_MONTH'
@@ -186,10 +202,11 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
   const loadPlansAndMeta = useCallback(async (preferredPlanId = '') => {
     setLoading(true);
     try {
+      const effectiveDept = (!canReadAll && userDept) ? userDept : filterDept;
       const [settingsRes, planList, assetsList] = await Promise.all([
         fetchVccPlanSettings(),
-        fetchVccPlans({ status: statusTab, year: filterYear, department: filterDept }),
-        fetchVccAssets({ status: 'ACTIVE', calibratable_only: true })
+        fetchVccPlans({ status: statusTab, year: filterYear, department: effectiveDept }),
+        fetchVccAssets({ status: 'ACTIVE', calibratable_only: true, department: effectiveDept })
       ]);
       setProviders(settingsRes.providers || []);
       setPlanSettings(settingsRes.planSettings || {});
@@ -218,7 +235,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
     } finally {
       setLoading(false);
     }
-  }, [statusTab, filterYear, filterDept, loadPlanWorkOrders]);
+  }, [statusTab, filterYear, filterDept, canReadAll, userDept, loadPlanWorkOrders]);
 
   useEffect(() => {
     loadPlansAndMeta(queryId || '');
@@ -243,13 +260,14 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
     // Only a real year counts: a click event or a filter label must not turn into NaN
     const fixedYear = Number.isInteger(Number(overrideYear)) && Number(overrideYear) > 0 ? Number(overrideYear) : null;
     const targetYear = fixedYear || (Number(filterYear) > 0 ? Number(filterYear) : currentYear);
-    const targetDept = filterDept || activeDepartments[0]?.code || '';
+    const targetDept = (!canReadAll && userDept) || filterDept || activeDepartments[0]?.code || 'QC';
+    const defaultDocCode = targetDept ? `VCC-PLAN-${targetDept}` : (planSettings.default_doc_code || 'VCC-PLAN');
     setEditingPlan(null);
     setPlanFormError('');
     setPlanForm({
       plan_year: targetYear,
       department: targetDept,
-      document_code: planSettings.default_doc_code || 'FM-QC-46',
+      document_code: defaultDocCode,
       revision: '01',
       title: `แผนการทวนสอบเครื่องมือประจำปี ${targetYear}`,
       due_date_rule: planSettings.due_date_rule || 'END_OF_MONTH'

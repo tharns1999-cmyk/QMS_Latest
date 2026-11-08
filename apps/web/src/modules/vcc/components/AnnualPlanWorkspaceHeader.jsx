@@ -128,9 +128,9 @@ export const AnnualPlanWorkspaceHeader = ({
   filterYear: _filterYear,
   setFilterYear: _setFilterYear,
   availableYears: _availableYears = [],
-  filterDept: _filterDept,
-  setFilterDept: _setFilterDept,
-  activeDepartments: _activeDepartments = [],
+  filterDept,
+  setFilterDept,
+  activeDepartments = [],
   plans = [],
   availablePlans = [],
   selectedPlanId,
@@ -157,7 +157,11 @@ export const AnnualPlanWorkspaceHeader = ({
   const menuRef = useDismiss(menuOpen, () => setMenuOpen(false));
 
   // Support both `plans` and `availablePlans` prop names
-  const effectivePlans = plans.length > 0 ? plans : availablePlans;
+  const rawPlans = plans.length > 0 ? plans : availablePlans;
+  const effectivePlans = useMemo(() => {
+    if (!filterDept) return rawPlans;
+    return rawPlans.filter((p) => p.department === filterDept);
+  }, [rawPlans, filterDept]);
 
   // Compute metrics for flat calibratable units (with de-duplication only if legacy group rows exist)
   const summaryMetrics = useMemo(() => {
@@ -372,7 +376,7 @@ export const AnnualPlanWorkspaceHeader = ({
           TIER 2: Filter Toolbar (ซ้าย) + Primary & Secondary Actions (ขวา)
           ───────────────────────────────────────────────────────────── */}
       <div className="pt-2.5 border-t border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-2.5">
-        {/* ฝั่งซ้าย: ตัวกรองสถานะแผน (แยกอิสระจากกล่องเลือกแผน เพื่อไม่ให้ผู้ใช้สับสน) */}
+        {/* ฝั่งซ้าย: ตัวกรองสถานะแผน และแผนก */}
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-xs font-semibold text-slate-500 flex items-center gap-1.5">
             <Filter size={13} className="text-slate-400" />
@@ -392,6 +396,26 @@ export const AnnualPlanWorkspaceHeader = ({
               ))}
             </select>
           </div>
+
+          {activeDepartments.length > 1 && (
+            <div className="inline-flex items-center gap-1 bg-slate-50 border border-slate-200/90 rounded-lg px-2.5 py-1 shadow-2xs">
+              <span className="text-xs font-semibold text-slate-500">แผนก:</span>
+              <select
+                aria-label="กรองตามแผนก"
+                value={filterDept || ''}
+                onChange={(e) => setFilterDept && setFilterDept(e.target.value)}
+                className="bg-transparent border-0 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-0 cursor-pointer"
+              >
+                <option value="">ทุกแผนก ({activeDepartments.length})</option>
+                {activeDepartments.map((d) => (
+                  <option key={d.code} value={d.code}>
+                    {d.nameTh || d.name || d.code} ({d.code})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           {effectivePlans.length > 0 && (
             <span className="text-[11px] text-slate-400 hidden sm:inline">
               ({effectivePlans.length} แผน)
@@ -712,7 +736,7 @@ export const AnnualPlanWorkspaceHeader = ({
 
       {guideOpen && (
         <div className="mt-2.5 bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-700 space-y-1.5">
-          <div className="font-bold text-slate-800 text-xs">ข้อกำหนดการใช้แผน (FM-QC-46)</div>
+          <div className="font-bold text-slate-800 text-xs">ข้อกำหนดการใช้แผนการทวนสอบประจำปี</div>
           <ul className="space-y-1 text-xs text-slate-600">
             <li className="flex items-start gap-1.5">
               <CheckCircle2 size={13} className="text-indigo-600 shrink-0 mt-0.5" />
