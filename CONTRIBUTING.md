@@ -43,4 +43,5 @@ scope: dcc | vcc | portal | shared | web | api | db
 ## ตั้งค่า GitHub (ทำครั้งเดียว)
 
 - เปิด branch protection ให้ `main`, `uat` และ `develop`: บังคับ PR และบังคับให้ CI (`web`, `e2e`, `api`) ผ่านก่อน merge
+- เปิด **Allow auto-merge** และ **Automatically delete head branches** (Settings → General) เพื่อให้ตั้งรวมงานล่วงหน้าได้ (`gh pr merge <เลข> --auto --squash`) GitHub จะรวมเมื่อ CI ผ่านครบเท่านั้น (ตั้งแล้ว 2026-11-08)
 - ตั้ง default branch เป็น `develop`
