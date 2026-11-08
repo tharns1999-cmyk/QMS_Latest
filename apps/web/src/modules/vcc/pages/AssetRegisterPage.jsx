@@ -15,7 +15,9 @@ import {
   RotateCcw,
   CheckCircle2,
   XCircle,
-  AlertTriangle
+  AlertTriangle,
+  Layers,
+  X
 } from 'lucide-react';
 import useStore from '../../../store/useStore';
 import {
@@ -32,9 +34,9 @@ import {
 import {
   AssetFormModal,
   AssetStatusModal,
-  AssetDetailHistoryModal,
   AssetTypesModal
 } from '../components/AssetRegisterModals';
+import { AssetDetailDrawer } from '../components/AssetDetailDrawer';
 import { filterReadableDepartments, manageableVccDepartments, canManageVccAsset, getUserDeptCodes } from '../utils/departmentScope';
 import AnnualPlanMatrixSection from '../components/AnnualPlanMatrixSection';
 import WorkOrderSection from '../components/WorkOrderSection';
@@ -106,9 +108,21 @@ const AssetRegisterPageInner = () => {
     }
   }, [navigate, location?.pathname, location?.search]);
 
-  // Separate status tabs: ACTIVE and RETIRED are never mixed in one list.
+  // 4 Status Tabs: ALL, ACTIVE, ON_HOLD, RETIRED (and UNDER_REPAIR if any). ACTIVE is default.
   const [activeTab, setActiveTab] = useState('ACTIVE');
-  const [assets, setAssets] = useState([]);
+  const [assetsByStatus, setAssetsByStatus] = useState({
+    ACTIVE: [],
+    ON_HOLD: [],
+    UNDER_REPAIR: [],
+    RETIRED: []
+  });
+  const [counts, setCounts] = useState({
+    ALL: 0,
+    ACTIVE: 0,
+    ON_HOLD: 0,
+    UNDER_REPAIR: 0,
+    RETIRED: 0
+  });
   const [assetTypes, setAssetTypes] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -229,9 +243,30 @@ const AssetRegisterPageInner = () => {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [list, types] = await Promise.all([
+      const [listActive, listOnHold, listUnderRepair, listRetired, types] = await Promise.all([
         fetchVccAssets({
-          status: activeTab,
+          status: 'ACTIVE',
+          department: filterDept,
+          asset_type: filterType,
+          calibratable_only: true,
+          q: searchQuery
+        }),
+        fetchVccAssets({
+          status: 'ON_HOLD',
+          department: filterDept,
+          asset_type: filterType,
+          calibratable_only: true,
+          q: searchQuery
+        }),
+        fetchVccAssets({
+          status: 'UNDER_REPAIR',
+          department: filterDept,
+          asset_type: filterType,
+          calibratable_only: true,
+          q: searchQuery
+        }),
+        fetchVccAssets({
+          status: 'RETIRED',
           department: filterDept,
           asset_type: filterType,
           calibratable_only: true,
@@ -239,16 +274,50 @@ const AssetRegisterPageInner = () => {
         }),
         fetchVccAssetTypes()
       ]);
-      setAssets(list);
-      setAssetTypes(types);
+
+      const activeList = listActive || [];
+      const onHoldList = listOnHold || [];
+      const underRepairList = listUnderRepair || [];
+      const retiredList = listRetired || [];
+
+      setAssetsByStatus({
+        ACTIVE: activeList,
+        ON_HOLD: onHoldList,
+        UNDER_REPAIR: underRepairList,
+        RETIRED: retiredList
+      });
+
+      setCounts({
+        ACTIVE: activeList.length,
+        ON_HOLD: onHoldList.length,
+        UNDER_REPAIR: underRepairList.length,
+        RETIRED: retiredList.length,
+        ALL: activeList.length + onHoldList.length + underRepairList.length + retiredList.length
+      });
+
+      setAssetTypes(types || []);
     } catch (err) {
       toast.error(err.message || 'ไม่สามารถโหลดข้อมูลทะเบียนเครื่องมือได้');
     } finally {
       setLoading(false);
     }
-  }, [activeTab, filterDept, filterType, searchQuery]);
+  }, [filterDept, filterType, searchQuery]);
 
-  const displayedAssets = assets;
+  const displayedAssets = useMemo(() => {
+    if (activeTab === 'ACTIVE') return assetsByStatus.ACTIVE;
+    if (activeTab === 'ON_HOLD') return assetsByStatus.ON_HOLD;
+    if (activeTab === 'UNDER_REPAIR') return assetsByStatus.UNDER_REPAIR;
+    if (activeTab === 'RETIRED') return assetsByStatus.RETIRED;
+    if (activeTab === 'ALL') {
+      return [
+        ...assetsByStatus.ACTIVE,
+        ...assetsByStatus.ON_HOLD,
+        ...assetsByStatus.UNDER_REPAIR,
+        ...assetsByStatus.RETIRED
+      ].sort((a, b) => String(a.asset_code || '').localeCompare(String(b.asset_code || '')));
+    }
+    return assetsByStatus.ACTIVE;
+  }, [activeTab, assetsByStatus]);
 
   useEffect(() => {
     if (moduleView === 'ASSETS') {
@@ -400,7 +469,11 @@ const AssetRegisterPageInner = () => {
     return assetTypes;
   }, [assetTypes, form.asset_type]);
 
-  const hasTestData = assets.some((a) => String(a.name || '').includes('[ข้อมูลทดสอบ]'));
+  const hasTestData = useMemo(() => {
+    return Object.values(assetsByStatus).some((list) =>
+      Array.isArray(list) && list.some((a) => String(a.name || '').includes('[ข้อมูลทดสอบ]'))
+    );
+  }, [assetsByStatus]);
 
   // Enterprise Page Metadata per moduleView
   const pageMeta = useMemo(() => {
@@ -488,7 +561,7 @@ const AssetRegisterPageInner = () => {
         </div>
       )}
 
-      {/* Compact Page Header: title + one-line description (for ASSETS, ANNUAL_PLAN, DASHBOARD) */}
+      {/* Compact Page Header: title + one-line description + primary actions */}
       {moduleView !== 'WORK_ORDERS' && (
         <div className="px-1 transition-all">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
@@ -496,12 +569,35 @@ const AssetRegisterPageInner = () => {
               <h1 className="text-xl md:text-2xl font-bold text-slate-900 tracking-tight break-words">
                 {pageMeta.title}
               </h1>
-
               <p className="hidden md:block text-sm text-slate-500">
                 {pageMeta.description}
               </p>
             </div>
 
+            {moduleView === 'ASSETS' && (
+              <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+                {isDccUser && (
+                  <button
+                    type="button"
+                    onClick={openTypesSettings}
+                    className="inline-flex items-center gap-2 px-3.5 py-2 min-h-[44px] sm:min-h-[38px] rounded-xl border border-slate-300 bg-white text-slate-700 text-xs sm:text-sm font-semibold hover:bg-slate-50 transition-colors shadow-2xs cursor-pointer select-none"
+                  >
+                    <SlidersHorizontal size={15} />
+                    <span>ตั้งค่าประเภทเครื่องมือ</span>
+                  </button>
+                )}
+                {canAddAsset && (
+                  <button
+                    type="button"
+                    onClick={openCreateModal}
+                    className="inline-flex items-center gap-2 px-4 py-2 min-h-[44px] sm:min-h-[38px] rounded-xl bg-indigo-600 text-white text-xs sm:text-sm font-semibold hover:bg-indigo-700 transition-colors shadow-xs cursor-pointer select-none"
+                  >
+                    <Plus size={16} />
+                    <span>เพิ่มเครื่องมือ</span>
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -531,153 +627,234 @@ const AssetRegisterPageInner = () => {
             </div>
           )}
 
-          {/* Management panel: who may do what, and the add / settings buttons, in plain view instead of the page corner */}
-          <section aria-label="จัดการเครื่องมือ" className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-3">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          {/* Management panel: who may do what, in plain view */}
+          <section aria-label="จัดการเครื่องมือ" className="bg-white rounded-2xl border border-slate-200/80 p-4 sm:p-5 shadow-2xs space-y-3">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
               <div className="min-w-0">
-                <h2 className="text-base font-bold text-slate-900">จัดการเครื่องมือ</h2>
-              </div>
-              <div className="flex flex-wrap items-center gap-2.5 shrink-0">
-                {isDccUser && (
-                  <button
-                    type="button"
-                    onClick={openTypesSettings}
-                    className="inline-flex items-center gap-2 px-4 py-2.5 h-10 rounded-xl border border-slate-300 bg-white text-slate-700 text-sm font-semibold hover:bg-slate-50 transition-colors shadow-2xs cursor-pointer"
-                  >
-                    <SlidersHorizontal size={15} />
-                    <span>ตั้งค่าประเภทเครื่องมือ</span>
-                  </button>
-                )}
-                {canAddAsset && (
-                  <button
-                    type="button"
-                    onClick={openCreateModal}
-                    className="inline-flex items-center gap-2 px-4 py-2.5 h-10 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 transition-colors shadow-xs cursor-pointer"
-                  >
-                    <Plus size={16} />
-                    <span>เพิ่มเครื่องมือ</span>
-                  </button>
-                )}
+                <h2 className="text-sm sm:text-base font-bold text-slate-900 flex items-center gap-2">
+                  <Wrench size={16} className="text-indigo-600" />
+                  <span>จัดการเครื่องมือ</span>
+                </h2>
               </div>
             </div>
             <MobileCollapsible summary="สิทธิ์ของคุณและคำอธิบาย" className="space-y-3">
-            <p className="text-sm text-slate-600" data-testid="asset-manage-summary">
-                  {isDccUser
-                    ? 'คุณเป็น DCC: จัดการเครื่องมือได้ทุกแผนก โอนเครื่องมือข้ามแผนกได้ และตั้งค่าประเภทเครื่องมือได้'
-                    : canAddAsset
-                      ? `คุณจัดการเครื่องมือของแผนก ${manageableDepts.join(', ')} ได้ (เพิ่ม แก้ไข ปลดออก นำกลับมาใช้) เครื่องมือของแผนกอื่นดูได้อย่างเดียว`
-                      : 'คุณดูทะเบียนเครื่องมือได้อย่างเดียว'}
-            </p>
-            {!canAddAsset && (
-              <div role="note" className="rounded-xl bg-slate-50 border border-slate-200 px-4 py-3 text-sm text-slate-700">
-                การเพิ่ม แก้ไข ปลดออก และนำกลับมาใช้ ทำโดยหัวหน้าแผนก (ระดับ L4 ขึ้นไป) ของแผนกเจ้าของเครื่องมือ หรือ DCC
-                {myDepts.length > 0 ? ` — แผนกของคุณคือ ${myDepts.join(', ')}` : ''} · การตั้งค่าประเภทเครื่องมือและการโอนข้ามแผนกเป็นหน้าที่ของ DCC
-              </div>
-            )}
-            <p className="text-xs text-slate-500">
-              <span className="font-semibold text-slate-700">ปลดออกจากทะเบียน</span> = เลิกใช้เครื่องมือนั้นทั้งระบบ (ไม่ลบ ประวัติอยู่ครบ นำกลับมาใช้ได้) ·{' '}
-              <span className="font-semibold text-slate-700">นำออกจากแผน</span> = เอาออกจากแผนประจำปีเท่านั้น ทำที่หน้าแผนประจำปี เครื่องมือยังอยู่ในทะเบียน
-            </p>
+              <p className="text-sm text-slate-600" data-testid="asset-manage-summary">
+                {isDccUser
+                  ? 'คุณเป็น DCC: จัดการเครื่องมือได้ทุกแผนก โอนเครื่องมือข้ามแผนกได้ และตั้งค่าประเภทเครื่องมือได้'
+                  : canAddAsset
+                    ? `คุณจัดการเครื่องมือของแผนก ${manageableDepts.join(', ')} ได้ (เพิ่ม แก้ไข ปลดออก นำกลับมาใช้) เครื่องมือของแผนกอื่นดูได้อย่างเดียว`
+                    : 'คุณดูทะเบียนเครื่องมือได้อย่างเดียว'}
+              </p>
+              {!canAddAsset && (
+                <div role="note" className="rounded-xl bg-slate-50 border border-slate-200 px-4 py-3 text-sm text-slate-700">
+                  การเพิ่ม แก้ไข ปลดออก และนำกลับมาใช้ ทำโดยหัวหน้าแผนก (ระดับ L4 ขึ้นไป) ของแผนกเจ้าของเครื่องมือ หรือ DCC
+                  {myDepts.length > 0 ? ` — แผนกของคุณคือ ${myDepts.join(', ')}` : ''} · การตั้งค่าประเภทเครื่องมือและการโอนข้ามแผนกเป็นหน้าที่ของ DCC
+                </div>
+              )}
+              <p className="text-xs text-slate-500">
+                <span className="font-semibold text-slate-700">ปลดออกจากทะเบียน</span> = เลิกใช้เครื่องมือนั้นทั้งระบบ (ไม่ลบ ประวัติอยู่ครบ นำกลับมาใช้ได้) ·{' '}
+                <span className="font-semibold text-slate-700">นำออกจากแผน</span> = เอาออกจากแผนประจำปีเท่านั้น ทำที่หน้าแผนประจำปี เครื่องมือยังอยู่ในทะเบียน
+              </p>
             </MobileCollapsible>
           </section>
 
           {/* Status Tabs & Filters */}
-          <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 pb-4">
+          <div className="bg-white rounded-2xl border border-slate-200/80 p-4 sm:p-5 shadow-2xs space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3.5">
               <div className="flex flex-wrap items-center gap-2" role="tablist" aria-label="สถานะเครื่องมือ">
+                {/* 1. ทั้งหมด */}
                 <button
                   type="button"
                   role="tab"
+                  aria-label="ทั้งหมด"
+                  aria-selected={activeTab === 'ALL'}
+                  onClick={() => setActiveTab('ALL')}
+                  className={`inline-flex items-center gap-2 px-3.5 py-2 min-h-[44px] sm:min-h-[36px] rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer select-none ${
+                    activeTab === 'ALL'
+                      ? 'bg-slate-900 text-white shadow-xs'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200/80'
+                  }`}
+                >
+                  <Layers size={15} />
+                  <span>ทั้งหมด</span>
+                  <span aria-hidden="true" className={`px-1.5 py-0.5 rounded-full text-[11px] font-bold ${
+                    activeTab === 'ALL' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
+                  }`}>
+                    {counts.ALL}
+                  </span>
+                </button>
+
+                {/* 2. ใช้งานปกติ */}
+                <button
+                  type="button"
+                  role="tab"
+                  aria-label="ใช้งานปกติ"
                   aria-selected={activeTab === 'ACTIVE'}
                   onClick={() => setActiveTab('ACTIVE')}
-                  className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-colors cursor-pointer ${
+                  className={`inline-flex items-center gap-2 px-3.5 py-2 min-h-[44px] sm:min-h-[36px] rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer select-none ${
                     activeTab === 'ACTIVE'
                       ? 'bg-emerald-700 text-white shadow-xs'
-                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200/80'
                   }`}
                 >
-                  <CheckCircle2 size={16} />
+                  <CheckCircle2 size={15} />
                   <span>ใช้งานปกติ</span>
+                  <span aria-hidden="true" className={`px-1.5 py-0.5 rounded-full text-[11px] font-bold ${
+                    activeTab === 'ACTIVE' ? 'bg-white/20 text-white' : 'bg-emerald-100 text-emerald-800'
+                  }`}>
+                    {counts.ACTIVE}
+                  </span>
                 </button>
 
+                {/* 3. ระงับใช้ */}
                 <button
                   type="button"
                   role="tab"
-                  aria-selected={activeTab === 'RETIRED'}
-                  onClick={() => setActiveTab('RETIRED')}
-                  className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-colors cursor-pointer ${
-                    activeTab === 'RETIRED'
-                      ? 'bg-rose-700 text-white shadow-xs'
-                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                  }`}
-                >
-                  <Archive size={16} />
-                  <span>ปลดออกแล้ว</span>
-                </button>
-
-                <button
-                  type="button"
-                  role="tab"
+                  aria-label="ระงับใช้"
                   aria-selected={activeTab === 'ON_HOLD'}
                   onClick={() => setActiveTab('ON_HOLD')}
-                  className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-colors cursor-pointer ${
+                  className={`inline-flex items-center gap-2 px-3.5 py-2 min-h-[44px] sm:min-h-[36px] rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer select-none ${
                     activeTab === 'ON_HOLD'
-                      ? 'bg-amber-700 text-white shadow-xs'
-                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                      ? 'bg-amber-600 text-white shadow-xs'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200/80'
                   }`}
                 >
+                  <AlertTriangle size={15} />
                   <span>ระงับใช้</span>
+                  <span aria-hidden="true" className={`px-1.5 py-0.5 rounded-full text-[11px] font-bold ${
+                    activeTab === 'ON_HOLD' ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-800'
+                  }`}>
+                    {counts.ON_HOLD}
+                  </span>
+                </button>
+
+                {/* 4. ซ่อมบำรุง (ถ้ามี) */}
+                {counts.UNDER_REPAIR > 0 && (
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-label="ซ่อมบำรุง"
+                    aria-selected={activeTab === 'UNDER_REPAIR'}
+                    onClick={() => setActiveTab('UNDER_REPAIR')}
+                    className={`inline-flex items-center gap-2 px-3.5 py-2 min-h-[44px] sm:min-h-[36px] rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer select-none ${
+                      activeTab === 'UNDER_REPAIR'
+                        ? 'bg-sky-700 text-white shadow-xs'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200/80'
+                    }`}
+                  >
+                    <Wrench size={15} />
+                    <span>ซ่อมบำรุง</span>
+                    <span aria-hidden="true" className={`px-1.5 py-0.5 rounded-full text-[11px] font-bold ${
+                      activeTab === 'UNDER_REPAIR' ? 'bg-white/20 text-white' : 'bg-sky-100 text-sky-800'
+                    }`}>
+                      {counts.UNDER_REPAIR}
+                    </span>
+                  </button>
+                )}
+
+                {/* 5. ปลดออกแล้ว */}
+                <button
+                  type="button"
+                  role="tab"
+                  aria-label="ปลดออกแล้ว"
+                  aria-selected={activeTab === 'RETIRED'}
+                  onClick={() => setActiveTab('RETIRED')}
+                  className={`inline-flex items-center gap-2 px-3.5 py-2 min-h-[44px] sm:min-h-[36px] rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer select-none ${
+                    activeTab === 'RETIRED'
+                      ? 'bg-rose-700 text-white shadow-xs'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200/80'
+                  }`}
+                >
+                  <Archive size={15} />
+                  <span>ปลดออกแล้ว</span>
+                  <span aria-hidden="true" className={`px-1.5 py-0.5 rounded-full text-[11px] font-bold ${
+                    activeTab === 'RETIRED' ? 'bg-white/20 text-white' : 'bg-rose-100 text-rose-800'
+                  }`}>
+                    {counts.RETIRED}
+                  </span>
                 </button>
               </div>
 
-              <div className="text-sm font-medium text-slate-600">
-                แสดงเฉพาะสถานะ <span className="font-bold text-slate-800">{getAssetStatusLabel(activeTab)}</span> ({displayedAssets.length} เครื่อง)
+              <div className="text-xs sm:text-sm font-medium text-slate-500">
+                แสดงสถานะ <span className="font-bold text-slate-800">{activeTab === 'ALL' ? 'ทั้งหมด' : getAssetStatusLabel(activeTab)}</span> ({displayedAssets.length} เครื่อง)
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-              <div className="relative md:col-span-2">
-                <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
+            {/* Search & Compact Filters */}
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
+              <div className="relative md:col-span-6">
+                <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="ค้นหารหัสเครื่องมือ, ชื่อ, แผนก, Serial, รุ่น, ที่ตั้ง..."
-                  className="w-full h-10 pl-10 pr-4 rounded-xl border border-slate-300 text-sm placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600"
+                  className="w-full h-10 pl-10 pr-9 rounded-xl border border-slate-300 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 bg-white"
                 />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
+                    aria-label="ล้างคำค้นหา"
+                  >
+                    <X size={14} />
+                  </button>
+                )}
               </div>
 
-              <select
-                value={filterDept}
-                onChange={(e) => setFilterDept(e.target.value)}
-                aria-label="กรองตามแผนก"
-                className="w-full h-10 px-3 rounded-xl border border-slate-300 text-sm bg-white focus:outline-none focus:border-indigo-600"
-              >
-                <option value="">ทุกแผนก (Master Data)</option>
-                {activeDepartments.map((d) => (
-                  <option key={d.code} value={d.code}>
-                    {d.code} — {d.nameTh}
-                  </option>
-                ))}
-              </select>
+              <div className="md:col-span-3">
+                <select
+                  value={filterDept}
+                  onChange={(e) => setFilterDept(e.target.value)}
+                  aria-label="กรองตามแผนก"
+                  className="w-full h-10 px-3 rounded-xl border border-slate-300 text-sm bg-white focus:outline-none focus:border-indigo-600 text-slate-700"
+                >
+                  <option value="">ทุกแผนก (Master Data)</option>
+                  {activeDepartments.map((d) => (
+                    <option key={d.code} value={d.code}>
+                      {d.code} — {d.nameTh}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-              <select
-                value={filterType}
-                onChange={(e) => setFilterType(e.target.value)}
-                aria-label="กรองตามประเภท"
-                className="w-full h-10 px-3 rounded-xl border border-slate-300 text-sm bg-white focus:outline-none focus:border-indigo-600"
-              >
-                <option value="">ทุกประเภท</option>
-                {assetTypes.map((t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
-                ))}
-              </select>
+              <div className="md:col-span-2">
+                <select
+                  value={filterType}
+                  onChange={(e) => setFilterType(e.target.value)}
+                  aria-label="กรองตามประเภท"
+                  className="w-full h-10 px-3 rounded-xl border border-slate-300 text-sm bg-white focus:outline-none focus:border-indigo-600 text-slate-700"
+                >
+                  <option value="">ทุกประเภท</option>
+                  {assetTypes.map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="md:col-span-1 flex justify-end">
+                {Boolean(searchQuery || filterDept || filterType) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchQuery('');
+                      setFilterDept('');
+                      setFilterType('');
+                    }}
+                    className="w-full h-10 px-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 cursor-pointer whitespace-nowrap text-center"
+                    title="ล้างตัวกรองทั้งหมด"
+                  >
+                    ล้างตัวกรอง
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 
-          {/* Assets Table */}
+          {/* Assets Table (5 Logical Desktop Columns) */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
             {loading ? (
               <div className="p-12 text-center text-slate-500 text-sm font-medium">
@@ -686,7 +863,7 @@ const AssetRegisterPageInner = () => {
             ) : displayedAssets.length === 0 ? (
               <div className="p-12 text-center space-y-2">
                 <div className="text-slate-700 font-bold text-base">
-                  ไม่พบรายการเครื่องมือในสถานะ {getAssetStatusLabel(activeTab)}
+                  ไม่พบรายการเครื่องมือในสถานะ {activeTab === 'ALL' ? 'ทั้งหมด' : getAssetStatusLabel(activeTab)}
                 </div>
                 <p className="text-slate-500 text-sm">
                   {canAddAsset ? 'ลองปรับเงื่อนไขการค้นหา หรือกดปุ่ม “เพิ่มเครื่องมือ” ด้านบน' : 'ลองปรับเงื่อนไขการค้นหา'}
@@ -723,9 +900,15 @@ const AssetRegisterPageInner = () => {
                               <CheckCircle2 size={12} />
                               ใช้งานปกติ
                             </span>
-                          ) : asset.status !== 'RETIRED' ? (
+                          ) : asset.status === 'ON_HOLD' ? (
                             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-300 text-xs font-bold">
+                              <AlertTriangle size={12} />
                               ระงับใช้
+                            </span>
+                          ) : asset.status === 'UNDER_REPAIR' ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-sky-50 text-sky-800 border border-sky-300 text-xs font-bold">
+                              <Wrench size={12} />
+                              ซ่อมบำรุง
                             </span>
                           ) : (
                             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-rose-50 text-rose-800 border border-rose-200 text-xs font-bold">
@@ -811,12 +994,10 @@ const AssetRegisterPageInner = () => {
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                   <thead>
-                    <tr className="bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-600 uppercase tracking-wider">
-                      <th className="py-3.5 px-4">รหัสเครื่องมือ</th>
-                      <th className="py-3.5 px-4">ชื่อเครื่องมือ / รุ่น</th>
-                      <th className="py-3.5 px-4">ประเภท</th>
-                      <th className="py-3.5 px-4">Serial No.</th>
-                      <th className="py-3.5 px-4">แผนก / ที่ตั้ง</th>
+                    <tr className="bg-slate-50/80 border-b border-slate-200 text-xs font-bold text-slate-600 uppercase tracking-wider">
+                      <th className="py-3.5 px-4">เครื่องมือ</th>
+                      <th className="py-3.5 px-4">แผนก / สถานที่</th>
+                      <th className="py-3.5 px-4">Serial Number</th>
                       <th className="py-3.5 px-4">สถานะ</th>
                       <th className="py-3.5 px-4 text-right">การจัดการ</th>
                     </tr>
@@ -826,18 +1007,23 @@ const AssetRegisterPageInner = () => {
                       const isComposite = asset.group_nature === 'COMPOSITE_SET';
                       return (
                         <tr key={asset.id} className="hover:bg-slate-50/80 transition-colors">
+                          {/* Col 1: เครื่องมือ (Code, Name, Model, Composite) */}
                           <td className="py-3.5 px-4 align-top">
                             <div className="font-mono font-bold text-sm text-slate-900">{asset.asset_code}</div>
-                            {isComposite && (
-                              <span className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-teal-50 text-teal-800 border border-teal-200 text-xs font-semibold">
-                                ชุดเครื่องมือ (Composite Set)
+                            <div className="font-medium text-slate-900 text-sm mt-0.5">{asset.name}</div>
+                            <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                              <span className="inline-flex px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[11px] font-medium">
+                                {asset.asset_type}
                               </span>
-                            )}
-                          </td>
-
-                          <td className="py-3.5 px-4 align-top">
-                            <div className="font-semibold text-slate-900 text-sm">{asset.name}</div>
-                            {asset.model && <div className="text-xs text-slate-600 mt-0.5">รุ่น: {asset.model}</div>}
+                              {asset.model && (
+                                <span className="text-xs text-slate-500">รุ่น: {asset.model}</span>
+                              )}
+                              {isComposite && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-teal-50 text-teal-800 border border-teal-200 text-xs font-semibold">
+                                  ชุดเครื่องมือ (Composite Set)
+                                </span>
+                              )}
+                            </div>
                             {isComposite && asset.composite_details && (
                               <div className="text-xs text-teal-800 mt-1">
                                 <span className="font-semibold">อุปกรณ์ในชุด:</span> {asset.composite_details}
@@ -850,16 +1036,7 @@ const AssetRegisterPageInner = () => {
                             )}
                           </td>
 
-                          <td className="py-3.5 px-4 align-top">
-                            <span className="inline-flex px-2.5 py-1 rounded-lg bg-slate-100 text-slate-800 text-xs font-medium">
-                              {asset.asset_type}
-                            </span>
-                          </td>
-
-                          <td className="py-3.5 px-4 align-top font-mono text-xs text-slate-800">
-                            {asset.serial_no || <span className="text-slate-400">-</span>}
-                          </td>
-
+                          {/* Col 2: แผนก / สถานที่ */}
                           <td className="py-3.5 px-4 align-top">
                             <div className="font-semibold text-slate-800 text-sm">
                               {asset.department} {asset.department_name_th ? `(${asset.department_name_th})` : ''}
@@ -871,7 +1048,7 @@ const AssetRegisterPageInner = () => {
                               return (
                                 <span
                                   data-testid="asset-ownership"
-                                  className={`mt-1 inline-flex px-2 py-0.5 rounded-md border text-xs font-semibold ${
+                                  className={`mt-1.5 inline-flex px-2 py-0.5 rounded-md border text-xs font-semibold ${
                                     canManage ? 'bg-indigo-50 text-indigo-800 border-indigo-200' : 'bg-slate-50 text-slate-600 border-slate-200'
                                   }`}
                                 >
@@ -881,30 +1058,44 @@ const AssetRegisterPageInner = () => {
                             })()}
                           </td>
 
+                          {/* Col 3: Serial Number */}
+                          <td className="py-3.5 px-4 align-top font-mono text-xs text-slate-800">
+                            {asset.serial_no || <span className="text-slate-400">-</span>}
+                          </td>
+
+                          {/* Col 4: สถานะ */}
                           <td className="py-3.5 px-4 align-top">
                             {asset.status === 'ACTIVE' ? (
                               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-bold">
                                 <CheckCircle2 size={13} />
                                 ใช้งานปกติ
                               </span>
-                            ) : asset.status !== 'RETIRED' ? (
-                              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 text-amber-800 border border-amber-200 text-xs font-bold">
-                                {asset.status === 'ON_HOLD' ? 'ระงับใช้' : 'ซ่อมบำรุง'}
+                            ) : asset.status === 'ON_HOLD' ? (
+                              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 text-amber-800 border border-amber-300 text-xs font-bold">
+                                <AlertTriangle size={13} />
+                                ระงับใช้
+                              </span>
+                            ) : asset.status === 'UNDER_REPAIR' ? (
+                              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-sky-50 text-sky-800 border border-sky-300 text-xs font-bold">
+                                <Wrench size={13} />
+                                ซ่อมบำรุง
                               </span>
                             ) : (
                               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-50 text-rose-800 border border-rose-200 text-xs font-bold">
-                                <XCircle size={13} />
+                                <Archive size={13} />
                                 ปลดออกแล้ว
                               </span>
                             )}
                           </td>
 
+                          {/* Col 5: การจัดการ */}
                           <td className="py-3.5 px-4 align-top text-right">
                             <div className="inline-flex flex-wrap items-center justify-end gap-1.5">
                               <button
                                 type="button"
                                 onClick={() => openHistoryModal(asset.id)}
-                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 text-xs sm:text-sm font-semibold hover:bg-slate-50 cursor-pointer"
+                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 text-xs sm:text-sm font-semibold hover:bg-slate-50 cursor-pointer shadow-2xs"
+                                title="ดูรายละเอียดและประวัติเครื่องมือ"
                               >
                                 <History size={13} />
                                 <span>ประวัติ</span>
@@ -984,11 +1175,15 @@ const AssetRegisterPageInner = () => {
         handleConfirmStatusChange={handleConfirmStatusChange}
       />
 
-      <AssetDetailHistoryModal
-        detailModalOpen={detailModalOpen}
-        setDetailModalOpen={handleCloseDetailModal}
-        loadingDetail={loadingDetail}
-        detailData={detailData}
+      <AssetDetailDrawer
+        isOpen={detailModalOpen}
+        onClose={handleCloseDetailModal}
+        loading={loadingDetail}
+        data={detailData}
+        onEdit={openEditModal}
+        onRetire={openRetireModal}
+        onReactivate={openReactivateModal}
+        canManage={detailData?.asset ? canManageVccAsset(currentUser, detailData.asset.department) : false}
       />
 
       <AssetTypesModal
