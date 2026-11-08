@@ -219,6 +219,8 @@ describe('VCC Phase 1 Step 3: Backend Workflow & Approval Security', () => {
     // Artificially simulate SoD violation: assigned_reviewer_id is set to QC-PREP-L4 in DB
     await env.DB.prepare('UPDATE vcc_annual_plans SET assigned_reviewer_id = ? WHERE id = ?')
       .bind('QC-PREP-L4', planId).run();
+    await env.DB.prepare('UPDATE vcc_annual_plan_items SET planned_months = "[6]" WHERE plan_id = ?')
+      .bind(planId).run();
 
     const submitRes = await call('POST', `/api/vcc/plans/${planId}/submit`, 'QC-PREP-L4', {});
     expect(submitRes.status).toBe(422);

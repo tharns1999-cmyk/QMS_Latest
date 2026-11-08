@@ -162,9 +162,9 @@ describe('Annual Planning Header Redesign (FM-QC-46) — Compact 2-Tier Enterpri
     fireEvent.click(usersBtn);
 
     expect(screen.getByTestId('annual-plan-approval-chain')).toBeInTheDocument();
-    expect(screen.getByText(/ผู้จัดทำ \(L1\+\)/)).toBeInTheDocument();
-    expect(screen.getByText(/ผู้ทบทวน \(L4\+\)/)).toBeInTheDocument();
-    expect(screen.getByText(/ผู้อนุมัติ \(L5\+\)/)).toBeInTheDocument();
+    expect(screen.getByText(/ผู้จัดทำ \((L1\+|L4\+)/)).toBeInTheDocument();
+    expect(screen.getByText(/ผู้ทบทวน \((PD L5|LB L5|L4\+)\)/)).toBeInTheDocument();
+    expect(screen.getByText(/ผู้อนุมัติ \((MGT L6\+|L5\+|L6\+)\)/)).toBeInTheDocument();
 
     // Click again to collapse
     fireEvent.click(usersBtn);

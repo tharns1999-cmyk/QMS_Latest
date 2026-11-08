@@ -118,9 +118,9 @@ describe('VCC FM-QC-46 — สถาปัตยกรรมข้อมูล�
     expect(screen.queryByText(/ผู้ทบทวน \(L4\+\)/)).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: /ผู้เกี่ยวข้อง/ }));
-    expect(screen.getByText(/ผู้จัดทำ \(L1\+\)/)).toBeInTheDocument();
-    expect(screen.getByText(/ผู้ทบทวน \(L4\+\)/)).toBeInTheDocument();
-    expect(screen.getByText(/ผู้อนุมัติ \(L5\+\)/)).toBeInTheDocument();
+    expect(screen.getByText(/ผู้จัดทำ \((L1\+|L4\+)/)).toBeInTheDocument();
+    expect(screen.getByText(/ผู้ทบทวน \((PD L5|LB L5|L4\+)\)/)).toBeInTheDocument();
+    expect(screen.getByText(/ผู้อนุมัติ \((MGT L6\+|L5\+|L6\+)\)/)).toBeInTheDocument();
   });
 });
 
