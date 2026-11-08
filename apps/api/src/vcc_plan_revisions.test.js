@@ -57,10 +57,11 @@ describe('VCC Phase 3.1: Plan Revision Foundation & Diff Engine Tests', () => {
       env.DB.prepare("INSERT OR IGNORE INTO departments (code, name_th, status) VALUES ('QC', 'ควบคุมคุณภาพ QC', 'ACTIVE')"),
       env.DB.prepare("INSERT OR IGNORE INTO departments (code, name_th, status) VALUES ('QA', 'ประกันคุณภาพ QA', 'ACTIVE')"),
       env.DB.prepare("INSERT OR IGNORE INTO departments (code, name_th, status) VALUES ('PD', 'ฝ่ายผลิต PD', 'ACTIVE')"),
+      env.DB.prepare("INSERT OR IGNORE INTO departments (code, name_th, status) VALUES ('MGT', 'ฝ่ายบริหาร MGT', 'ACTIVE')"),
       ...[
-        ['REV-QC-STAFF', 2, 1, 'QC', '["QC"]'],
-        ['REV-QC-SUP', 4, 1, 'QC', '["QC"]'],
-        ['REV-QA-MGR', 6, 1, 'QA', '["QA"]'],
+        ['REV-QC-STAFF', 4, 1, 'QC', '["QC"]'],
+        ['REV-QC-SUP', 5, 1, 'PD', '["PD","QC"]'],
+        ['REV-QA-MGR', 6, 1, 'MGT', '["MGT","QA"]'],
         ['REV-QA-STAFF', 2, 0, 'QA', '["QA"]'],
         ['REV-PD-STAFF', 2, 0, 'PD', '["PD"]']
       ].map(([id, level, dcc, dept, depts]) =>
@@ -73,7 +74,24 @@ describe('VCC Phase 3.1: Plan Revision Foundation & Diff Engine Tests', () => {
              departments = excluded.departments,
              is_dcc = excluded.is_dcc`
         ).bind(id, id, `${id}@rev.local`, hash, level, dept, depts, dcc)
-      )
+      ),
+      env.DB.prepare(`
+        INSERT INTO settings (key, value) VALUES ('vcc_document_profiles', ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value
+      `).bind(JSON.stringify({
+        QC: {
+          document_code: 'FM-QC-46',
+          revision: '01',
+          form_issue_date: '2026-06-25',
+          title_th: 'แผนการทวนสอบเครื่องมือวัดประจำปี',
+          reviewer_dept: 'PD',
+          required_reviewer_level: 5,
+          required_approver_level: 6,
+          min_preparer_level: 4,
+          assigned_reviewer_id: 'REV-QC-SUP',
+          assigned_approver_id: 'REV-QA-MGR'
+        }
+      }))
     ]);
 
     for (const id of ['REV-QC-STAFF', 'REV-QC-SUP', 'REV-QA-MGR', 'REV-QA-STAFF', 'REV-PD-STAFF']) {

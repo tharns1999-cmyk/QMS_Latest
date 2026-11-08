@@ -53,24 +53,53 @@ describe('VCC Multi-Department Access & Approval Workflow (RBAC & SoD)', () => {
       // QC-HOD-L5:    QC HOD (L5, primary QC, departments: ['QC'])
       ...[
         ['DCC-USER', 'DC', ['DC'], 4, 1, 'DCC_ADMIN'],
-        ['QC-STAFF', 'QC', ['QC'], 2, 0, 'GENERAL_USER'],
+        ['QC-STAFF', 'QC', ['QC'], 4, 0, 'GENERAL_USER'],
         ['QC-LEAD',  'QC', ['QC'], 4, 0, 'GENERAL_USER'],
-        ['QA-MGR',   'QA', ['QA'], 6, 0, 'GENERAL_USER'],
+        ['QA-MGR',   'QA', ['QA', 'MGT'], 6, 0, 'GENERAL_USER'],
         ['PD-USER',  'PD', ['PD'], 2, 0, 'GENERAL_USER'],
         ['QC-L4-CREATOR', 'QC', ['QC'], 4, 0, 'GENERAL_USER'],
         ['PD-QC-L5-REV',  'PD', ['PD', 'QC'], 5, 0, 'GENERAL_USER'],
         ['PD-ONLY-L5',   'PD', ['PD'], 5, 0, 'GENERAL_USER'],
-        ['QC-HOD-L5',    'QC', ['QC'], 5, 0, 'GENERAL_USER'],
+        ['QC-HOD-L5',    'QC', ['QC', 'MGT'], 6, 0, 'GENERAL_USER'],
         ['QA-L4-STAFF',  'QA', ['QA'], 4, 0, 'GENERAL_USER'],
         ['MGT-STAFF',    'MGT', ['MGT'], 2, 0, 'GENERAL_USER'],
-        ['LB-STAFF',     'LB', ['LB'], 2, 0, 'GENERAL_USER'],
+        ['LB-STAFF',     'LB', ['LB'], 4, 0, 'GENERAL_USER'],
         ['WH-USER',      'WH', ['WH'], 2, 0, 'GENERAL_USER']
       ].map(([id, dept, depts, level, dcc, role]) =>
         env.DB.prepare(
           `INSERT OR REPLACE INTO users (id, name, email, password_hash, role, approval_level, primary_department, departments, is_dcc, status)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE')`
         ).bind(id, id, `${id}@vcc-rbac.local`, hash, role, level, dept, JSON.stringify(depts), dcc)
-      )
+      ),
+      env.DB.prepare(`
+        INSERT INTO settings (key, value) VALUES ('vcc_document_profiles', ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value
+      `).bind(JSON.stringify({
+        QC: {
+          document_code: 'FM-QC-46',
+          revision: '01',
+          form_issue_date: '2026-06-25',
+          title_th: 'แผนการทวนสอบเครื่องมือวัดประจำปี',
+          reviewer_dept: 'PD',
+          required_reviewer_level: 5,
+          required_approver_level: 6,
+          min_preparer_level: 4,
+          assigned_reviewer_id: 'PD-QC-L5-REV',
+          assigned_approver_id: 'QA-MGR'
+        },
+        LB: {
+          document_code: 'FM-LB-11',
+          revision: '02',
+          form_issue_date: '2026-08-10',
+          title_th: 'แผนการสอบเทียบเครื่องมือประจำปี',
+          reviewer_dept: 'LB',
+          required_reviewer_level: 5,
+          required_approver_level: 6,
+          min_preparer_level: 4,
+          assigned_reviewer_id: 'LB-STAFF',
+          assigned_approver_id: 'QA-MGR'
+        }
+      }))
     ]);
 
     for (const id of ['DCC-USER', 'QC-STAFF', 'QC-LEAD', 'QA-MGR', 'PD-USER', 'QC-L4-CREATOR', 'PD-QC-L5-REV', 'PD-ONLY-L5', 'QC-HOD-L5', 'QA-L4-STAFF', 'MGT-STAFF', 'LB-STAFF', 'WH-USER']) {
@@ -192,14 +221,14 @@ describe('VCC Multi-Department Access & Approval Workflow (RBAC & SoD)', () => {
     expect(staffSelfReview.status).toBe(403);
     expect(staffSelfReview.body.error).toMatch(/ผู้จัดทำไม่สามารถทบทวนแผนของตนเองได้/);
 
-    // Step C: QC Supervisor (QC-LEAD, L4) reviews plan
-    const leadReviewRes = await call('POST', `/api/vcc/plans/${planId}/review`, 'QC-LEAD', { comment: 'ผ่านการทบทวนโดยหัวหน้า QC' });
+    // Step C: PD Reviewer (PD-QC-L5-REV, L5) reviews plan
+    const leadReviewRes = await call('POST', `/api/vcc/plans/${planId}/review`, 'PD-QC-L5-REV', { comment: 'ผ่านการทบทวนโดยผู้ชำนาญการ PD' });
     expect(leadReviewRes.status).toBe(200);
     expect(leadReviewRes.body.plan.status).toBe('PENDING_APPROVAL');
-    expect(leadReviewRes.body.plan.reviewed_by).toBe('QC-LEAD');
+    expect(leadReviewRes.body.plan.reviewed_by).toBe('PD-QC-L5-REV');
 
-    // SoD Check: QC-LEAD cannot approve the plan they reviewed
-    const leadSelfApprove = await call('POST', `/api/vcc/plans/${planId}/approve`, 'QC-LEAD', { comment: 'อนุมัติเอง' });
+    // SoD Check: PD-QC-L5-REV cannot approve the plan they reviewed
+    const leadSelfApprove = await call('POST', `/api/vcc/plans/${planId}/approve`, 'PD-QC-L5-REV', { comment: 'อนุมัติเอง' });
     expect(leadSelfApprove.status).toBe(403);
     expect(leadSelfApprove.body.error).toMatch(/ผู้ทบทวนไม่สามารถอนุมัติแผนที่ตนทบทวนได้/);
 
@@ -319,10 +348,12 @@ describe('VCC Multi-Department Access & Approval Workflow (RBAC & SoD)', () => {
 
     // 2. QC L4 Creator creates and drafts annual plan for QC
     const planRes = await call('POST', '/api/vcc/plans', 'QC-L4-CREATOR', {
-      plan_year: 2026,
+      plan_year: 2027,
       department: 'QC',
       revision: '01',
-      title: 'แผนการทวนสอบ QC 2026 โดย QC L4'
+      title: 'แผนการทวนสอบ QC 2027 โดย QC L4',
+      assigned_reviewer_id: 'PD-QC-L5-REV',
+      assigned_approver_id: 'QC-HOD-L5'
     });
     expect(planRes.status).toBe(201);
     const planId = planRes.body.plan.id;
@@ -362,7 +393,7 @@ describe('VCC Multi-Department Access & Approval Workflow (RBAC & SoD)', () => {
     // QA-L4-STAFF (has VCC access, but belongs only to QA, not QC, and level < 6) attempts to review QC plan -> BLOCKED with 403!
     const qaCrossReview = await call('POST', `/api/vcc/plans/${planId}/review`, 'QA-L4-STAFF', { comment: 'พยายามทบทวนข้ามแผนก' });
     expect(qaCrossReview.status).toBe(403);
-    expect(qaCrossReview.body.error).toMatch(/เฉพาะผู้ใช้งานที่สังกัดแผนกของแผน หรือ DCC\/QMR เท่านั้น/);
+    expect(qaCrossReview.body.error).toMatch(/เฉพาะผู้ทบทวนที่ได้รับมอบหมายตามแบบฟอร์มเอกสารควบคุมเท่านั้น|เฉพาะผู้ใช้งานที่สังกัดแผนกของแผน/);
 
     // PD-QC-L5-REV (primary PD, but affiliated with QC via departments) MUST see review task!
     const pdQcTasks = await call('GET', '/api/vcc/tasks', 'PD-QC-L5-REV');
@@ -382,18 +413,18 @@ describe('VCC Multi-Department Access & Approval Workflow (RBAC & SoD)', () => {
     expect(pdQcApproveBlocked.status).toBe(403);
     expect(pdQcApproveBlocked.body.error).toMatch(/ผู้ทบทวนไม่สามารถอนุมัติแผนที่ตนทบทวนได้/);
 
-    // 7. QC-HOD-L5 approves the plan -> APPROVED
-    const hodTasks = await call('GET', '/api/vcc/tasks', 'QC-HOD-L5');
-    const approveTask = hodTasks.body.tasks.find(t => t.planId === planId && t.type === 'Approve');
+    // 7. QA-MGR approves the plan -> APPROVED
+    const mgrTasks = await call('GET', '/api/vcc/tasks', 'QA-MGR');
+    const approveTask = mgrTasks.body.tasks.find(t => t.planId === planId && t.type === 'Approve');
     expect(approveTask).toBeDefined();
 
-    const approveRes = await call('POST', `/api/vcc/plans/${planId}/approve`, 'QC-HOD-L5', { comment: 'อนุมัติโดยหัวหน้าแผนก QC' });
+    const approveRes = await call('POST', `/api/vcc/plans/${planId}/approve`, 'QA-MGR', { comment: 'อนุมัติโดยผู้จัดการ QA/MGT' });
     expect(approveRes.status).toBe(200);
     expect(approveRes.body.plan.status).toBe('APPROVED');
-    expect(approveRes.body.plan.approved_by).toBe('QC-HOD-L5');
+    expect(approveRes.body.plan.approved_by).toBe('QA-MGR');
 
     // 8. Completed plan produces no pending review/approve tasks
-    const postApproveTasks = await call('GET', '/api/vcc/tasks', 'QC-HOD-L5');
+    const postApproveTasks = await call('GET', '/api/vcc/tasks', 'QA-MGR');
     expect(postApproveTasks.body.tasks.some(t => t.planId === planId)).toBe(false);
   });
 

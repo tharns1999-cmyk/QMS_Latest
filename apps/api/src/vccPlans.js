@@ -1439,8 +1439,8 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
       return c.json({ error: 'กติกาคำนวณวันครบกำหนดไม่ถูกต้อง' }, 400);
     }
 
-    const assignedReviewerId = deptProfile?.assigned_reviewer_id || null;
-    const assignedApproverId = deptProfile?.assigned_approver_id || null;
+    const assignedReviewerId = deptProfile?.assigned_reviewer_id || clean(body.assigned_reviewer_id, 100) || null;
+    const assignedApproverId = deptProfile?.assigned_approver_id || clean(body.assigned_approver_id, 100) || null;
 
     // Historical Profile Snapshot: Immutable record of document profile configuration at creation
     const profileSnapshot = JSON.stringify({
@@ -1689,9 +1689,9 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
           remarks,
           sortOrder,
           JSON.stringify(initialCycleIds),
-          mpe,
-          acceptanceCriteria,
-          calibrationPoints,
+          mpe ?? '',
+          acceptanceCriteria ?? '',
+          calibrationPoints ?? '',
           user.id,
           itemId
         ),
@@ -1719,9 +1719,9 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
           remarks,
           sortOrder,
           JSON.stringify(initialCycleIds),
-          mpe,
-          acceptanceCriteria,
-          calibrationPoints,
+          mpe ?? '',
+          acceptanceCriteria ?? '',
+          calibrationPoints ?? '',
           user.id,
           user.id
         ),
@@ -2239,6 +2239,11 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
       return c.json({ error: 'แผนนี้ไม่อยู่ในสถานะรอทบทวน (PENDING_REVIEW)' }, 409);
     }
 
+    // Segregation of Duties: Reviewer cannot be the preparer
+    if (user.id === plan.prepared_by) {
+      return c.json({ error: 'ผู้จัดทำไม่สามารถทบทวนแผนของตนเองได้ (Segregation of Duties)' }, 403);
+    }
+
     const planSettings = await loadPlanSettings(db);
     const thresholds = await getThresholds(db, planSettings.approval_doc_type);
     const isDeptProfiled = ['QC', 'LB'].includes(plan.department);
@@ -2279,11 +2284,6 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
       if (Number(user.approval_level || 0) < thresholds.required_reviewer_level) {
         return c.json({ error: `ผู้ทบทวนต้องมีระดับอนุมัติ L${thresholds.required_reviewer_level} ขึ้นไปตาม Approval Matrix` }, 403);
       }
-    }
-
-    // Segregation of Duties: Reviewer cannot be the preparer
-    if (user.id === plan.prepared_by) {
-      return c.json({ error: 'ผู้จัดทำไม่สามารถทบทวนแผนของตนเองได้ (Segregation of Duties)' }, 403);
     }
 
     // Review gate: Plan Revisions must have 0 unresolved conflicts
@@ -2352,6 +2352,14 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
       return c.json({ error: 'แผนนี้ไม่อยู่ในสถานะรออนุมัติ (PENDING_APPROVAL)' }, 409);
     }
 
+    // Segregation of Duties: Approver cannot be preparer or reviewer
+    if (user.id === plan.prepared_by) {
+      return c.json({ error: 'ผู้จัดทำไม่สามารถอนุมัติแผนของตนเองได้ (Segregation of Duties)' }, 403);
+    }
+    if (user.id === plan.reviewed_by) {
+      return c.json({ error: 'ผู้ทบทวนไม่สามารถอนุมัติแผนที่ตนทบทวนได้ (Segregation of Duties)' }, 403);
+    }
+
     const planSettings = await loadPlanSettings(db);
     const thresholds = await getThresholds(db, planSettings.approval_doc_type);
     const isDeptProfiled = ['QC', 'LB'].includes(plan.department);
@@ -2397,14 +2405,6 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
       if (!appUser) {
         appUser = { id: user.id, name: user.name || user.id, position: 'Approver' };
       }
-    }
-
-    // Segregation of Duties: Approver cannot be preparer or reviewer
-    if (user.id === plan.prepared_by) {
-      return c.json({ error: 'ผู้จัดทำไม่สามารถอนุมัติแผนของตนเองได้ (Segregation of Duties)' }, 403);
-    }
-    if (user.id === plan.reviewed_by) {
-      return c.json({ error: 'ผู้ทบทวนไม่สามารถอนุมัติแผนที่ตนทบทวนได้ (Segregation of Duties)' }, 403);
     }
 
     // Approval gate: Plan Revisions must have 0 unresolved conflicts
@@ -3161,8 +3161,9 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
         db.prepare(`
           INSERT INTO vcc_annual_plan_items (
             id, plan_id, asset_id, provider_name, frequency_label, planned_months, due_dates,
-            responsible_dept, responsible_label, remarks, sort_order, initial_cycle_ids, created_by, updated_by
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            responsible_dept, responsible_label, remarks, sort_order, initial_cycle_ids,
+            mpe, acceptance_criteria, calibration_points, created_by, updated_by
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).bind(
           newItemId,
           newPlanId,
@@ -3176,18 +3177,38 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
           item.remarks,
           item.sort_order,
           JSON.stringify(initialCycleIds),
+          item.mpe ?? '',
+          item.acceptance_criteria ?? '',
+          item.calibration_points ?? '',
           user.id,
           user.id
         )
       );
     }
 
+    const deptProfile = await getDocumentProfileForDept(db, sourcePlan.department);
+    const assignedReviewerId = deptProfile?.assigned_reviewer_id || sourcePlan.assigned_reviewer_id || null;
+    const assignedApproverId = deptProfile?.assigned_approver_id || sourcePlan.assigned_approver_id || null;
+    const formIssueDate = sourcePlan.form_issue_date || deptProfile?.form_issue_date || null;
+    const profileSnapshot = sourcePlan.profile_snapshot || (deptProfile ? JSON.stringify({
+      department: sourcePlan.department,
+      document_code: sourcePlan.document_code,
+      revision: nextRevision,
+      form_issue_date: formIssueDate,
+      title_th: deptProfile.title_th || title,
+      min_preparer_level: deptProfile.min_preparer_level || 4,
+      assigned_reviewer_id: assignedReviewerId,
+      assigned_approver_id: assignedApproverId,
+      snapshot_at: new Date().toISOString()
+    }) : null);
+
     const planInsert = db.prepare(`
       INSERT INTO vcc_annual_plans (
         id, plan_year, department, document_code, revision, title, status,
         effective_status, is_current, due_date_rule, prepared_by, parent_plan_id,
-        revision_reason, created_by, updated_by
-      ) VALUES (?, ?, ?, ?, ?, ?, 'DRAFT', 'PENDING', 0, ?, ?, ?, ?, ?, ?)
+        revision_reason, assigned_reviewer_id, assigned_approver_id, form_issue_date, profile_snapshot,
+        created_by, updated_by
+      ) VALUES (?, ?, ?, ?, ?, ?, 'DRAFT', 'PENDING', 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
       newPlanId,
       sourcePlan.plan_year,
@@ -3199,6 +3220,10 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
       user.id,
       sourcePlan.id,
       revisionReason,
+      assignedReviewerId,
+      assignedApproverId,
+      formIssueDate,
+      profileSnapshot,
       user.id,
       user.id
     );
