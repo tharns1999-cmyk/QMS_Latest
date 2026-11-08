@@ -470,7 +470,7 @@ export const VccTaskInboxSection = () => {
                 <div className="space-y-1.5 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-mono text-xs font-bold px-2.5 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200">
-                      {activePlan.document_code} Rev.{activePlan.revision}
+                      Rev.{activePlan.revision}
                     </span>
                     <span className="text-xs font-semibold px-2.5 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200">
                       ปี {activePlan.plan_year} (พ.ศ. {Number(activePlan.plan_year) + 543})
@@ -987,7 +987,7 @@ export const VccTaskInboxSection = () => {
                       </span>
 
                       <span className="font-mono text-xs font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
-                        {plan.document_code} Rev.{plan.revision}
+                        Rev.{plan.revision}
                       </span>
 
                       <span className="text-xs font-semibold text-slate-700">

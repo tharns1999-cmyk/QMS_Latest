@@ -962,7 +962,7 @@ const PlanSubmitModalContent = ({
                   : 'ส่งแผนประจำปีเข้าสู่กระบวนการทบทวนและอนุมัติ'}
               </h2>
               <p className="text-xs text-slate-500 font-medium">
-                {plan.title} ({plan.document_code} Rev.{plan.revision})
+                {plan.title} (Rev.{plan.revision})
               </p>
             </div>
           </div>

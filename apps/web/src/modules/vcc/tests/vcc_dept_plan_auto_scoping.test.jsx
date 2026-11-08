@@ -81,8 +81,8 @@ describe('VCC User Department Auto-Scoping and Legacy Form Code Sanitization', (
       </MemoryRouter>
     );
 
-    // Verifies LB plan profile badge is rendered
-    const planBadges = await screen.findAllByText(/VCC-PLAN-LB Rev\.01/i);
+    // Verifies paperless revision badge is rendered
+    const planBadges = await screen.findAllByText(/Rev\.01/i);
     expect(planBadges.length).toBeGreaterThanOrEqual(1);
 
     // Verifies department badge displays LB, not QC

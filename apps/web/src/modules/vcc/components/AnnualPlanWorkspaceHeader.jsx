@@ -306,7 +306,7 @@ export const AnnualPlanWorkspaceHeader = ({
               {/* Inline Metadata Tags */}
               <div className="flex items-center gap-2 flex-wrap text-xs text-slate-600">
                 <span className="font-mono font-semibold text-slate-800 bg-slate-100 px-2 py-0.5 rounded border border-slate-200/80 shadow-2xs">
-                  {activePlan.document_code || `VCC-PLAN-${activePlan.department}`} Rev.{activePlan.revision}
+                  Rev.{activePlan.revision}
                 </span>
 
                 {activePlan.form_issue_date && (
@@ -363,11 +363,17 @@ export const AnnualPlanWorkspaceHeader = ({
             className="h-8.5 px-3 rounded-xl border border-slate-300 text-xs font-semibold bg-white text-slate-800 shadow-2xs hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 cursor-pointer w-full sm:w-72 md:w-80 truncate"
           >
             {effectivePlans.length === 0 && <option value="">ไม่มีแผนในสถานะนี้</option>}
-            {effectivePlans.map((p) => (
-              <option key={p.id} value={p.id}>
-                ปี {p.plan_year} · แผนก {p.department} · {p.document_code || `VCC-PLAN-${p.department}`} Rev.{p.revision}
-              </option>
-            ))}
+            {effectivePlans.map((p) => {
+              const deptName =
+                p.department_name_th ||
+                activeDepartments.find((d) => d.code === p.department)?.nameTh ||
+                p.department;
+              return (
+                <option key={p.id} value={p.id}>
+                  ปี {p.plan_year} · {deptName ? `${deptName} (${p.department})` : `แผนก ${p.department}`} · Rev.{p.revision}
+                </option>
+              );
+            })}
           </select>
         </div>
       </div>
