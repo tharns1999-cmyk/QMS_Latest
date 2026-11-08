@@ -157,7 +157,31 @@ export const PlanFormModal = ({
                   required
                   disabled={Boolean(editingPlan) || activeDepartments.length === 0}
                   value={form.department}
-                  onChange={(e) => setForm({ ...form, department: e.target.value })}
+                  onChange={(e) => {
+                    const dept = e.target.value;
+                    const yr = form.plan_year ? String(form.plan_year) : '';
+                    if (editingPlan) {
+                      setForm({ ...form, department: dept });
+                    } else if (dept === 'QC') {
+                      setForm({
+                        ...form,
+                        department: dept,
+                        document_code: 'FM-QC-46',
+                        revision: '01',
+                        title: yr ? `แผนการทวนสอบเครื่องมือประจำปี ${yr}` : 'แผนการทวนสอบเครื่องมือประจำปี'
+                      });
+                    } else if (dept === 'LB') {
+                      setForm({
+                        ...form,
+                        department: dept,
+                        document_code: 'FM-LB-11',
+                        revision: '02',
+                        title: yr ? `แผนการสอบเทียบเครื่องมือที่ใช้ในห้องปฏิบัติการจุลชีววิทยา ประจำปี ${yr}` : 'แผนการสอบเทียบเครื่องมือที่ใช้ในห้องปฏิบัติการจุลชีววิทยา ประจำปี'
+                      });
+                    } else {
+                      setForm({ ...form, department: dept });
+                    }
+                  }}
                   className="w-full h-9.5 px-3 rounded-lg border border-slate-300 text-xs font-medium bg-white disabled:bg-slate-100/90 text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600"
                 >
                   <option value="" disabled>
@@ -597,6 +621,55 @@ export const PlanItemModal = ({
             </div>
           </div>
 
+          {/* Department-specific metrology fields (FM-QC-46 / FM-LB-11) */}
+          <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 space-y-3">
+            <div className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+              <FileText size={13} className="text-indigo-600 shrink-0" />
+              <span>เกณฑ์มาตรฐานเฉพาะแผนก (Metrology & Criteria)</span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  MPE (ค่าความผิดพลาดสูงสุด)
+                </label>
+                <input
+                  type="text"
+                  value={itemForm.mpe || ''}
+                  onChange={(e) => setItemForm({ ...itemForm, mpe: e.target.value })}
+                  placeholder="เช่น ±0.02 mm, ±0.5°C"
+                  className="w-full h-9 px-3 rounded-lg border border-slate-300 text-xs font-medium"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  จุดสอบเทียบ / ทวนสอบ
+                </label>
+                <input
+                  type="text"
+                  value={itemForm.calibration_points || ''}
+                  onChange={(e) => setItemForm({ ...itemForm, calibration_points: e.target.value })}
+                  placeholder="เช่น 0, 50, 100 mm"
+                  className="w-full h-9 px-3 rounded-lg border border-slate-300 text-xs font-medium"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  เกณฑ์การยอมรับ
+                </label>
+                <input
+                  type="text"
+                  value={itemForm.acceptance_criteria || ''}
+                  onChange={(e) => setItemForm({ ...itemForm, acceptance_criteria: e.target.value })}
+                  placeholder="เช่น ไม่เกิน MPE"
+                  className="w-full h-9 px-3 rounded-lg border border-slate-300 text-xs font-medium"
+                />
+              </div>
+            </div>
+          </div>
+
           <div>
             <label className="block text-sm font-semibold text-slate-700 mb-1.5">หมายเหตุ</label>
             <input
@@ -795,10 +868,12 @@ const PlanSubmitModalContent = ({
     return (masterUsers || []).filter((u) => {
       if (!u || !u.id || String(u.status || '').toUpperCase() === 'INACTIVE') return false;
       if (u.id === currentUser?.id) return false; // SoD: ผู้จัดทำห้ามทบทวนงานตนเอง
+      if (plan.assigned_reviewer_id && u.id === plan.assigned_reviewer_id) return true;
       const lvl = Number(u.approval_level || u.level || 0);
+      if (planDept === 'QC' && isUserEligibleForDept(u, 'PD') && lvl >= 5) return true;
       return lvl >= minReviewerLevel && isUserEligibleForDept(u, planDept);
     });
-  }, [masterUsers, currentUser, planDept, minReviewerLevel]);
+  }, [masterUsers, currentUser, planDept, minReviewerLevel, plan.assigned_reviewer_id]);
 
   const [selectedReviewerId, setSelectedReviewerId] = useState(
     plan.assigned_reviewer_id || eligibleReviewers[0]?.id || ''
@@ -809,10 +884,11 @@ const PlanSubmitModalContent = ({
       if (!u || !u.id || String(u.status || '').toUpperCase() === 'INACTIVE') return false;
       if (u.id === currentUser?.id) return false; // SoD: ผู้จัดทำห้ามอนุมัติงานตนเอง
       if (u.id === selectedReviewerId) return false; // 4-Eyes: ผู้ทบทวนห้ามอนุมัติงานที่ตนทบทวน
+      if (plan.assigned_approver_id && u.id === plan.assigned_approver_id) return true;
       const lvl = Number(u.approval_level || u.level || 0);
       return lvl >= minApproverLevel && isUserEligibleForDept(u, planDept);
     });
-  }, [masterUsers, currentUser, selectedReviewerId, planDept, minApproverLevel]);
+  }, [masterUsers, currentUser, selectedReviewerId, planDept, minApproverLevel, plan.assigned_approver_id]);
 
   const [selectedApproverId, setSelectedApproverId] = useState(
     plan.assigned_approver_id || eligibleApprovers[0]?.id || ''

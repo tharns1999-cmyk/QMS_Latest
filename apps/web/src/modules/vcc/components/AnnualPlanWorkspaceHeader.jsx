@@ -147,7 +147,8 @@ export const AnnualPlanWorkspaceHeader = ({
   onOpenEditPlan,
   onOpenHistory,
   onOpenJustificationModal,
-  onOpenSmartImport
+  onOpenSmartImport,
+  onOpenOfficialPdf
 }) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
@@ -304,6 +305,12 @@ export const AnnualPlanWorkspaceHeader = ({
                   {activePlan.document_code} Rev.{activePlan.revision}
                 </span>
 
+                {activePlan.form_issue_date && (
+                  <span className="font-mono text-xs text-slate-600 bg-slate-50 px-2 py-0.5 rounded border border-slate-200/60" title="วันที่ประกาศใช้แบบฟอร์ม">
+                    ประกาศใช้: {activePlan.form_issue_date}
+                  </span>
+                )}
+
                 <span className="font-semibold text-slate-700 bg-slate-50 px-2 py-0.5 rounded border border-slate-200/60">
                   {activePlan.department_name_th
                     ? `${activePlan.department_name_th} (${activePlan.department})`
@@ -428,6 +435,18 @@ export const AnnualPlanWorkspaceHeader = ({
             </button>
           )}
 
+          {activePlan && activePlan.status === 'APPROVED' && onOpenOfficialPdf && (
+            <button
+              type="button"
+              onClick={onOpenOfficialPdf}
+              title="เปิดดูเอกสารทางการ PDF ที่ได้รับการอนุมัติ"
+              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-semibold text-xs shadow-2xs transition-colors cursor-pointer"
+            >
+              <BookOpen size={13} className="text-emerald-700" />
+              <span>เปิดดูเอกสาร PDF ทางการ</span>
+            </button>
+          )}
+
           {/* Secondary Action: สร้างแผนใหม่ */}
           <button
             type="button"
@@ -503,6 +522,17 @@ export const AnnualPlanWorkspaceHeader = ({
                   >
                     <History size={14} className="text-slate-500" />
                     <span>ประวัติการอนุมัติ</span>
+                  </button>
+                )}
+                {activePlan && activePlan.status === 'APPROVED' && onOpenOfficialPdf && (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className={menuItemClass}
+                    onClick={runMenu(onOpenOfficialPdf)}
+                  >
+                    <BookOpen size={14} className="text-emerald-600" />
+                    <span>เปิดดูเอกสาร PDF ทางการ</span>
                   </button>
                 )}
                 {onOpenSettings && (

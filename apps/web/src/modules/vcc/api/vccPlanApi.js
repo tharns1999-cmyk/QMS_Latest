@@ -541,6 +541,10 @@ const enrichLocalPlanItem = (item, allAssets, deptMap) => {
     model: asset.model || '',
     location: asset.location || '',
     asset_department: asset.department || '',
+    brand: asset.brand || item.brand || '',
+    mpe: item.mpe || '',
+    acceptance_criteria: item.acceptance_criteria || '',
+    calibration_points: item.calibration_points || '',
     is_group: isGroup ? 1 : 0,
     group_nature: groupNature,
     is_logical_group: isLogicalGroup,
@@ -951,6 +955,9 @@ export const saveVccPlanItem = async (planId, payload) => {
     responsible_dept: responsibleDept,
     responsible_label: String(payload.responsible_label || '').trim(),
     remarks: String(payload.remarks || '').trim(),
+    mpe: String(payload.mpe || '').trim(),
+    acceptance_criteria: String(payload.acceptance_criteria || '').trim(),
+    calibration_points: String(payload.calibration_points || '').trim(),
     sort_order: existingIdx >= 0 ? allItems[existingIdx].sort_order : allItems.length + 1
   };
 
@@ -1540,4 +1547,20 @@ export const rejectVccPlan = async (planId, reason = '') => {
   });
   await syncVccTasks(user).catch(() => {});
   return enrichLocalPlan(updated, getLocalPlanItems(), getDepartmentMap());
+};
+
+export const getVccPlanPdfUrl = (planId) => `/api/vcc/plans/${encodeURIComponent(planId)}/pdf`;
+
+export const fetchApprovedPlanPdf = async (planId, purpose = 'view') => {
+  const token = sessionStorage.getItem('qms-api-token');
+  const res = await fetch(`/api/vcc/plans/${encodeURIComponent(planId)}/pdf?purpose=${encodeURIComponent(purpose)}`, {
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {})
+    }
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || 'ไม่สามารถเปิดเอกสารทางการ PDF ได้');
+  }
+  return res.blob();
 };

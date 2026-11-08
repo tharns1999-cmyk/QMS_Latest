@@ -789,6 +789,7 @@ const fetchPlanItems = async (db, planId, planObj = null) => {
       a.asset_type,
       a.serial_no,
       a.model,
+      a.brand,
       a.location,
       a.department AS asset_department,
       a.is_group,
@@ -1405,6 +1406,9 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
     const responsibleDept = clean(body.responsible_dept, 20)?.toUpperCase();
     const responsibleLabel = cleanOpt(body.responsible_label, 150);
     const remarks = cleanOpt(body.remarks, 500);
+    const mpe = cleanOpt(body.mpe, 150);
+    const acceptanceCriteria = cleanOpt(body.acceptance_criteria, 255);
+    const calibrationPoints = cleanOpt(body.calibration_points, 255);
     const sortOrder = Number.isInteger(Number(body.sort_order)) ? Number(body.sort_order) : 0;
 
     if (!assetId) return c.json({ error: 'กรุณาเลือกเครื่องมือจากทะเบียนเครื่องมือ' }, 400);
@@ -1452,7 +1456,10 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
       due_dates: dueDates,
       responsible_dept: responsibleDept,
       responsible_label: responsibleLabel,
-      remarks
+      remarks,
+      mpe,
+      acceptance_criteria: acceptanceCriteria,
+      calibration_points: calibrationPoints
     };
 
     let initialCycleIds = [];
@@ -1488,7 +1495,8 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
           UPDATE vcc_annual_plan_items
           SET provider_name = ?, frequency_label = ?, planned_months = ?, due_dates = ?,
               responsible_dept = ?, responsible_label = ?, remarks = ?, sort_order = ?,
-              initial_cycle_ids = ?, updated_at = ${NOW}, updated_by = ?
+              initial_cycle_ids = ?, mpe = ?, acceptance_criteria = ?, calibration_points = ?,
+              updated_at = ${NOW}, updated_by = ?
           WHERE id = ?
         `).bind(
           providerName,
@@ -1500,6 +1508,9 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
           remarks,
           sortOrder,
           JSON.stringify(initialCycleIds),
+          mpe,
+          acceptanceCriteria,
+          calibrationPoints,
           user.id,
           itemId
         ),
@@ -1511,8 +1522,9 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
         db.prepare(`
           INSERT INTO vcc_annual_plan_items (
             id, plan_id, asset_id, provider_name, frequency_label, planned_months, due_dates,
-            responsible_dept, responsible_label, remarks, sort_order, initial_cycle_ids, created_by, updated_by
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            responsible_dept, responsible_label, remarks, sort_order, initial_cycle_ids,
+            mpe, acceptance_criteria, calibration_points, created_by, updated_by
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).bind(
           itemId,
           planId,
@@ -1526,6 +1538,9 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
           remarks,
           sortOrder,
           JSON.stringify(initialCycleIds),
+          mpe,
+          acceptanceCriteria,
+          calibrationPoints,
           user.id,
           user.id
         ),

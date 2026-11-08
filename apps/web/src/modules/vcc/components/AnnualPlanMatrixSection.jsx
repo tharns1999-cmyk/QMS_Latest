@@ -19,6 +19,7 @@ import {
   validateVccPlanItemWorkOrder,
   submitVccPlan,
   isUserAuthorizedForPlanDept,
+  fetchApprovedPlanPdf,
 } from '../api/vccPlanApi';
 import { isApiMode } from '../../../api/client';
 import { fetchVccWorkOrders, createVccWorkOrder } from '../api/vccWorkOrderApi';
@@ -597,6 +598,23 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
     }
   };
 
+  const handleOpenOfficialPdf = async () => {
+    if (!planDetail?.plan?.id) return;
+    if (!isApiMode) {
+      toast.error('การเปิดดูเอกสารทางการ PDF ใช้ได้เมื่อเชื่อมต่อเซิร์ฟเวอร์เท่านั้น');
+      return;
+    }
+    try {
+      toast.loading('กำลังโหลดเอกสารทางการ...', { id: 'vcc-pdf' });
+      const blob = await fetchApprovedPlanPdf(planDetail.plan.id, 'view');
+      const url = window.URL.createObjectURL(blob);
+      window.open(url, '_blank');
+      toast.success('เปิดเอกสารสำเร็จ', { id: 'vcc-pdf' });
+    } catch (err) {
+      toast.error(err.message || 'ไม่สามารถเปิดเอกสารทางการได้', { id: 'vcc-pdf' });
+    }
+  };
+
   const activePlan = planDetail?.plan;
   const planItems = useMemo(() => planDetail?.items || [], [planDetail?.items]);
   const isUserEligibleEditor = useMemo(() => {
@@ -706,6 +724,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments }) => {
         onOpenHistory={() => setHistoryOpen(true)}
         onOpenJustificationModal={() => setJustificationModalOpen(true)}
         onOpenSmartImport={() => setSmartImportOpen(true)}
+        onOpenOfficialPdf={handleOpenOfficialPdf}
       />
 
       {workflowBannerError && (

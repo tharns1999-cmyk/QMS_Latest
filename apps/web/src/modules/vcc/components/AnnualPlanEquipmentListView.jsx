@@ -438,9 +438,31 @@ export const AnnualPlanEquipmentListView = ({
                       {/* 2. Asset Name & Location / Model */}
                       <td className="py-2.5 px-3.5 align-top">
                         <div className="space-y-0.5">
-                          <div className="font-semibold text-slate-800 leading-tight">
-                            {item.asset_name}
+                          <div className="font-semibold text-slate-800 leading-tight flex items-center gap-1.5 flex-wrap">
+                            <span>{item.asset_name}</span>
+                            {item.brand && (
+                              <span className="text-slate-500 font-normal text-xs">({item.brand})</span>
+                            )}
                           </div>
+                          {(item.mpe || item.acceptance_criteria || item.calibration_points) && (
+                            <div className="flex items-center gap-1.5 flex-wrap text-[10px] pt-0.5">
+                              {item.mpe && (
+                                <span className="bg-amber-50 text-amber-900 border border-amber-200/80 px-1.5 py-0.2 rounded font-medium">
+                                  MPE: {item.mpe}
+                                </span>
+                              )}
+                              {item.calibration_points && (
+                                <span className="bg-blue-50 text-blue-900 border border-blue-200/80 px-1.5 py-0.2 rounded font-medium">
+                                  จุดวัด: {item.calibration_points}
+                                </span>
+                              )}
+                              {item.acceptance_criteria && (
+                                <span className="bg-emerald-50 text-emerald-900 border border-emerald-200/80 px-1.5 py-0.2 rounded font-medium">
+                                  เกณฑ์: {item.acceptance_criteria}
+                                </span>
+                              )}
+                            </div>
+                          )}
                           {isCompositeSet && item.composite_details && (
                             <div className="text-xs text-teal-800 leading-snug line-clamp-2">
                               อุปกรณ์ในชุด: {item.composite_details}

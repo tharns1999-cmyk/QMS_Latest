@@ -43,19 +43,33 @@ const StepRow = ({ label, name, at, done, current }) => (
 export const AnnualPlanApprovalChain = ({ activePlan, thresholds = {} }) => {
   if (!activePlan) return null;
 
+  const dept = activePlan.department;
+  const isDeptProfiled = dept === 'QC' || dept === 'LB';
+  const preparerLabel = isDeptProfiled
+    ? `ผู้จัดทำ (L4+ · แผนก ${dept})`
+    : `ผู้จัดทำ (L${thresholds.min_requester_level || 1}+)`;
+  const reviewerLabel = dept === 'QC'
+    ? 'ผู้ทบทวน (PD L5)'
+    : dept === 'LB'
+      ? 'ผู้ทบทวน (LB L5)'
+      : `ผู้ทบทวน (L${thresholds.required_reviewer_level || 4}+)`;
+  const approverLabel = isDeptProfiled
+    ? 'ผู้อนุมัติ (MGT L6+)'
+    : `ผู้อนุมัติ (L${thresholds.required_approver_level || 5}+)`;
+
   return (
     <div
       data-testid="annual-plan-approval-chain"
       className="mt-2.5 pt-2.5 border-t border-slate-100 bg-slate-50/80 p-3 rounded-xl border border-slate-200/60 grid grid-cols-1 md:grid-cols-3 gap-2"
     >
       <StepRow
-        label={`ผู้จัดทำ (L${thresholds.min_requester_level || 1}+)`}
+        label={preparerLabel}
         name={activePlan.prepared_by_name || activePlan.prepared_by || 'ยังไม่ส่ง'}
         at={formatThaiDateTime(activePlan.prepared_at)}
         done={Boolean(activePlan.prepared_at)}
       />
       <StepRow
-        label={`ผู้ทบทวน (L${thresholds.required_reviewer_level || 4}+)`}
+        label={reviewerLabel}
         name={
           activePlan.reviewed_by_name ||
           activePlan.reviewed_by ||
@@ -68,7 +82,7 @@ export const AnnualPlanApprovalChain = ({ activePlan, thresholds = {} }) => {
         current={activePlan.status === 'PENDING_REVIEW'}
       />
       <StepRow
-        label={`ผู้อนุมัติ (L${thresholds.required_approver_level || 5}+)`}
+        label={approverLabel}
         name={
           activePlan.approved_by_name ||
           activePlan.approved_by ||
