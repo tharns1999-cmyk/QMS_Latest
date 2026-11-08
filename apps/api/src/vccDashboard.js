@@ -1239,7 +1239,7 @@ export const registerVccDashboardRoutes = (app, { requireAuth, audit }) => {
       status: 200,
       headers: {
         'Content-Type': 'text/csv; charset=utf-8',
-        'Content-Disposition': `attachment; filename="FM-QC-46_${year}_Rev${plan.revision}.csv"`
+        'Content-Disposition': `attachment; filename="${plan.document_code || `VCC-PLAN-${plan.department || 'QC'}`}_${year}_Rev${plan.revision}.csv"`
       }
     });
   });

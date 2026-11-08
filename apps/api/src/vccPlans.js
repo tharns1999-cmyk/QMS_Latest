@@ -11,7 +11,7 @@ export const DUE_DATE_RULES = ['END_OF_MONTH', 'START_OF_MONTH'];
 
 const DEFAULT_PROVIDERS = ['ห้องปฏิบัติการภายนอก', 'ทวนสอบภายใน', 'บ.ยูโรแพค จำกัด'];
 const DEFAULT_PLAN_SETTINGS = {
-  default_doc_code: 'FM-QC-46',
+  default_doc_code: 'VCC-PLAN',
   approval_doc_type: 'FM',
   due_date_rule: 'END_OF_MONTH'
 };
@@ -121,7 +121,6 @@ export const generatePlanPdfBuffer = async (plan, items = [], signatories = {}) 
   const doc = await PDFDocument.create();
   const font = await doc.embedFont(StandardFonts.Helvetica);
   const fontBold = await doc.embedFont(StandardFonts.HelveticaBold);
-  const page = doc.addPage([841.89, 595.28]); // A4 Landscape
 
   const safeAscii = (text, fallback = '-') => {
     if (!text) return fallback;
@@ -129,96 +128,277 @@ export const generatePlanPdfBuffer = async (plan, items = [], signatories = {}) 
     return cleaned || fallback;
   };
 
-  const docCode = safeAscii(plan.document_code || (plan.department === 'QC' ? 'FM-QC-46' : 'FM-LB-11'), 'FM-QC-46');
+  const planYear = safeAscii(plan.plan_year, String(new Date().getFullYear()));
+  const dept = safeAscii(plan.department, 'GEN');
+  const defaultDocCode = `VCC-PLAN-${dept}`;
+  const docCode = safeAscii(plan.document_code || defaultDocCode, defaultDocCode);
   const rev = safeAscii(plan.revision, '01');
   const issueDate = safeAscii(plan.form_issue_date, '-');
-  const planYear = safeAscii(plan.plan_year, String(new Date().getFullYear()));
-  const dept = safeAscii(plan.department, 'VCC');
+  const effectiveDate = safeAscii(plan.effective_date, '-');
   const attemptId = safeAscii(plan.approval_attempt_id, 'N/A');
 
-  page.drawText(`${docCode} Rev.${rev} : ANNUAL VERIFICATION / CALIBRATION PLAN ${planYear}`, {
-    x: 50,
-    y: 550,
-    size: 14,
-    font: fontBold,
-    color: rgb(0.1, 0.2, 0.45)
-  });
+  const rawTitle = safeAscii(plan.title, '');
+  const title = rawTitle.length > 3 ? rawTitle : `ANNUAL VERIFICATION & CALIBRATION PLAN ${planYear} (${dept})`;
 
-  page.drawText(`Department: ${dept} | Form Issue Date: ${issueDate} | Effective Status: CURRENT | Attempt ID: ${attemptId}`, {
-    x: 50,
-    y: 532,
-    size: 9,
-    font,
-    color: rgb(0.25, 0.25, 0.25)
-  });
+  const prepName = safeAscii(signatories.preparer?.name, plan.prepared_by_name || plan.prepared_by || 'Preparer');
+  const prepPos = safeAscii(signatories.preparer?.position, plan.prepared_by_position || 'Quality Staff');
+  const prepDate = safeAscii(plan.prepared_at, '-');
 
-  const prepName = safeAscii(signatories.preparer?.name, plan.prepared_by_name || plan.prepared_by || '-');
-  const prepPos = safeAscii(signatories.preparer?.position, plan.prepared_by_position || 'Preparer');
-  const revName = safeAscii(signatories.reviewer?.name, plan.reviewed_by_name || plan.reviewed_by || '-');
-  const revPos = safeAscii(signatories.reviewer?.position, plan.reviewed_by_position || 'Reviewer');
-  const appName = safeAscii(signatories.approver?.name, plan.approved_by_name || plan.approved_by || '-');
-  const appPos = safeAscii(signatories.approver?.position, plan.approved_by_position || 'Approver');
+  const revName = safeAscii(signatories.reviewer?.name, plan.reviewed_by_name || plan.reviewed_by || 'Reviewer');
+  const revPos = safeAscii(signatories.reviewer?.position, plan.reviewed_by_position || 'Department Reviewer');
+  const revDate = safeAscii(plan.reviewed_at, '-');
 
-  page.drawText(`Prepared By: ${prepName} (${prepPos})  |  Reviewed By: ${revName} (${revPos})  |  Approved By: ${appName} (${appPos})`, {
-    x: 50,
-    y: 505,
-    size: 9,
-    font,
-    color: rgb(0.15, 0.15, 0.15)
-  });
+  const appName = safeAscii(signatories.approver?.name, plan.approved_by_name || plan.approved_by || 'Approver');
+  const appPos = safeAscii(signatories.approver?.position, plan.approved_by_position || 'Management Approver');
+  const appDate = safeAscii(plan.approved_at, new Date().toISOString().slice(0, 10));
 
-  page.drawText(`Item Count: ${items.length} equipment scheduled`, {
-    x: 50,
-    y: 485,
-    size: 9,
-    font: fontBold,
-    color: rgb(0.2, 0.2, 0.2)
-  });
+  // Pagination calculation (Landscape A4: 841.89 x 595.28)
+  const itemsPerPage = 14;
+  const totalPages = Math.max(1, Math.ceil((items.length || 1) / itemsPerPage));
 
-  let y = 465;
-  page.drawText('No.  Asset Code     Equipment Name               Model / Serial        Schedule (Months)', {
-    x: 50,
-    y,
-    size: 8,
-    font: fontBold,
-    color: rgb(0.2, 0.2, 0.2)
-  });
-  y -= 15;
+  for (let pIdx = 0; pIdx < totalPages; pIdx++) {
+    const page = doc.addPage([841.89, 595.28]);
+    const isLastPage = pIdx === totalPages - 1;
 
-  const displayItems = items.slice(0, 25);
-  displayItems.forEach((item, idx) => {
-    const no = String(idx + 1).padStart(2, ' ');
-    const code = safeAscii(item.asset_code, '-').padEnd(14, ' ');
-    const name = safeAscii(item.asset_name, item.asset_code || 'Asset').slice(0, 26).padEnd(28, ' ');
-    const model = safeAscii(item.model || item.serial_no, '-').slice(0, 20).padEnd(22, ' ');
-    const months = Array.isArray(item.planned_months) ? item.planned_months.join(',') : '-';
-    page.drawText(`${no}.  ${code} ${name} ${model} [${months}]`, {
-      x: 50,
-      y,
-      size: 8,
-      font,
-      color: rgb(0.3, 0.3, 0.3)
+    // Header Top Banner (Dark Navy)
+    page.drawRectangle({
+      x: 36,
+      y: 520,
+      width: 769.89,
+      height: 52,
+      color: rgb(0.08, 0.15, 0.3)
     });
-    y -= 12;
-  });
 
-  if (items.length > 25) {
-    page.drawText(`... and ${items.length - 25} more items recorded in official register`, {
-      x: 50,
-      y,
+    page.drawText('QMS PORTAL · VERIFY & CALIBRATION CENTER (VCC)', {
+      x: 48,
+      y: 554,
+      size: 9,
+      font: fontBold,
+      color: rgb(0.75, 0.85, 1)
+    });
+
+    page.drawText(title.toUpperCase().slice(0, 70), {
+      x: 48,
+      y: 532,
+      size: 13,
+      font: fontBold,
+      color: rgb(1, 1, 1)
+    });
+
+    page.drawText('ISO 9001:2015 CONTROLLED RECORD', {
+      x: 580,
+      y: 554,
+      size: 8.5,
+      font: fontBold,
+      color: rgb(0.65, 0.9, 0.75)
+    });
+
+    page.drawText('STATUS: APPROVED (ELECTRONIC SIGNATURE)', {
+      x: 580,
+      y: 532,
+      size: 9.5,
+      font: fontBold,
+      color: rgb(0.5, 1, 0.6)
+    });
+
+    // Metadata Sub-banner
+    page.drawRectangle({
+      x: 36,
+      y: 472,
+      width: 769.89,
+      height: 42,
+      color: rgb(0.96, 0.97, 0.99),
+      borderColor: rgb(0.85, 0.88, 0.92),
+      borderWidth: 1
+    });
+
+    page.drawText(`Document Ref / ID: ${docCode} Rev.${rev}`, {
+      x: 48,
+      y: 498,
+      size: 8.5,
+      font: fontBold,
+      color: rgb(0.15, 0.2, 0.3)
+    });
+
+    page.drawText(`Department: ${dept}    |    Plan Year: ${planYear}`, {
+      x: 48,
+      y: 482,
       size: 8,
       font,
-      color: rgb(0.4, 0.4, 0.4)
+      color: rgb(0.3, 0.35, 0.4)
+    });
+
+    page.drawText(`Effective Date: ${effectiveDate}    |    Form Issue Date: ${issueDate}`, {
+      x: 360,
+      y: 498,
+      size: 8,
+      font,
+      color: rgb(0.3, 0.35, 0.4)
+    });
+
+    page.drawText(`Attempt Hash / ID: ${attemptId}`, {
+      x: 360,
+      y: 482,
+      size: 8,
+      font,
+      color: rgb(0.35, 0.4, 0.45)
+    });
+
+    page.drawText(`Page ${pIdx + 1} of ${totalPages}`, {
+      x: 730,
+      y: 490,
+      size: 8.5,
+      font: fontBold,
+      color: rgb(0.2, 0.25, 0.35)
+    });
+
+    // Table Header Box (Dark Slate)
+    let y = 450;
+    page.drawRectangle({
+      x: 36,
+      y: y - 16,
+      width: 769.89,
+      height: 18,
+      color: rgb(0.18, 0.24, 0.32)
+    });
+
+    page.drawText('No.', { x: 42, y: y - 11, size: 7.5, font: fontBold, color: rgb(1, 1, 1) });
+    page.drawText('Asset Code', { x: 68, y: y - 11, size: 7.5, font: fontBold, color: rgb(1, 1, 1) });
+    page.drawText('Equipment Name', { x: 155, y: y - 11, size: 7.5, font: fontBold, color: rgb(1, 1, 1) });
+    page.drawText('Brand / Model', { x: 295, y: y - 11, size: 7.5, font: fontBold, color: rgb(1, 1, 1) });
+    page.drawText('MPE / Criteria', { x: 415, y: y - 11, size: 7.5, font: fontBold, color: rgb(1, 1, 1) });
+    page.drawText('Cal. Points', { x: 525, y: y - 11, size: 7.5, font: fontBold, color: rgb(1, 1, 1) });
+    page.drawText('Schedule (Months)', { x: 605, y: y - 11, size: 7.5, font: fontBold, color: rgb(1, 1, 1) });
+    page.drawText('Provider', { x: 710, y: y - 11, size: 7.5, font: fontBold, color: rgb(1, 1, 1) });
+
+    y -= 20;
+
+    const pageItems = items.slice(pIdx * itemsPerPage, (pIdx + 1) * itemsPerPage);
+
+    if (pageItems.length === 0) {
+      page.drawText('No measuring equipment scheduled in this annual plan.', {
+        x: 48,
+        y: y - 10,
+        size: 8,
+        font,
+        color: rgb(0.5, 0.5, 0.5)
+      });
+    }
+
+    pageItems.forEach((item, idx) => {
+      const globalIdx = pIdx * itemsPerPage + idx + 1;
+      const noStr = String(globalIdx).padStart(2, '0');
+      const assetCode = safeAscii(item.asset_code, '-').slice(0, 15);
+      const assetName = safeAscii(item.asset_name, item.asset_code || 'Instrument').slice(0, 26);
+      const brandModel = safeAscii(`${item.brand || ''} ${item.model || item.serial_no || ''}`.trim(), '-').slice(0, 22);
+      const mpeCriteria = safeAscii(item.mpe || item.acceptance_criteria || '-', '-').slice(0, 20);
+      const points = safeAscii(item.calibration_points || '-', '-').slice(0, 15);
+      const months = Array.isArray(item.planned_months) && item.planned_months.length > 0 ? item.planned_months.join(',') : '-';
+      const provider = safeAscii(item.provider_name, 'In-house').slice(0, 16);
+
+      // Alternating row background
+      if (idx % 2 === 1) {
+        page.drawRectangle({
+          x: 36,
+          y: y - 14,
+          width: 769.89,
+          height: 16,
+          color: rgb(0.97, 0.98, 0.99)
+        });
+      }
+
+      page.drawText(noStr, { x: 42, y: y - 10, size: 7.5, font, color: rgb(0.2, 0.2, 0.2) });
+      page.drawText(assetCode, { x: 68, y: y - 10, size: 7.5, font: fontBold, color: rgb(0.1, 0.2, 0.4) });
+      page.drawText(assetName, { x: 155, y: y - 10, size: 7.5, font, color: rgb(0.2, 0.2, 0.2) });
+      page.drawText(brandModel, { x: 295, y: y - 10, size: 7.5, font, color: rgb(0.3, 0.3, 0.3) });
+      page.drawText(mpeCriteria, { x: 415, y: y - 10, size: 7.5, font, color: rgb(0.2, 0.2, 0.2) });
+      page.drawText(points, { x: 525, y: y - 10, size: 7.5, font, color: rgb(0.3, 0.3, 0.3) });
+      page.drawText(months, { x: 605, y: y - 10, size: 7.5, font: fontBold, color: rgb(0.1, 0.4, 0.2) });
+      page.drawText(provider, { x: 710, y: y - 10, size: 7.5, font, color: rgb(0.3, 0.3, 0.3) });
+
+      // Horizontal separator line
+      page.drawLine({
+        start: { x: 36, y: y - 14 },
+        end: { x: 805.89, y: y - 14 },
+        thickness: 0.5,
+        color: rgb(0.88, 0.9, 0.92)
+      });
+
+      y -= 16;
+    });
+
+    // On the last page, render the Electronic Signature Certification Block
+    if (isLastPage) {
+      const boxY = 60;
+      const boxW = 250;
+      const boxH = 68;
+
+      // 1. Prepared By Box
+      page.drawRectangle({
+        x: 36,
+        y: boxY,
+        width: boxW,
+        height: boxH,
+        color: rgb(0.98, 0.99, 1),
+        borderColor: rgb(0.8, 0.85, 0.92),
+        borderWidth: 1
+      });
+      page.drawText('PREPARED BY (Electronic Signature)', { x: 44, y: boxY + 54, size: 7.5, font: fontBold, color: rgb(0.2, 0.3, 0.5) });
+      page.drawText(`Name: ${prepName}`, { x: 44, y: boxY + 40, size: 8, font, color: rgb(0.15, 0.15, 0.15) });
+      page.drawText(`Position: ${prepPos}`, { x: 44, y: boxY + 28, size: 7.5, font, color: rgb(0.35, 0.35, 0.35) });
+      page.drawText(`Date/Time: ${prepDate}`, { x: 44, y: boxY + 16, size: 7, font, color: rgb(0.4, 0.4, 0.4) });
+      page.drawText('State: SUBMITTED ELECTRONICALLY', { x: 44, y: boxY + 5, size: 6.5, font: fontBold, color: rgb(0.1, 0.5, 0.3) });
+
+      // 2. Reviewed By Box
+      page.drawRectangle({
+        x: 296,
+        y: boxY,
+        width: boxW,
+        height: boxH,
+        color: rgb(0.98, 0.99, 1),
+        borderColor: rgb(0.8, 0.85, 0.92),
+        borderWidth: 1
+      });
+      page.drawText('REVIEWED BY (Electronic Signature)', { x: 304, y: boxY + 54, size: 7.5, font: fontBold, color: rgb(0.2, 0.3, 0.5) });
+      page.drawText(`Name: ${revName}`, { x: 304, y: boxY + 40, size: 8, font, color: rgb(0.15, 0.15, 0.15) });
+      page.drawText(`Position: ${revPos}`, { x: 304, y: boxY + 28, size: 7.5, font, color: rgb(0.35, 0.35, 0.35) });
+      page.drawText(`Date/Time: ${revDate}`, { x: 304, y: boxY + 16, size: 7, font, color: rgb(0.4, 0.4, 0.4) });
+      page.drawText('State: REVIEWED & VERIFIED', { x: 304, y: boxY + 5, size: 6.5, font: fontBold, color: rgb(0.1, 0.4, 0.6) });
+
+      // 3. Approved By Box
+      page.drawRectangle({
+        x: 556,
+        y: boxY,
+        width: 249.89,
+        height: boxH,
+        color: rgb(0.96, 0.99, 0.97),
+        borderColor: rgb(0.7, 0.85, 0.75),
+        borderWidth: 1
+      });
+      page.drawText('APPROVED BY (Electronic Signature)', { x: 564, y: boxY + 54, size: 7.5, font: fontBold, color: rgb(0.1, 0.45, 0.25) });
+      page.drawText(`Name: ${appName}`, { x: 564, y: boxY + 40, size: 8, font, color: rgb(0.15, 0.15, 0.15) });
+      page.drawText(`Position: ${appPos}`, { x: 564, y: boxY + 28, size: 7.5, font, color: rgb(0.35, 0.35, 0.35) });
+      page.drawText(`Date/Time: ${appDate}`, { x: 564, y: boxY + 16, size: 7, font, color: rgb(0.4, 0.4, 0.4) });
+      page.drawText('State: APPROVED & AUTHORIZED', { x: 564, y: boxY + 5, size: 6.5, font: fontBold, color: rgb(0.08, 0.5, 0.2) });
+    }
+
+    // Official Footer (ISO 9001 Clauses & WORM storage statement)
+    page.drawText('CONTROLLED ELECTRONIC DOCUMENT - QMS PORTAL VCC (ISO 9001:2015 Clause 7.1.5 & Clause 7.5.3)', {
+      x: 36,
+      y: 28,
+      size: 7.5,
+      font: fontBold,
+      color: rgb(0.35, 0.4, 0.45)
+    });
+
+    page.drawText('Cryptographically validated on Cloudflare R2 & D1 ledger. Uncontrolled when printed or detached from QMS-Portal.', {
+      x: 36,
+      y: 16,
+      size: 7,
+      font,
+      color: rgb(0.5, 0.55, 0.6)
     });
   }
-
-  page.drawText('CONTROLLED ELECTRONIC DOCUMENT - QMS PORTAL VCC (ISO 9001:2015 Clause 7.1.5 & Clause 7.5.3)', {
-    x: 50,
-    y: 30,
-    size: 8,
-    font: fontBold,
-    color: rgb(0.4, 0.4, 0.4)
-  });
 
   return await doc.save();
 };
@@ -1244,11 +1424,12 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
     }
 
     const planSettings = await loadPlanSettings(db);
-    const documentCode = clean(body.document_code ?? deptProfile?.document_code ?? planSettings.default_doc_code, 50);
-    const revision = clean(body.revision ?? deptProfile?.revision ?? '00', 10);
-    const formIssueDate = clean(body.form_issue_date ?? deptProfile?.form_issue_date ?? null, 30);
+    const defaultDocCode = deptProfile?.document_code || `VCC-PLAN-${department}`;
+    const documentCode = clean(body.document_code, 50) || defaultDocCode;
+    const revision = clean(body.revision, 10) || deptProfile?.revision || '01';
+    const formIssueDate = clean(body.form_issue_date, 30) || deptProfile?.form_issue_date || null;
     const defaultTitle = deptProfile?.title_th ? `${deptProfile.title_th} ${planYear}` : `แผนการทวนสอบเครื่องมือประจำปี ${planYear}`;
-    const title = clean(body.title ?? defaultTitle, 300);
+    const title = clean(body.title, 300) || defaultTitle;
     const dueDateRule = String(body.due_date_rule ?? planSettings.due_date_rule).toUpperCase();
 
     if (!documentCode || !revision || !title) {
@@ -1835,63 +2016,7 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
       return c.json({ error: `ผู้จัดทำแผนต้องมีระดับอนุมัติ L${thresholds.min_requester_level} ขึ้นไป` }, 403);
     }
 
-    const items = await fetchPlanItems(db, id, plan);
-    if (items.length === 0) {
-      return c.json({ error: 'กรุณาเพิ่มรายการเครื่องมือในแผนอย่างน้อย 1 รายการก่อนส่งขออนุมัติ' }, 400);
-    }
-
-    // Submission gate 1: Block submission if any legacy Logical Group items remain unresolved in DRAFT/REJECTED plan
-    const groupItems = items.filter((i) => Number(i.is_group) === 1 && i.group_nature !== 'COMPOSITE_SET');
-    if (groupItems.length > 0) {
-      const groupCodes = groupItems.map((i) => i.asset_code).join(', ');
-      return c.json({
-        error: `พบรายการกลุ่มเครื่องมือเดิม (${groupCodes}) ค้างอยู่ในแผน กรุณาปรับเป็นเครื่องมือรายตัวก่อนส่งทบทวนแผน`,
-        unresolved_group_items: groupItems.map((i) => ({ id: i.id, asset_id: i.asset_id, asset_code: i.asset_code, asset_name: i.asset_name }))
-      }, 400);
-    }
-
-    // Submission gate 2: Every independent Calibratable Unit must have planned months or an unplanned justification
-    const calibratableUnits = items.filter((i) => Number(i.is_group) === 0 || i.group_nature === 'COMPOSITE_SET');
-    const unplannedWithoutJustification = [];
-
-    for (const item of calibratableUnits) {
-      const hasPlan = Array.isArray(item.planned_months) && item.planned_months.length > 0;
-      const hasRemarks = Boolean(item.remarks && item.remarks.trim());
-      if (!hasPlan && !hasRemarks) {
-        unplannedWithoutJustification.push(item);
-      }
-    }
-
-    if (unplannedWithoutJustification.length > 0) {
-      const codes = unplannedWithoutJustification.map((i) => i.asset_code).join(', ');
-      return c.json({
-        error: `กรุณาวางแผนเดือนทวนสอบหรือระบุเหตุผลที่ไม่วางแผนสำหรับเครื่องมือ (${codes}) ก่อนส่งทบทวน`,
-        unplanned_items: unplannedWithoutJustification.map((i) => ({ id: i.id, asset_code: i.asset_code, asset_name: i.asset_name }))
-      }, 400);
-    }
-
-    // Submission gate 3: Plan Revisions must have 0 unresolved conflicts
-    if (plan.parent_plan_id) {
-      const parentPlan = await fetchPlan(db, plan.parent_plan_id);
-      if (parentPlan) {
-        const diff = await computePlanDiff(db, plan, parentPlan);
-        if (diff.unresolved_conflicts && diff.unresolved_conflicts.length > 0) {
-          return c.json({
-            error: 'ไม่สามารถส่งแผนได้เนื่องจากมีรอบสอบเทียบที่ขัดแย้งหรือคลุมเครือ (Unresolved Conflicts) กรุณาระบุการจับคู่รอบให้ชัดเจนก่อนส่งแผน',
-            conflicts: diff.unresolved_conflicts,
-            diff_summary: diff.summary
-          }, 409);
-        }
-        if (!diff.summary.invariants_satisfied || !diff.summary.can_reconcile) {
-          return c.json({
-            error: 'ไม่สามารถส่งแผนได้เนื่องจากผลการวิเคราะห์ความแตกต่างของแผนไม่ผ่านเงื่อนไขความถูกต้อง (Invariants Check Failed)',
-            diff_summary: diff.summary
-          }, 409);
-        }
-      }
-    }
-
-    // Reviewer and Approver Assignment
+    // Reviewer and Approver Assignment & Segregation of Duties (checked before item content)
     const body = await c.req.json().catch(() => ({}));
     const bodyRevId = cleanOpt(body.reviewer_id || body.reviewerId, 100);
     const bodyAppId = cleanOpt(body.approver_id || body.approverId, 100);
@@ -1968,6 +2093,62 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
         if (assignedRevId && approverUser.id === assignedRevId) return c.json({ error: 'ผู้ทบทวนไม่สามารถเป็นผู้อนุมัติแผนที่ตนทบทวนได้' }, 400);
         if (approverUser.approval_level < thresholds.required_approver_level) {
           return c.json({ error: `ผู้อนุมัติต้องมีระดับอนุมัติ L${thresholds.required_approver_level} ขึ้นไปตาม Approval Matrix` }, 400);
+        }
+      }
+    }
+
+    const items = await fetchPlanItems(db, id, plan);
+    if (items.length === 0) {
+      return c.json({ error: 'กรุณาเพิ่มรายการเครื่องมือในแผนอย่างน้อย 1 รายการก่อนส่งขออนุมัติ' }, 400);
+    }
+
+    // Submission gate 1: Block submission if any legacy Logical Group items remain unresolved in DRAFT/REJECTED plan
+    const groupItems = items.filter((i) => Number(i.is_group) === 1 && i.group_nature !== 'COMPOSITE_SET');
+    if (groupItems.length > 0) {
+      const groupCodes = groupItems.map((i) => i.asset_code).join(', ');
+      return c.json({
+        error: `พบรายการกลุ่มเครื่องมือเดิม (${groupCodes}) ค้างอยู่ในแผน กรุณาปรับเป็นเครื่องมือรายตัวก่อนส่งทบทวนแผน`,
+        unresolved_group_items: groupItems.map((i) => ({ id: i.id, asset_id: i.asset_id, asset_code: i.asset_code, asset_name: i.asset_name }))
+      }, 400);
+    }
+
+    // Submission gate 2: Every independent Calibratable Unit must have planned months or an unplanned justification
+    const calibratableUnits = items.filter((i) => Number(i.is_group) === 0 || i.group_nature === 'COMPOSITE_SET');
+    const unplannedWithoutJustification = [];
+
+    for (const item of calibratableUnits) {
+      const hasPlan = Array.isArray(item.planned_months) && item.planned_months.length > 0;
+      const hasRemarks = Boolean(item.remarks && item.remarks.trim());
+      if (!hasPlan && !hasRemarks) {
+        unplannedWithoutJustification.push(item);
+      }
+    }
+
+    if (unplannedWithoutJustification.length > 0) {
+      const codes = unplannedWithoutJustification.map((i) => i.asset_code).join(', ');
+      return c.json({
+        error: `กรุณาวางแผนเดือนทวนสอบหรือระบุเหตุผลที่ไม่วางแผนสำหรับเครื่องมือ (${codes}) ก่อนส่งทบทวน`,
+        unplanned_items: unplannedWithoutJustification.map((i) => ({ id: i.id, asset_code: i.asset_code, asset_name: i.asset_name }))
+      }, 400);
+    }
+
+    // Submission gate 3: Plan Revisions must have 0 unresolved conflicts
+    if (plan.parent_plan_id) {
+      const parentPlan = await fetchPlan(db, plan.parent_plan_id);
+      if (parentPlan) {
+        const diff = await computePlanDiff(db, plan, parentPlan);
+        if (diff.unresolved_conflicts && diff.unresolved_conflicts.length > 0) {
+          return c.json({
+            error: 'ไม่สามารถส่งแผนได้เนื่องจากมีรอบสอบเทียบที่ขัดแย้งหรือคลุมเครือ (Unresolved Conflicts) กรุณาระบุการจับคู่รอบให้ชัดเจนก่อนส่งแผน',
+            conflicts: diff.unresolved_conflicts,
+            diff_summary: diff.summary
+          }, 409);
+        }
+        if (!diff.summary.invariants_satisfied || !diff.summary.can_reconcile) {
+          return c.json({
+            error: 'ไม่สามารถส่งแผนได้เนื่องจากผลการวิเคราะห์ความแตกต่างของแผนไม่ผ่านเงื่อนไขความถูกต้อง (Invariants Check Failed)',
+            diff_summary: diff.summary
+          }, 409);
         }
       }
     }
@@ -2265,7 +2446,7 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
     }
 
     const attemptId = crypto.randomUUID();
-    const docCode = plan.document_code || (plan.department === 'QC' ? 'FM-QC-46' : 'FM-LB-11');
+    const docCode = plan.document_code || `VCC-PLAN-${plan.department || 'GEN'}`;
     const pdfKey = `vcc/plans/${plan.id}/${docCode}_${plan.plan_year}_Rev${plan.revision}_${attemptId}.pdf`;
 
     const items = await fetchPlanItems(db, id, plan);
@@ -2443,7 +2624,7 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
     const headers = new Headers();
     headers.set('Content-Type', obj.httpMetadata?.contentType || 'application/pdf');
     if (obj.httpEtag) headers.set('ETag', obj.httpEtag);
-    const fileName = `${plan.document_code || 'Plan'}_${plan.plan_year}_Rev${plan.revision}_Approved.pdf`;
+    const fileName = `${plan.document_code || `VCC-PLAN-${plan.department || 'GEN'}`}_${plan.plan_year}_Rev${plan.revision}_Approved.pdf`;
     headers.set('Content-Disposition', `inline; filename="${fileName}"`);
 
     return new Response(obj.body, { headers });

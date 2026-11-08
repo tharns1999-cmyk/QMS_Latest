@@ -30,6 +30,22 @@ export const PlanFormModal = ({
   onSubmit,
   activeDepartments
 }) => {
+  const [docProfiles, setDocProfiles] = useState({});
+
+  useEffect(() => {
+    let alive = true;
+    if (open) {
+      fetchVccDocumentProfiles()
+        .then((res) => {
+          if (alive && res?.profiles) setDocProfiles(res.profiles);
+        })
+        .catch(() => {});
+    }
+    return () => {
+      alive = false;
+    };
+  }, [open]);
+
   const isDirty = useMemo(() => {
     if (!form) return false;
     if (editingPlan) {
@@ -162,24 +178,17 @@ export const PlanFormModal = ({
                     const yr = form.plan_year ? String(form.plan_year) : '';
                     if (editingPlan) {
                       setForm({ ...form, department: dept });
-                    } else if (dept === 'QC') {
-                      setForm({
-                        ...form,
-                        department: dept,
-                        document_code: 'FM-QC-46',
-                        revision: '01',
-                        title: yr ? `แผนการทวนสอบเครื่องมือประจำปี ${yr}` : 'แผนการทวนสอบเครื่องมือประจำปี'
-                      });
-                    } else if (dept === 'LB') {
-                      setForm({
-                        ...form,
-                        department: dept,
-                        document_code: 'FM-LB-11',
-                        revision: '02',
-                        title: yr ? `แผนการสอบเทียบเครื่องมือที่ใช้ในห้องปฏิบัติการจุลชีววิทยา ประจำปี ${yr}` : 'แผนการสอบเทียบเครื่องมือที่ใช้ในห้องปฏิบัติการจุลชีววิทยา ประจำปี'
-                      });
                     } else {
-                      setForm({ ...form, department: dept });
+                      const prof = (docProfiles && docProfiles[dept]) || {};
+                      setForm({
+                        ...form,
+                        department: dept,
+                        document_code: prof.document_code || `VCC-PLAN-${dept}`,
+                        revision: prof.revision || '01',
+                        title: yr
+                          ? (prof.title_th ? `${prof.title_th} ${yr}` : `แผนการทวนสอบเครื่องมือประจำปี ${yr} (${dept})`)
+                          : (prof.title_th || `แผนการทวนสอบเครื่องมือประจำปี (${dept})`)
+                      });
                     }
                   }}
                   className="w-full h-9.5 px-3 rounded-lg border border-slate-300 text-xs font-medium bg-white disabled:bg-slate-100/90 text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600"
@@ -211,10 +220,12 @@ export const PlanFormModal = ({
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">รหัสแบบฟอร์มเอกสาร</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  รหัสเอกสารอ้างอิง / Electronic ID (เว้นว่างได้)
+                </label>
                 <input
                   type="text"
-                  required
+                  placeholder={`เช่น VCC-PLAN-${form.department || 'QC'}`}
                   value={form.document_code}
                   onChange={(e) => setForm({ ...form, document_code: e.target.value })}
                   className="w-full h-9.5 px-3 rounded-lg border border-slate-300 text-xs font-mono font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600"
@@ -621,7 +632,7 @@ export const PlanItemModal = ({
             </div>
           </div>
 
-          {/* Department-specific metrology fields (FM-QC-46 / FM-LB-11) */}
+          {/* Department-specific metrology fields (ISO 9001 Clause 7.1.5) */}
           <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 space-y-3">
             <div className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
               <FileText size={13} className="text-indigo-600 shrink-0" />
@@ -1260,10 +1271,10 @@ export const PlanSettingsModal = ({
         // Populate initial dept draft
         const initial = loadedProfiles[selectedDept] || {};
         setDeptDraft({
-          document_code: initial.document_code || (selectedDept === 'QC' ? 'FM-QC-46' : 'FM-LB-11'),
-          revision: initial.revision || (selectedDept === 'QC' ? '01' : '02'),
-          form_issue_date: initial.form_issue_date || (selectedDept === 'QC' ? '2026-06-09' : '2026-08-10'),
-          title_th: initial.title_th || (selectedDept === 'QC' ? 'แผนการทวนสอบเครื่องมือประจำปี' : 'แผนการสอบเทียบเครื่องมือที่ใช้ในห้องปฏิบัติการจุลชีววิทยา ประจำปี'),
+          document_code: initial.document_code || `VCC-PLAN-${selectedDept}`,
+          revision: initial.revision || '01',
+          form_issue_date: initial.form_issue_date || '',
+          title_th: initial.title_th || `แผนการทวนสอบและสอบเทียบเครื่องมือประจำปี (${selectedDept})`,
           min_preparer_level: initial.min_preparer_level || 4,
           assigned_reviewer_id: initial.assigned_reviewer_id || '',
           assigned_approver_id: initial.assigned_approver_id || ''
@@ -1476,7 +1487,7 @@ export const PlanSettingsModal = ({
                         : 'text-slate-600 hover:text-slate-900'
                     }`}
                   >
-                    แผนก QC (FM-QC-46 R01)
+                    แผนก QC {profiles.QC?.document_code ? `(${profiles.QC.document_code})` : ''}
                   </button>
                   <button
                     type="button"
@@ -1487,7 +1498,7 @@ export const PlanSettingsModal = ({
                         : 'text-slate-600 hover:text-slate-900'
                     }`}
                   >
-                    แผนก LAB (FM-LB-11 R02)
+                    แผนก LAB {profiles.LB?.document_code ? `(${profiles.LB.document_code})` : ''}
                   </button>
                 </div>
 
@@ -1505,12 +1516,12 @@ export const PlanSettingsModal = ({
                   <div className="space-y-3.5">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1">รหัสแบบฟอร์มควบคุม (Document Code)</label>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">รหัสเอกสารอ้างอิง / Electronic ID (ถ้ามี)</label>
                         <input
                           type="text"
                           value={deptDraft.document_code}
                           onChange={(e) => setDeptDraft({ ...deptDraft, document_code: e.target.value })}
-                          placeholder={selectedDept === 'QC' ? 'FM-QC-46' : 'FM-LB-11'}
+                          placeholder={`เช่น VCC-PLAN-${selectedDept} หรือ รหัสเอกสารของบริษัท`}
                           className="w-full h-10 px-3 rounded-xl border border-slate-300 text-sm font-medium"
                         />
                       </div>

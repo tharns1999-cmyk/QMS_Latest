@@ -115,7 +115,7 @@ const getShortPlanTitle = (plan) => {
 };
 
 /**
- * Compact Executive Planning Header (FM-QC-46)
+ * Compact Executive Planning Header (Paperless ISO 9001 Electronic Record)
  * ออกแบบตามแนวคิด Clean Minimal Luxury + Progress Stepper สไตล์ Enterprise SaaS
  * - Tier 1: Primary Identity & Context (ซ้าย) + Plan Switcher, Filter & Actions (ขวา)
  * - Tier 2: Visual Workflow Progress Stepper (4 ขั้นตอน ร่าง -> ทบทวน -> อนุมัติ -> บังคับใช้)
@@ -302,7 +302,7 @@ export const AnnualPlanWorkspaceHeader = ({
               {/* Inline Metadata Tags */}
               <div className="flex items-center gap-2 flex-wrap text-xs text-slate-600">
                 <span className="font-mono font-semibold text-slate-800 bg-slate-100 px-2 py-0.5 rounded border border-slate-200/80 shadow-2xs">
-                  {activePlan.document_code} Rev.{activePlan.revision}
+                  {activePlan.document_code || `VCC-PLAN-${activePlan.department}`} Rev.{activePlan.revision}
                 </span>
 
                 {activePlan.form_issue_date && (
@@ -361,7 +361,7 @@ export const AnnualPlanWorkspaceHeader = ({
             {effectivePlans.length === 0 && <option value="">ไม่มีแผนในสถานะนี้</option>}
             {effectivePlans.map((p) => (
               <option key={p.id} value={p.id}>
-                ปี {p.plan_year} · แผนก {p.department} · {p.document_code} Rev.{p.revision}
+                ปี {p.plan_year} · แผนก {p.department} · {p.document_code || `VCC-PLAN-${p.department}`} Rev.{p.revision}
               </option>
             ))}
           </select>

@@ -520,4 +520,94 @@ describe('VCC Phase 1 Step 3: Backend Workflow & Approval Security', () => {
     expect(dccCreateLabRes.status).toBe(403);
     expect(dccCreateLabRes.body.error).toContain('ผู้จัดทำต้องสังกัดแผนกเจ้าของแผน (LB) เท่านั้น');
   });
+
+  // 13. Pure Electronic Paperless Quality System & Decoupled Dynamic PDF
+  it('supports 100% paperless electronic plans without paper FM codes and generates dynamic ISO 9001 PDF', async () => {
+    // Setup QA-PREP-L4 with L4+ approval in QA
+    const hash = await hashPassword(PASSWORD);
+    await env.DB.prepare(`
+      INSERT INTO users (id, name, email, password_hash, role, approval_level, primary_department, departments, status)
+      VALUES ('QA-PREP-L4', 'QA Quality Officer', 'qa-prep-l4@test.local', ?, 'USER', 4, 'QA', '["QA"]', 'ACTIVE')
+      ON CONFLICT(id) DO UPDATE SET approval_level = 4, status = 'ACTIVE'
+    `).bind(hash).run();
+
+    const loginRes = await app.request('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'qa-prep-l4@test.local', password: PASSWORD })
+    }, env);
+    const loginJson = await loginRes.json();
+    tokens['QA-PREP-L4'] = loginJson.token;
+
+    // Add an equipment for QA
+    await env.DB.prepare(`
+      INSERT INTO vcc_assets (
+        id, asset_code, name, asset_type, department, model, serial_no, brand,
+        location, status
+      ) VALUES (
+        'ASSET-QA-001', 'CAL-QA-001', 'Spectrophotometer', 'เครื่องสเปกโตรโฟโตมิเตอร์', 'QA', 'DR-3900', 'SN-QA-01', 'Hach',
+        'QA Analytical Lab', 'ACTIVE'
+      ) ON CONFLICT(id) DO NOTHING
+    `).run();
+
+    // 1. Create plan WITHOUT document_code (Pure Electronic Mode)
+    const planRes = await call('POST', '/api/vcc/plans', 'QA-PREP-L4', {
+      plan_year: 2097,
+      department: 'QA'
+      // document_code is omitted on purpose
+    });
+    expect(planRes.status).toBe(201);
+    const plan = planRes.body.plan;
+    expect(plan.document_code).toBe('VCC-PLAN-QA');
+    expect(plan.revision).toBe('01');
+    expect(plan.status).toBe('DRAFT');
+
+    // 2. Add planned item
+    const itemRes = await call('POST', `/api/vcc/plans/${plan.id}/items`, 'QA-PREP-L4', {
+      asset_id: 'ASSET-QA-001',
+      provider_name: 'External Lab',
+      responsible_dept: 'QA',
+      planned_months: [4, 10],
+      mpe: '±1 nm',
+      acceptance_criteria: 'Bandwidth 2 nm',
+      calibration_points: 'Holmium Oxide Wavelength'
+    });
+    expect(itemRes.status).toBe(201);
+
+    // 3. Submit plan (Maker-checker with QA-REV-L5 and MGT-APP-L6)
+    const submitRes = await call('POST', `/api/vcc/plans/${plan.id}/submit`, 'QA-PREP-L4', {
+      reviewer_id: 'QA-REV-L5',
+      approver_id: 'MGT-APP-L6'
+    });
+    expect(submitRes.status).toBe(200);
+    expect(submitRes.body.plan.status).toBe('PENDING_REVIEW');
+
+    // 4. Review plan (QA-REV-L5 token is from beforeAll)
+    const reviewRes = await call('POST', `/api/vcc/plans/${plan.id}/review`, 'QA-REV-L5', {
+      comment: 'QA electronic calibration schedule verified'
+    });
+    expect(reviewRes.status).toBe(200);
+    expect(reviewRes.body.plan.status).toBe('PENDING_APPROVAL');
+
+    // 5. Approve plan
+    const approveRes = await call('POST', `/api/vcc/plans/${plan.id}/approve`, 'MGT-APP-L6', {
+      comment: 'Approved pure electronic quality plan'
+    });
+    expect(approveRes.status).toBe(200);
+    const approvedPlan = approveRes.body.plan;
+    expect(approvedPlan.status).toBe('APPROVED');
+    expect(approvedPlan.document_code).toBe('VCC-PLAN-QA');
+    expect(approvedPlan.pdf_file_key).toContain(`vcc/plans/${plan.id}/VCC-PLAN-QA_2097_Rev01_`);
+
+    // 6. Verify PDF download and headers
+    const pdfRes = await app.request(`/api/vcc/plans/${plan.id}/pdf`, {
+      headers: { Authorization: `Bearer ${tokens['QA-PREP-L4']}` }
+    }, env);
+    expect(pdfRes.status).toBe(200);
+    expect(pdfRes.headers.get('content-type')).toBe('application/pdf');
+    expect(pdfRes.headers.get('content-disposition')).toContain('VCC-PLAN-QA_2097_Rev01_Approved.pdf');
+
+    const pdfBuffer = await pdfRes.arrayBuffer();
+    expect(pdfBuffer.byteLength).toBeGreaterThan(1000);
+  });
 });

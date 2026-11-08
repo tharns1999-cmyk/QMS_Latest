@@ -163,7 +163,7 @@ describe('VCC Phase 1 Step 4: QC/LAB Department Forms & Workflow UI', () => {
     expect(screen.getByText(/เกณฑ์: Error ≤ MPE/i)).toBeInTheDocument();
   });
 
-  it('5. PlanFormModal auto-populates FM-QC-46 and FM-LB-11 defaults when selecting department', () => {
+  it('5. PlanFormModal auto-populates paperless electronic defaults when selecting department', () => {
     let currentForm = { plan_year: 2026, department: '', document_code: '', revision: '', title: '' };
     const setForm = (updater) => {
       currentForm = typeof updater === 'function' ? updater(currentForm) : updater;
@@ -188,16 +188,16 @@ describe('VCC Phase 1 Step 4: QC/LAB Department Forms & Workflow UI', () => {
     fireEvent.change(deptSelect, { target: { value: 'QC' } });
 
     expect(currentForm.department).toBe('QC');
-    expect(currentForm.document_code).toBe('FM-QC-46');
+    expect(currentForm.document_code).toBe('VCC-PLAN-QC');
     expect(currentForm.revision).toBe('01');
     expect(currentForm.title).toContain('แผนการทวนสอบเครื่องมือประจำปี 2026');
 
     // Simulate choosing LB
     fireEvent.change(deptSelect, { target: { value: 'LB' } });
     expect(currentForm.department).toBe('LB');
-    expect(currentForm.document_code).toBe('FM-LB-11');
-    expect(currentForm.revision).toBe('02');
-    expect(currentForm.title).toContain('แผนการสอบเทียบเครื่องมือที่ใช้ในห้องปฏิบัติการจุลชีววิทยา');
+    expect(currentForm.document_code).toBe('VCC-PLAN-LB');
+    expect(currentForm.revision).toBe('01');
+    expect(currentForm.title).toContain('แผนการทวนสอบเครื่องมือประจำปี 2026');
   });
 
   it('6. PlanSubmitModal includes assigned PD reviewer for QC plan submission', () => {
