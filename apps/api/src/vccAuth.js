@@ -90,6 +90,37 @@ export const DCC_ONLY = { error: 'เฉพาะ DCC เท่านั้น�
 export const requireVccAccess = async (c, next) => {
   const user = c.get('user');
   if (!isVccAuthorized(user)) {
+    // If not globally authorized by department, grant access if user is designated as reviewer or approver on a VCC document profile or plan
+    if (c.env?.DB && user?.id) {
+      try {
+        const [planAssigned, profileRow] = await Promise.all([
+          c.env.DB.prepare(`
+            SELECT 1 FROM vcc_annual_plans WHERE assigned_reviewer_id = ? OR assigned_approver_id = ? LIMIT 1
+          `).bind(user.id, user.id).first(),
+          c.env.DB.prepare(`
+            SELECT value FROM settings WHERE key = 'vcc_document_profiles'
+          `).first()
+        ]);
+        if (planAssigned) {
+          await next();
+          return;
+        }
+        if (profileRow?.value) {
+          try {
+            const profiles = JSON.parse(profileRow.value);
+            const isProfileAssigned = Object.values(profiles).some(
+              (p) => p.assigned_reviewer_id === user.id || p.assigned_approver_id === user.id
+            );
+            if (isProfileAssigned) {
+              await next();
+              return;
+            }
+          } catch {}
+        }
+      } catch (err) {
+        console.error('requireVccAccess DB check error:', err);
+      }
+    }
     return c.json(VCC_FORBIDDEN, 403);
   }
   await next();

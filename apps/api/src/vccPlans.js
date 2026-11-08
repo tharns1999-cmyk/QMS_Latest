@@ -116,6 +116,113 @@ export const getDocumentProfileForDept = async (db, dept) => {
   return profile;
 };
 
+export const generatePlanPdfBuffer = async (plan, items = [], signatories = {}) => {
+  const { PDFDocument, StandardFonts, rgb } = await import('pdf-lib');
+  const doc = await PDFDocument.create();
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  const fontBold = await doc.embedFont(StandardFonts.HelveticaBold);
+  const page = doc.addPage([841.89, 595.28]); // A4 Landscape
+
+  const safeAscii = (text, fallback = '-') => {
+    if (!text) return fallback;
+    const cleaned = String(text).replace(/[^\x20-\x7E]/g, '').trim();
+    return cleaned || fallback;
+  };
+
+  const docCode = safeAscii(plan.document_code || (plan.department === 'QC' ? 'FM-QC-46' : 'FM-LB-11'), 'FM-QC-46');
+  const rev = safeAscii(plan.revision, '01');
+  const issueDate = safeAscii(plan.form_issue_date, '-');
+  const planYear = safeAscii(plan.plan_year, String(new Date().getFullYear()));
+  const dept = safeAscii(plan.department, 'VCC');
+  const attemptId = safeAscii(plan.approval_attempt_id, 'N/A');
+
+  page.drawText(`${docCode} Rev.${rev} : ANNUAL VERIFICATION / CALIBRATION PLAN ${planYear}`, {
+    x: 50,
+    y: 550,
+    size: 14,
+    font: fontBold,
+    color: rgb(0.1, 0.2, 0.45)
+  });
+
+  page.drawText(`Department: ${dept} | Form Issue Date: ${issueDate} | Effective Status: CURRENT | Attempt ID: ${attemptId}`, {
+    x: 50,
+    y: 532,
+    size: 9,
+    font,
+    color: rgb(0.25, 0.25, 0.25)
+  });
+
+  const prepName = safeAscii(signatories.preparer?.name, plan.prepared_by_name || plan.prepared_by || '-');
+  const prepPos = safeAscii(signatories.preparer?.position, plan.prepared_by_position || 'Preparer');
+  const revName = safeAscii(signatories.reviewer?.name, plan.reviewed_by_name || plan.reviewed_by || '-');
+  const revPos = safeAscii(signatories.reviewer?.position, plan.reviewed_by_position || 'Reviewer');
+  const appName = safeAscii(signatories.approver?.name, plan.approved_by_name || plan.approved_by || '-');
+  const appPos = safeAscii(signatories.approver?.position, plan.approved_by_position || 'Approver');
+
+  page.drawText(`Prepared By: ${prepName} (${prepPos})  |  Reviewed By: ${revName} (${revPos})  |  Approved By: ${appName} (${appPos})`, {
+    x: 50,
+    y: 505,
+    size: 9,
+    font,
+    color: rgb(0.15, 0.15, 0.15)
+  });
+
+  page.drawText(`Item Count: ${items.length} equipment scheduled`, {
+    x: 50,
+    y: 485,
+    size: 9,
+    font: fontBold,
+    color: rgb(0.2, 0.2, 0.2)
+  });
+
+  let y = 465;
+  page.drawText('No.  Asset Code     Equipment Name               Model / Serial        Schedule (Months)', {
+    x: 50,
+    y,
+    size: 8,
+    font: fontBold,
+    color: rgb(0.2, 0.2, 0.2)
+  });
+  y -= 15;
+
+  const displayItems = items.slice(0, 25);
+  displayItems.forEach((item, idx) => {
+    const no = String(idx + 1).padStart(2, ' ');
+    const code = safeAscii(item.asset_code, '-').padEnd(14, ' ');
+    const name = safeAscii(item.asset_name, item.asset_code || 'Asset').slice(0, 26).padEnd(28, ' ');
+    const model = safeAscii(item.model || item.serial_no, '-').slice(0, 20).padEnd(22, ' ');
+    const months = Array.isArray(item.planned_months) ? item.planned_months.join(',') : '-';
+    page.drawText(`${no}.  ${code} ${name} ${model} [${months}]`, {
+      x: 50,
+      y,
+      size: 8,
+      font,
+      color: rgb(0.3, 0.3, 0.3)
+    });
+    y -= 12;
+  });
+
+  if (items.length > 25) {
+    page.drawText(`... and ${items.length - 25} more items recorded in official register`, {
+      x: 50,
+      y,
+      size: 8,
+      font,
+      color: rgb(0.4, 0.4, 0.4)
+    });
+  }
+
+  page.drawText('CONTROLLED ELECTRONIC DOCUMENT - QMS PORTAL VCC (ISO 9001:2015 Clause 7.1.5 & Clause 7.5.3)', {
+    x: 50,
+    y: 30,
+    size: 8,
+    font: fontBold,
+    color: rgb(0.4, 0.4, 0.4)
+  });
+
+  return await doc.save();
+};
+
 export { getUserDepartments };
 
 export const isUserAuthorizedForPlanDept = (user, planDepartment) => {
@@ -861,10 +968,10 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
     const profiles = await loadDocumentProfiles(db);
 
     const { results: rawUsers } = await db.prepare(`
-      SELECT id, name, position, department, departments, approval_level, status
+      SELECT id, name, position, primary_department, departments, approval_level, status
       FROM users
       WHERE status = 'ACTIVE'
-      ORDER BY department ASC, approval_level DESC, name ASC
+      ORDER BY primary_department ASC, approval_level DESC, name ASC
     `).all();
 
     const activeUsers = (rawUsers || []).map((u) => ({
@@ -878,7 +985,7 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
     }));
 
     const candidates = {
-      qc_reviewers: activeUsers.filter((u) => (u.departments.includes('PD') || u.departments.includes('QA')) && u.approval_level >= 5),
+      qc_reviewers: activeUsers.filter((u) => u.departments.includes('PD') && u.approval_level >= 5),
       lab_reviewers: activeUsers.filter((u) => u.departments.includes('LB') && u.approval_level >= 5),
       approvers: activeUsers.filter((u) => u.departments.includes('MGT') && u.approval_level >= 6),
       qc_preparers: activeUsers.filter((u) => u.departments.includes('QC') && u.approval_level >= 4),
@@ -931,10 +1038,15 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
       ? (body.assigned_approver_id ? String(body.assigned_approver_id).trim() : null)
       : (prevDeptProfile.assigned_approver_id || null);
 
+    // Segregation of Duties: Reviewer != Approver
+    if (assignedReviewerId && assignedApproverId && assignedReviewerId === assignedApproverId) {
+      return c.json({ error: 'ผู้ทบทวนและผู้อนุมัติต้องไม่เป็นบุคคลเดียวกัน (Segregation of Duties)' }, 422);
+    }
+
     // Live validation against Central RBAC users table
     if (assignedReviewerId) {
       const revUser = await db.prepare(`
-        SELECT id, name, position, department, departments, approval_level, status
+        SELECT id, name, position, primary_department, departments, approval_level, status
         FROM users WHERE id = ?
       `).bind(assignedReviewerId).first();
 
@@ -949,8 +1061,8 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
       }
 
       const revDepts = getUserDepartments(revUser);
-      if (dept === 'QC' && !revDepts.includes('PD') && !revDepts.includes('QA')) {
-        return c.json({ error: `ผู้ทบทวนแผนประจำปีของแผนก QC (${revUser.name}) ต้องสังกัดฝ่ายผลิต (PD) หรือ QA` }, 422);
+      if (dept === 'QC' && !revDepts.includes('PD')) {
+        return c.json({ error: `ผู้ทบทวนแผนประจำปีของแผนก QC (${revUser.name}) ต้องสังกัดฝ่ายผลิต (PD) เท่านั้น` }, 422);
       }
       if (dept === 'LB' && !revDepts.includes('LB')) {
         return c.json({ error: `ผู้ทบทวนแผนประจำปีของแผนก LAB (${revUser.name}) ต้องสังกัดห้องปฏิบัติการ (LB)` }, 422);
@@ -959,7 +1071,7 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
 
     if (assignedApproverId) {
       const appUser = await db.prepare(`
-        SELECT id, name, position, department, departments, approval_level, status
+        SELECT id, name, position, primary_department, departments, approval_level, status
         FROM users WHERE id = ?
       `).bind(assignedApproverId).first();
 
@@ -977,11 +1089,6 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
       if (!appDepts.includes('MGT')) {
         return c.json({ error: `ผู้อนุมัติแผนประจำปี (${appUser.name}) ต้องสังกัดฝ่ายบริหาร (MGT) เท่านั้น` }, 422);
       }
-    }
-
-    // Segregation of Duties: Reviewer != Approver
-    if (assignedReviewerId && assignedApproverId && assignedReviewerId === assignedApproverId) {
-      return c.json({ error: 'ผู้ทบทวนและผู้อนุมัติต้องไม่เป็นบุคคลเดียวกัน (Segregation of Duties)' }, 422);
     }
 
     const updatedDeptProfile = {
@@ -1034,10 +1141,11 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
     const clauses = ['p.status = ?'];
     const args = [status];
 
-    const scope = vccDeptScopeSql(c.get('user'), 'p.department');
+    const user = c.get('user');
+    const scope = vccDeptScopeSql(user, 'p.department');
     if (scope) {
-      clauses.push(scope.sql);
-      args.push(...scope.args);
+      clauses.push(`(${scope.sql} OR p.assigned_reviewer_id = ? OR p.assigned_approver_id = ?)`);
+      args.push(...scope.args, user.id, user.id);
     }
 
     if (yearParam !== undefined && yearParam !== '') {
@@ -1063,7 +1171,10 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
     const id = c.req.param('id');
     const plan = await fetchPlan(db, id);
     if (!plan) return c.json({ error: 'ไม่พบแผนการสอบเทียบประจำปี' }, 404);
-    if (!canReadVccDepartment(c.get('user'), plan.department)) return c.json(VCC_DEPT_FORBIDDEN, 403);
+    const user = c.get('user');
+    const isAssigned = Boolean((plan.assigned_reviewer_id && plan.assigned_reviewer_id === user.id) ||
+      (plan.assigned_approver_id && plan.assigned_approver_id === user.id));
+    if (!canReadVccDepartment(user, plan.department) && !isAssigned) return c.json(VCC_DEPT_FORBIDDEN, 403);
 
     const [items, planSettings, { results: rawHistory }] = await Promise.all([
       fetchPlanItems(db, id),
@@ -1102,10 +1213,27 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
     const deptRow = await db.prepare("SELECT code FROM departments WHERE code = ? AND status = 'ACTIVE'").bind(department).first();
     if (!deptRow) return c.json({ error: 'ไม่พบแผนกที่ระบุใน Master Data' }, 400);
 
+    // Preparer gate: Must belong to plan department and have at least min_preparer_level (default L4)
+    const deptProfile = await getDocumentProfileForDept(db, department);
+    const minPrepLevel = Number(deptProfile?.min_preparer_level || 4);
+    const userLevel = Number(user.approval_level || user.approvalLevel || 0);
+    const userDepts = getUserDepartments(user);
+    const isDccUser = Boolean(user.isDcc || user.is_dcc);
+    if (!isDccUser) {
+      if (userLevel < minPrepLevel) {
+        return c.json({ error: `ผู้จัดทำแผนต้องมีระดับอนุมัติตั้งแต่ L${minPrepLevel} ขึ้นไปตามแบบฟอร์มเอกสารควบคุม` }, 403);
+      }
+      if (!userDepts.includes(department)) {
+        return c.json({ error: `ผู้จัดทำต้องสังกัดแผนกเจ้าของแผน (${department}) เท่านั้น` }, 403);
+      }
+    }
+
     const planSettings = await loadPlanSettings(db);
-    const documentCode = clean(body.document_code ?? planSettings.default_doc_code, 50);
-    const revision = clean(body.revision ?? '00', 10);
-    const title = clean(body.title ?? `แผนการทวนสอบเครื่องมือประจำปี ${planYear}`, 300);
+    const documentCode = clean(body.document_code ?? deptProfile?.document_code ?? planSettings.default_doc_code, 50);
+    const revision = clean(body.revision ?? deptProfile?.revision ?? '00', 10);
+    const formIssueDate = clean(body.form_issue_date ?? deptProfile?.form_issue_date ?? null, 30);
+    const defaultTitle = deptProfile?.title_th ? `${deptProfile.title_th} ${planYear}` : `แผนการทวนสอบเครื่องมือประจำปี ${planYear}`;
+    const title = clean(body.title ?? defaultTitle, 300);
     const dueDateRule = String(body.due_date_rule ?? planSettings.due_date_rule).toUpperCase();
 
     if (!documentCode || !revision || !title) {
@@ -1114,6 +1242,22 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
     if (!DUE_DATE_RULES.includes(dueDateRule)) {
       return c.json({ error: 'กติกาคำนวณวันครบกำหนดไม่ถูกต้อง' }, 400);
     }
+
+    const assignedReviewerId = deptProfile?.assigned_reviewer_id || null;
+    const assignedApproverId = deptProfile?.assigned_approver_id || null;
+
+    // Historical Profile Snapshot: Immutable record of document profile configuration at creation
+    const profileSnapshot = JSON.stringify({
+      department,
+      document_code: documentCode,
+      revision,
+      form_issue_date: formIssueDate,
+      title_th: deptProfile?.title_th || title,
+      min_preparer_level: minPrepLevel,
+      assigned_reviewer_id: assignedReviewerId,
+      assigned_approver_id: assignedApproverId,
+      snapshot_at: new Date().toISOString()
+    });
 
     const id = crypto.randomUUID();
     const details = {
@@ -1124,6 +1268,9 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
       revision,
       title,
       due_date_rule: dueDateRule,
+      assigned_reviewer_id: assignedReviewerId,
+      assigned_approver_id: assignedApproverId,
+      form_issue_date: formIssueDate,
       status: 'DRAFT'
     };
 
@@ -1131,9 +1278,14 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
       await db.batch([
         db.prepare(`
           INSERT INTO vcc_annual_plans (
-            id, plan_year, department, document_code, revision, title, status, effective_status, is_current, due_date_rule, created_by, updated_by
-          ) VALUES (?, ?, ?, ?, ?, ?, 'DRAFT', 'PENDING', 0, ?, ?, ?)
-        `).bind(id, planYear, department, documentCode, revision, title, dueDateRule, user.id, user.id),
+            id, plan_year, department, document_code, revision, title, status, effective_status,
+            is_current, due_date_rule, created_by, updated_by, prepared_by,
+            assigned_reviewer_id, assigned_approver_id, form_issue_date, profile_snapshot
+          ) VALUES (?, ?, ?, ?, ?, ?, 'DRAFT', 'PENDING', 0, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(
+          id, planYear, department, documentCode, revision, title, dueDateRule,
+          user.id, user.id, user.id, assignedReviewerId, assignedApproverId, formIssueDate, profileSnapshot
+        ),
         audit(db, user.id, 'VCC_PLAN_CREATED', details)
       ]);
     } catch (err) {
@@ -1654,45 +1806,6 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
       return c.json({ error: `ผู้จัดทำแผนต้องมีระดับอนุมัติ L${thresholds.min_requester_level} ขึ้นไป` }, 403);
     }
 
-    const body = await c.req.json().catch(() => ({}));
-    const reviewerId = cleanOpt(body.reviewer_id || body.reviewerId, 100);
-    const approverId = cleanOpt(body.approver_id || body.approverId, 100);
-
-    if (reviewerId) {
-      const reviewerUser = await db.prepare('SELECT * FROM users WHERE id = ? AND status = "ACTIVE"').bind(reviewerId).first();
-      if (!reviewerUser) {
-        return c.json({ error: 'ไม่พบผู้ทบทวนที่เลือก หรือบัญชีผู้ใช้ถูกระงับ' }, 400);
-      }
-      if (reviewerUser.id === user.id) {
-        return c.json({ error: 'ผู้จัดทำไม่สามารถเป็นผู้ทบทวนแผนของตนเองได้' }, 400);
-      }
-      if (reviewerUser.approval_level < thresholds.required_reviewer_level) {
-        return c.json({ error: `ผู้ทบทวนต้องมีระดับอนุมัติ L${thresholds.required_reviewer_level} ขึ้นไปตาม Approval Matrix` }, 400);
-      }
-      if (!isUserAuthorizedForPlanDept(reviewerUser, plan.department)) {
-        return c.json({ error: `ผู้ทบทวนต้องสังกัดแผนก ${plan.department} หรือมีสิทธิ์ครอบคลุมข้ามแผนก` }, 400);
-      }
-    }
-
-    if (approverId) {
-      const approverUser = await db.prepare('SELECT * FROM users WHERE id = ? AND status = "ACTIVE"').bind(approverId).first();
-      if (!approverUser) {
-        return c.json({ error: 'ไม่พบผู้อนุมัติที่เลือก หรือบัญชีผู้ใช้ถูกระงับ' }, 400);
-      }
-      if (approverUser.id === user.id) {
-        return c.json({ error: 'ผู้จัดทำไม่สามารถเป็นผู้อนุมัติแผนของตนเองได้' }, 400);
-      }
-      if (reviewerId && approverUser.id === reviewerId) {
-        return c.json({ error: 'ผู้ทบทวนไม่สามารถเป็นผู้อนุมัติแผนที่ตนทบทวนได้' }, 400);
-      }
-      if (approverUser.approval_level < thresholds.required_approver_level) {
-        return c.json({ error: `ผู้อนุมัติต้องมีระดับอนุมัติ L${thresholds.required_approver_level} ขึ้นไปตาม Approval Matrix` }, 400);
-      }
-      if (!isUserAuthorizedForPlanDept(approverUser, plan.department)) {
-        return c.json({ error: `ผู้อนุมัติต้องสังกัดแผนก ${plan.department} หรือมีสิทธิ์ครอบคลุมข้ามแผนก` }, 400);
-      }
-    }
-
     const items = await fetchPlanItems(db, id, plan);
     if (items.length === 0) {
       return c.json({ error: 'กรุณาเพิ่มรายการเครื่องมือในแผนอย่างน้อย 1 รายการก่อนส่งขออนุมัติ' }, 400);
@@ -1749,6 +1862,87 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
       }
     }
 
+    // Reviewer and Approver Assignment
+    const body = await c.req.json().catch(() => ({}));
+    const bodyRevId = cleanOpt(body.reviewer_id || body.reviewerId, 100);
+    const bodyAppId = cleanOpt(body.approver_id || body.approverId, 100);
+    const assignedRevId = plan.assigned_reviewer_id || bodyRevId;
+    const assignedAppId = plan.assigned_approver_id || bodyAppId;
+
+    const deptProfile = await getDocumentProfileForDept(db, plan.department);
+    if (deptProfile) {
+      if (!assignedRevId || !assignedAppId) {
+        return c.json({ error: `แบบฟอร์มเอกสารควบคุมแผนก ${plan.department} ยังไม่ได้กำหนดผู้ทบทวนหรือผู้อนุมัติ กรุณาติดต่อ DCC Admin เพื่อตั้งค่าก่อนส่งแผน` }, 422);
+      }
+
+      // Segregation of Duties (Maker-Checker)
+      if (user.id === assignedRevId) {
+        return c.json({ error: 'ผู้จัดทำไม่สามารถเป็นผู้ทบทวนแผนของตนเองได้ (Segregation of Duties)' }, 422);
+      }
+      if (user.id === assignedAppId) {
+        return c.json({ error: 'ผู้จัดทำไม่สามารถเป็นผู้อนุมัติแผนของตนเองได้ (Segregation of Duties)' }, 422);
+      }
+      if (assignedRevId === assignedAppId) {
+        return c.json({ error: 'ผู้ทบทวนและผู้อนุมัติต้องไม่เป็นบุคคลเดียวกัน (Segregation of Duties)' }, 422);
+      }
+
+      // Live Central RBAC check for reviewer
+      const revUser = await db.prepare(`
+        SELECT id, name, position, primary_department, departments, approval_level, status
+        FROM users WHERE id = ?
+      `).bind(assignedRevId).first();
+
+      if (!revUser || revUser.status !== 'ACTIVE') {
+        return c.json({ error: `ผู้ทบทวนที่ได้รับมอบหมาย (${assignedRevId}) ไม่มีอยู่ในระบบหรือบัญชีถูกระงับ` }, 422);
+      }
+      if (Number(revUser.approval_level || 0) < 5) {
+        return c.json({ error: `ผู้ทบทวนที่ได้รับมอบหมาย (${revUser.name}) ต้องมีระดับอนุมัติตั้งแต่ L5 ขึ้นไป` }, 422);
+      }
+      const revDepts = getUserDepartments(revUser);
+      if (plan.department === 'QC' && !revDepts.includes('PD')) {
+        return c.json({ error: `ผู้ทบทวนแผนก QC (${revUser.name}) ต้องสังกัดฝ่ายผลิต (PD) เท่านั้น` }, 422);
+      }
+      if (plan.department === 'LB' && !revDepts.includes('LB')) {
+        return c.json({ error: `ผู้ทบทวนแผนก LAB (${revUser.name}) ต้องสังกัดห้องปฏิบัติการ (LB) เท่านั้น` }, 422);
+      }
+
+      // Live Central RBAC check for approver
+      const appUser = await db.prepare(`
+        SELECT id, name, position, primary_department, departments, approval_level, status
+        FROM users WHERE id = ?
+      `).bind(assignedAppId).first();
+
+      if (!appUser || appUser.status !== 'ACTIVE') {
+        return c.json({ error: `ผู้อนุมัติที่ได้รับมอบหมาย (${assignedAppId}) ไม่มีอยู่ในระบบหรือบัญชีถูกระงับ` }, 422);
+      }
+      if (Number(appUser.approval_level || 0) < 6) {
+        return c.json({ error: `ผู้อนุมัติที่ได้รับมอบหมาย (${appUser.name}) ต้องมีระดับอนุมัติตั้งแต่ L6 ขึ้นไป` }, 422);
+      }
+      const appDepts = getUserDepartments(appUser);
+      if (!appDepts.includes('MGT')) {
+        return c.json({ error: `ผู้อนุมัติแผนก ${plan.department} (${appUser.name}) ต้องสังกัดฝ่ายบริหาร (MGT) เท่านั้น` }, 422);
+      }
+    } else {
+      // Legacy unprofiled departments:
+      if (assignedRevId) {
+        const reviewerUser = await db.prepare('SELECT * FROM users WHERE id = ? AND status = "ACTIVE"').bind(assignedRevId).first();
+        if (!reviewerUser) return c.json({ error: 'ไม่พบผู้ทบทวนที่เลือก หรือบัญชีผู้ใช้ถูกระงับ' }, 400);
+        if (reviewerUser.id === user.id) return c.json({ error: 'ผู้จัดทำไม่สามารถเป็นผู้ทบทวนแผนของตนเองได้' }, 400);
+        if (reviewerUser.approval_level < thresholds.required_reviewer_level) {
+          return c.json({ error: `ผู้ทบทวนต้องมีระดับอนุมัติ L${thresholds.required_reviewer_level} ขึ้นไปตาม Approval Matrix` }, 400);
+        }
+      }
+      if (assignedAppId) {
+        const approverUser = await db.prepare('SELECT * FROM users WHERE id = ? AND status = "ACTIVE"').bind(assignedAppId).first();
+        if (!approverUser) return c.json({ error: 'ไม่พบผู้อนุมัติที่เลือก หรือบัญชีผู้ใช้ถูกระงับ' }, 400);
+        if (approverUser.id === user.id) return c.json({ error: 'ผู้จัดทำไม่สามารถเป็นผู้อนุมัติแผนของตนเองได้' }, 400);
+        if (assignedRevId && approverUser.id === assignedRevId) return c.json({ error: 'ผู้ทบทวนไม่สามารถเป็นผู้อนุมัติแผนที่ตนทบทวนได้' }, 400);
+        if (approverUser.approval_level < thresholds.required_approver_level) {
+          return c.json({ error: `ผู้อนุมัติต้องมีระดับอนุมัติ L${thresholds.required_approver_level} ขึ้นไปตาม Approval Matrix` }, 400);
+        }
+      }
+    }
+
     // Freeze scope: persist any virtual items into vcc_annual_plan_items
     const batchStatements = [];
     for (const item of items) {
@@ -1800,15 +1994,15 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
             updated_at = ${NOW},
             updated_by = ?
         WHERE id = ?
-      `).bind(user.id, reviewerId || null, approverId || null, user.id, id),
+      `).bind(user.id, assignedRevId || null, assignedAppId || null, user.id, id),
       audit(db, user.id, 'VCC_PLAN_SUBMITTED', {
         plan_id: id,
         plan_year: plan.plan_year,
         department: plan.department,
         revision: plan.revision,
         item_count: items.length,
-        assigned_reviewer_id: reviewerId || null,
-        assigned_approver_id: approverId || null,
+        assigned_reviewer_id: assignedRevId || null,
+        assigned_approver_id: assignedAppId || null,
         task_reference: `api-vcc-plan-${id}-review`,
         is_resubmission: plan.status === 'REJECTED',
         before: { status: plan.status },
@@ -1837,18 +2031,49 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
 
     const planSettings = await loadPlanSettings(db);
     const thresholds = await getThresholds(db, planSettings.approval_doc_type);
+    const isDeptProfiled = ['QC', 'LB'].includes(plan.department);
 
-    if (plan.assigned_reviewer_id && user.id !== plan.assigned_reviewer_id && !user.isDcc && !user.isQmr && user.approval_level < 6) {
-      return c.json({ error: 'แผนนี้ถูกมอบหมายให้ผู้ทบทวนรายอื่นดำเนินการ' }, 403);
+    if (isDeptProfiled && plan.assigned_reviewer_id) {
+      // Strict Reviewer Assignment: Only the DCC-assigned reviewer User ID can review
+      if (user.id !== plan.assigned_reviewer_id) {
+        return c.json({ error: 'เฉพาะผู้ทบทวนที่ได้รับมอบหมายตามแบบฟอร์มเอกสารควบคุมเท่านั้นที่สามารถทบทวนแผนนี้ได้' }, 403);
+      }
+
+      // Live Central RBAC check for reviewer
+      const revUser = await db.prepare(`
+        SELECT id, name, position, primary_department, departments, approval_level, status
+        FROM users WHERE id = ?
+      `).bind(user.id).first();
+
+      if (!revUser || revUser.status !== 'ACTIVE') {
+        return c.json({ error: 'บัญชีผู้ใช้งานของผู้ทบทวนไม่อยู่ในสถานะพร้อมปฏิบัติงาน (Inactive/Suspended)' }, 422);
+      }
+      if (Number(revUser.approval_level || 0) < 5) {
+        return c.json({ error: 'ผู้ทบทวนต้องมีระดับอนุมัติตั้งแต่ L5 ขึ้นไป' }, 403);
+      }
+      const revDepts = getUserDepartments(revUser);
+      if (plan.department === 'QC' && !revDepts.includes('PD')) {
+        return c.json({ error: 'ผู้ทบทวนแผนประจำปีของแผนก QC ต้องสังกัดฝ่ายผลิต (PD) เท่านั้น' }, 403);
+      }
+      if (plan.department === 'LB' && !revDepts.includes('LB')) {
+        return c.json({ error: 'ผู้ทบทวนแผนประจำปีของแผนก LAB ต้องสังกัดห้องปฏิบัติการ (LB) เท่านั้น' }, 403);
+      }
+    } else {
+      // Legacy unprofiled plan fallback
+      if (plan.assigned_reviewer_id && user.id !== plan.assigned_reviewer_id && !user.isDcc && !user.isQmr && user.approval_level < 6) {
+        return c.json({ error: 'แผนนี้ถูกมอบหมายให้ผู้ทบทวนรายอื่นดำเนินการ' }, 403);
+      }
+      if (!isUserAuthorizedForPlanDept(user, plan.department)) {
+        return c.json({ error: 'เฉพาะผู้ใช้งานที่สังกัดแผนกของแผน หรือ DCC/QMR เท่านั้นที่สามารถทบทวนแผนได้' }, 403);
+      }
+      if (Number(user.approval_level || 0) < thresholds.required_reviewer_level) {
+        return c.json({ error: `ผู้ทบทวนต้องมีระดับอนุมัติ L${thresholds.required_reviewer_level} ขึ้นไปตาม Approval Matrix` }, 403);
+      }
     }
-    if (!isUserAuthorizedForPlanDept(user, plan.department)) {
-      return c.json({ error: 'เฉพาะผู้ใช้งานที่สังกัดแผนกของแผน หรือ DCC/QMR เท่านั้นที่สามารถทบทวนแผนได้' }, 403);
-    }
+
+    // Segregation of Duties: Reviewer cannot be the preparer
     if (user.id === plan.prepared_by) {
-      return c.json({ error: 'ผู้จัดทำไม่สามารถทบทวนแผนของตนเองได้' }, 403);
-    }
-    if (user.approval_level < thresholds.required_reviewer_level) {
-      return c.json({ error: `ผู้ทบทวนต้องมีระดับอนุมัติ L${thresholds.required_reviewer_level} ขึ้นไปตาม Approval Matrix` }, 403);
+      return c.json({ error: 'ผู้จัดทำไม่สามารถทบทวนแผนของตนเองได้ (Segregation of Duties)' }, 403);
     }
 
     // Review gate: Plan Revisions must have 0 unresolved conflicts
@@ -1919,21 +2144,57 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
 
     const planSettings = await loadPlanSettings(db);
     const thresholds = await getThresholds(db, planSettings.approval_doc_type);
+    const isDeptProfiled = ['QC', 'LB'].includes(plan.department);
 
-    if (plan.assigned_approver_id && user.id !== plan.assigned_approver_id && !user.isDcc && !user.isQmr && user.approval_level < 6) {
-      return c.json({ error: 'แผนนี้ถูกมอบหมายให้ผู้อนุมัติรายอื่นดำเนินการ' }, 403);
+    let appUser;
+    if (isDeptProfiled && plan.assigned_approver_id) {
+      // Strict Approver Assignment: Only the DCC-assigned approver User ID can approve
+      if (user.id !== plan.assigned_approver_id) {
+        return c.json({ error: 'เฉพาะผู้อนุมัติที่ได้รับมอบหมายตามแบบฟอร์มเอกสารควบคุมเท่านั้นที่สามารถอนุมัติแผนนี้ได้' }, 403);
+      }
+
+      // Live Central RBAC check for approver
+      appUser = await db.prepare(`
+        SELECT id, name, position, primary_department, departments, approval_level, status
+        FROM users WHERE id = ?
+      `).bind(user.id).first();
+
+      if (!appUser || appUser.status !== 'ACTIVE') {
+        return c.json({ error: 'บัญชีผู้ใช้งานของผู้อนุมัติไม่อยู่ในสถานะพร้อมปฏิบัติงาน (Inactive/Suspended)' }, 422);
+      }
+      if (Number(appUser.approval_level || 0) < 6) {
+        return c.json({ error: 'ผู้อนุมัติต้องมีระดับอนุมัติตั้งแต่ L6 ขึ้นไป' }, 403);
+      }
+      const appDepts = getUserDepartments(appUser);
+      if (!appDepts.includes('MGT')) {
+        return c.json({ error: 'ผู้อนุมัติต้องสังกัดฝ่ายบริหาร (MGT) เท่านั้น' }, 403);
+      }
+    } else {
+      // Legacy unprofiled plan fallback
+      if (plan.assigned_approver_id && user.id !== plan.assigned_approver_id && !user.isDcc && !user.isQmr && user.approval_level < 6) {
+        return c.json({ error: 'แผนนี้ถูกมอบหมายให้ผู้อนุมัติรายอื่นดำเนินการ' }, 403);
+      }
+      if (!isUserAuthorizedForPlanDept(user, plan.department)) {
+        return c.json({ error: 'เฉพาะผู้ใช้งานที่สังกัดแผนกของแผน หรือ DCC/QMR เท่านั้นที่สามารถอนุมัติแผนได้' }, 403);
+      }
+      if (Number(user.approval_level || 0) < thresholds.required_approver_level) {
+        return c.json({ error: `ผู้อนุมัติต้องมีระดับอนุมัติ L${thresholds.required_approver_level} ขึ้นไปตาม Approval Matrix` }, 403);
+      }
+      appUser = await db.prepare(`
+        SELECT id, name, position, primary_department, departments, approval_level, status
+        FROM users WHERE id = ?
+      `).bind(user.id).first();
+      if (!appUser) {
+        appUser = { id: user.id, name: user.name || user.id, position: 'Approver' };
+      }
     }
-    if (!isUserAuthorizedForPlanDept(user, plan.department)) {
-      return c.json({ error: 'เฉพาะผู้ใช้งานที่สังกัดแผนกของแผน หรือ DCC/QMR เท่านั้นที่สามารถอนุมัติแผนได้' }, 403);
-    }
+
+    // Segregation of Duties: Approver cannot be preparer or reviewer
     if (user.id === plan.prepared_by) {
-      return c.json({ error: 'ผู้จัดทำไม่สามารถอนุมัติแผนของตนเองได้' }, 403);
+      return c.json({ error: 'ผู้จัดทำไม่สามารถอนุมัติแผนของตนเองได้ (Segregation of Duties)' }, 403);
     }
     if (user.id === plan.reviewed_by) {
-      return c.json({ error: 'ผู้ทบทวนไม่สามารถอนุมัติแผนที่ตนทบทวนได้' }, 403);
-    }
-    if (user.approval_level < thresholds.required_approver_level) {
-      return c.json({ error: `ผู้อนุมัติต้องมีระดับอนุมัติ L${thresholds.required_approver_level} ขึ้นไปตาม Approval Matrix` }, 403);
+      return c.json({ error: 'ผู้ทบทวนไม่สามารถอนุมัติแผนที่ตนทบทวนได้ (Segregation of Duties)' }, 403);
     }
 
     // Approval gate: Plan Revisions must have 0 unresolved conflicts
@@ -1957,7 +2218,7 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
       }
     }
 
-    // Prepare reconciliation statements and execute atomic batch transaction
+    // Prepare reconciliation statements
     const reconciliation = await buildWorkOrderReconciliationStatements(db, id, user.id);
     if (reconciliation.error) {
       return c.json({ error: reconciliation.error }, 409);
@@ -1969,6 +2230,63 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
       }, 409);
     }
 
+    // Step 5 Forward-Proofing: Fail-closed if R2 binding is not available
+    if (!c.env.FILES) {
+      return c.json({ error: 'ระบบไม่สามารถอนุมัติแผนได้เนื่องจากบริการ Cloudflare R2 Storage ไม่พร้อมใช้งาน (Fail-Closed: Missing FILES binding)' }, 503);
+    }
+
+    const attemptId = crypto.randomUUID();
+    const docCode = plan.document_code || (plan.department === 'QC' ? 'FM-QC-46' : 'FM-LB-11');
+    const pdfKey = `vcc/plans/${plan.id}/${docCode}_${plan.plan_year}_Rev${plan.revision}_${attemptId}.pdf`;
+
+    const items = await fetchPlanItems(db, id, plan);
+    const planWithAttempt = { ...plan, approval_attempt_id: attemptId };
+    const signatories = {
+      preparer: await db.prepare('SELECT id, name, position FROM users WHERE id = ?').bind(plan.prepared_by).first(),
+      reviewer: await db.prepare('SELECT id, name, position FROM users WHERE id = ?').bind(plan.reviewed_by).first(),
+      approver: appUser
+    };
+
+    let pdfBytes;
+    try {
+      pdfBytes = await generatePlanPdfBuffer(planWithAttempt, items, signatories);
+    } catch (genErr) {
+      console.error('PDF generation error:', genErr);
+      return c.json({ error: `การสร้างไฟล์ PDF เอกสารควบคุมล้มเหลว: ${genErr.message}` }, 500);
+    }
+
+    // Step 2 in Final Spec: Pre-commit upload to Cloudflare R2
+    try {
+      await c.env.FILES.put(pdfKey, pdfBytes, {
+        customMetadata: {
+          plan_id: plan.id,
+          department: plan.department,
+          plan_year: String(plan.plan_year),
+          revision: String(plan.revision),
+          approval_attempt_id: attemptId,
+          approver_id: user.id
+        },
+        httpMetadata: {
+          contentType: 'application/pdf'
+        }
+      });
+    } catch (r2PutErr) {
+      console.error('R2 PUT error:', r2PutErr);
+      return c.json({ error: `การอัปโหลดไฟล์ PDF ไปยัง Cloudflare R2 ล้มเหลว: ${r2PutErr.message}` }, 500);
+    }
+
+    // Step 3 in Final Spec: Direct HEAD verification on R2
+    try {
+      const headObj = await c.env.FILES.head(pdfKey);
+      if (!headObj || Number(headObj.size || 0) === 0) {
+        return c.json({ error: 'การตรวจสอบไฟล์เอกสารควบคุมบน Cloudflare R2 ล้มเหลว (HEAD Verification Failed)' }, 500);
+      }
+    } catch (r2HeadErr) {
+      console.error('R2 HEAD error:', r2HeadErr);
+      return c.json({ error: `การตรวจสอบไฟล์เอกสารควบคุมบน Cloudflare R2 ล้มเหลว: ${r2HeadErr.message}` }, 500);
+    }
+
+    // Step 4 in Final Spec: Single Atomic Batch in D1 (Gate + Reconciliation + Audit)
     const allStatements = [
       db.prepare(`
         UPDATE vcc_annual_plans
@@ -1986,10 +2304,13 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
             approved_by = ?,
             approved_at = ${NOW},
             approval_comment = ?,
+            approval_attempt_id = ?,
+            pdf_file_key = ?,
+            effective_date = COALESCE(form_issue_date, date('now')),
             updated_at = ${NOW},
             updated_by = ?
         WHERE id = ? AND status = 'PENDING_APPROVAL'
-      `).bind(user.id, comment, user.id, id),
+      `).bind(user.id, comment, attemptId, pdfKey, user.id, id),
       ...reconciliation.batchStatements,
       audit(db, user.id, 'VCC_PLAN_APPROVED', {
         plan_id: id,
@@ -1997,6 +2318,8 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
         department: plan.department,
         revision: plan.revision,
         comment,
+        approval_attempt_id: attemptId,
+        pdf_file_key: pdfKey,
         work_orders_generated: reconciliation.generated_count,
         required_approver_level: thresholds.required_approver_level,
         task_reference: `api-vcc-plan-${id}-approve`,
@@ -2005,15 +2328,127 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
       })
     ];
 
-    const batchRes = await db.batch(allStatements);
+    let batchRes;
+    try {
+      batchRes = await db.batch(allStatements);
+    } catch (d1Err) {
+      console.error('D1 batch commit failed:', d1Err);
+      // WORM No-Delete Compliance: Keep PDF, write Uncommitted Orphan Tombstone record
+      const tombstoneKey = `vcc/audit-orphans/${plan.id}/${attemptId}_uncommitted.json`;
+      try {
+        await c.env.FILES.put(tombstoneKey, JSON.stringify({
+          plan_id: plan.id,
+          attempt_id: attemptId,
+          pdf_file_key: pdfKey,
+          attempted_at: new Date().toISOString(),
+          actor_id: user.id,
+          reason: d1Err.message || 'D1_BATCH_ROLLBACK'
+        }, null, 2), {
+          customMetadata: {
+            type: 'UNCOMMITTED_ORPHAN_TOMBSTONE',
+            plan_id: plan.id,
+            attempt_id: attemptId
+          }
+        });
+      } catch (tombErr) {
+        console.error('Failed to write orphan tombstone:', tombErr);
+      }
+      return c.json({ error: 'การบันทึกสถานะอนุมัติในฐานข้อมูลล้มเหลว (D1 Batch Rollback)' }, 409);
+    }
+
     if (batchRes?.[1]?.meta?.changes === 0) {
-      return c.json({ error: 'แผนนี้ถูกดำเนินการไปแล้ว กรุณารีเฟรชหน้าจอ' }, 409);
+      // Zero rows affected: concurrent approval won the race
+      const tombstoneKey = `vcc/audit-orphans/${plan.id}/${attemptId}_uncommitted.json`;
+      try {
+        await c.env.FILES.put(tombstoneKey, JSON.stringify({
+          plan_id: plan.id,
+          attempt_id: attemptId,
+          pdf_file_key: pdfKey,
+          attempted_at: new Date().toISOString(),
+          actor_id: user.id,
+          reason: 'CONCURRENT_RACE_OR_ZERO_CHANGES'
+        }, null, 2), {
+          customMetadata: {
+            type: 'UNCOMMITTED_ORPHAN_TOMBSTONE',
+            plan_id: plan.id,
+            attempt_id: attemptId
+          }
+        });
+      } catch (tombErr) {
+        console.error('Failed to write orphan tombstone:', tombErr);
+      }
+      return c.json({ error: 'แผนนี้ถูกดำเนินการไปแล้ว กรุณารีเฟรชหน้าจอ (Concurrent Approval Race)' }, 409);
     }
 
     const { batchStatements: _bs, ...reconciliationResult } = reconciliation;
     return c.json({
       plan: await fetchPlan(db, id),
       work_orders_generation: reconciliationResult
+    });
+  });
+
+  // Download/View Approved Official PDF from R2
+  app.get('/api/vcc/plans/:id/pdf', requireAuth, requireVccAccess, async (c) => {
+    const db = c.env.DB;
+    const id = c.req.param('id');
+    const plan = await fetchPlan(db, id);
+    if (!plan) return c.json({ error: 'ไม่พบแผนการสอบเทียบประจำปี' }, 404);
+    if (plan.status !== 'APPROVED' || !plan.pdf_file_key) {
+      return c.json({ error: 'ยังไม่มีไฟล์เอกสาร PDF ที่ได้รับการอนุมัติอย่างเป็นทางการสำหรับแผนนี้' }, 404);
+    }
+    if (!c.env.FILES) {
+      return c.json({ error: 'บริการ Cloudflare R2 ไม่พร้อมใช้งาน' }, 503);
+    }
+
+    const obj = await c.env.FILES.get(plan.pdf_file_key);
+    if (!obj) {
+      return c.json({ error: 'ไม่พบไฟล์เอกสาร PDF บน Cloudflare R2' }, 404);
+    }
+
+    const headers = new Headers();
+    headers.set('Content-Type', obj.httpMetadata?.contentType || 'application/pdf');
+    if (obj.httpEtag) headers.set('ETag', obj.httpEtag);
+    const fileName = `${plan.document_code || 'Plan'}_${plan.plan_year}_Rev${plan.revision}_Approved.pdf`;
+    headers.set('Content-Disposition', `inline; filename="${fileName}"`);
+
+    return new Response(obj.body, { headers });
+  });
+
+  // Storage Reconciliation & Orphan Audit: Compare R2 objects against D1 plans table
+  app.get('/api/vcc/admin/reconcile-storage', requireAuth, requireDccOnly, async (c) => {
+    const db = c.env.DB;
+    if (!c.env.FILES) {
+      return c.json({ error: 'บริการ Cloudflare R2 ไม่พร้อมใช้งาน' }, 503);
+    }
+
+    const listRes = await c.env.FILES.list({ prefix: 'vcc/plans/' });
+    const { results: approvedPlans } = await db.prepare(`
+      SELECT id, department, plan_year, revision, document_code, pdf_file_key, approval_attempt_id, status
+      FROM vcc_annual_plans
+      WHERE pdf_file_key IS NOT NULL
+    `).all();
+
+    const committedKeyMap = new Map();
+    for (const p of approvedPlans || []) {
+      committedKeyMap.set(p.pdf_file_key, p);
+    }
+
+    const objects = (listRes.objects || []).map((obj) => {
+      const isCommitted = committedKeyMap.has(obj.key);
+      return {
+        key: obj.key,
+        size: obj.size,
+        uploaded_at: obj.uploaded,
+        status: isCommitted ? 'OFFICIAL_COMMITTED' : 'UNCOMMITTED_ORPHAN_ATTEMPT',
+        plan: committedKeyMap.get(obj.key) || null
+      };
+    });
+
+    return c.json({
+      total_objects: objects.length,
+      official_committed_count: objects.filter((o) => o.status === 'OFFICIAL_COMMITTED').length,
+      uncommitted_orphan_count: objects.filter((o) => o.status === 'UNCOMMITTED_ORPHAN_ATTEMPT').length,
+      objects
     });
   });
 
@@ -2589,7 +3024,10 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
     const id = c.req.param('id');
     const plan = await fetchPlan(db, id);
     if (!plan) return c.json({ error: 'ไม่พบแผนการสอบเทียบประจำปี' }, 404);
-    if (!canReadVccDepartment(c.get('user'), plan.department)) return c.json(VCC_DEPT_FORBIDDEN, 403);
+    const user = c.get('user');
+    const isAssigned = Boolean((plan.assigned_reviewer_id && plan.assigned_reviewer_id === user.id) ||
+      (plan.assigned_approver_id && plan.assigned_approver_id === user.id));
+    if (!canReadVccDepartment(user, plan.department) && !isAssigned) return c.json(VCC_DEPT_FORBIDDEN, 403);
 
     const { results } = await db.prepare(`
       SELECT p.*,
