@@ -25,7 +25,7 @@ export const DEFAULT_VCC_PROVIDERS = [
 ];
 
 export const DEFAULT_VCC_PLAN_SETTINGS = {
-  default_doc_code: 'FM-QC-46',
+  default_doc_code: 'VCC-PLAN',
   approval_doc_type: 'FM',
   due_date_rule: 'END_OF_MONTH'
 };
@@ -80,6 +80,56 @@ const INITIAL_LOCAL_PLANS = [
     document_code: 'FM-QC-46',
     revision: '01',
     title: '[ข้อมูลทดสอบ] แผนการทวนสอบเครื่องมือประจำปี 2027 (พ.ศ. 2570)',
+    status: 'DRAFT',
+    due_date_rule: 'END_OF_MONTH',
+    prepared_by: null,
+    prepared_at: null,
+    reviewed_by: null,
+    reviewed_at: null,
+    review_comment: null,
+    approved_by: null,
+    approved_at: null,
+    approval_comment: null,
+    rejected_by: null,
+    rejected_at: null,
+    rejected_reason: null,
+    created_at: '2026-10-28T03:00:00.000Z',
+    created_by: 'dc4',
+    updated_at: '2026-10-28T03:00:00.000Z',
+    updated_by: 'dc4'
+  },
+  {
+    id: 'vcc-plan-2026-lb',
+    plan_year: 2026,
+    department: 'LB',
+    document_code: 'VCC-PLAN-LB',
+    revision: '01',
+    title: '[ข้อมูลทดสอบ] แผนการสอบเทียบและทวนสอบเครื่องมือห้องปฏิบัติการประจำปี 2026 (พ.ศ. 2569)',
+    status: 'DRAFT',
+    due_date_rule: 'END_OF_MONTH',
+    prepared_by: null,
+    prepared_at: null,
+    reviewed_by: null,
+    reviewed_at: null,
+    review_comment: null,
+    approved_by: null,
+    approved_at: null,
+    approval_comment: null,
+    rejected_by: null,
+    rejected_at: null,
+    rejected_reason: null,
+    created_at: '2026-10-28T03:00:00.000Z',
+    created_by: 'dc4',
+    updated_at: '2026-10-28T03:00:00.000Z',
+    updated_by: 'dc4'
+  },
+  {
+    id: 'vcc-plan-2027-lb',
+    plan_year: 2027,
+    department: 'LB',
+    document_code: 'VCC-PLAN-LB',
+    revision: '01',
+    title: '[ข้อมูลทดสอบ] แผนการสอบเทียบและทวนสอบเครื่องมือห้องปฏิบัติการประจำปี 2027 (พ.ศ. 2570)',
     status: 'DRAFT',
     due_date_rule: 'END_OF_MONTH',
     prepared_by: null,
@@ -165,12 +215,83 @@ const INITIAL_LOCAL_PLAN_ITEMS = [
     responsible_label: 'QC Sup.',
     remarks: '[ข้อมูลทดสอบ] V002 ทวนสอบเดือน 9 (ยึดตามหมายเหตุ)',
     sort_order: 5
+  },
+  {
+    id: 'vcc-pi-2026-pip001',
+    plan_id: 'vcc-plan-2026-lb',
+    asset_id: 'vcc-seed-lb-pipette',
+    provider_name: 'ทวนสอบภายใน',
+    frequency_label: 'ทุก 6 เดือน',
+    planned_months: [3, 9],
+    due_dates: ['2026-03-31', '2026-09-30'],
+    responsible_dept: 'LB',
+    responsible_label: 'LB Officer',
+    remarks: '[ข้อมูลทดสอบ] ทวนสอบปริมาตรประจำรอบ',
+    sort_order: 1
+  },
+  {
+    id: 'vcc-pi-2026-ac001',
+    plan_id: 'vcc-plan-2026-lb',
+    asset_id: 'vcc-seed-lb-autoclave',
+    provider_name: 'ห้องปฏิบัติการภายนอก',
+    frequency_label: 'รายปี',
+    planned_months: [6],
+    due_dates: ['2026-06-30'],
+    responsible_dept: 'LB',
+    responsible_label: 'LB Officer',
+    remarks: '[ข้อมูลทดสอบ] สอบเทียบอุณหภูมิและความดัน',
+    sort_order: 2
+  },
+  {
+    id: 'vcc-pi-2026-inc001',
+    plan_id: 'vcc-plan-2026-lb',
+    asset_id: 'vcc-seed-lb-incubator',
+    provider_name: 'ห้องปฏิบัติการภายนอก',
+    frequency_label: 'รายปี',
+    planned_months: [8],
+    due_dates: ['2026-08-31'],
+    responsible_dept: 'LB',
+    responsible_label: 'LB Officer',
+    remarks: '[ข้อมูลทดสอบ] สอบเทียบการกระจายอุณหภูมิ',
+    sort_order: 3
   }
 ];
 
-export const getLocalPlans = () => readJson(STORAGE_PLANS_KEY, () => [...INITIAL_LOCAL_PLANS]);
+export const getLocalPlans = () => {
+  const plans = readJson(STORAGE_PLANS_KEY, () => [...INITIAL_LOCAL_PLANS]);
+  let mutated = false;
+  for (const p of plans) {
+    if (p.department === 'LB' && (p.document_code === 'FM-LB-11' || p.document_code?.startsWith('FM-LB'))) {
+      p.document_code = 'VCC-PLAN-LB';
+      mutated = true;
+    }
+  }
+  const hasLbPlan = plans.some((p) => p.department === 'LB');
+  if (!hasLbPlan) {
+    const defaultLbPlans = INITIAL_LOCAL_PLANS.filter((p) => p.department === 'LB');
+    plans.push(...defaultLbPlans);
+    mutated = true;
+  }
+  if (mutated) {
+    writeJson(STORAGE_PLANS_KEY, plans);
+  }
+  return plans;
+};
+
 const setLocalPlans = (list) => writeJson(STORAGE_PLANS_KEY, list);
-export const getLocalPlanItems = () => readJson(STORAGE_PLAN_ITEMS_KEY, () => [...INITIAL_LOCAL_PLAN_ITEMS]);
+
+export const getLocalPlanItems = () => {
+  const items = readJson(STORAGE_PLAN_ITEMS_KEY, () => [...INITIAL_LOCAL_PLAN_ITEMS]);
+  const hasLbItems = items.some((i) => i.plan_id === 'vcc-plan-2026-lb');
+  if (!hasLbItems) {
+    const defaultLbItems = INITIAL_LOCAL_PLAN_ITEMS.filter((i) => i.plan_id === 'vcc-plan-2026-lb');
+    if (defaultLbItems.length > 0) {
+      items.push(...defaultLbItems);
+      writeJson(STORAGE_PLAN_ITEMS_KEY, items);
+    }
+  }
+  return items;
+};
 const setLocalPlanItems = (list) => writeJson(STORAGE_PLAN_ITEMS_KEY, list);
 const getLocalProviders = () => readJson(STORAGE_PROVIDERS_KEY, () => [...DEFAULT_VCC_PROVIDERS]);
 const setLocalProviders = (list) => writeJson(STORAGE_PROVIDERS_KEY, list);
@@ -541,6 +662,10 @@ const enrichLocalPlanItem = (item, allAssets, deptMap) => {
     model: asset.model || '',
     location: asset.location || '',
     asset_department: asset.department || '',
+    brand: asset.brand || item.brand || '',
+    mpe: item.mpe || '',
+    acceptance_criteria: item.acceptance_criteria || '',
+    calibration_points: item.calibration_points || '',
     is_group: isGroup ? 1 : 0,
     group_nature: groupNature,
     is_logical_group: isLogicalGroup,
@@ -618,6 +743,73 @@ export const saveVccPlanSettings = async ({ providers, planSettings }) => {
   };
 };
 
+const STORAGE_DOCUMENT_PROFILES_KEY = 'qms-vcc-local-document-profiles-v1';
+const DEFAULT_LOCAL_DOCUMENT_PROFILES = {
+  QC: {
+    document_code: 'FM-QC-46',
+    revision: '01',
+    form_issue_date: '2026-06-09',
+    title_th: 'แผนการทวนสอบเครื่องมือประจำปี',
+    reviewer_dept: 'PD',
+    required_reviewer_level: 5,
+    required_approver_level: 6,
+    min_preparer_level: 4,
+    assigned_reviewer_id: null,
+    assigned_approver_id: null
+  },
+  LB: {
+    document_code: 'VCC-PLAN-LB',
+    revision: '01',
+    form_issue_date: '2026-08-10',
+    title_th: 'แผนการสอบเทียบเครื่องมือที่ใช้ในห้องปฏิบัติการจุลชีววิทยา ประจำปี',
+    reviewer_dept: 'LB',
+    required_reviewer_level: 5,
+    required_approver_level: 6,
+    min_preparer_level: 4,
+    assigned_reviewer_id: null,
+    assigned_approver_id: null
+  }
+};
+
+export const fetchVccDocumentProfiles = async () => {
+  if (isApiMode) {
+    return apiGet('/api/vcc/document-profiles');
+  }
+  assertLocalVccAccess();
+  let profiles = DEFAULT_LOCAL_DOCUMENT_PROFILES;
+  try {
+    const raw = localStorage.getItem(STORAGE_DOCUMENT_PROFILES_KEY);
+    if (raw) profiles = { ...DEFAULT_LOCAL_DOCUMENT_PROFILES, ...JSON.parse(raw) };
+  } catch {}
+  if (profiles.LB?.document_code === 'FM-LB-11' || profiles.LB?.document_code?.startsWith('FM-LB')) {
+    profiles.LB.document_code = 'VCC-PLAN-LB';
+  }
+  return { profiles, candidates: { qc_reviewers: [], lab_reviewers: [], approvers: [], qc_preparers: [], lab_preparers: [] }, allActiveUsers: [] };
+};
+
+export const saveVccDocumentProfile = async (dept, profileData) => {
+  const normDept = String(dept || '').toUpperCase().trim();
+  if (isApiMode) {
+    return apiPut(`/api/vcc/document-profiles/${normDept}`, profileData);
+  }
+  assertLocalDcc();
+  const current = (await fetchVccDocumentProfiles()).profiles;
+  const updated = {
+    ...current,
+    [normDept]: {
+      ...(current[normDept] || {}),
+      ...profileData
+    }
+  };
+  localStorage.setItem(STORAGE_DOCUMENT_PROFILES_KEY, JSON.stringify(updated));
+  appendLocalAudit('VCC_DOCUMENT_PROFILE_UPDATED', {
+    department: normDept,
+    before: current[normDept] || null,
+    after: updated[normDept]
+  });
+  return { department: normDept, profile: updated[normDept], allProfiles: updated };
+};
+
 export const fetchVccPlans = async ({ status = 'DRAFT', year = '', department = '' } = {}) => {
   if (isApiMode) {
     if (status === 'ALL' || !status) {
@@ -634,16 +826,30 @@ export const fetchVccPlans = async ({ status = 'DRAFT', year = '', department = 
     const { plans } = await apiGet(`/api/vcc/plans?${params.toString()}`);
     return plans;
   }
-  assertLocalVccAccess();
+  const user = assertLocalVccAccess();
   const allPlans = getLocalPlans();
   const allItems = getLocalPlanItems();
   const deptMap = getDepartmentMap();
+  const uDept = String(user?.department || user?.dept || '').toUpperCase();
+  const deptRank = (d) => {
+    const norm = String(d || '').toUpperCase();
+    if (uDept && norm === uDept) return 0;
+    if (norm === 'QC') return 1;
+    if (norm === 'LB') return 2;
+    return 3;
+  };
   return allPlans
+    .filter((p) => isUserAuthorizedForPlanDept(user, p.department))
     .filter((p) => (status === 'ALL' || !status ? true : p.status === status))
     .filter((p) => (year === '' || year === undefined || year === null ? true : Number(p.plan_year) === Number(year)))
     .filter((p) => (!department ? true : p.department === department))
     .map((p) => enrichLocalPlan(p, allItems, deptMap))
-    .sort((a, b) => a.plan_year - b.plan_year || a.department.localeCompare(b.department));
+    .sort(
+      (a, b) =>
+        a.plan_year - b.plan_year ||
+        deptRank(a.department) - deptRank(b.department) ||
+        a.department.localeCompare(b.department)
+    );
 };
 
 export const fetchVccPlanDetail = async (id) => {
@@ -887,6 +1093,9 @@ export const saveVccPlanItem = async (planId, payload) => {
     responsible_dept: responsibleDept,
     responsible_label: String(payload.responsible_label || '').trim(),
     remarks: String(payload.remarks || '').trim(),
+    mpe: String(payload.mpe || '').trim(),
+    acceptance_criteria: String(payload.acceptance_criteria || '').trim(),
+    calibration_points: String(payload.calibration_points || '').trim(),
     sort_order: existingIdx >= 0 ? allItems[existingIdx].sort_order : allItems.length + 1
   };
 
@@ -1476,4 +1685,20 @@ export const rejectVccPlan = async (planId, reason = '') => {
   });
   await syncVccTasks(user).catch(() => {});
   return enrichLocalPlan(updated, getLocalPlanItems(), getDepartmentMap());
+};
+
+export const getVccPlanPdfUrl = (planId) => `/api/vcc/plans/${encodeURIComponent(planId)}/pdf`;
+
+export const fetchApprovedPlanPdf = async (planId, purpose = 'view') => {
+  const token = sessionStorage.getItem('qms-api-token');
+  const res = await fetch(`/api/vcc/plans/${encodeURIComponent(planId)}/pdf?purpose=${encodeURIComponent(purpose)}`, {
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {})
+    }
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || 'ไม่สามารถเปิดเอกสารทางการ PDF ได้');
+  }
+  return res.blob();
 };

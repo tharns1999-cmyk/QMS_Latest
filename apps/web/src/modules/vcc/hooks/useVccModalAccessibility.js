@@ -28,10 +28,21 @@ export const syncInertState = () => {
   const topmostId = vccDialogStack[vccDialogStack.length - 1];
 
   // 1. App background container(s)
+  // Only inert app background containers if they DO NOT contain any active dialog.
+  // Setting inert on an ancestor of an active dialog makes the entire dialog inert (HTML inert spec §6.5.3),
+  // which disables all pointer events, mouse clicks, keyboard inputs, and focus inside the dialog.
   const root = document.getElementById('root') || document.querySelector('[data-vcc-app-root]');
-  const appContainers = root ? [root] : [];
+  const activeDialogElements = Array.from(vccDialogElements.values()).filter(Boolean);
+  const rootContainsActiveDialog = Boolean(
+    root && (
+      activeDialogElements.some((el) => root.contains(el)) ||
+      root.querySelector('[role="dialog"], [role="alertdialog"]')
+    )
+  );
 
-  if (vccDialogStack.length > 0) {
+  const appContainers = root && !rootContainsActiveDialog ? [root] : [];
+
+  if (vccDialogStack.length > 0 && appContainers.length > 0) {
     appContainers.forEach((el) => {
       try {
         el.inert = true;
@@ -41,16 +52,14 @@ export const syncInertState = () => {
         // Safe fallback
       }
     });
-  } else {
-    appContainers.forEach((el) => {
-      try {
-        el.inert = false;
-        el.removeAttribute('inert');
-        el.removeAttribute('aria-hidden');
-      } catch {
-        // Safe fallback
-      }
-    });
+  } else if (root) {
+    try {
+      root.inert = false;
+      root.removeAttribute('inert');
+      root.removeAttribute('aria-hidden');
+    } catch {
+      // Safe fallback
+    }
   }
 
   // 2. Multi-layer modal stacking (Nested dialogs)

@@ -194,7 +194,7 @@ export const SmartAssetImportModal = ({
               </div>
               <div>
                 <h2 id="smart-import-title" className="text-xl font-bold text-slate-900 tracking-tight">
-                  เลือกเครื่องมือจากทะเบียนเข้าสู่แผนปี {plan.plan_year} (FM-QC-46)
+                  เลือกเครื่องมือจากทะเบียนเข้าสู่แผนปี {plan.plan_year}
                 </h2>
                 <p className="text-sm text-slate-500 font-medium mt-0.5">
                   เชื่อมโยงข้อมูลเครื่องมือจริงจาก Asset Register เพื่อกำหนดรอบการทวนสอบและวันครบกำหนดอัตโนมัติ

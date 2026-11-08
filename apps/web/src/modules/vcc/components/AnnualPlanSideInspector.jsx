@@ -158,6 +158,10 @@ export const AnnualPlanSideInspector = ({
 
               <div className="grid grid-cols-2 gap-3 pt-1">
                 <div>
+                  <span className="text-slate-500 block text-xs font-medium">ยี่ห้อ (Brand)</span>
+                  <span className="font-semibold text-slate-900 text-sm">{item.brand || '-'}</span>
+                </div>
+                <div>
                   <span className="text-slate-500 block text-xs font-medium">รุ่น (Model)</span>
                   <span className="font-semibold text-slate-900 text-sm">{item.model || '-'}</span>
                 </div>
@@ -203,6 +207,24 @@ export const AnnualPlanSideInspector = ({
                   <span className="text-slate-500 block text-xs font-medium">ความถี่รอบการตรวจ</span>
                   <span className="font-semibold text-slate-900 text-sm">{item.frequency_label || 'รายปี'}</span>
                 </div>
+                {item.mpe && (
+                  <div>
+                    <span className="text-slate-500 block text-xs font-medium">MPE (ความผิดพลาดสูงสุด)</span>
+                    <span className="font-semibold text-slate-900 text-sm">{item.mpe}</span>
+                  </div>
+                )}
+                {item.calibration_points && (
+                  <div>
+                    <span className="text-slate-500 block text-xs font-medium">จุดสอบเทียบ / ทวนสอบ</span>
+                    <span className="font-semibold text-slate-900 text-sm">{item.calibration_points}</span>
+                  </div>
+                )}
+                {item.acceptance_criteria && (
+                  <div className="col-span-2">
+                    <span className="text-slate-500 block text-xs font-medium">เกณฑ์การยอมรับ</span>
+                    <span className="font-semibold text-slate-900 text-sm">{item.acceptance_criteria}</span>
+                  </div>
+                )}
                 <div className="col-span-2">
                   <span className="text-slate-500 block text-xs font-medium">วันครบกำหนดตามเกณฑ์</span>
                   <span className="font-semibold text-slate-900 text-sm font-sans" title={(item.due_dates || []).join(', ')}>

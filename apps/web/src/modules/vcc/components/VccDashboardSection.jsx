@@ -295,7 +295,7 @@ export default function VccDashboardSection({ onNavigateToWorkOrders, onNavigate
                 className="h-8 inline-flex items-center gap-1.5 px-3 rounded-lg bg-white hover:bg-slate-50 text-slate-700 border border-slate-200/90 text-xs font-semibold transition-colors shadow-2xs cursor-pointer"
               >
                 <FileSpreadsheet size={14} className="text-emerald-600 shrink-0" />
-                <span>แผน FM-QC-46 (CSV)</span>
+                <span>แผนประจำปี (CSV)</span>
               </button>
 
               <button

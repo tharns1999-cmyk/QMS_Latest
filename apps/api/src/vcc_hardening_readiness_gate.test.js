@@ -38,10 +38,11 @@ describe('VCC Phase 2.5: Final Hardening & Phase 3 Readiness Gate Tests', () => 
       env.DB.prepare("INSERT OR IGNORE INTO departments (code, name_th, status) VALUES ('QC', 'ควบคุมคุณภาพ QC', 'ACTIVE')"),
       env.DB.prepare("INSERT OR IGNORE INTO departments (code, name_th, status) VALUES ('QA', 'ประกันคุณภาพ QA', 'ACTIVE')"),
       env.DB.prepare("INSERT OR IGNORE INTO departments (code, name_th, status) VALUES ('PD', 'ฝ่ายผลิต PD', 'ACTIVE')"),
+      env.DB.prepare("INSERT OR IGNORE INTO departments (code, name_th, status) VALUES ('MGT', 'ฝ่ายบริหาร MGT', 'ACTIVE')"),
       ...[
-        ['GATE-QC-STAFF', 2, 1, 'QC', '["QC"]'],
-        ['GATE-QC-SUP', 4, 1, 'QC', '["QC"]'],
-        ['GATE-QA-MGR', 6, 1, 'QC', '["QC","QA"]'],
+        ['GATE-QC-STAFF', 4, 1, 'QC', '["QC"]'],
+        ['GATE-QC-SUP', 5, 1, 'PD', '["PD","QC"]'],
+        ['GATE-QA-MGR', 6, 1, 'MGT', '["MGT","QA","QC"]'],
         ['GATE-PD-STAFF', 2, 0, 'PD', '["PD"]']
       ].map(([id, level, dcc, dept, depts]) =>
         env.DB.prepare(
@@ -53,7 +54,24 @@ describe('VCC Phase 2.5: Final Hardening & Phase 3 Readiness Gate Tests', () => 
              departments = excluded.departments,
              is_dcc = excluded.is_dcc`
         ).bind(id, id, `${id}@gate.local`, hash, level, dept, depts, dcc)
-      )
+      ),
+      env.DB.prepare(`
+        INSERT INTO settings (key, value) VALUES ('vcc_document_profiles', ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value
+      `).bind(JSON.stringify({
+        QC: {
+          document_code: 'FM-QC-46',
+          revision: '01',
+          form_issue_date: '2026-06-25',
+          title_th: 'แผนการทวนสอบเครื่องมือวัดประจำปี',
+          reviewer_dept: 'PD',
+          required_reviewer_level: 5,
+          required_approver_level: 6,
+          min_preparer_level: 4,
+          assigned_reviewer_id: 'GATE-QC-SUP',
+          assigned_approver_id: 'GATE-QA-MGR'
+        }
+      }))
     ]);
 
     for (const id of ['GATE-QC-STAFF', 'GATE-QC-SUP', 'GATE-QA-MGR', 'GATE-PD-STAFF']) {

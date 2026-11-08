@@ -38,10 +38,11 @@ describe('VCC Phase 2.5: Stable Planned Cycle Identity, Reconciliation & E2E Ver
     await env.DB.batch([
       env.DB.prepare("INSERT OR IGNORE INTO departments (code, name_th, status) VALUES ('QC', 'ควบคุมคุณภาพ QC', 'ACTIVE')"),
       env.DB.prepare("INSERT OR IGNORE INTO departments (code, name_th, status) VALUES ('PD', 'ฝ่ายผลิต PD', 'ACTIVE')"),
+      env.DB.prepare("INSERT OR IGNORE INTO departments (code, name_th, status) VALUES ('MGT', 'ฝ่ายบริหาร MGT', 'ACTIVE')"),
       ...[
-        ['E2E-QC-STAFF', 2, 1, 'QC', '["QC"]'],
-        ['E2E-QC-SUP', 4, 1, 'QC', '["QC"]'],
-        ['E2E-QA-MGR', 6, 1, 'QC', '["QC","QA"]'],
+        ['E2E-QC-STAFF', 4, 1, 'QC', '["QC"]'],
+        ['E2E-QC-SUP', 5, 1, 'PD', '["PD","QC"]'],
+        ['E2E-QA-MGR', 6, 1, 'MGT', '["MGT","QC","QA"]'],
         ['E2E-PD-STAFF', 2, 0, 'PD', '["PD"]']
       ].map(([id, level, dcc, dept, depts]) =>
         env.DB.prepare(
@@ -53,7 +54,24 @@ describe('VCC Phase 2.5: Stable Planned Cycle Identity, Reconciliation & E2E Ver
              departments = excluded.departments,
              is_dcc = excluded.is_dcc`
         ).bind(id, id, `${id}@e2e.local`, hash, level, dept, depts, dcc)
-      )
+      ),
+      env.DB.prepare(`
+        INSERT INTO settings (key, value) VALUES ('vcc_document_profiles', ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value
+      `).bind(JSON.stringify({
+        QC: {
+          document_code: 'FM-QC-46',
+          revision: '01',
+          form_issue_date: '2026-06-25',
+          title_th: 'แผนการทวนสอบเครื่องมือวัดประจำปี',
+          reviewer_dept: 'PD',
+          required_reviewer_level: 5,
+          required_approver_level: 6,
+          min_preparer_level: 4,
+          assigned_reviewer_id: 'E2E-QC-SUP',
+          assigned_approver_id: 'E2E-QA-MGR'
+        }
+      }))
     ]);
 
     for (const id of ['E2E-QC-STAFF', 'E2E-QC-SUP', 'E2E-QA-MGR', 'E2E-PD-STAFF']) {
