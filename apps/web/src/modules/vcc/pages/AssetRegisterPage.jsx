@@ -563,15 +563,17 @@ const AssetRegisterPageInner = () => {
 
       {/* Compact Page Header: title + one-line description + primary actions */}
       {moduleView !== 'WORK_ORDERS' && (
-        <div className="px-1 transition-all">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-            <div className="space-y-0.5 min-w-0">
-              <h1 className="text-xl md:text-2xl font-bold text-slate-900 tracking-tight break-words">
+        <div className={`px-1 transition-all ${moduleView === 'ANNUAL_PLAN' ? 'mb-1' : ''}`}>
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
+            <div className="space-y-0 min-w-0">
+              <h1 className={`${moduleView === 'ANNUAL_PLAN' ? 'text-lg md:text-xl font-bold' : 'text-xl md:text-2xl font-bold'} text-slate-900 tracking-tight break-words`}>
                 {pageMeta.title}
               </h1>
-              <p className="hidden md:block text-sm text-slate-500">
-                {pageMeta.description}
-              </p>
+              {moduleView !== 'ANNUAL_PLAN' && (
+                <p className="hidden md:block text-sm text-slate-500">
+                  {pageMeta.description}
+                </p>
+              )}
             </div>
 
             {moduleView === 'ASSETS' && (

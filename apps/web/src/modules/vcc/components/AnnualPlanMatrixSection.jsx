@@ -87,6 +87,10 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
   const [filterYear, setFilterYear] = useState('');
   const [filterDept, setFilterDept] = useState(() => (!canReadAll && userDept ? userDept : ''));
 
+  const effectiveDept = useMemo(() => {
+    return (!canReadAll && userDept) ? userDept : filterDept;
+  }, [canReadAll, userDept, filterDept]);
+
   useEffect(() => {
     if (!canReadAll && userDept) {
       setFilterDept(userDept);
@@ -723,7 +727,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
         filterYear={filterYear}
         setFilterYear={setFilterYear}
         availableYears={availableYears}
-        filterDept={filterDept}
+        filterDept={effectiveDept}
         setFilterDept={setFilterDept}
         activeDepartments={activeDepartments}
         plans={plans}
@@ -839,7 +843,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
               filterYear={filterYear}
               setFilterYear={setFilterYear}
               availableYears={availableYears}
-              filterDept={filterDept}
+              filterDept={effectiveDept}
               setFilterDept={setFilterDept}
               activeDepartments={activeDepartments}
               onOpenAddItem={openAddItem}
@@ -875,7 +879,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
               filterYear={filterYear}
               setFilterYear={setFilterYear}
               availableYears={availableYears}
-              filterDept={filterDept}
+              filterDept={effectiveDept}
               setFilterDept={setFilterDept}
               activeDepartments={activeDepartments}
               onOpenAddItem={openAddItem}

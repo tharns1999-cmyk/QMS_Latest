@@ -10,11 +10,12 @@ import {
 import { formatVccDateTime } from '../utils/vccDateUtils';
 
 /**
- * Enterprise Workflow Progress Stepper for Annual Plan (FM-QC-46)
- * Clean Minimal Luxury Design:
- * - 4 Stages: 1. ร่างแผน (Draft) -> 2. รอทบทวน (Review) -> 3. รออนุมัติ (Approval) -> 4. อนุมัติแล้ว (Approved)
- * - Visual States: Completed, Current, Upcoming, Returned
- * - Non-fictitious: displays only real actors and timestamps from activePlan
+ * Enterprise Compact Workflow Progress Indicator for Annual Plan (FM-QC-46)
+ * High Information Density & Modern Minimal Luxury SaaS Design:
+ * - 4 Horizontal Segments (34px height):
+ *   1. ร่างแผน (Draft) -> 2. ทบทวนแผน (Review) -> 3. อนุมัติแผน (Approval) -> 4. มีผลบังคับใช้ (Effective)
+ * - Micro Visual States: Completed (Emerald), Current (Indigo Focus Ring), Upcoming (Slate Muted), Returned (Rose)
+ * - Preserves complete accessibility, actors, and real timestamp traceability.
  */
 export const AnnualPlanProgressStepper = ({
   activePlan,
@@ -105,16 +106,9 @@ export const AnnualPlanProgressStepper = ({
       data-testid="annual-plan-progress-stepper"
       role="region"
       aria-label="ขั้นตอนการอนุมัติแผนประจำปี"
-      className="bg-slate-50/70 border border-slate-200/70 rounded-xl p-3 sm:p-3.5 space-y-2"
+      className="bg-slate-50/70 border border-slate-200/80 rounded-xl px-2 sm:px-3 py-1.5 transition-all shadow-2xs"
     >
-      {/* Desktop & Tablet: Horizontal Flow */}
-      <div className="hidden sm:flex items-center justify-between relative">
-        {/* Background Connecting Track */}
-        <div
-          className="absolute top-4 left-6 right-6 h-0.5 bg-slate-200/90 -z-0"
-          aria-hidden="true"
-        />
-
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-1.5 sm:gap-2">
         {steps.map((step) => {
           const isStepCurrent = step.state === 'CURRENT' || step.state === 'RETURNED_EDIT';
           const isStepCompleted = step.state === 'COMPLETED';
@@ -125,145 +119,60 @@ export const AnnualPlanProgressStepper = ({
           return (
             <div
               key={step.id}
-              className="flex-1 flex flex-col items-center text-center relative z-10 px-1 group"
               aria-current={isStepCurrent ? 'step' : undefined}
+              className={`flex items-center gap-1.5 sm:gap-2 px-2 py-1 rounded-lg border text-xs min-w-0 transition-all ${
+                isStepReturned
+                  ? 'bg-rose-50/90 border-rose-300 text-rose-900 ring-1 ring-rose-200/80 font-semibold'
+                  : isStepCurrent
+                  ? 'bg-white border-indigo-300 text-indigo-900 font-bold shadow-2xs ring-2 ring-indigo-500/10'
+                  : isStepCompleted
+                  ? 'bg-emerald-50/70 border-emerald-200/80 text-emerald-900 font-medium'
+                  : 'bg-white/60 border-slate-200/60 text-slate-500 font-normal'
+              }`}
             >
-              {/* Node Circle */}
-              <div
-                className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
+              {/* Micro Status Node */}
+              <span
+                className={`w-4.5 h-4.5 rounded-full flex items-center justify-center shrink-0 text-[10px] font-mono font-bold ${
                   isStepReturned
-                    ? 'bg-rose-50 text-rose-700 border-2 border-rose-500 ring-4 ring-rose-100 shadow-2xs'
+                    ? 'bg-rose-600 text-white'
                     : isStepCurrent
-                    ? 'bg-indigo-600 text-white ring-4 ring-indigo-100 shadow-2xs font-bold'
+                    ? 'bg-indigo-600 text-white shadow-2xs'
                     : isStepCompleted
-                    ? 'bg-emerald-600 text-white shadow-2xs'
-                    : 'bg-white text-slate-400 border border-slate-300'
+                    ? 'bg-emerald-600 text-white'
+                    : 'bg-slate-200 text-slate-600'
                 }`}
               >
                 {isStepCompleted ? (
-                  <Check size={14} strokeWidth={2.5} />
+                  <Check size={11} strokeWidth={3} />
                 ) : (
-                  <StepIcon size={13} strokeWidth={2.2} />
+                  <StepIcon size={11} strokeWidth={2.2} />
                 )}
-              </div>
+              </span>
 
-              {/* Title & Role */}
-              <div className="mt-1.5 space-y-0.5">
-                <div
-                  className={`text-xs tracking-tight ${
-                    isStepReturned
-                      ? 'font-bold text-rose-800'
-                      : isStepCurrent
-                      ? 'font-bold text-indigo-900'
-                      : isStepCompleted
-                      ? 'font-semibold text-slate-800'
-                      : 'font-medium text-slate-500'
-                  }`}
-                >
+              {/* Title & Actor Summary in one line */}
+              <div className="min-w-0 flex-1 flex items-baseline justify-between gap-1">
+                <span className="truncate tracking-tight leading-tight">
                   {step.title}
-                </div>
+                </span>
 
-                <div className="text-[11px] text-slate-500 leading-tight">
-                  {step.role}
-                </div>
-
-                {/* Subtext: Actor / Timestamp if exists */}
                 {step.actor && (
-                  <div
-                    className={`text-[10px] font-sans truncate max-w-[130px] mx-auto ${
+                  <span
+                    className={`text-[10px] font-normal truncate max-w-[90px] sm:max-w-[110px] hidden sm:inline ${
                       isStepReturned
-                        ? 'text-rose-600 font-medium'
+                        ? 'text-rose-700 font-medium'
                         : isStepCurrent
-                        ? 'text-indigo-600 font-medium'
+                        ? 'text-indigo-700 font-medium'
                         : 'text-slate-500'
                     }`}
-                    title={step.actor}
+                    title={`${step.actor}${step.timestamp && formatVccDateTime(step.timestamp) !== '-' ? ` · ${formatVccDateTime(step.timestamp).split(' ')[0]}` : ''}`}
                   >
-                    {isStepCurrent && !isStepReturned && !step.timestamp ? (
-                      <span>{step.actor}</span>
-                    ) : (
-                      <span>
-                        {step.actor}
-                        {step.timestamp && formatVccDateTime(step.timestamp) !== '-' ? (
-                          <span className="text-slate-400 ml-1">· {formatVccDateTime(step.timestamp).split(' ')[0]}</span>
-                        ) : null}
-                      </span>
-                    )}
-                  </div>
+                    {step.actor}
+                  </span>
                 )}
               </div>
             </div>
           );
         })}
-      </div>
-
-      {/* Mobile: Compact Horizontal Stepper Pills & Current Step Card */}
-      <div className="sm:hidden space-y-2">
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar text-xs">
-          {steps.map((step) => {
-            const isStepCurrent = step.state === 'CURRENT' || step.state === 'RETURNED_EDIT';
-            const isStepCompleted = step.state === 'COMPLETED';
-            const isStepReturned = step.state === 'RETURNED' || step.state === 'RETURNED_EDIT';
-
-            const StepIcon = step.icon;
-
-            return (
-              <div
-                key={step.id}
-                aria-current={isStepCurrent ? 'step' : undefined}
-                className={`shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs transition-all ${
-                  isStepReturned
-                    ? 'bg-rose-50 border-rose-200 text-rose-800 font-bold'
-                    : isStepCurrent
-                    ? 'bg-white border-indigo-300 text-indigo-900 font-bold shadow-2xs ring-2 ring-indigo-500/10'
-                    : isStepCompleted
-                    ? 'bg-emerald-50/70 border-emerald-200 text-emerald-800 font-medium'
-                    : 'bg-white/80 border-slate-200 text-slate-500 font-normal'
-                }`}
-              >
-                <span
-                  className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 text-[10px] ${
-                    isStepReturned
-                      ? 'bg-rose-600 text-white'
-                      : isStepCurrent
-                      ? 'bg-indigo-600 text-white'
-                      : isStepCompleted
-                      ? 'bg-emerald-600 text-white'
-                      : 'bg-slate-200 text-slate-600'
-                  }`}
-                >
-                  {isStepCompleted ? <Check size={10} strokeWidth={3} /> : <StepIcon size={10} />}
-                </span>
-                <span className="whitespace-nowrap">{step.title}</span>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Mobile: Current Step Context Badge */}
-        {(() => {
-          const activeStep = steps.find((s) => s.state === 'CURRENT' || s.state === 'RETURNED_EDIT') || steps[steps.length - 1];
-          if (!activeStep) return null;
-          return (
-            <div className="p-2.5 bg-white rounded-lg border border-slate-200/80 text-xs flex items-center justify-between gap-2 shadow-2xs">
-              <div className="flex items-center gap-2">
-                <span className="w-5 h-5 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-700 font-bold font-mono text-[11px] flex items-center justify-center shrink-0">
-                  {activeStep.stepNum}
-                </span>
-                <div>
-                  <div className="font-bold text-slate-800 leading-tight">
-                    {activeStep.title} <span className="font-normal text-slate-500 text-[11px]">({activeStep.role})</span>
-                  </div>
-                  {activeStep.actor && (
-                    <div className="text-[11px] text-slate-600 mt-0.5">
-                      ผู้รับผิดชอบ: {activeStep.actor}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          );
-        })()}
       </div>
     </div>
   );

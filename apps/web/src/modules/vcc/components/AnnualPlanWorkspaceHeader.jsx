@@ -267,19 +267,28 @@ export const AnnualPlanWorkspaceHeader = ({
   const menuItemClass =
     'w-full flex items-center gap-2.5 px-3.5 py-2 text-left text-xs font-medium text-slate-700 hover:bg-slate-50 cursor-pointer';
 
+  const planDocCode = useMemo(() => {
+    if (!activePlan) return '';
+    const raw = activePlan.document_code;
+    if (!raw || raw.startsWith('FM-')) {
+      return `VCC-PLAN-${activePlan.department || 'QC'}`;
+    }
+    return raw;
+  }, [activePlan]);
+
   return (
     <div
       data-testid="annual-plan-workspace-header"
-      className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs p-3.5 sm:p-4 space-y-3"
+      className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs p-2.5 sm:p-3 space-y-2"
     >
       {/* ─────────────────────────────────────────────────────────────
           TIER 1: Plan Context & Metadata (ซ้าย) + Plan Selector (ขวา)
           ───────────────────────────────────────────────────────────── */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2.5">
         {/* ฝั่งซ้าย: ชื่อแผน + รหัสเอกสาร + แผนก + สถานะ + กติกาวันครบกำหนด */}
         <div className="min-w-0">
           {activePlan ? (
-            <div className="space-y-1.5">
+            <div className="space-y-1">
               <div className="flex items-center gap-2 flex-wrap">
                 <h2
                   className="text-sm sm:text-base font-bold text-slate-900 tracking-tight flex items-center gap-1.5 flex-wrap"
@@ -306,7 +315,8 @@ export const AnnualPlanWorkspaceHeader = ({
               {/* Inline Metadata Tags */}
               <div className="flex items-center gap-2 flex-wrap text-xs text-slate-600">
                 <span className="font-mono font-semibold text-slate-800 bg-slate-100 px-2 py-0.5 rounded border border-slate-200/80 shadow-2xs">
-                  Rev.{activePlan.revision}
+                  {planDocCode && <span>{planDocCode}&nbsp;</span>}
+                  <span>Rev.{activePlan.revision}</span>
                 </span>
 
                 {activePlan.form_issue_date && (
@@ -381,7 +391,7 @@ export const AnnualPlanWorkspaceHeader = ({
       {/* ─────────────────────────────────────────────────────────────
           TIER 2: Filter Toolbar (ซ้าย) + Primary & Secondary Actions (ขวา)
           ───────────────────────────────────────────────────────────── */}
-      <div className="pt-2.5 border-t border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-2.5">
+      <div className="pt-2 border-t border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-2">
         {/* ฝั่งซ้าย: ตัวกรองสถานะแผน และแผนก */}
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-xs font-semibold text-slate-500 flex items-center gap-1.5">
@@ -629,7 +639,7 @@ export const AnnualPlanWorkspaceHeader = ({
           TIER 3: 4 Inline Metrics (ซ้าย) + Contextual Workflow Guidance (ขวา)
           ───────────────────────────────────────────────────────────── */}
       {activePlan && (
-        <div className="pt-2 border-t border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-2 text-xs">
+        <div className="pt-1.5 border-t border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-2 text-xs">
           {/* ฝั่งซ้าย: 4 Inline Metrics แบบกระชับ สะอาดตา */}
           <div className="flex items-center gap-2.5 flex-wrap text-slate-600">
             <div className="inline-flex items-center gap-1.5">

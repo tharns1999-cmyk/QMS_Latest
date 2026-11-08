@@ -831,6 +831,8 @@ export const fetchVccPlans = async ({ status = 'DRAFT', year = '', department = 
   const allItems = getLocalPlanItems();
   const deptMap = getDepartmentMap();
   const uDept = String(user?.department || user?.dept || '').toUpperCase();
+  const isGlobalUser = Boolean(user?.isDcc || user?.isQmr || Number(user?.approval_level ?? user?.approvalLevel ?? 0) >= 6);
+  const effectiveFilterDept = (!isGlobalUser && uDept) ? uDept : department;
   const deptRank = (d) => {
     const norm = String(d || '').toUpperCase();
     if (uDept && norm === uDept) return 0;
@@ -842,7 +844,7 @@ export const fetchVccPlans = async ({ status = 'DRAFT', year = '', department = 
     .filter((p) => isUserAuthorizedForPlanDept(user, p.department))
     .filter((p) => (status === 'ALL' || !status ? true : p.status === status))
     .filter((p) => (year === '' || year === undefined || year === null ? true : Number(p.plan_year) === Number(year)))
-    .filter((p) => (!department ? true : p.department === department))
+    .filter((p) => (!effectiveFilterDept ? true : p.department === effectiveFilterDept))
     .map((p) => enrichLocalPlan(p, allItems, deptMap))
     .sort(
       (a, b) =>

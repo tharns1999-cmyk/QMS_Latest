@@ -127,54 +127,54 @@ export const AnnualPlanOverviewCards = ({
   const unincludedCount = computedUnincluded?.unincludedAssets?.length || 0;
 
   return (
-    <div className="space-y-2.5" data-testid="annual-plan-overview-cards">
-      {/* 4 Clean Minimal KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
+    <div className="space-y-2" data-testid="annual-plan-overview-cards">
+      {/* 4 Clean Minimal Compact KPI Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-2.5">
         {/* Card 1: In Scope */}
-        <div className="bg-white rounded-xl border border-slate-200/80 p-3 sm:p-3.5 shadow-2xs flex items-center justify-between gap-2">
+        <div className="bg-white rounded-xl border border-slate-200/80 px-2.5 py-1.5 sm:px-3 sm:py-2 shadow-2xs flex items-center justify-between gap-2 transition-all">
           <div className="min-w-0">
             <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block truncate">
               เครื่องมือในขอบเขต
             </span>
             <div className="flex items-baseline gap-1 mt-0.5">
-              <span className="text-xl sm:text-2xl font-bold font-mono text-slate-900">
+              <span className="text-lg sm:text-xl font-bold font-mono text-slate-900">
                 {inScopeCount}
               </span>
               <span className="text-xs text-slate-400 font-medium">เครื่อง</span>
             </div>
           </div>
-          <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-600 shrink-0">
-            <Layers size={16} />
+          <div className="w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center text-slate-600 shrink-0">
+            <Layers size={14} />
           </div>
         </div>
 
         {/* Card 2: Planned */}
-        <div className="bg-white rounded-xl border border-slate-200/80 p-3 sm:p-3.5 shadow-2xs flex items-center justify-between gap-2">
+        <div className="bg-white rounded-xl border border-slate-200/80 px-2.5 py-1.5 sm:px-3 sm:py-2 shadow-2xs flex items-center justify-between gap-2 transition-all">
           <div className="min-w-0">
             <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block truncate">
               มีแผนทวนสอบแล้ว
             </span>
             <div className="flex items-baseline gap-1 mt-0.5">
-              <span className="text-xl sm:text-2xl font-bold font-mono text-indigo-600">
+              <span className="text-lg sm:text-xl font-bold font-mono text-indigo-600">
                 {plannedCount}
               </span>
               <span className="text-xs text-slate-400 font-medium">เครื่อง</span>
             </div>
           </div>
-          <div className="w-8 h-8 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 shrink-0">
-            <CheckCircle2 size={16} />
+          <div className="w-7 h-7 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 shrink-0">
+            <CheckCircle2 size={14} />
           </div>
         </div>
 
         {/* Card 3: Unplanned */}
-        <div className="bg-white rounded-xl border border-slate-200/80 p-3 sm:p-3.5 shadow-2xs flex items-center justify-between gap-2">
+        <div className="bg-white rounded-xl border border-slate-200/80 px-2.5 py-1.5 sm:px-3 sm:py-2 shadow-2xs flex items-center justify-between gap-2 transition-all">
           <div className="min-w-0">
             <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block truncate">
               ยังไม่ได้วางแผน
             </span>
             <div className="flex items-baseline gap-1 mt-0.5">
               <span
-                className={`text-xl sm:text-2xl font-bold font-mono ${
+                className={`text-lg sm:text-xl font-bold font-mono ${
                   unplannedCount > 0
                     ? unplannedWithoutReasonCount > 0
                       ? 'text-amber-600'
@@ -188,31 +188,31 @@ export const AnnualPlanOverviewCards = ({
             </div>
           </div>
           <div
-            className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+            className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
               unplannedCount > 0 && unplannedWithoutReasonCount > 0
                 ? 'bg-amber-50 border border-amber-200 text-amber-700'
                 : 'bg-slate-100 text-slate-600'
             }`}
           >
-            <Clock size={16} />
+            <Clock size={14} />
           </div>
         </div>
 
         {/* Card 4: Total Cycles */}
-        <div className="bg-white rounded-xl border border-slate-200/80 p-3 sm:p-3.5 shadow-2xs flex items-center justify-between gap-2">
+        <div className="bg-white rounded-xl border border-slate-200/80 px-2.5 py-1.5 sm:px-3 sm:py-2 shadow-2xs flex items-center justify-between gap-2 transition-all">
           <div className="min-w-0">
             <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block truncate">
               รอบวางแผนรวม
             </span>
             <div className="flex items-baseline gap-1 mt-0.5">
-              <span className="text-xl sm:text-2xl font-bold font-mono text-emerald-600">
+              <span className="text-lg sm:text-xl font-bold font-mono text-emerald-600">
                 {totalCyclesCount}
               </span>
               <span className="text-xs text-slate-400 font-medium">รอบ</span>
             </div>
           </div>
-          <div className="w-8 h-8 rounded-lg bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600 shrink-0">
-            <RotateCw size={16} />
+          <div className="w-7 h-7 rounded-lg bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600 shrink-0">
+            <RotateCw size={14} />
           </div>
         </div>
       </div>
