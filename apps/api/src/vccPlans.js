@@ -1219,12 +1219,26 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
     const userLevel = Number(user.approval_level || user.approvalLevel || 0);
     const userDepts = getUserDepartments(user);
     const isDccUser = Boolean(user.isDcc || user.is_dcc);
-    if (!isDccUser) {
+
+    if (deptProfile) {
+      // Strict Department Document Profile Enforcement:
+      // Even DCC Admin cannot prepare operational plans for another department.
+      // Must belong to the department and have approval level >= min_preparer_level.
+      if (!userDepts.includes(department)) {
+        return c.json({ error: `ผู้จัดทำต้องสังกัดแผนกเจ้าของแผน (${department}) เท่านั้น` }, 403);
+      }
       if (userLevel < minPrepLevel) {
         return c.json({ error: `ผู้จัดทำแผนต้องมีระดับอนุมัติตั้งแต่ L${minPrepLevel} ขึ้นไปตามแบบฟอร์มเอกสารควบคุม` }, 403);
       }
-      if (!userDepts.includes(department)) {
-        return c.json({ error: `ผู้จัดทำต้องสังกัดแผนกเจ้าของแผน (${department}) เท่านั้น` }, 403);
+    } else {
+      // Legacy unprofiled departments:
+      if (!isDccUser) {
+        if (!userDepts.includes(department)) {
+          return c.json({ error: `ผู้จัดทำต้องสังกัดแผนกเจ้าของแผน (${department}) เท่านั้น` }, 403);
+        }
+        if (userLevel < minPrepLevel) {
+          return c.json({ error: `ผู้จัดทำแผนต้องมีระดับอนุมัติตั้งแต่ L${minPrepLevel} ขึ้นไป` }, 403);
+        }
       }
     }
 
@@ -2390,9 +2404,15 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
   // Download/View Approved Official PDF from R2
   app.get('/api/vcc/plans/:id/pdf', requireAuth, requireVccAccess, async (c) => {
     const db = c.env.DB;
+    const user = c.get('user');
     const id = c.req.param('id');
     const plan = await fetchPlan(db, id);
     if (!plan) return c.json({ error: 'ไม่พบแผนการสอบเทียบประจำปี' }, 404);
+    const isAssigned = Boolean((plan.assigned_reviewer_id && plan.assigned_reviewer_id === user.id) ||
+      (plan.assigned_approver_id && plan.assigned_approver_id === user.id));
+    if (!canReadVccDepartment(user, plan.department) && !isAssigned) {
+      return c.json(VCC_DEPT_FORBIDDEN, 403);
+    }
     if (plan.status !== 'APPROVED' || !plan.pdf_file_key) {
       return c.json({ error: 'ยังไม่มีไฟล์เอกสาร PDF ที่ได้รับการอนุมัติอย่างเป็นทางการสำหรับแผนนี้' }, 404);
     }
@@ -3061,7 +3081,10 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
     const id = c.req.param('id');
     const targetPlan = await fetchPlan(db, id);
     if (!targetPlan) return c.json({ error: 'ไม่พบแผนการสอบเทียบประจำปี' }, 404);
-    if (!canReadVccDepartment(c.get('user'), targetPlan.department)) return c.json(VCC_DEPT_FORBIDDEN, 403);
+    const user = c.get('user');
+    const isAssigned = Boolean((targetPlan.assigned_reviewer_id && targetPlan.assigned_reviewer_id === user.id) ||
+      (targetPlan.assigned_approver_id && targetPlan.assigned_approver_id === user.id));
+    if (!canReadVccDepartment(user, targetPlan.department) && !isAssigned) return c.json(VCC_DEPT_FORBIDDEN, 403);
 
     const compareToId = c.req.query('compare_to') || targetPlan.parent_plan_id;
     let basePlan = null;

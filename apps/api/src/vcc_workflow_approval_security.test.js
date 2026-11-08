@@ -243,6 +243,20 @@ describe('VCC Phase 1 Step 3: Backend Workflow & Approval Security', () => {
       planned_months: [3]
     });
 
+    // Ensure all items in the plan have either planned months or justification remarks to satisfy submission gate
+    const planDetail = await call('GET', `/api/vcc/plans/${planId}`, 'QC-PREP-L4');
+    for (const item of (planDetail.body.items || [])) {
+      if ((!item.planned_months || item.planned_months.length === 0) && !item.remarks) {
+        await call('POST', `/api/vcc/plans/${planId}/items`, 'QC-PREP-L4', {
+          asset_id: item.asset_id,
+          provider_name: item.provider_name || 'Internal QC Lab',
+          responsible_dept: 'QC',
+          planned_months: [],
+          remarks: 'ทวนสอบรอบปีอื่น'
+        });
+      }
+    }
+
     const submitRes = await call('POST', `/api/vcc/plans/${planId}/submit`, 'QC-PREP-L4', {});
     expect(submitRes.status).toBe(200);
 
@@ -452,5 +466,56 @@ describe('VCC Phase 1 Step 3: Backend Workflow & Approval Security', () => {
     const officialObj = reconRes.body.objects.find((o) => o.status === 'OFFICIAL_COMMITTED');
     expect(officialObj).toBeDefined();
     expect(officialObj.plan).toBeDefined();
+  });
+
+  // 11. Task-Scoped Isolation: External Reviewer cannot access unassigned assets, work orders or unassigned plan PDFs
+  it('strictly isolates external task-assigned reviewers from accessing assets, work orders or unassigned plan PDFs (HTTP 403)', async () => {
+    // 1. PD-REV-L5 lists assets -> scoped to PD only, gets 0 QC assets
+    const assetListRes = await call('GET', '/api/vcc/assets', 'PD-REV-L5');
+    expect(assetListRes.status).toBe(200);
+    expect((assetListRes.body.assets || []).some((a) => a.department === 'QC')).toBe(false);
+
+    // 2. PD-REV-L5 direct access to a QC asset -> 403 Forbidden
+    const singleAssetRes = await call('GET', '/api/vcc/assets/ASSET-QC-001', 'PD-REV-L5');
+    expect(singleAssetRes.status).toBe(403);
+
+    // 3. PD-REV-L5 lists work orders -> gets 0 QC work orders
+    const woListRes = await call('GET', '/api/vcc/work-orders', 'PD-REV-L5');
+    expect(woListRes.status).toBe(200);
+    expect((woListRes.body.workOrders || []).some((w) => w.department === 'QC')).toBe(false);
+
+    // 4. Create an unassigned LB plan (where reviewer is LB-REV-L5, not PD-REV-L5)
+    // PD-REV-L5 attempting to download PDF of unassigned plan -> 403 Forbidden
+    const unassignedPlanRes = await call('POST', '/api/vcc/plans', 'LB-PREP-L4', {
+      plan_year: 2095,
+      department: 'LB'
+    });
+    expect(unassignedPlanRes.status).toBe(201);
+    const lbPlanId = unassignedPlanRes.body.plan.id;
+
+    const unassignedPdfRes = await app.request(`/api/vcc/plans/${lbPlanId}/pdf`, {
+      headers: { Authorization: `Bearer ${tokens['PD-REV-L5']}` }
+    }, env);
+    expect(unassignedPdfRes.status).toBe(403);
+  });
+
+  // 12. DCC Operational Preparation Blocker
+  it('strictly blocks DCC Admin from creating or submitting operational plans for QC/LB without department membership (HTTP 403)', async () => {
+    // DCC-ADMIN has primary_department = 'DC', is_dcc = 1
+    // Attempting to create an operational plan for QC
+    const dccCreateRes = await call('POST', '/api/vcc/plans', 'DCC-ADMIN', {
+      plan_year: 2096,
+      department: 'QC'
+    });
+    expect(dccCreateRes.status).toBe(403);
+    expect(dccCreateRes.body.error).toContain('ผู้จัดทำต้องสังกัดแผนกเจ้าของแผน (QC) เท่านั้น');
+
+    // Attempting to create an operational plan for LB
+    const dccCreateLabRes = await call('POST', '/api/vcc/plans', 'DCC-ADMIN', {
+      plan_year: 2096,
+      department: 'LB'
+    });
+    expect(dccCreateLabRes.status).toBe(403);
+    expect(dccCreateLabRes.body.error).toContain('ผู้จัดทำต้องสังกัดแผนกเจ้าของแผน (LB) เท่านั้น');
   });
 });
