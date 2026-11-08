@@ -56,9 +56,9 @@ describe('Annual Planning Header Redesign (FM-QC-46) — Compact 2-Tier Enterpri
     // Status badge with status label
     expect(screen.getByText(/สถานะ: ร่างแผน/, { selector: 'span' })).toBeInTheDocument();
 
-    // Document code and department metadata tags
-    expect(screen.getAllByText(/FM-QC-46 Rev\.01/).length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText(/ควบคุมคุณภาพ \(QC\)/)).toBeInTheDocument();
+    // Revision and department metadata tags
+    expect(screen.getAllByText(/Rev\.01/).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/ควบคุมคุณภาพ \(QC\)/).length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText(/ครบกำหนดวันสิ้นเดือน/)).toBeInTheDocument();
 
     // Primary action button

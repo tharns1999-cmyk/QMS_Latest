@@ -65,7 +65,7 @@ describe('VCC FM-QC-46 — สถาปัตยกรรมข้อมูล�
     await openPlanPage();
 
     const planSelect = screen.getByLabelText('เลือกแผนประจำปี');
-    expect(planSelect.selectedOptions[0]).toHaveTextContent(/ปี 2026 · แผนก QC · FM-QC-46 Rev\.01/);
+    expect(planSelect.selectedOptions[0]).toHaveTextContent(/ปี 2026 · ควบคุมคุณภาพ \(QC\) · Rev\.01/);
 
     expect(screen.queryByLabelText('กรองตามปีของแผน')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: /กรองปี\/แผนก/ }));

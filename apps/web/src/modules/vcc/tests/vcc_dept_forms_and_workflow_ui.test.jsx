@@ -62,8 +62,8 @@ describe('VCC Phase 1 Step 4: QC/LAB Department Forms & Workflow UI', () => {
       />
     );
 
-    // Verify document code and revision badge
-    expect(screen.getByText('FM-QC-46 Rev.01')).toBeInTheDocument();
+    // Verify paperless revision badge
+    expect(screen.getByText('Rev.01')).toBeInTheDocument();
     // Verify form issue date
     expect(screen.getByText(/ประกาศใช้: 2026-06-09/i)).toBeInTheDocument();
     // Verify reviewer in metadata
