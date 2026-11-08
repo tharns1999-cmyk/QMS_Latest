@@ -70,6 +70,52 @@ const loadPlanSettings = async (db) => {
   }
 };
 
+export const DEFAULT_DOCUMENT_PROFILES = {
+  QC: {
+    document_code: 'FM-QC-46',
+    revision: '01',
+    form_issue_date: '2026-06-09',
+    title_th: 'แผนการทวนสอบเครื่องมือประจำปี',
+    reviewer_dept: 'PD',
+    required_reviewer_level: 5,
+    required_approver_level: 6,
+    min_preparer_level: 4,
+    assigned_reviewer_id: null,
+    assigned_approver_id: null
+  },
+  LB: {
+    document_code: 'FM-LB-11',
+    revision: '02',
+    form_issue_date: '2026-08-10',
+    title_th: 'แผนการสอบเทียบเครื่องมือที่ใช้ในห้องปฏิบัติการจุลชีววิทยา ประจำปี',
+    reviewer_dept: 'LB',
+    required_reviewer_level: 5,
+    required_approver_level: 6,
+    min_preparer_level: 4,
+    assigned_reviewer_id: null,
+    assigned_approver_id: null
+  }
+};
+
+export const loadDocumentProfiles = async (db) => {
+  const row = await db.prepare("SELECT value FROM settings WHERE key = 'vcc_document_profiles'").first();
+  if (!row?.value) return { ...DEFAULT_DOCUMENT_PROFILES };
+  try {
+    const parsed = JSON.parse(row.value);
+    return { ...DEFAULT_DOCUMENT_PROFILES, ...parsed };
+  } catch {
+    return { ...DEFAULT_DOCUMENT_PROFILES };
+  }
+};
+
+export const getDocumentProfileForDept = async (db, dept) => {
+  const profiles = await loadDocumentProfiles(db);
+  const normalizedDept = String(dept || '').toUpperCase().trim();
+  const profile = profiles[normalizedDept];
+  if (!profile) return null; // STRICT: NO FALLBACK ACROSS DEPARTMENTS
+  return profile;
+};
+
 export { getUserDepartments };
 
 export const isUserAuthorizedForPlanDept = (user, planDepartment) => {
@@ -741,12 +787,13 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
   // Settings: calibration providers & schedule/approval rules (configurable by DCC)
   app.get('/api/vcc/plan-settings', requireAuth, requireVccAccess, async (c) => {
     const db = c.env.DB;
-    const [providers, planSettings] = await Promise.all([
+    const [providers, planSettings, documentProfiles] = await Promise.all([
       loadProviders(db),
-      loadPlanSettings(db)
+      loadPlanSettings(db),
+      loadDocumentProfiles(db)
     ]);
     const thresholds = await getThresholds(db, planSettings.approval_doc_type);
-    return c.json({ providers, planSettings, thresholds });
+    return c.json({ providers, planSettings, thresholds, documentProfiles });
   });
 
   app.put('/api/vcc/plan-settings', requireAuth, requireDccOnly, async (c) => {
@@ -804,7 +851,175 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
     ]);
 
     const thresholds = await getThresholds(db, nextSettings.approval_doc_type);
-    return c.json({ providers: nextProviders, planSettings: nextSettings, thresholds });
+    const documentProfiles = await loadDocumentProfiles(db);
+    return c.json({ providers: nextProviders, planSettings: nextSettings, thresholds, documentProfiles });
+  });
+
+  // Department Document Profiles: Query profiles and eligible Central RBAC candidate assignees
+  app.get('/api/vcc/document-profiles', requireAuth, requireVccAccess, async (c) => {
+    const db = c.env.DB;
+    const profiles = await loadDocumentProfiles(db);
+
+    const { results: rawUsers } = await db.prepare(`
+      SELECT id, name, position, department, departments, approval_level, status
+      FROM users
+      WHERE status = 'ACTIVE'
+      ORDER BY department ASC, approval_level DESC, name ASC
+    `).all();
+
+    const activeUsers = (rawUsers || []).map((u) => ({
+      id: u.id,
+      name: u.name,
+      position: u.position,
+      department: u.department,
+      departments: getUserDepartments(u),
+      approval_level: Number(u.approval_level || 0),
+      status: u.status
+    }));
+
+    const candidates = {
+      qc_reviewers: activeUsers.filter((u) => (u.departments.includes('PD') || u.departments.includes('QA')) && u.approval_level >= 5),
+      lab_reviewers: activeUsers.filter((u) => u.departments.includes('LB') && u.approval_level >= 5),
+      approvers: activeUsers.filter((u) => u.departments.includes('MGT') && u.approval_level >= 6),
+      qc_preparers: activeUsers.filter((u) => u.departments.includes('QC') && u.approval_level >= 4),
+      lab_preparers: activeUsers.filter((u) => u.departments.includes('LB') && u.approval_level >= 4)
+    };
+
+    return c.json({ profiles, candidates, allActiveUsers: activeUsers });
+  });
+
+  // Department Document Profiles: Update profile for a specific department (DCC Admin only, per-dept safe merge)
+  app.put('/api/vcc/document-profiles/:dept', requireAuth, requireDccOnly, async (c) => {
+    const db = c.env.DB;
+    const user = c.get('user');
+    const dept = String(c.req.param('dept') || '').toUpperCase().trim();
+    const body = await c.req.json().catch(() => ({}));
+
+    // Check valid department in master data
+    const validDept = await db.prepare('SELECT code FROM departments WHERE code = ?').bind(dept).first();
+    if (!validDept && !['QC', 'LB'].includes(dept)) {
+      return c.json({ error: `ไม่พบแผนก ${dept} ในระบบข้อมูลหลัก` }, 404);
+    }
+
+    const currentProfiles = await loadDocumentProfiles(db);
+    const prevDeptProfile = currentProfiles[dept] || {};
+
+    const docCode = body.document_code !== undefined ? clean(body.document_code, 50) : prevDeptProfile.document_code;
+    const rev = body.revision !== undefined ? clean(body.revision, 20) : prevDeptProfile.revision;
+    const formIssueDate = body.form_issue_date !== undefined ? clean(body.form_issue_date, 30) : prevDeptProfile.form_issue_date;
+    const titleTh = body.title_th !== undefined ? clean(body.title_th, 200) : prevDeptProfile.title_th;
+
+    if (!docCode) return c.json({ error: 'รหัสเอกสารควบคุม (Document Code) ต้องไม่เป็นค่าว่าง' }, 400);
+    if (!rev) return c.json({ error: 'ครั้งที่แก้ไขของแบบฟอร์ม (Revision) ต้องไม่เป็นค่าว่าง' }, 400);
+    if (!formIssueDate) return c.json({ error: 'วันที่เริ่มใช้แบบฟอร์ม (Form Issue Date) ต้องไม่เป็นค่าว่าง' }, 400);
+    if (!titleTh) return c.json({ error: 'ชื่อแบบฟอร์มควบคุม (Document Title) ต้องไม่เป็นค่าว่าง' }, 400);
+
+    let minPrepLevel = prevDeptProfile.min_preparer_level || 4;
+    if (body.min_preparer_level !== undefined) {
+      const parsedLvl = Number(body.min_preparer_level);
+      if (!Number.isInteger(parsedLvl) || parsedLvl < 1 || parsedLvl > 8) {
+        return c.json({ error: 'ระดับขั้นต่ำของผู้จัดทำต้องเป็นตัวเลขระหว่าง 1 ถึง 8' }, 400);
+      }
+      minPrepLevel = parsedLvl;
+    }
+
+    const assignedReviewerId = body.assigned_reviewer_id !== undefined
+      ? (body.assigned_reviewer_id ? String(body.assigned_reviewer_id).trim() : null)
+      : (prevDeptProfile.assigned_reviewer_id || null);
+
+    const assignedApproverId = body.assigned_approver_id !== undefined
+      ? (body.assigned_approver_id ? String(body.assigned_approver_id).trim() : null)
+      : (prevDeptProfile.assigned_approver_id || null);
+
+    // Live validation against Central RBAC users table
+    if (assignedReviewerId) {
+      const revUser = await db.prepare(`
+        SELECT id, name, position, department, departments, approval_level, status
+        FROM users WHERE id = ?
+      `).bind(assignedReviewerId).first();
+
+      if (!revUser) {
+        return c.json({ error: `ไม่พบผู้ใช้งานที่ระบุเป็นผู้ทบทวนในระบบ (User ID: ${assignedReviewerId} not found)` }, 422);
+      }
+      if (revUser.status !== 'ACTIVE') {
+        return c.json({ error: `ผู้ใช้งาน ${revUser.name || assignedReviewerId} ที่ระบุเป็นผู้ทบทวนมีสถานะไม่พร้อมปฏิบัติงาน (Inactive/Suspended)` }, 422);
+      }
+      if (Number(revUser.approval_level || 0) < 5) {
+        return c.json({ error: `ผู้ทบทวน (${revUser.name}) ต้องมีระดับอนุมัติตั้งแต่ L5 ขึ้นไป (ระดับปัจจุบัน: L${revUser.approval_level || 0})` }, 422);
+      }
+
+      const revDepts = getUserDepartments(revUser);
+      if (dept === 'QC' && !revDepts.includes('PD') && !revDepts.includes('QA')) {
+        return c.json({ error: `ผู้ทบทวนแผนประจำปีของแผนก QC (${revUser.name}) ต้องสังกัดฝ่ายผลิต (PD) หรือ QA` }, 422);
+      }
+      if (dept === 'LB' && !revDepts.includes('LB')) {
+        return c.json({ error: `ผู้ทบทวนแผนประจำปีของแผนก LAB (${revUser.name}) ต้องสังกัดห้องปฏิบัติการ (LB)` }, 422);
+      }
+    }
+
+    if (assignedApproverId) {
+      const appUser = await db.prepare(`
+        SELECT id, name, position, department, departments, approval_level, status
+        FROM users WHERE id = ?
+      `).bind(assignedApproverId).first();
+
+      if (!appUser) {
+        return c.json({ error: `ไม่พบผู้ใช้งานที่ระบุเป็นผู้อนุมัติในระบบ (User ID: ${assignedApproverId} not found)` }, 422);
+      }
+      if (appUser.status !== 'ACTIVE') {
+        return c.json({ error: `ผู้ใช้งาน ${appUser.name || assignedApproverId} ที่ระบุเป็นผู้อนุมัติมีสถานะไม่พร้อมปฏิบัติงาน (Inactive/Suspended)` }, 422);
+      }
+      if (Number(appUser.approval_level || 0) < 6) {
+        return c.json({ error: `ผู้อนุมัติ (${appUser.name}) ต้องมีระดับอนุมัติตั้งแต่ L6 ขึ้นไป (ระดับปัจจุบัน: L${appUser.approval_level || 0})` }, 422);
+      }
+
+      const appDepts = getUserDepartments(appUser);
+      if (!appDepts.includes('MGT')) {
+        return c.json({ error: `ผู้อนุมัติแผนประจำปี (${appUser.name}) ต้องสังกัดฝ่ายบริหาร (MGT) เท่านั้น` }, 422);
+      }
+    }
+
+    // Segregation of Duties: Reviewer != Approver
+    if (assignedReviewerId && assignedApproverId && assignedReviewerId === assignedApproverId) {
+      return c.json({ error: 'ผู้ทบทวนและผู้อนุมัติต้องไม่เป็นบุคคลเดียวกัน (Segregation of Duties)' }, 422);
+    }
+
+    const updatedDeptProfile = {
+      ...prevDeptProfile,
+      document_code: docCode,
+      revision: rev,
+      form_issue_date: formIssueDate,
+      title_th: titleTh,
+      reviewer_dept: dept === 'QC' ? 'PD' : 'LB',
+      required_reviewer_level: 5,
+      required_approver_level: 6,
+      min_preparer_level: minPrepLevel,
+      assigned_reviewer_id: assignedReviewerId,
+      assigned_approver_id: assignedApproverId
+    };
+
+    const nextProfiles = {
+      ...currentProfiles,
+      [dept]: updatedDeptProfile
+    };
+
+    await db.batch([
+      db.prepare(`
+        INSERT INTO settings (key, value, updated_by) VALUES ('vcc_document_profiles', ?, ?)
+        ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = ${NOW}, updated_by = excluded.updated_by
+      `).bind(JSON.stringify(nextProfiles), user.id),
+      audit(db, user.id, 'VCC_DOCUMENT_PROFILE_UPDATED', {
+        department: dept,
+        before: prevDeptProfile,
+        after: updatedDeptProfile
+      })
+    ]);
+
+    return c.json({
+      department: dept,
+      profile: updatedDeptProfile,
+      allProfiles: nextProfiles
+    });
   });
 
   // Strictly separated by status (never mix statuses in one list).

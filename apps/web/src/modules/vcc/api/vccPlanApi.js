@@ -618,6 +618,70 @@ export const saveVccPlanSettings = async ({ providers, planSettings }) => {
   };
 };
 
+const STORAGE_DOCUMENT_PROFILES_KEY = 'qms-vcc-local-document-profiles-v1';
+const DEFAULT_LOCAL_DOCUMENT_PROFILES = {
+  QC: {
+    document_code: 'FM-QC-46',
+    revision: '01',
+    form_issue_date: '2026-06-09',
+    title_th: 'แผนการทวนสอบเครื่องมือประจำปี',
+    reviewer_dept: 'PD',
+    required_reviewer_level: 5,
+    required_approver_level: 6,
+    min_preparer_level: 4,
+    assigned_reviewer_id: null,
+    assigned_approver_id: null
+  },
+  LB: {
+    document_code: 'FM-LB-11',
+    revision: '02',
+    form_issue_date: '2026-08-10',
+    title_th: 'แผนการสอบเทียบเครื่องมือที่ใช้ในห้องปฏิบัติการจุลชีววิทยา ประจำปี',
+    reviewer_dept: 'LB',
+    required_reviewer_level: 5,
+    required_approver_level: 6,
+    min_preparer_level: 4,
+    assigned_reviewer_id: null,
+    assigned_approver_id: null
+  }
+};
+
+export const fetchVccDocumentProfiles = async () => {
+  if (isApiMode) {
+    return apiGet('/api/vcc/document-profiles');
+  }
+  assertLocalVccAccess();
+  let profiles = DEFAULT_LOCAL_DOCUMENT_PROFILES;
+  try {
+    const raw = localStorage.getItem(STORAGE_DOCUMENT_PROFILES_KEY);
+    if (raw) profiles = { ...DEFAULT_LOCAL_DOCUMENT_PROFILES, ...JSON.parse(raw) };
+  } catch {}
+  return { profiles, candidates: { qc_reviewers: [], lab_reviewers: [], approvers: [], qc_preparers: [], lab_preparers: [] }, allActiveUsers: [] };
+};
+
+export const saveVccDocumentProfile = async (dept, profileData) => {
+  const normDept = String(dept || '').toUpperCase().trim();
+  if (isApiMode) {
+    return apiPut(`/api/vcc/document-profiles/${normDept}`, profileData);
+  }
+  assertLocalDcc();
+  const current = (await fetchVccDocumentProfiles()).profiles;
+  const updated = {
+    ...current,
+    [normDept]: {
+      ...(current[normDept] || {}),
+      ...profileData
+    }
+  };
+  localStorage.setItem(STORAGE_DOCUMENT_PROFILES_KEY, JSON.stringify(updated));
+  appendLocalAudit('VCC_DOCUMENT_PROFILE_UPDATED', {
+    department: normDept,
+    before: current[normDept] || null,
+    after: updated[normDept]
+  });
+  return { department: normDept, profile: updated[normDept], allProfiles: updated };
+};
+
 export const fetchVccPlans = async ({ status = 'DRAFT', year = '', department = '' } = {}) => {
   if (isApiMode) {
     if (status === 'ALL' || !status) {
