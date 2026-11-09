@@ -1,3 +1,4 @@
+import useVccPolicyUser from '../hooks/useVccPolicyUser';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
@@ -88,7 +89,8 @@ const getDefaultAdHocDueDate = (d = new Date()) => {
 };
 
 const WorkOrderSection = ({ activeDepartments = [] }) => {
-  const currentUser = useStore((s) => s.currentUser);
+  const sessionUser = useStore((s) => s.currentUser);
+  const currentUser = useVccPolicyUser(sessionUser);
   const [activeTab, setActiveTab] = useState('OPEN');
   const [filterDept, setFilterDept] = useState('');
   const [filterResult, setFilterResult] = useState('');
@@ -683,6 +685,7 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
 
           <button
             type="button"
+            disabled={currentUser?.vccReadOnly}
             onClick={openSettings}
             className="h-9 inline-flex items-center gap-1.5 px-3 rounded-lg border border-slate-200 bg-white text-slate-700 text-xs sm:text-sm font-medium hover:bg-slate-50 transition-colors cursor-pointer"
           >
@@ -692,6 +695,7 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
 
           <button
             type="button"
+            disabled={currentUser?.vccReadOnly}
             onClick={openCreateModal}
             className="h-9 inline-flex items-center gap-1.5 px-3.5 rounded-lg bg-indigo-600 text-white text-xs sm:text-sm font-semibold hover:bg-indigo-700 transition-colors shadow-2xs cursor-pointer"
           >

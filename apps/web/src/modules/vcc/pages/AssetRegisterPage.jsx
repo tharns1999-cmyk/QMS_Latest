@@ -1,3 +1,4 @@
+import useVccPolicyUser from '../hooks/useVccPolicyUser';
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useInRouterContext, useLocation, useNavigate, useSearchParams, MemoryRouter } from 'react-router-dom';
 import toast from 'react-hot-toast';
@@ -59,7 +60,8 @@ const EMPTY_FORM = {
 };
 
 const AssetRegisterPageInner = () => {
-  const { departments: storeDepts, masterDepartments, currentUser } = useStore();
+  const { departments: storeDepts, masterDepartments, currentUser: sessionUser } = useStore();
+  const currentUser = useVccPolicyUser(sessionUser);
   const { isMobile } = useVccMobileViewport();
 
   const activeDepartments = useMemo(() => {
@@ -133,7 +135,7 @@ const AssetRegisterPageInner = () => {
   // DCC manages every department; L4+ only their own VCC department(s). The server enforces the same rule; here it only decides what is shown.
   const isDccUser = Boolean(currentUser?.isDcc);
   const manageableDepts = useMemo(() => manageableVccDepartments(currentUser), [currentUser]);
-  const canAddAsset = manageableDepts.length > 0;
+  const canAddAsset = manageableDepts.some((d) => !currentUser?.vccEnabledDepartments || currentUser.vccEnabledDepartments.includes(d));
   const myDepts = useMemo(() => getUserDeptCodes(currentUser), [currentUser]);
   const formDepartments = useMemo(
     () => (isDccUser ? activeDepartments : activeDepartments.filter((d) => manageableDepts.includes(String(d.code).toUpperCase()))),
@@ -1160,7 +1162,7 @@ const AssetRegisterPageInner = () => {
         handleSaveAsset={handleSaveAsset}
         formTypeOptions={formTypeOptions}
         assetTypes={assetTypes}
-        activeDepartments={formDepartments}
+        activeDepartments={editingAsset ? formDepartments : formDepartments.filter((d) => !currentUser?.vccEnabledDepartments || currentUser.vccEnabledDepartments.includes(d.code))}
         canTransfer={isDccUser}
       />
 

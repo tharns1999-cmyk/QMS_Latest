@@ -146,7 +146,7 @@ describe('VCC Critical UX Bugfix — Modal Interaction Verification Inside #root
     expect(handleSubmit).toHaveBeenCalled();
   });
 
-  it('3. PlanSettingsModal: Can switch tabs between general and profiles, and type in fields', () => {
+  it('3. PlanSettingsModal: Can switch tabs between general and configured profiles, and type in fields', async () => {
     const handleClose = vi.fn();
     const onSave = vi.fn();
 
@@ -169,9 +169,10 @@ describe('VCC Critical UX Bugfix — Modal Interaction Verification Inside #root
     expect(rootEl.hasAttribute('inert')).toBe(false);
 
     // Tabs can be switched
-    const profilesTab = screen.getByRole('button', { name: /แบบฟอร์มควบคุมและผู้รับผิดชอบ/i });
+    const profilesTab = screen.getByRole('button', { name: /แบบฟอร์มและผู้รับผิดชอบตามแผนก/i });
     fireEvent.click(profilesTab);
-    expect(screen.getByText(/นโยบายความปลอดภัยและแยกข้อมูลเฉพาะแผนก/i)).toBeInTheDocument();
+    expect(await screen.findByLabelText('แผนกที่ตั้งค่าแล้ว')).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'QC' })).toBeInTheDocument();
 
     const generalTab = screen.getByRole('button', { name: /ทั่วไปและหน่วยงานทวนสอบ/i });
     fireEvent.click(generalTab);

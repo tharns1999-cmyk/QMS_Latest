@@ -352,6 +352,7 @@ export const getUserDepartments = (user) => {
 };
 
 export const isUserAuthorizedForPlanDept = (user, planDepartment) => {
+  if (user?.vccReadOnly) return false;
   if (!user) return false;
   const userLevel = Number(user.approval_level ?? user.approvalLevel ?? 1);
   if (user.isDcc || user.isQmr || userLevel >= 6) return true;

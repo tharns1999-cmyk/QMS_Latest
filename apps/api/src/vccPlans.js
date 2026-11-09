@@ -1,3 +1,5 @@
+import { canManageModule, canCreateVccDepartment } from './moduleAccess.js';
+import { loadVccProfiles, controlledVccForm, configurationIncomplete, vccProfileThresholds, vccProfileReadiness } from './vccConfiguration.js';
 // VCC (Verify and Calibration Center) — Phase 2: Calibration Schedule Rules, Annual Plan Matrix & Plan Approval API.
 import { getThresholds } from './approval.js';
 import { requireVccAccess, requireDccOnly, getUserDepartments, canReadVccDepartment, vccDeptScopeSql, VCC_DEPT_FORBIDDEN } from './vccAuth.js';
@@ -70,43 +72,7 @@ const loadPlanSettings = async (db) => {
   }
 };
 
-export const DEFAULT_DOCUMENT_PROFILES = {
-  QC: {
-    document_code: 'FM-QC-46',
-    revision: '01',
-    form_issue_date: '2026-06-09',
-    title_th: 'แผนการทวนสอบเครื่องมือประจำปี',
-    reviewer_dept: 'PD',
-    required_reviewer_level: 5,
-    required_approver_level: 6,
-    min_preparer_level: 4,
-    assigned_reviewer_id: null,
-    assigned_approver_id: null
-  },
-  LB: {
-    document_code: 'FM-LB-11',
-    revision: '02',
-    form_issue_date: '2026-08-10',
-    title_th: 'แผนการสอบเทียบเครื่องมือที่ใช้ในห้องปฏิบัติการจุลชีววิทยา ประจำปี',
-    reviewer_dept: 'LB',
-    required_reviewer_level: 5,
-    required_approver_level: 6,
-    min_preparer_level: 4,
-    assigned_reviewer_id: null,
-    assigned_approver_id: null
-  }
-};
-
-export const loadDocumentProfiles = async (db) => {
-  const row = await db.prepare("SELECT value FROM settings WHERE key = 'vcc_document_profiles'").first();
-  if (!row?.value) return { ...DEFAULT_DOCUMENT_PROFILES };
-  try {
-    const parsed = JSON.parse(row.value);
-    return { ...DEFAULT_DOCUMENT_PROFILES, ...parsed };
-  } catch {
-    return { ...DEFAULT_DOCUMENT_PROFILES };
-  }
-};
+export const loadDocumentProfiles = loadVccProfiles;
 
 export const getDocumentProfileForDept = async (db, dept) => {
   const profiles = await loadDocumentProfiles(db);
@@ -115,6 +81,38 @@ export const getDocumentProfileForDept = async (db, dept) => {
   if (!profile) return null; // STRICT: NO FALLBACK ACROSS DEPARTMENTS
   return profile;
 };
+
+const planPolicy = async (db, plan) => {
+  let snapshot = {};
+  try { snapshot = JSON.parse(plan.profile_snapshot || '{}'); } catch {}
+  return snapshot.reviewer_dept ? snapshot : await getDocumentProfileForDept(db, plan.department);
+};
+
+const getPlanDecisionCheck = async (db) => {
+  const profiles = await loadVccProfiles(db);
+  const policy = await vccProfileThresholds(db);
+  return (user, plan, review) => {
+    if (!user || user.status && user.status !== 'ACTIVE') return 'บัญชีผู้รับผิดชอบไม่พร้อมใช้งาน';
+    if (user.id === plan.prepared_by) return review ? 'ผู้จัดทำไม่สามารถเป็นผู้ทบทวนแผนของตนเองได้ (Segregation of Duties)' : 'ผู้จัดทำไม่สามารถเป็นผู้อนุมัติแผนของตนเองได้ (Segregation of Duties)';
+    if (!review && user.id === plan.reviewed_by) return 'ผู้ทบทวนไม่สามารถอนุมัติแผนที่ตนทบทวนได้ (Segregation of Duties)';
+    let snapshot = {};
+    try { snapshot = JSON.parse(plan.profile_snapshot || '{}'); } catch {}
+    const profile = snapshot.reviewer_dept ? snapshot : profiles[plan.department];
+    const stage = review ? 'reviewer' : 'approver';
+    const required = Math.max(policy[`required_${stage}_level`], Number(profile?.[`required_${stage}_level`] || 0));
+    const assigned = plan[`assigned_${stage}_id`];
+    if (assigned && assigned !== user.id) return `เฉพาะ${review ? 'ผู้ทบทวน' : 'ผู้อนุมัติ'}ที่ได้รับมอบหมายตามแบบฟอร์มเอกสารควบคุมเท่านั้น`;
+    if (Number(user.approval_level) < required) return `ต้องมีระดับ L${required} ขึ้นไป`;
+    if (assigned && profile?.[`${stage}_dept`]) {
+      if (!getUserDepartments(user).includes(profile[`${stage}_dept`])) return 'ผู้รับผิดชอบต้องสังกัดแผนกตามค่าตั้งค่างานนี้';
+    } else if (!isUserAuthorizedForPlanDept(user, plan.department)) return 'ไม่มีสิทธิ์ดำเนินการในแผนกนี้';
+    return null;
+  };
+};
+const planActions = (decide, user, plan) => [
+  ...(plan.status === 'PENDING_REVIEW' && !decide(user,plan,true) ? ['REVIEW','REJECT'] : []),
+  ...(plan.status === 'PENDING_APPROVAL' && !decide(user,plan,false) ? ['APPROVE','REJECT'] : [])
+];
 
 export const generatePlanPdfBuffer = async (plan, items = [], signatories = {}) => {
   const { PDFDocument, StandardFonts, rgb } = await import('pdf-lib');
@@ -1165,152 +1163,27 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
       status: u.status
     }));
 
-    const candidates = {
-      qc_reviewers: activeUsers.filter((u) => u.departments.includes('PD') && u.approval_level >= 5),
-      lab_reviewers: activeUsers.filter((u) => u.departments.includes('LB') && u.approval_level >= 5),
-      approvers: activeUsers.filter((u) => u.departments.includes('MGT') && u.approval_level >= 6),
-      qc_preparers: activeUsers.filter((u) => u.departments.includes('QC') && u.approval_level >= 4),
-      lab_preparers: activeUsers.filter((u) => u.departments.includes('LB') && u.approval_level >= 4)
-    };
+    const candidates = {};
+    for (const [dept, profile] of Object.entries(profiles)) {
+      const levels = await vccProfileThresholds(db, profile);
+      candidates[dept] = {
+        reviewers: activeUsers.filter((u) => u.departments.includes(profile.reviewer_dept) && u.approval_level >= levels.required_reviewer_level),
+        approvers: activeUsers.filter((u) => u.departments.includes(profile.approver_dept) && u.approval_level >= levels.required_approver_level),
+        preparers: activeUsers.filter((u) => u.departments.includes(dept) && u.approval_level >= levels.min_requester_level)
+      };
+    }
 
-    return c.json({ profiles, candidates, allActiveUsers: activeUsers });
+    const readiness = {};
+    for (const [dept, profile] of Object.entries(profiles)) readiness[dept] = await vccProfileReadiness(db, profile);
+    return c.json({ profiles, candidates, allActiveUsers: activeUsers, readiness, canManage: await canManageModule(db, c.get('user'), 'vcc') });
   });
 
   // Department Document Profiles: Update profile for a specific department (DCC Admin only, per-dept safe merge)
-  app.put('/api/vcc/document-profiles/:dept', requireAuth, requireDccOnly, async (c) => {
-    const db = c.env.DB;
-    const user = c.get('user');
-    const dept = String(c.req.param('dept') || '').toUpperCase().trim();
-    const body = await c.req.json().catch(() => ({}));
-
-    // Check valid department in master data
-    const validDept = await db.prepare('SELECT code FROM departments WHERE code = ?').bind(dept).first();
-    if (!validDept && !['QC', 'LB'].includes(dept)) {
-      return c.json({ error: `ไม่พบแผนก ${dept} ในระบบข้อมูลหลัก` }, 404);
-    }
-
-    const currentProfiles = await loadDocumentProfiles(db);
-    const prevDeptProfile = currentProfiles[dept] || {};
-
-    const docCode = body.document_code !== undefined ? clean(body.document_code, 50) : prevDeptProfile.document_code;
-    const rev = body.revision !== undefined ? clean(body.revision, 20) : prevDeptProfile.revision;
-    const formIssueDate = body.form_issue_date !== undefined ? clean(body.form_issue_date, 30) : prevDeptProfile.form_issue_date;
-    const titleTh = body.title_th !== undefined ? clean(body.title_th, 200) : prevDeptProfile.title_th;
-
-    if (!docCode) return c.json({ error: 'รหัสเอกสารควบคุม (Document Code) ต้องไม่เป็นค่าว่าง' }, 400);
-    if (!rev) return c.json({ error: 'ครั้งที่แก้ไขของแบบฟอร์ม (Revision) ต้องไม่เป็นค่าว่าง' }, 400);
-    if (!formIssueDate) return c.json({ error: 'วันที่เริ่มใช้แบบฟอร์ม (Form Issue Date) ต้องไม่เป็นค่าว่าง' }, 400);
-    if (!titleTh) return c.json({ error: 'ชื่อแบบฟอร์มควบคุม (Document Title) ต้องไม่เป็นค่าว่าง' }, 400);
-
-    let minPrepLevel = prevDeptProfile.min_preparer_level || 4;
-    if (body.min_preparer_level !== undefined) {
-      const parsedLvl = Number(body.min_preparer_level);
-      if (!Number.isInteger(parsedLvl) || parsedLvl < 1 || parsedLvl > 8) {
-        return c.json({ error: 'ระดับขั้นต่ำของผู้จัดทำต้องเป็นตัวเลขระหว่าง 1 ถึง 8' }, 400);
-      }
-      minPrepLevel = parsedLvl;
-    }
-
-    const assignedReviewerId = body.assigned_reviewer_id !== undefined
-      ? (body.assigned_reviewer_id ? String(body.assigned_reviewer_id).trim() : null)
-      : (prevDeptProfile.assigned_reviewer_id || null);
-
-    const assignedApproverId = body.assigned_approver_id !== undefined
-      ? (body.assigned_approver_id ? String(body.assigned_approver_id).trim() : null)
-      : (prevDeptProfile.assigned_approver_id || null);
-
-    // Segregation of Duties: Reviewer != Approver
-    if (assignedReviewerId && assignedApproverId && assignedReviewerId === assignedApproverId) {
-      return c.json({ error: 'ผู้ทบทวนและผู้อนุมัติต้องไม่เป็นบุคคลเดียวกัน (Segregation of Duties)' }, 422);
-    }
-
-    // Live validation against Central RBAC users table
-    if (assignedReviewerId) {
-      const revUser = await db.prepare(`
-        SELECT id, name, position, primary_department, departments, approval_level, status
-        FROM users WHERE id = ?
-      `).bind(assignedReviewerId).first();
-
-      if (!revUser) {
-        return c.json({ error: `ไม่พบผู้ใช้งานที่ระบุเป็นผู้ทบทวนในระบบ (User ID: ${assignedReviewerId} not found)` }, 422);
-      }
-      if (revUser.status !== 'ACTIVE') {
-        return c.json({ error: `ผู้ใช้งาน ${revUser.name || assignedReviewerId} ที่ระบุเป็นผู้ทบทวนมีสถานะไม่พร้อมปฏิบัติงาน (Inactive/Suspended)` }, 422);
-      }
-      if (Number(revUser.approval_level || 0) < 5) {
-        return c.json({ error: `ผู้ทบทวน (${revUser.name}) ต้องมีระดับอนุมัติตั้งแต่ L5 ขึ้นไป (ระดับปัจจุบัน: L${revUser.approval_level || 0})` }, 422);
-      }
-
-      const revDepts = getUserDepartments(revUser);
-      if (dept === 'QC' && !revDepts.includes('PD')) {
-        return c.json({ error: `ผู้ทบทวนแผนประจำปีของแผนก QC (${revUser.name}) ต้องสังกัดฝ่ายผลิต (PD) เท่านั้น` }, 422);
-      }
-      if (dept === 'LB' && !revDepts.includes('LB')) {
-        return c.json({ error: `ผู้ทบทวนแผนประจำปีของแผนก LAB (${revUser.name}) ต้องสังกัดห้องปฏิบัติการ (LB)` }, 422);
-      }
-    }
-
-    if (assignedApproverId) {
-      const appUser = await db.prepare(`
-        SELECT id, name, position, primary_department, departments, approval_level, status
-        FROM users WHERE id = ?
-      `).bind(assignedApproverId).first();
-
-      if (!appUser) {
-        return c.json({ error: `ไม่พบผู้ใช้งานที่ระบุเป็นผู้อนุมัติในระบบ (User ID: ${assignedApproverId} not found)` }, 422);
-      }
-      if (appUser.status !== 'ACTIVE') {
-        return c.json({ error: `ผู้ใช้งาน ${appUser.name || assignedApproverId} ที่ระบุเป็นผู้อนุมัติมีสถานะไม่พร้อมปฏิบัติงาน (Inactive/Suspended)` }, 422);
-      }
-      if (Number(appUser.approval_level || 0) < 6) {
-        return c.json({ error: `ผู้อนุมัติ (${appUser.name}) ต้องมีระดับอนุมัติตั้งแต่ L6 ขึ้นไป (ระดับปัจจุบัน: L${appUser.approval_level || 0})` }, 422);
-      }
-
-      const appDepts = getUserDepartments(appUser);
-      if (!appDepts.includes('MGT')) {
-        return c.json({ error: `ผู้อนุมัติแผนประจำปี (${appUser.name}) ต้องสังกัดฝ่ายบริหาร (MGT) เท่านั้น` }, 422);
-      }
-    }
-
-    const updatedDeptProfile = {
-      ...prevDeptProfile,
-      document_code: docCode,
-      revision: rev,
-      form_issue_date: formIssueDate,
-      title_th: titleTh,
-      reviewer_dept: dept === 'QC' ? 'PD' : 'LB',
-      required_reviewer_level: 5,
-      required_approver_level: 6,
-      min_preparer_level: minPrepLevel,
-      assigned_reviewer_id: assignedReviewerId,
-      assigned_approver_id: assignedApproverId
-    };
-
-    const nextProfiles = {
-      ...currentProfiles,
-      [dept]: updatedDeptProfile
-    };
-
-    await db.batch([
-      db.prepare(`
-        INSERT INTO settings (key, value, updated_by) VALUES ('vcc_document_profiles', ?, ?)
-        ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = ${NOW}, updated_by = excluded.updated_by
-      `).bind(JSON.stringify(nextProfiles), user.id),
-      audit(db, user.id, 'VCC_DOCUMENT_PROFILE_UPDATED', {
-        department: dept,
-        before: prevDeptProfile,
-        after: updatedDeptProfile
-      })
-    ]);
-
-    return c.json({
-      department: dept,
-      profile: updatedDeptProfile,
-      allProfiles: nextProfiles
-    });
+  app.put('/api/vcc/document-profiles/:dept', requireAuth, async (c) => {
+    if (!await canManageModule(c.env.DB, c.get('user'), 'vcc')) return c.json({ error: 'ต้องได้รับมอบหมายสิทธิ์ MODULE_MANAGE' }, 403);
+    return c.json({ error: 'กรุณาเปลี่ยนค่าผ่านหน้าจัดการระบบย่อย เพื่อระบุเหตุผลและตรวจสอบผลกระทบ', code: 'GOVERNANCE_EDITOR_REQUIRED' }, 409);
   });
 
-  // Strictly separated by status (never mix statuses in one list).
   app.get('/api/vcc/plans', requireAuth, requireVccAccess, async (c) => {
     const status = (c.req.query('status') || 'DRAFT').toUpperCase();
     if (!PLAN_STATUSES.includes(status)) {
@@ -1344,7 +1217,8 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
 
     const sql = `${PLAN_SELECT} WHERE ${clauses.join(' AND ')} ORDER BY p.plan_year DESC, p.department ASC, p.revision DESC`;
     const { results } = await c.env.DB.prepare(sql).bind(...args).all();
-    return c.json({ plans: results });
+    const decide = await getPlanDecisionCheck(c.env.DB);
+    return c.json({ plans: results.map((plan) => ({ ...plan, allowedActions: planActions(decide,user,plan) })) });
   });
 
   app.get('/api/vcc/plans/:id', requireAuth, requireVccAccess, async (c) => {
@@ -1376,7 +1250,8 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
       details: h.details ? JSON.parse(h.details) : null
     }));
 
-    return c.json({ plan, items, thresholds, history });
+    plan.allowedActions = planActions(await getPlanDecisionCheck(db), user, plan);
+    return c.json({ plan, items, thresholds: await vccProfileThresholds(db, await planPolicy(db,plan) || {}), history });
   });
 
   app.post('/api/vcc/plans', requireAuth, requireVccAccess, async (c) => {
@@ -1394,40 +1269,23 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
     const deptRow = await db.prepare("SELECT code FROM departments WHERE code = ? AND status = 'ACTIVE'").bind(department).first();
     if (!deptRow) return c.json({ error: 'ไม่พบแผนกที่ระบุใน Master Data' }, 400);
 
-    // Preparer gate: Must belong to plan department and have at least min_preparer_level (default L4)
-    const deptProfile = await getDocumentProfileForDept(db, department);
-    const minPrepLevel = Number(deptProfile?.min_preparer_level || 4);
-    const userLevel = Number(user.approval_level || user.approvalLevel || 0);
-    const userDepts = getUserDepartments(user);
-    const isDccUser = Boolean(user.isDcc || user.is_dcc);
-
-    if (deptProfile) {
-      // Strict Department Document Profile Enforcement:
-      // Even DCC Admin cannot prepare operational plans for another department.
-      // Must belong to the department and have approval level >= min_preparer_level.
-      if (!userDepts.includes(department)) {
-        return c.json({ error: `ผู้จัดทำต้องสังกัดแผนกเจ้าของแผน (${department}) เท่านั้น` }, 403);
-      }
-      if (userLevel < minPrepLevel) {
-        return c.json({ error: `ผู้จัดทำแผนต้องมีระดับอนุมัติตั้งแต่ L${minPrepLevel} ขึ้นไปตามแบบฟอร์มเอกสารควบคุม` }, 403);
-      }
-    } else {
-      // Legacy unprofiled departments:
-      if (!isDccUser) {
-        if (!userDepts.includes(department)) {
-          return c.json({ error: `ผู้จัดทำต้องสังกัดแผนกเจ้าของแผน (${department}) เท่านั้น` }, 403);
-        }
-        if (userLevel < minPrepLevel) {
-          return c.json({ error: `ผู้จัดทำแผนต้องมีระดับอนุมัติตั้งแต่ L${minPrepLevel} ขึ้นไป` }, 403);
-        }
-      }
+    if (!await canCreateVccDepartment(db, department)) {
+      return c.json({ code: 'DEPARTMENT_DISABLED', error: 'แผนกนี้ปิดรับทะเบียนและแผนใหม่แล้ว งานเดิมยังดำเนินการต่อได้' }, 403);
     }
+
+    const deptProfile = await getDocumentProfileForDept(db, department);
+    if (!getUserDepartments(user).includes(department)) return c.json({ error: `ผู้จัดทำต้องสังกัดแผนกเจ้าของแผน (${department}) เท่านั้น` }, 403);
+    const levels = await vccProfileThresholds(db, deptProfile || {});
+    const minPrepLevel = levels.min_requester_level;
+    if (Number(user.approval_level) < minPrepLevel) return c.json({ error: `ผู้จัดทำแผนต้องมีระดับอนุมัติตั้งแต่ L${minPrepLevel} ขึ้นไป` }, 403);
+    const controlledForm = await controlledVccForm(db, deptProfile);
+    if (!controlledForm) return c.json(configurationIncomplete, 422);
 
     const planSettings = await loadPlanSettings(db);
     const defaultDocCode = deptProfile?.document_code || `VCC-PLAN-${department}`;
-    const documentCode = clean(body.document_code, 50) || defaultDocCode;
+    const documentCode = deptProfile?.document_code || defaultDocCode;
     const revision = clean(body.revision, 10) || deptProfile?.revision || '01';
-    const formIssueDate = clean(body.form_issue_date, 30) || deptProfile?.form_issue_date || null;
+    const formIssueDate = controlledForm.effective_date;
     const defaultTitle = deptProfile?.title_th ? `${deptProfile.title_th} ${planYear}` : `แผนการทวนสอบเครื่องมือประจำปี ${planYear}`;
     const title = clean(body.title, 300) || defaultTitle;
     const dueDateRule = String(body.due_date_rule ?? planSettings.due_date_rule).toUpperCase();
@@ -1444,9 +1302,10 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
 
     // Historical Profile Snapshot: Immutable record of document profile configuration at creation
     const profileSnapshot = JSON.stringify({
+      ...deptProfile,
       department,
       document_code: documentCode,
-      revision,
+      revision: deptProfile?.revision || revision,
       form_issue_date: formIssueDate,
       title_th: deptProfile?.title_th || title,
       min_preparer_level: minPrepLevel,
@@ -2016,87 +1875,6 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
       return c.json({ error: `ผู้จัดทำแผนต้องมีระดับอนุมัติ L${thresholds.min_requester_level} ขึ้นไป` }, 403);
     }
 
-    // Reviewer and Approver Assignment & Segregation of Duties (checked before item content)
-    const body = await c.req.json().catch(() => ({}));
-    const bodyRevId = cleanOpt(body.reviewer_id || body.reviewerId, 100);
-    const bodyAppId = cleanOpt(body.approver_id || body.approverId, 100);
-    const assignedRevId = plan.assigned_reviewer_id || bodyRevId;
-    const assignedAppId = plan.assigned_approver_id || bodyAppId;
-
-    const deptProfile = await getDocumentProfileForDept(db, plan.department);
-    if (deptProfile) {
-      if (!assignedRevId || !assignedAppId) {
-        return c.json({ error: `แบบฟอร์มเอกสารควบคุมแผนก ${plan.department} ยังไม่ได้กำหนดผู้ทบทวนหรือผู้อนุมัติ กรุณาติดต่อ DCC Admin เพื่อตั้งค่าก่อนส่งแผน` }, 422);
-      }
-
-      // Segregation of Duties (Maker-Checker)
-      if (user.id === assignedRevId) {
-        return c.json({ error: 'ผู้จัดทำไม่สามารถเป็นผู้ทบทวนแผนของตนเองได้ (Segregation of Duties)' }, 422);
-      }
-      if (user.id === assignedAppId) {
-        return c.json({ error: 'ผู้จัดทำไม่สามารถเป็นผู้อนุมัติแผนของตนเองได้ (Segregation of Duties)' }, 422);
-      }
-      if (assignedRevId === assignedAppId) {
-        return c.json({ error: 'ผู้ทบทวนและผู้อนุมัติต้องไม่เป็นบุคคลเดียวกัน (Segregation of Duties)' }, 422);
-      }
-
-      // Live Central RBAC check for reviewer
-      const revUser = await db.prepare(`
-        SELECT id, name, position, primary_department, departments, approval_level, status
-        FROM users WHERE id = ?
-      `).bind(assignedRevId).first();
-
-      if (!revUser || revUser.status !== 'ACTIVE') {
-        return c.json({ error: `ผู้ทบทวนที่ได้รับมอบหมาย (${assignedRevId}) ไม่มีอยู่ในระบบหรือบัญชีถูกระงับ` }, 422);
-      }
-      if (Number(revUser.approval_level || 0) < 5) {
-        return c.json({ error: `ผู้ทบทวนที่ได้รับมอบหมาย (${revUser.name}) ต้องมีระดับอนุมัติตั้งแต่ L5 ขึ้นไป` }, 422);
-      }
-      const revDepts = getUserDepartments(revUser);
-      if (plan.department === 'QC' && !revDepts.includes('PD')) {
-        return c.json({ error: `ผู้ทบทวนแผนก QC (${revUser.name}) ต้องสังกัดฝ่ายผลิต (PD) เท่านั้น` }, 422);
-      }
-      if (plan.department === 'LB' && !revDepts.includes('LB')) {
-        return c.json({ error: `ผู้ทบทวนแผนก LAB (${revUser.name}) ต้องสังกัดห้องปฏิบัติการ (LB) เท่านั้น` }, 422);
-      }
-
-      // Live Central RBAC check for approver
-      const appUser = await db.prepare(`
-        SELECT id, name, position, primary_department, departments, approval_level, status
-        FROM users WHERE id = ?
-      `).bind(assignedAppId).first();
-
-      if (!appUser || appUser.status !== 'ACTIVE') {
-        return c.json({ error: `ผู้อนุมัติที่ได้รับมอบหมาย (${assignedAppId}) ไม่มีอยู่ในระบบหรือบัญชีถูกระงับ` }, 422);
-      }
-      if (Number(appUser.approval_level || 0) < 6) {
-        return c.json({ error: `ผู้อนุมัติที่ได้รับมอบหมาย (${appUser.name}) ต้องมีระดับอนุมัติตั้งแต่ L6 ขึ้นไป` }, 422);
-      }
-      const appDepts = getUserDepartments(appUser);
-      if (!appDepts.includes('MGT')) {
-        return c.json({ error: `ผู้อนุมัติแผนก ${plan.department} (${appUser.name}) ต้องสังกัดฝ่ายบริหาร (MGT) เท่านั้น` }, 422);
-      }
-    } else {
-      // Legacy unprofiled departments:
-      if (assignedRevId) {
-        const reviewerUser = await db.prepare('SELECT * FROM users WHERE id = ? AND status = "ACTIVE"').bind(assignedRevId).first();
-        if (!reviewerUser) return c.json({ error: 'ไม่พบผู้ทบทวนที่เลือก หรือบัญชีผู้ใช้ถูกระงับ' }, 400);
-        if (reviewerUser.id === user.id) return c.json({ error: 'ผู้จัดทำไม่สามารถเป็นผู้ทบทวนแผนของตนเองได้' }, 400);
-        if (reviewerUser.approval_level < thresholds.required_reviewer_level) {
-          return c.json({ error: `ผู้ทบทวนต้องมีระดับอนุมัติ L${thresholds.required_reviewer_level} ขึ้นไปตาม Approval Matrix` }, 400);
-        }
-      }
-      if (assignedAppId) {
-        const approverUser = await db.prepare('SELECT * FROM users WHERE id = ? AND status = "ACTIVE"').bind(assignedAppId).first();
-        if (!approverUser) return c.json({ error: 'ไม่พบผู้อนุมัติที่เลือก หรือบัญชีผู้ใช้ถูกระงับ' }, 400);
-        if (approverUser.id === user.id) return c.json({ error: 'ผู้จัดทำไม่สามารถเป็นผู้อนุมัติแผนของตนเองได้' }, 400);
-        if (assignedRevId && approverUser.id === assignedRevId) return c.json({ error: 'ผู้ทบทวนไม่สามารถเป็นผู้อนุมัติแผนที่ตนทบทวนได้' }, 400);
-        if (approverUser.approval_level < thresholds.required_approver_level) {
-          return c.json({ error: `ผู้อนุมัติต้องมีระดับอนุมัติ L${thresholds.required_approver_level} ขึ้นไปตาม Approval Matrix` }, 400);
-        }
-      }
-    }
-
     const items = await fetchPlanItems(db, id, plan);
     if (items.length === 0) {
       return c.json({ error: 'กรุณาเพิ่มรายการเครื่องมือในแผนอย่างน้อย 1 รายการก่อนส่งขออนุมัติ' }, 400);
@@ -2110,6 +1888,22 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
         error: `พบรายการกลุ่มเครื่องมือเดิม (${groupCodes}) ค้างอยู่ในแผน กรุณาปรับเป็นเครื่องมือรายตัวก่อนส่งทบทวนแผน`,
         unresolved_group_items: groupItems.map((i) => ({ id: i.id, asset_id: i.asset_id, asset_code: i.asset_code, asset_name: i.asset_name }))
       }, 400);
+    }
+
+    const body = await c.req.json().catch(() => ({}));
+    const deptProfile = await getDocumentProfileForDept(db, plan.department);
+    const assignedRevId = plan.assigned_reviewer_id || deptProfile?.assigned_reviewer_id || cleanOpt(body.reviewer_id || body.reviewerId, 100);
+    const assignedAppId = plan.assigned_approver_id || deptProfile?.assigned_approver_id || cleanOpt(body.approver_id || body.approverId, 100);
+
+    // Segregation of Duties check (Maker-Checker & Distinct Signatories)
+    if (assignedRevId && assignedRevId === user.id) {
+      return c.json({ error: 'ผู้จัดทำไม่สามารถเป็นผู้ทบทวนแผนของตนเองได้ (Segregation of Duties)' }, 422);
+    }
+    if (assignedAppId && assignedAppId === user.id) {
+      return c.json({ error: 'ผู้จัดทำไม่สามารถเป็นผู้อนุมัติแผนของตนเองได้ (Segregation of Duties)' }, 422);
+    }
+    if (assignedRevId && assignedAppId && assignedRevId === assignedAppId) {
+      return c.json({ error: 'ผู้ทบทวนและผู้อนุมัติต้องไม่เป็นบุคคลเดียวกัน (Segregation of Duties)' }, 422);
     }
 
     // Submission gate 2: Every independent Calibratable Unit must have planned months or an unplanned justification
@@ -2151,6 +1945,17 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
           }, 409);
         }
       }
+    }
+
+    // Submission gate 4: DCC Profile & Signatory Assignment
+    if (!await controlledVccForm(db, deptProfile)) return c.json(configurationIncomplete, 422);
+    if (!assignedRevId || !assignedAppId) return c.json({ error: 'กรุณากำหนดผู้ทบทวนและผู้อนุมัติ' }, 422);
+    const proposed = { ...plan, prepared_by: plan.prepared_by || user.id, assigned_reviewer_id: assignedRevId, assigned_approver_id: assignedAppId };
+    const decide = await getPlanDecisionCheck(db);
+    for (const [personId, review] of [[assignedRevId,true],[assignedAppId,false]]) {
+      const person = await db.prepare('SELECT * FROM users WHERE id=?').bind(personId).first();
+      const error = decide(person, proposed, review);
+      if (error) return c.json({ error }, 422);
     }
 
     // Freeze scope: persist any virtual items into vcc_annual_plan_items
@@ -2244,47 +2049,9 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
       return c.json({ error: 'ผู้จัดทำไม่สามารถทบทวนแผนของตนเองได้ (Segregation of Duties)' }, 403);
     }
 
-    const planSettings = await loadPlanSettings(db);
-    const thresholds = await getThresholds(db, planSettings.approval_doc_type);
-    const isDeptProfiled = ['QC', 'LB'].includes(plan.department);
-
-    if (isDeptProfiled && plan.assigned_reviewer_id) {
-      // Strict Reviewer Assignment: Only the DCC-assigned reviewer User ID can review
-      if (user.id !== plan.assigned_reviewer_id) {
-        return c.json({ error: 'เฉพาะผู้ทบทวนที่ได้รับมอบหมายตามแบบฟอร์มเอกสารควบคุมเท่านั้นที่สามารถทบทวนแผนนี้ได้' }, 403);
-      }
-
-      // Live Central RBAC check for reviewer
-      const revUser = await db.prepare(`
-        SELECT id, name, position, primary_department, departments, approval_level, status
-        FROM users WHERE id = ?
-      `).bind(user.id).first();
-
-      if (!revUser || revUser.status !== 'ACTIVE') {
-        return c.json({ error: 'บัญชีผู้ใช้งานของผู้ทบทวนไม่อยู่ในสถานะพร้อมปฏิบัติงาน (Inactive/Suspended)' }, 422);
-      }
-      if (Number(revUser.approval_level || 0) < 5) {
-        return c.json({ error: 'ผู้ทบทวนต้องมีระดับอนุมัติตั้งแต่ L5 ขึ้นไป' }, 403);
-      }
-      const revDepts = getUserDepartments(revUser);
-      if (plan.department === 'QC' && !revDepts.includes('PD')) {
-        return c.json({ error: 'ผู้ทบทวนแผนประจำปีของแผนก QC ต้องสังกัดฝ่ายผลิต (PD) เท่านั้น' }, 403);
-      }
-      if (plan.department === 'LB' && !revDepts.includes('LB')) {
-        return c.json({ error: 'ผู้ทบทวนแผนประจำปีของแผนก LAB ต้องสังกัดห้องปฏิบัติการ (LB) เท่านั้น' }, 403);
-      }
-    } else {
-      // Legacy unprofiled plan fallback
-      if (plan.assigned_reviewer_id && user.id !== plan.assigned_reviewer_id && !user.isDcc && !user.isQmr && user.approval_level < 6) {
-        return c.json({ error: 'แผนนี้ถูกมอบหมายให้ผู้ทบทวนรายอื่นดำเนินการ' }, 403);
-      }
-      if (!isUserAuthorizedForPlanDept(user, plan.department)) {
-        return c.json({ error: 'เฉพาะผู้ใช้งานที่สังกัดแผนกของแผน หรือ DCC/QMR เท่านั้นที่สามารถทบทวนแผนได้' }, 403);
-      }
-      if (Number(user.approval_level || 0) < thresholds.required_reviewer_level) {
-        return c.json({ error: `ผู้ทบทวนต้องมีระดับอนุมัติ L${thresholds.required_reviewer_level} ขึ้นไปตาม Approval Matrix` }, 403);
-      }
-    }
+    const thresholds = await vccProfileThresholds(db, await planPolicy(db, plan) || {});
+    const decisionError = (await getPlanDecisionCheck(db))(user, plan, true);
+    if (decisionError) return c.json({ error: decisionError }, 403);
 
     // Review gate: Plan Revisions must have 0 unresolved conflicts
     if (plan.parent_plan_id) {
@@ -2360,52 +2127,10 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
       return c.json({ error: 'ผู้ทบทวนไม่สามารถอนุมัติแผนที่ตนทบทวนได้ (Segregation of Duties)' }, 403);
     }
 
-    const planSettings = await loadPlanSettings(db);
-    const thresholds = await getThresholds(db, planSettings.approval_doc_type);
-    const isDeptProfiled = ['QC', 'LB'].includes(plan.department);
-
-    let appUser;
-    if (isDeptProfiled && plan.assigned_approver_id) {
-      // Strict Approver Assignment: Only the DCC-assigned approver User ID can approve
-      if (user.id !== plan.assigned_approver_id) {
-        return c.json({ error: 'เฉพาะผู้อนุมัติที่ได้รับมอบหมายตามแบบฟอร์มเอกสารควบคุมเท่านั้นที่สามารถอนุมัติแผนนี้ได้' }, 403);
-      }
-
-      // Live Central RBAC check for approver
-      appUser = await db.prepare(`
-        SELECT id, name, position, primary_department, departments, approval_level, status
-        FROM users WHERE id = ?
-      `).bind(user.id).first();
-
-      if (!appUser || appUser.status !== 'ACTIVE') {
-        return c.json({ error: 'บัญชีผู้ใช้งานของผู้อนุมัติไม่อยู่ในสถานะพร้อมปฏิบัติงาน (Inactive/Suspended)' }, 422);
-      }
-      if (Number(appUser.approval_level || 0) < 6) {
-        return c.json({ error: 'ผู้อนุมัติต้องมีระดับอนุมัติตั้งแต่ L6 ขึ้นไป' }, 403);
-      }
-      const appDepts = getUserDepartments(appUser);
-      if (!appDepts.includes('MGT')) {
-        return c.json({ error: 'ผู้อนุมัติต้องสังกัดฝ่ายบริหาร (MGT) เท่านั้น' }, 403);
-      }
-    } else {
-      // Legacy unprofiled plan fallback
-      if (plan.assigned_approver_id && user.id !== plan.assigned_approver_id && !user.isDcc && !user.isQmr && user.approval_level < 6) {
-        return c.json({ error: 'แผนนี้ถูกมอบหมายให้ผู้อนุมัติรายอื่นดำเนินการ' }, 403);
-      }
-      if (!isUserAuthorizedForPlanDept(user, plan.department)) {
-        return c.json({ error: 'เฉพาะผู้ใช้งานที่สังกัดแผนกของแผน หรือ DCC/QMR เท่านั้นที่สามารถอนุมัติแผนได้' }, 403);
-      }
-      if (Number(user.approval_level || 0) < thresholds.required_approver_level) {
-        return c.json({ error: `ผู้อนุมัติต้องมีระดับอนุมัติ L${thresholds.required_approver_level} ขึ้นไปตาม Approval Matrix` }, 403);
-      }
-      appUser = await db.prepare(`
-        SELECT id, name, position, primary_department, departments, approval_level, status
-        FROM users WHERE id = ?
-      `).bind(user.id).first();
-      if (!appUser) {
-        appUser = { id: user.id, name: user.name || user.id, position: 'Approver' };
-      }
-    }
+    const thresholds = await vccProfileThresholds(db, await planPolicy(db, plan) || {});
+    const decisionError = (await getPlanDecisionCheck(db))(user, plan, false);
+    if (decisionError) return c.json({ error: decisionError }, 403);
+    const appUser = await db.prepare('SELECT * FROM users WHERE id=?').bind(user.id).first();
 
     // Approval gate: Plan Revisions must have 0 unresolved conflicts
     if (plan.parent_plan_id) {
@@ -2783,31 +2508,8 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
       return c.json({ error: 'ส่งกลับแก้ไขได้เฉพาะแผนที่รอทบทวนหรือรออนุมัติเท่านั้น' }, 409);
     }
 
-    const planSettings = await loadPlanSettings(db);
-    const thresholds = await getThresholds(db, planSettings.approval_doc_type);
-    const requiredLevel = plan.status === 'PENDING_REVIEW'
-      ? thresholds.required_reviewer_level
-      : thresholds.required_approver_level;
-
-    if (plan.status === 'PENDING_REVIEW' && plan.assigned_reviewer_id && user.id !== plan.assigned_reviewer_id && !user.isDcc && !user.isQmr && user.approval_level < 6) {
-      return c.json({ error: 'แผนนี้ถูกมอบหมายให้ผู้ทบทวนรายอื่นดำเนินการ' }, 403);
-    }
-    if (plan.status === 'PENDING_APPROVAL' && plan.assigned_approver_id && user.id !== plan.assigned_approver_id && !user.isDcc && !user.isQmr && user.approval_level < 6) {
-      return c.json({ error: 'แผนนี้ถูกมอบหมายให้ผู้อนุมัติรายอื่นดำเนินการ' }, 403);
-    }
-    if (plan.status === 'PENDING_APPROVAL' && user.id === plan.reviewed_by) {
-      return c.json({ error: 'ผู้ทบทวนไม่สามารถพิจารณาอนุมัติหรือส่งกลับแผนในขั้นตอนอนุมัติได้' }, 403);
-    }
-
-    if (!isUserAuthorizedForPlanDept(user, plan.department)) {
-      return c.json({ error: 'เฉพาะผู้ใช้งานที่สังกัดแผนกของแผน หรือ DCC/QMR เท่านั้นที่สามารถส่งกลับแผนได้' }, 403);
-    }
-    if (user.id === plan.prepared_by) {
-      return c.json({ error: 'ผู้จัดทำไม่สามารถพิจารณาแผนของตนเองได้' }, 403);
-    }
-    if (user.approval_level < requiredLevel) {
-      return c.json({ error: `ต้องมีระดับอนุมัติ L${requiredLevel} ขึ้นไปตาม Approval Matrix` }, 403);
-    }
+    const decisionError = (await getPlanDecisionCheck(db))(user, plan, plan.status === 'PENDING_REVIEW');
+    if (decisionError) return c.json({ error: decisionError }, 403);
 
     const batchRes = await db.batch([
       db.prepare(`
@@ -2854,11 +2556,10 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
     `).all();
 
     const tasks = [];
+    const decide = await getPlanDecisionCheck(db);
     for (const p of (pendingPlans || [])) {
-      const isDeptAllowed = isUserAuthorizedForPlanDept(user, p.department);
-      if (p.status === 'PENDING_REVIEW') {
-        const isAssigned = p.assigned_reviewer_id ? (user.id === p.assigned_reviewer_id || user.isDcc || user.isQmr || user.approval_level >= 6) : true;
-        if (isAssigned && isDeptAllowed && user.id !== p.prepared_by && user.approval_level >= thresholds.required_reviewer_level) {
+        if (p.status === 'PENDING_REVIEW') {
+        if (!decide(user, p, true)) {
           tasks.push({
             id: `api-vcc-plan-${p.id}-review`,
             planId: p.id,
@@ -2887,8 +2588,7 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
           });
         }
       } else if (p.status === 'PENDING_APPROVAL') {
-        const isAssigned = p.assigned_approver_id ? (user.id === p.assigned_approver_id || user.isDcc || user.isQmr || user.approval_level >= 6) : true;
-        if (isAssigned && isDeptAllowed && user.id !== p.prepared_by && user.id !== p.reviewed_by && user.approval_level >= thresholds.required_approver_level) {
+        if (!decide(user, p, false)) {
           tasks.push({
             id: `api-vcc-plan-${p.id}-approve`,
             planId: p.id,
