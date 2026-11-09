@@ -18,7 +18,7 @@ import {
   FilePlus,
   ArrowLeft
 } from 'lucide-react';
-import { PLAN_STATUS_OPTIONS, getPlanStatusLabel, getDueDateRuleLabel } from '../utils/planLabels';
+import { PLAN_STATUS_OPTIONS, getPlanStatusLabel, getDueDateRuleLabel, formatPlanDocCode } from '../utils/planLabels';
 import AnnualPlanApprovalChain from './AnnualPlanApprovalChain';
 import AnnualPlanProgressStepper from './AnnualPlanProgressStepper';
 import { formatVccDateTime, toBuddhistYear } from '../utils/vccDateUtils';
@@ -343,7 +343,7 @@ export const AnnualPlanWorkspaceHeader = ({
                   className="font-mono font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded border border-slate-200/80 shadow-2xs inline-flex items-center gap-1.5"
                   title={`ฉบับแก้ไขแผนงาน (Plan Revision) Rev.${activePlan.revision}`}
                 >
-                  <span>{activePlan.document_code || `VCC-PLAN-${activePlan.department || 'QC'}`}</span>
+                  <span>{formatPlanDocCode(activePlan)}</span>
                   <span className="text-slate-400">·</span>
                   <span>Rev.{activePlan.revision}</span>
                 </span>

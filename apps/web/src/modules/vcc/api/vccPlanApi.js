@@ -52,7 +52,7 @@ const INITIAL_LOCAL_PLANS = [
     id: 'vcc-plan-2026-qc',
     plan_year: 2026,
     department: 'QC',
-    document_code: 'FM-QC-46',
+    document_code: 'VCC-PLAN-QC',
     revision: '01',
     title: '[ข้อมูลทดสอบ] แผนการทวนสอบเครื่องมือประจำปี 2026 (พ.ศ. 2569)',
     status: 'DRAFT',
@@ -77,7 +77,7 @@ const INITIAL_LOCAL_PLANS = [
     id: 'vcc-plan-2027-qc',
     plan_year: 2027,
     department: 'QC',
-    document_code: 'FM-QC-46',
+    document_code: 'VCC-PLAN-QC',
     revision: '01',
     title: '[ข้อมูลทดสอบ] แผนการทวนสอบเครื่องมือประจำปี 2027 (พ.ศ. 2570)',
     status: 'DRAFT',
@@ -261,6 +261,10 @@ export const getLocalPlans = () => {
   const plans = readJson(STORAGE_PLANS_KEY, () => [...INITIAL_LOCAL_PLANS]);
   let mutated = false;
   for (const p of plans) {
+    if ((p.id === 'vcc-plan-2026-qc' || p.id === 'vcc-plan-2027-qc') && (p.document_code === 'FM-QC-46' || p.document_code?.startsWith('FM-') || !p.document_code)) {
+      p.document_code = 'VCC-PLAN-QC';
+      mutated = true;
+    }
     if (p.department === 'LB' && (p.document_code === 'FM-LB-11' || p.document_code?.startsWith('FM-LB'))) {
       p.document_code = 'VCC-PLAN-LB';
       mutated = true;
@@ -626,8 +630,14 @@ const enrichLocalPlan = (plan, allItems, deptMap) => {
   const users = useStore.getState().masterUsers || [];
   const assignedReviewer = users.find((u) => u.id === plan.assigned_reviewer_id);
   const assignedApprover = users.find((u) => u.id === plan.assigned_approver_id);
+  const rawDocCode = String(plan.document_code || '').trim();
+  const shouldNormalize = (plan.id === 'vcc-plan-2026-qc' || plan.id === 'vcc-plan-2027-qc') && (rawDocCode === 'FM-QC-46' || rawDocCode.startsWith('FM-'));
+  const normalizedDocCode = (!rawDocCode || shouldNormalize)
+    ? `VCC-PLAN-${String(plan.department || 'QC').toUpperCase()}`
+    : rawDocCode;
   return {
     ...plan,
+    document_code: normalizedDocCode,
     department_name_th: deptMap[plan.department] || plan.department,
     item_count: planItems.length,
     group_item_count: groupCount,
@@ -746,7 +756,7 @@ export const saveVccPlanSettings = async ({ providers, planSettings }) => {
 const STORAGE_DOCUMENT_PROFILES_KEY = 'qms-vcc-local-document-profiles-v1';
 const DEFAULT_LOCAL_DOCUMENT_PROFILES = {
   QC: {
-    document_code: 'FM-QC-46',
+    document_code: 'VCC-PLAN-QC',
     revision: '01',
     form_issue_date: '2026-06-09',
     title_th: 'แผนการทวนสอบเครื่องมือประจำปี',
@@ -781,6 +791,9 @@ export const fetchVccDocumentProfiles = async () => {
     const raw = localStorage.getItem(STORAGE_DOCUMENT_PROFILES_KEY);
     if (raw) profiles = { ...DEFAULT_LOCAL_DOCUMENT_PROFILES, ...JSON.parse(raw) };
   } catch {}
+  if (profiles.QC?.document_code === 'FM-QC-46' || profiles.QC?.document_code?.startsWith('FM-QC')) {
+    profiles.QC.document_code = 'VCC-PLAN-QC';
+  }
   if (profiles.LB?.document_code === 'FM-LB-11' || profiles.LB?.document_code?.startsWith('FM-LB')) {
     profiles.LB.document_code = 'VCC-PLAN-LB';
   }
@@ -963,7 +976,8 @@ export const createVccPlan = async (payload) => {
   const planYear = Number(payload.plan_year);
   const department = String(payload.department || '').trim().toUpperCase();
   const settings = getLocalPlanSettings();
-  const documentCode = String(payload.document_code || settings.default_doc_code).trim();
+  const rawDocCode = String(payload.document_code || settings.default_doc_code || `VCC-PLAN-${department}`).trim();
+  const documentCode = (!rawDocCode || rawDocCode.startsWith('FM-')) ? `VCC-PLAN-${department}` : rawDocCode;
   const revision = String(payload.revision || '00').trim();
   const title = String(payload.title || `แผนการทวนสอบเครื่องมือประจำปี ${planYear}`).trim();
   const dueDateRule = String(payload.due_date_rule || settings.due_date_rule).trim().toUpperCase();

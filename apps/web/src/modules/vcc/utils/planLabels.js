@@ -16,6 +16,15 @@ export const getDueDateRuleLabel = (rule) => {
   return rule ? `ครบกำหนดตามกติกา ${rule}` : '';
 };
 
+export const formatPlanDocCode = (plan) => {
+  if (!plan) return 'VCC-PLAN';
+  const raw = String(plan.document_code || '').trim();
+  if (!raw || raw === 'FM-QC-46' || raw === 'FM-LB-11' || raw.startsWith('FM-')) {
+    return `VCC-PLAN-${String(plan.department || 'QC').toUpperCase()}`;
+  }
+  return raw;
+};
+
 export const getPlanStatusTone = (status) => {
   switch (status) {
     case 'APPROVED':

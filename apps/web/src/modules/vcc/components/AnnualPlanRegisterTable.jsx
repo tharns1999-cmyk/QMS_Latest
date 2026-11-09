@@ -15,7 +15,7 @@ import {
   ExternalLink
 } from 'lucide-react';
 import { toBuddhistYear, formatVccDateTime } from '../utils/vccDateUtils';
-import { getPlanStatusLabel } from '../utils/planLabels';
+import { getPlanStatusLabel, formatPlanDocCode } from '../utils/planLabels';
 
 /**
  * Status tone mapping for enterprise badge presentation
@@ -166,7 +166,7 @@ export const AnnualPlanRegisterTable = ({
       // 4. Text search
       if (searchQuery.trim()) {
         const query = searchQuery.trim().toLowerCase();
-        const docCode = String(p.document_code || '').toLowerCase();
+        const docCode = formatPlanDocCode(p).toLowerCase();
         const title = String(p.title || '').toLowerCase();
         const dept = String(p.department || '').toLowerCase();
         const deptTh = String(p.department_name_th || '').toLowerCase();
@@ -431,7 +431,7 @@ export const AnnualPlanRegisterTable = ({
 
                       {/* 3. Plan Code */}
                       <td className="py-3 px-3 whitespace-nowrap font-mono font-semibold text-slate-800">
-                        {plan.document_code || `VCC-PLAN-${plan.department || 'QC'}`}
+                        {formatPlanDocCode(plan)}
                       </td>
 
                       {/* 4. Plan Revision */}
@@ -523,7 +523,7 @@ export const AnnualPlanRegisterTable = ({
                           {plan.department}
                         </span>
                         <span className="font-mono text-xs font-semibold text-slate-800">
-                          {plan.document_code || `VCC-PLAN-${plan.department || 'QC'}`}
+                          {formatPlanDocCode(plan)}
                         </span>
                       </div>
                     </div>
