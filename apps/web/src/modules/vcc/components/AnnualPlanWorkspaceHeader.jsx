@@ -324,6 +324,13 @@ export const AnnualPlanWorkspaceHeader = ({
                 </h2>
 
                 <span
+                  className="font-mono font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md text-xs border border-slate-200/80 shadow-2xs shrink-0"
+                  title={`ฉบับแก้ไขแผนงาน (Plan Revision) Rev.${activePlan.revision}`}
+                >
+                  Rev.{activePlan.revision}
+                </span>
+
+                <span
                   className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold border shrink-0 ${
                     isSuperseded
                       ? getStatusBadgeStyle('SUPERSEDED')
@@ -339,19 +346,6 @@ export const AnnualPlanWorkspaceHeader = ({
 
               {/* Inline Metadata Tags */}
               <div className="flex items-center gap-2 flex-wrap text-xs text-slate-600">
-                <span
-                  className="font-mono font-bold text-slate-800 bg-slate-100 px-2.5 py-0.5 rounded border border-slate-200/80 shadow-2xs"
-                  title={`ฉบับแก้ไขแผนงาน (Plan Revision) Rev.${activePlan.revision}`}
-                >
-                  Rev.{activePlan.revision}
-                </span>
-
-                {activePlan.form_issue_date && (
-                  <span className="font-mono text-xs text-slate-600 bg-slate-50 px-2 py-0.5 rounded border border-slate-200/60" title="วันที่ประกาศใช้แบบฟอร์ม">
-                    ประกาศใช้: {activePlan.form_issue_date}
-                  </span>
-                )}
-
                 <span className="font-semibold text-slate-700 bg-slate-50 px-2 py-0.5 rounded border border-slate-200/60">
                   {activePlan.department_name_th
                     ? `${activePlan.department_name_th} (${activePlan.department})`
