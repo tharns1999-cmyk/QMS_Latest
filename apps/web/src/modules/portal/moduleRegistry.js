@@ -1,3 +1,4 @@
+import { isApiMode } from '../../api/client';
 import { Library, Wrench, Settings } from 'lucide-react';
 import { isSystemAdmin } from '../admin/adminAccess';
 import { ADMIN_MASTER_DATA } from '../admin/adminRoutes';
@@ -7,8 +8,9 @@ export const MODULE_STATUS = {
   COMING_SOON: 'COMING_SOON'
 };
 
-export const isUserAuthorizedForModule = (module, user) => {
+export const isUserAuthorizedForModule = (module, user, capabilities = null) => {
   if (!module) return false;
+  if (module.moduleId === 'vcc' && isApiMode) return Boolean(capabilities?.allowed);
   if (module.adminOnly) return isSystemAdmin(user);
   if (!module.allowedDepartments && !module.dccOnly) return true;
   if (!user) return false;

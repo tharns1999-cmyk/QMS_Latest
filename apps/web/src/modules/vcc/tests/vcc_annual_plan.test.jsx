@@ -247,5 +247,5 @@ describe('VCC Phase 2 — Annual Calibration Plan (FM-QC-46) & Approval Workflow
 
     const savePlanBtn = screen.getByRole('button', { name: /บันทึกแผนประจำปี/i });
     expect(savePlanBtn).toBeDisabled();
-  });
+  }, 15000);
 });

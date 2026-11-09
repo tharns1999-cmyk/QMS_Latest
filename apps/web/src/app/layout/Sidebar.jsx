@@ -1,3 +1,4 @@
+import { useModuleAccess } from '../../shared/components/ModuleAccessProvider';
 import React, { useState, useEffect, useMemo } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import useStore, { isNotificationVisibleToUser, isNotificationReadByUser } from '../../store/useStore';
@@ -172,6 +173,9 @@ const Sidebar = ({ isOpen = false, onClose = () => {} }) => {
   );
 
   const isDccUser = Boolean(currentUser?.isDcc || currentUser?.role === 'DCC_ADMIN' || currentUser?.role === 'DCC_STAFF');
+  const moduleAccess = useModuleAccess();
+  const vccTaskOnly = moduleAccess.modules?.find((m) => m.moduleId === 'vcc')?.taskOnly;
+  const canManageModules = moduleAccess.modules?.some((m) => m.canManage);
   const isAdmin = isSystemAdmin(currentUser);
   // Global System Administration: its own spoke with its own menu; the portal reaches it through a module card only
   const isAdminModule = isAdminPath(path);
@@ -397,6 +401,8 @@ const Sidebar = ({ isOpen = false, onClose = () => {} }) => {
           </>
         )}
 
+        {canManageModules && isAdminModule && <NavItem to="/admin/modules" icon={SlidersHorizontal} label="จัดการระบบย่อย" />}
+
         {/* DCC MODULE NAVIGATION (Shown only when active in DCC module route) */}
         {isDccModule && (
           <>
@@ -485,6 +491,7 @@ const Sidebar = ({ isOpen = false, onClose = () => {} }) => {
             />
 
             <SectionHeader title="การปฏิบัติงานและภาพรวม" />
+            {!vccTaskOnly && <>
             <NavItem
               to="/vcc/dashboard"
               icon={BarChart3}
@@ -509,6 +516,7 @@ const Sidebar = ({ isOpen = false, onClose = () => {} }) => {
               icon={Wrench}
               label="ทะเบียนเครื่องมือวัด"
             />
+            </>}
           </>
         )}
       </nav>

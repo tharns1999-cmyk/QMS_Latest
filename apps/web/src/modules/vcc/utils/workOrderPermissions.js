@@ -10,7 +10,7 @@ const inDepartment = (user, workOrder) => {
 // Mirrors the server rule for closing or sending back a work-order result, so the UI only offers buttons that can work.
 // The server stays the authority: it still refuses anything this lets through.
 export const canReviewWorkOrder = (user, workOrder, thresholds = {}) => {
-  if (!user || !workOrder) return false;
+  if (!user || user.vccReadOnly || !workOrder) return false;
   if (user.id === workOrder.performed_by) return false;
   if (levelOf(user) < Number(thresholds.required_reviewer_level ?? 4)) return false;
   return inDepartment(user, workOrder);
@@ -18,7 +18,7 @@ export const canReviewWorkOrder = (user, workOrder, thresholds = {}) => {
 
 // Mirrors POST /release-hold: L5+ (approver level) of the department, on a reviewed (CLOSED) work order, not the performer.
 export const canReleaseWorkOrderHold = (user, workOrder, thresholds = {}) => {
-  if (!user || !workOrder || workOrder.nc_status !== 'OPEN' || workOrder.status !== 'CLOSED') return false;
+  if (!user || user.vccReadOnly || !workOrder || workOrder.nc_status !== 'OPEN' || workOrder.status !== 'CLOSED') return false;
   if (user.id === workOrder.performed_by) return false;
   if (levelOf(user) < Number(thresholds.required_approver_level ?? 5)) return false;
   return inDepartment(user, workOrder);
@@ -32,7 +32,7 @@ export const canCancelWorkOrder = (user, workOrder) =>
   canManageVccAsset(user, workOrder.department);
 
 export const isUserInWorkOrderDepartment = (user, workOrder) => {
-  if (!user || !workOrder) return false;
+  if (!user || user.vccReadOnly || !workOrder) return false;
   const userDepts = [
     user.department,
     user.primary_department,
@@ -48,7 +48,7 @@ export const isUserInWorkOrderDepartment = (user, workOrder) => {
 
 // Mirrors POST /request-reschedule: Requester must be L2+ in owning department, WO active, no pending request
 export const canRequestReschedule = (user, workOrder) => {
-  if (!user || !workOrder) return false;
+  if (!user || user.vccReadOnly || !workOrder) return false;
   if (['CLOSED', 'CANCELLED'].includes(workOrder.status)) return false;
   if (workOrder.reschedule_status === 'REQUESTED') return false;
   if (levelOf(user) < 2) return false;
@@ -72,7 +72,7 @@ export const getReschedulePermissionReason = (user, workOrder) => {
 
 // Mirrors POST /reschedule: DCC Direct Override only
 export const canDirectReschedule = (user, workOrder) => {
-  if (!user || !workOrder) return false;
+  if (!user || user.vccReadOnly || !workOrder) return false;
   if (['CLOSED', 'CANCELLED'].includes(workOrder.status)) return false;
   if (workOrder.reschedule_status === 'REQUESTED') return false;
   return Boolean(user.isDcc || user.is_dcc);
@@ -80,7 +80,7 @@ export const canDirectReschedule = (user, workOrder) => {
 
 // Mirrors POST /approve-reschedule & /reject-reschedule: L4+ in dept, DCC/QMR, or L6+
 export const canApproveReschedule = (user, workOrder) => {
-  if (!user || !workOrder) return false;
+  if (!user || user.vccReadOnly || !workOrder) return false;
   if (['CLOSED', 'CANCELLED'].includes(workOrder.status)) return false;
   if (workOrder.reschedule_status !== 'REQUESTED') return false;
   const isDccUser = Boolean(user.isDcc || user.is_dcc);

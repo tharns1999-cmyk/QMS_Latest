@@ -1,3 +1,4 @@
+import { installVccTestConfiguration } from './test/vccConfigurationFixture.js';
 import { describe, it, expect, beforeAll } from 'vitest';
 import { getPlatformProxy } from 'wrangler';
 import app from './index.js';
@@ -41,6 +42,8 @@ describe('VCC Phase 1-2: Automatic Work Order Generation, Lifecycle & Idempotenc
         ).bind(id, id, `${id}@autowo.local`, hash, level, dcc)
       )
     ]);
+
+    await installVccTestConfiguration(env.DB, ["AUTOQC", "RECONQC"], {"AUTOQC": {"assigned_reviewer_id": "AUTO-REV4", "assigned_approver_id": "AUTO-APP6", "min_preparer_level": 2}, "RECONQC": {"assigned_reviewer_id": "AUTO-REV4", "assigned_approver_id": "AUTO-APP6", "min_preparer_level": 2}});
 
     for (const id of ['AUTO-PREP', 'AUTO-REV4', 'AUTO-APP6']) {
       const res = await app.request(

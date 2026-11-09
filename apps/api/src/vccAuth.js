@@ -1,28 +1,5 @@
+import { getVccAccess } from './moduleAccess.js';
 // Authorization helpers for VCC (Verify and Calibration Center)
-export const VCC_ALLOWED_DEPTS = ['DC', 'QC', 'QA', 'MGT', 'LB'];
-
-/**
- * Checks whether the user is authorized to access the VCC module (DCC, QC, QA, or QMR).
- * @param {Object} user - Decoded user from requireAuth middleware
- * @returns {boolean}
- */
-export const isVccAuthorized = (user) => {
-  if (!user) return false;
-  if (user.isDcc || user.isQmr || Number(user.approval_level || user.approvalLevel || 0) >= 6) return true;
-  const userDepts = [
-    user.department,
-    user.dept,
-    user.primary_department,
-    ...(Array.isArray(user.depts) ? user.depts : []),
-    ...(Array.isArray(user.departments) ? user.departments : []),
-    ...(Array.isArray(user.secondaryDepartments) ? user.secondaryDepartments : []),
-    ...(Array.isArray(user.affiliated_departments) ? user.affiliated_departments : [])
-  ]
-    .filter(Boolean)
-    .map((d) => String(d).toUpperCase().trim());
-  return userDepts.some((d) => VCC_ALLOWED_DEPTS.includes(d));
-};
-
 export const getUserDepartments = (user) => {
   if (!user) return [];
   const depts = [];
@@ -45,16 +22,18 @@ export const getUserDepartments = (user) => {
 // Writes and approvals keep their own rule (isUserAuthorizedForPlanDept in vccPlans.js).
 export const canReadAllVccDepartments = (user) => {
   if (!user) return false;
+  if (user.vccTaskOnly) return false;
   if (user.isDcc || user.is_dcc || user.isQmr || user.is_qmr) return true;
   if (Number(user.approval_level ?? user.approvalLevel ?? 0) >= 6) return true;
   return getUserDepartments(user).includes('MGT');
 };
 
 export const canReadVccDepartment = (user, department) =>
-  canReadAllVccDepartments(user) || getUserDepartments(user).includes(String(department || '').toUpperCase());
+  !user?.vccTaskOnly && (canReadAllVccDepartments(user) || getUserDepartments(user).includes(String(department || '').toUpperCase()));
 
 // SQL fragment limiting rows to the departments the user may read; null means no restriction.
 export const vccDeptScopeSql = (user, column) => {
+  if (user?.vccTaskOnly) return { sql: '1 = 0', args: [] };
   if (canReadAllVccDepartments(user)) return null;
   const depts = getUserDepartments(user);
   if (depts.length === 0) return { sql: '1 = 0', args: [] };
@@ -66,9 +45,9 @@ export const vccDeptScopeSql = (user, column) => {
 export const VCC_ASSET_MANAGE_MIN_LEVEL = 4;
 export const manageableVccDepartments = (user) => {
   if (!user) return [];
-  if (user.isDcc) return [...VCC_ALLOWED_DEPTS];
+  if (user.isDcc) return [...(user.vccDepartments || [])];
   if (Number(user.approval_level ?? user.approvalLevel ?? 0) < VCC_ASSET_MANAGE_MIN_LEVEL) return [];
-  return getUserDepartments(user).filter((d) => VCC_ALLOWED_DEPTS.includes(d));
+  return getUserDepartments(user).filter((d) => (user.vccDepartments || []).includes(d));
 };
 export const canManageVccAsset = (user, department) => {
   if (!user) return false;
@@ -88,41 +67,10 @@ export const DCC_ONLY = { error: 'เฉพาะ DCC เท่านั้น�
  * Middleware ensuring user has VCC module access.
  */
 export const requireVccAccess = async (c, next) => {
-  const user = c.get('user');
-  if (!isVccAuthorized(user)) {
-    // If not globally authorized by department, grant access if user is designated as reviewer or approver on a VCC document profile or plan
-    if (c.env?.DB && user?.id) {
-      try {
-        const [planAssigned, profileRow] = await Promise.all([
-          c.env.DB.prepare(`
-            SELECT 1 FROM vcc_annual_plans WHERE assigned_reviewer_id = ? OR assigned_approver_id = ? LIMIT 1
-          `).bind(user.id, user.id).first(),
-          c.env.DB.prepare(`
-            SELECT value FROM settings WHERE key = 'vcc_document_profiles'
-          `).first()
-        ]);
-        if (planAssigned) {
-          await next();
-          return;
-        }
-        if (profileRow?.value) {
-          try {
-            const profiles = JSON.parse(profileRow.value);
-            const isProfileAssigned = Object.values(profiles).some(
-              (p) => p.assigned_reviewer_id === user.id || p.assigned_approver_id === user.id
-            );
-            if (isProfileAssigned) {
-              await next();
-              return;
-            }
-          } catch {}
-        }
-      } catch (err) {
-        console.error('requireVccAccess DB check error:', err);
-      }
-    }
-    return c.json(VCC_FORBIDDEN, 403);
-  }
+  const access = await getVccAccess(c.env.DB, c.get('user'));
+  if (!access.allowed) return c.json(VCC_FORBIDDEN, 403);
+  c.get('user').vccDepartments = access.departments.map((d) => d.department);
+  c.get('user').vccTaskOnly = access.taskOnly;
   await next();
 };
 

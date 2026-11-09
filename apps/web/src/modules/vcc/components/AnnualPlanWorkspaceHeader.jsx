@@ -139,6 +139,7 @@ export const AnnualPlanWorkspaceHeader = ({
   planItems = [],
   activeAssets = [],
   canEditPlan = false,
+  canCreatePlan = true,
   thresholds = {},
   onSubmitPlan,
   onOpenRevision,

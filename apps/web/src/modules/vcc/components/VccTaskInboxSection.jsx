@@ -1,3 +1,4 @@
+import useVccPolicyUser from '../hooks/useVccPolicyUser';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
@@ -89,7 +90,8 @@ const TABS = [
  * - Dedicated Task Detail สำหรับพิจารณา ทบทวน / อนุมัติ / ส่งกลับแก้ไข พร้อมตาราง Read-only และประวัติครบถ้วน
  */
 export const VccTaskInboxSection = () => {
-  const { currentUser } = useStore();
+  const { currentUser: sessionUser } = useStore();
+  const currentUser = useVccPolicyUser(sessionUser);
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
 
@@ -200,14 +202,14 @@ export const VccTaskInboxSection = () => {
         ? currentUser.id === plan.assigned_approver_id || isOverrideAdmin
         : true;
 
-      const canReview =
+      const canReview = plan.allowedActions ? !currentUser.vccReadOnly && plan.allowedActions.includes('REVIEW') :
         plan.status === 'PENDING_REVIEW' &&
         isDeptAllowed &&
         isAssignedReviewer &&
         currentUser.id !== plan.prepared_by &&
         userLevel >= (thresholds.required_reviewer_level || 4);
 
-      const canApprove =
+      const canApprove = plan.allowedActions ? !currentUser.vccReadOnly && plan.allowedActions.includes('APPROVE') :
         plan.status === 'PENDING_APPROVAL' &&
         isDeptAllowed &&
         isAssignedApprover &&
@@ -216,7 +218,7 @@ export const VccTaskInboxSection = () => {
         userLevel >= (thresholds.required_approver_level || 5);
 
       const canRevise =
-        plan.status === 'REJECTED' &&
+        !currentUser.vccReadOnly && plan.status === 'REJECTED' &&
         (currentUser.id === plan.prepared_by || isOverrideAdmin || isDeptAllowed);
 
       const isMyActionable = canReview || canApprove || canRevise;

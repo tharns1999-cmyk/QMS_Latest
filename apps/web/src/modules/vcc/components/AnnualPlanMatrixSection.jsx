@@ -1,3 +1,5 @@
+import { getUserDeptCodes } from '../utils/departmentScope';
+import useVccPolicyUser from '../hooks/useVccPolicyUser';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
@@ -44,10 +46,13 @@ import SmartAssetImportModal from './SmartAssetImportModal';
 import useStore from '../../../store/useStore';
 
 const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
-  const { currentUser, masterUsers, tasks } = useStore();
+  const { currentUser: sessionUser, masterUsers, tasks } = useStore();
+  const currentUser = useVccPolicyUser(sessionUser);
   const [searchParams] = useSearchParams();
   const queryTab = searchParams.get('tab');
   const queryId = searchParams.get('id');
+
+  const createDepartments = useMemo(() => !isApiMode ? activeDepartments : activeDepartments.filter((d) => !currentUser?.vccReadOnly && getUserDeptCodes(currentUser).includes(d.code) && currentUser.vccEnabledDepartments?.includes(d.code)), [activeDepartments, currentUser]);
 
   const userDept = useMemo(() => {
     return String(currentUser?.department || currentUser?.dept || '').toUpperCase();
@@ -732,6 +737,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
         activePlan={activePlan}
         planItems={planItems}
         activeAssets={activeAssets}
+        canCreatePlan={!currentUser?.vccReadOnly}
         canEditPlan={canEditPlan}
         thresholds={thresholds}
         onSubmitPlan={handleSubmitPlan}
@@ -899,7 +905,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
         error={planFormError}
         saving={savingPlanForm}
         onSubmit={handleSavePlan}
-        activeDepartments={activeDepartments}
+        activeDepartments={editingPlan ? activeDepartments : (createDepartments.length > 0 ? createDepartments : activeDepartments)}
       />
 
       <PlanRevisionModal

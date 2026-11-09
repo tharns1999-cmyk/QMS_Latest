@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { installVccTestConfiguration, OFFICIAL_TEST_PROFILES } from './test/vccConfigurationFixture.js';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { getPlatformProxy } from 'wrangler';
 import app from './index.js';
 import { hashPassword } from './password.js';
@@ -6,10 +7,17 @@ import { hashPassword } from './password.js';
 describe('VCC Phase 1 Step 2: DCC Document Profile Configuration & Central RBAC User Assignment', () => {
   let proxy;
   let env;
+  let originalProfiles;
   const tokens = {};
   const PASSWORD = 'vcc-profile-pass-123';
 
   const call = async (method, path, who, body) => {
+    if (method === 'PUT' && path.startsWith('/api/vcc/document-profiles/')) {
+      const dept=path.split('/').pop();
+      const current=JSON.parse((await env.DB.prepare("SELECT value FROM settings WHERE key='vcc_document_profiles'").first()).value)[dept];
+      body={...current,approver_dept:'MGT',...body,reason:'[ข้อมูลทดสอบ] เปลี่ยนค่าตั้งค่า',version:(await env.DB.prepare("SELECT version FROM module_configuration WHERE module_id='vcc'").first()).version};
+      path=`/api/module-governance/vcc/profiles/${dept}`;
+    }
     const res = await app.request(
       path,
       {
@@ -28,6 +36,7 @@ describe('VCC Phase 1 Step 2: DCC Document Profile Configuration & Central RBAC 
   beforeAll(async () => {
     proxy = await getPlatformProxy({ persist: { path: '.wrangler/test/v3' } });
     env = { ...proxy.env, JWT_SECRET: 'test-secret' };
+    originalProfiles = (await env.DB.prepare("SELECT value FROM settings WHERE key='vcc_document_profiles'").first()).value;
     const hash = await hashPassword(PASSWORD);
 
     // 1. Ensure master departments exist
@@ -81,6 +90,9 @@ describe('VCC Phase 1 Step 2: DCC Document Profile Configuration & Central RBAC 
       )
     );
 
+    await installVccTestConfiguration(env.DB, ['QC','LB'], OFFICIAL_TEST_PROFILES);
+    await env.DB.prepare("INSERT INTO module_permission_grants(user_id,permission,module_id) VALUES('TEST-DCC','MODULE_MANAGE','vcc')").run();
+
     // Obtain JWT tokens for each test actor
     for (const [id] of testUsers) {
       const res = await app.request(
@@ -99,6 +111,11 @@ describe('VCC Phase 1 Step 2: DCC Document Profile Configuration & Central RBAC 
     }
   });
 
+  afterAll(async()=>{
+    await env.DB.prepare("UPDATE settings SET value=? WHERE key='vcc_document_profiles'").bind(originalProfiles).run();
+    await proxy?.dispose();
+  });
+
   // 1. Reading Document Profiles & Central RBAC Candidates
   it('allows authorized VCC user to read document profiles and Central RBAC candidate lists', async () => {
     const res = await call('GET', '/api/vcc/document-profiles', 'TEST-NON-DCC');
@@ -111,9 +128,9 @@ describe('VCC Phase 1 Step 2: DCC Document Profile Configuration & Central RBAC 
 
     // Verify Central RBAC candidates categorization
     expect(res.body.candidates).toBeDefined();
-    expect(res.body.candidates.qc_reviewers.some((u) => u.id === 'TEST-PD-L5')).toBe(true);
-    expect(res.body.candidates.lab_reviewers.some((u) => u.id === 'TEST-LB-L5')).toBe(true);
-    expect(res.body.candidates.approvers.some((u) => u.id === 'TEST-MGT-L6')).toBe(true);
+    expect(res.body.candidates.QC.reviewers.some((u) => u.id === 'TEST-PD-L5')).toBe(true);
+    expect(res.body.candidates.LB.reviewers.some((u) => u.id === 'TEST-LB-L5')).toBe(true);
+    expect(res.body.candidates.QC.approvers.some((u) => u.id === 'TEST-MGT-L6')).toBe(true);
   });
 
   // 2. Security: Non-DCC users cannot edit Document Profiles
@@ -125,7 +142,7 @@ describe('VCC Phase 1 Step 2: DCC Document Profile Configuration & Central RBAC 
       title_th: 'แฮกการตั้งค่า'
     });
     expect(res.status).toBe(403);
-    expect(res.body.error).toContain('เฉพาะ DCC');
+    expect(res.body.code).toBe('MODULE_MANAGE_REQUIRED');
   });
 
   // 3. Validation: Non-existent User ID rejected with HTTP 422
@@ -165,7 +182,7 @@ describe('VCC Phase 1 Step 2: DCC Document Profile Configuration & Central RBAC 
       assigned_approver_id: 'TEST-MGT-L6'
     });
     expect(res.status).toBe(422);
-    expect(res.body.error).toContain('ฝ่ายผลิต (PD)');
+    expect(res.body.error).toContain('แผนก PD');
   });
 
   it('rejects LAB reviewer who is not from LB department (HTTP 422)', async () => {
@@ -174,7 +191,7 @@ describe('VCC Phase 1 Step 2: DCC Document Profile Configuration & Central RBAC 
       assigned_approver_id: 'TEST-MGT-L6'
     });
     expect(res.status).toBe(422);
-    expect(res.body.error).toContain('ห้องปฏิบัติการ (LB)');
+    expect(res.body.error).toContain('แผนก LB');
   });
 
   // 7. Validation: Approver must be from MGT department and Level >= 6
@@ -184,7 +201,7 @@ describe('VCC Phase 1 Step 2: DCC Document Profile Configuration & Central RBAC 
       assigned_approver_id: 'TEST-PD-L6' // PD L6 instead of MGT L6
     });
     expect(res.status).toBe(422);
-    expect(res.body.error).toContain('ฝ่ายบริหาร (MGT)');
+    expect(res.body.error).toContain('แผนก MGT');
   });
 
   // 8. Segregation of Duties: Reviewer != Approver
@@ -233,12 +250,12 @@ describe('VCC Phase 1 Step 2: DCC Document Profile Configuration & Central RBAC 
     expect(resLab.body.profile.document_code).toBe('FM-LB-11');
     expect(resLab.body.profile.assigned_reviewer_id).toBe('TEST-LB-L5');
 
-    // 10.2 Now update QC profile only (change title)
+    // 10.2 Change only QC preparer policy; controlled-form titles come from DCC.
     const resQc = await call('PUT', '/api/vcc/document-profiles/QC', 'TEST-DCC', {
-      title_th: 'แผนการทวนสอบเครื่องมือประจำปี (QC Updated Title)'
+      min_preparer_level: 5
     });
     expect(resQc.status).toBe(200);
-    expect(resQc.body.profile.title_th).toBe('แผนการทวนสอบเครื่องมือประจำปี (QC Updated Title)');
+    expect(resQc.body.profile.min_preparer_level).toBe(5);
 
     // 10.3 Verify LAB profile is still 100% intact
     const resAll = await call('GET', '/api/vcc/document-profiles', 'TEST-DCC');

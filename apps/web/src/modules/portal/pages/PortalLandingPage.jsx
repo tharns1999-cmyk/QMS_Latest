@@ -1,3 +1,5 @@
+import { useModuleAccess } from '../../../shared/components/ModuleAccessProvider';
+import { isApiMode } from '../../../api/client';
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import useStore from '../../../store/useStore';
@@ -9,9 +11,12 @@ const PortalLandingPage = () => {
   const navigate = useNavigate();
   const { currentUser } = useStore();
   const { t } = usePortalTranslation();
+  const moduleAccess = useModuleAccess();
+  const vcc = moduleAccess.modules?.find((m) => m.moduleId === 'vcc');
 
   const visibleModules = moduleRegistry
-    .filter((module) => isUserAuthorizedForModule(module, currentUser))
+    .filter((module) => isUserAuthorizedForModule(module, currentUser, module.moduleId === 'vcc' ? vcc : null))
+    .map((module) => module.moduleId === 'vcc' && isApiMode && vcc ? { ...module, status: vcc.status, route: vcc.taskOnly ? '/vcc/tasks' : module.route } : module)
     .sort((a, b) => a.order - b.order);
 
   const hasModuleAccess = () => {
@@ -44,11 +49,13 @@ const PortalLandingPage = () => {
         )}
       </div>
 
+      {moduleAccess.error && <p role="alert" className="text-red-700">{moduleAccess.error}</p>}
+      {(vcc?.canManage || !isApiMode && currentUser?.isDcc) && <button onClick={() => navigate('/admin/modules')} className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-50">จัดการระบบย่อย</button>}
       {/* Modules Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
         {visibleModules.map((module) => {
           const Icon = module.icon;
-          const isActive = module.status === MODULE_STATUS.ACTIVE;
+          const isActive = module.status === MODULE_STATUS.ACTIVE || module.status === 'READ_ONLY';
           const hasAccess = hasModuleAccess(module);
           
           return (
@@ -66,6 +73,7 @@ const PortalLandingPage = () => {
                 }
               }}
             >
+              {module.moduleId === 'vcc' && isApiMode && module.status !== 'ACTIVE' && <p className="mb-3 text-sm font-semibold text-slate-700">{{ READ_ONLY: 'อ่านอย่างเดียว', MAINTENANCE: 'ปรับปรุงระบบ', DISABLED: 'ปิดใช้งาน' }[module.status]}{vcc?.maintenance_message ? ` · ${vcc.maintenance_message}` : ''}</p>}
               <div className="flex items-start justify-between mb-4">
                 <div className={`p-3 rounded-xl transition-colors ${
                   isActive && hasAccess 

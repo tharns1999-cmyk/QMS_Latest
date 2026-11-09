@@ -1,7 +1,8 @@
+import { isApiMode } from '../../../api/client';
 import React, { useState, useEffect, useMemo } from 'react';
 import toast from 'react-hot-toast';
-import { AlertTriangle, CheckCircle2, FolderTree, Trash2, X, Send, UserCheck, ShieldCheck, Calendar, FileText, Clock, Lock, Settings2 } from 'lucide-react';
-import { computeDueDates, computeDueDateForMonth, fetchVccDocumentProfiles, saveVccDocumentProfile } from '../api/vccPlanApi';
+import { AlertTriangle, CheckCircle2, FolderTree, Trash2, X, Send, UserCheck, ShieldCheck, Calendar, FileText, Clock, Lock } from 'lucide-react';
+import { computeDueDates, computeDueDateForMonth, fetchVccDocumentProfiles } from '../api/vccPlanApi';
 import { formatVccDateTime, formatVccDueDatesList } from '../utils/vccDateUtils';
 import { useVccModalAccessibility } from '../hooks/useVccModalAccessibility';
 import { VccDiscardConfirmDialog } from './VccDiscardConfirmDialog';
@@ -205,6 +206,11 @@ export const PlanFormModal = ({
                 {activeDepartments.length === 0 && (
                   <p className="mt-1 text-[11px] text-rose-600 font-semibold">
                     ไม่สามารถโหลดแผนกจาก Master Data ได้ กรุณาตรวจสอบข้อมูลแผนกก่อนบันทึก
+                  </p>
+                )}
+                {form.department && docProfiles && !docProfiles[form.department]?.document_code && (
+                  <p className="mt-1 text-[11px] text-amber-700 font-medium">
+                    แผนก {form.department} ยังไม่ได้ผูกแบบฟอร์ม DCC ระบบจะใช้แบบฟอร์มมาตรฐาน
                   </p>
                 )}
               </div>
@@ -860,7 +866,10 @@ const PlanSubmitModalContent = ({
 }) => {
   const minReviewerLevel = Number(thresholds.required_reviewer_level || 4);
   const minApproverLevel = Number(thresholds.required_approver_level || 5);
-  const planDept = String(plan.department || 'QC').toUpperCase().trim();
+  const planDept = String(plan.department || '').toUpperCase().trim();
+  const [workflowProfiles, setWorkflowProfiles] = useState({});
+  useEffect(() => { let alive = true; fetchVccDocumentProfiles().then((res) => { if (alive) setWorkflowProfiles(res.profiles || {}); }).catch(() => {}); return () => { alive = false; }; }, []);
+  const workflowProfile = isApiMode ? workflowProfiles[planDept] || {} : {};
 
   const isUserEligibleForDept = (u, dept) => {
     if (!u) return false;
@@ -879,12 +888,12 @@ const PlanSubmitModalContent = ({
     return (masterUsers || []).filter((u) => {
       if (!u || !u.id || String(u.status || '').toUpperCase() === 'INACTIVE') return false;
       if (u.id === currentUser?.id) return false; // SoD: ผู้จัดทำห้ามทบทวนงานตนเอง
-      if (plan.assigned_reviewer_id && u.id === plan.assigned_reviewer_id) return true;
+      if (!isApiMode && plan.assigned_reviewer_id && u.id === plan.assigned_reviewer_id) return true;
+      if (isApiMode && plan.assigned_reviewer_id && u.id !== plan.assigned_reviewer_id) return false;
       const lvl = Number(u.approval_level || u.level || 0);
-      if (planDept === 'QC' && isUserEligibleForDept(u, 'PD') && lvl >= 5) return true;
-      return lvl >= minReviewerLevel && isUserEligibleForDept(u, planDept);
+      return lvl >= Math.max(minReviewerLevel, workflowProfile.required_reviewer_level || 0) && (plan.assigned_reviewer_id && !workflowProfile.reviewer_dept || isUserEligibleForDept(u, workflowProfile.reviewer_dept || planDept));
     });
-  }, [masterUsers, currentUser, planDept, minReviewerLevel, plan.assigned_reviewer_id]);
+  }, [masterUsers, currentUser, planDept, minReviewerLevel, plan.assigned_reviewer_id, workflowProfile]);
 
   const [selectedReviewerId, setSelectedReviewerId] = useState(
     plan.assigned_reviewer_id || eligibleReviewers[0]?.id || ''
@@ -895,11 +904,12 @@ const PlanSubmitModalContent = ({
       if (!u || !u.id || String(u.status || '').toUpperCase() === 'INACTIVE') return false;
       if (u.id === currentUser?.id) return false; // SoD: ผู้จัดทำห้ามอนุมัติงานตนเอง
       if (u.id === selectedReviewerId) return false; // 4-Eyes: ผู้ทบทวนห้ามอนุมัติงานที่ตนทบทวน
-      if (plan.assigned_approver_id && u.id === plan.assigned_approver_id) return true;
+      if (!isApiMode && plan.assigned_approver_id && u.id === plan.assigned_approver_id) return true;
+      if (isApiMode && plan.assigned_approver_id && u.id !== plan.assigned_approver_id) return false;
       const lvl = Number(u.approval_level || u.level || 0);
-      return lvl >= minApproverLevel && isUserEligibleForDept(u, planDept);
+      return lvl >= Math.max(minApproverLevel, workflowProfile.required_approver_level || 0) && (plan.assigned_approver_id && !workflowProfile.approver_dept || isUserEligibleForDept(u, workflowProfile.approver_dept || planDept));
     });
-  }, [masterUsers, currentUser, selectedReviewerId, planDept, minApproverLevel, plan.assigned_approver_id]);
+  }, [masterUsers, currentUser, selectedReviewerId, planDept, minApproverLevel, plan.assigned_approver_id, workflowProfile]);
 
   const [selectedApproverId, setSelectedApproverId] = useState(
     plan.assigned_approver_id || eligibleApprovers[0]?.id || ''
@@ -1205,458 +1215,7 @@ export const GroupWorkOrderModal = ({
   );
 };
 
-export const PlanSettingsModal = ({
-  open,
-  onClose,
-  draftProviders,
-  setDraftProviders,
-  newProvider,
-  setNewProvider,
-  draftSettings,
-  setDraftSettings,
-  saving,
-  onSave
-}) => {
-  const [activeTab, setActiveTab] = useState('general'); // 'general' | 'profiles'
-  const [selectedDept, setSelectedDept] = useState('QC'); // 'QC' | 'LB'
-  const [profiles, setProfiles] = useState({});
-  const [candidates, setCandidates] = useState({
-    qc_reviewers: [],
-    lab_reviewers: [],
-    approvers: [],
-    qc_preparers: [],
-    lab_preparers: []
-  });
-  const [loadingProfiles, setLoadingProfiles] = useState(false);
-  const [savingDeptProfile, setSavingDeptProfile] = useState(false);
-
-  // Department Profile Draft state
-  const [deptDraft, setDeptDraft] = useState({
-    document_code: '',
-    revision: '',
-    form_issue_date: '',
-    title_th: '',
-    min_preparer_level: 4,
-    assigned_reviewer_id: '',
-    assigned_approver_id: ''
-  });
-
-  const isDirty = Boolean(newProvider?.trim());
-
-  const {
-    dialogRef,
-    requestClose,
-    handleBackdropClick,
-    showConfirmDiscard,
-    confirmDiscard,
-    cancelDiscard
-  } = useVccModalAccessibility({
-    isOpen: open,
-    onClose,
-    isDirty
-  });
-
-  // Load document profiles and Central RBAC candidates when modal opens
-  useEffect(() => {
-    if (!open) return;
-    let isMounted = true;
-    setLoadingProfiles(true);
-    fetchVccDocumentProfiles()
-      .then((data) => {
-        if (!isMounted) return;
-        const loadedProfiles = data?.profiles || {};
-        setProfiles(loadedProfiles);
-        if (data?.candidates) setCandidates(data.candidates);
-
-        // Populate initial dept draft
-        const initial = loadedProfiles[selectedDept] || {};
-        setDeptDraft({
-          document_code: initial.document_code || `VCC-PLAN-${selectedDept}`,
-          revision: initial.revision || '01',
-          form_issue_date: initial.form_issue_date || '',
-          title_th: initial.title_th || `แผนการทวนสอบและสอบเทียบเครื่องมือประจำปี (${selectedDept})`,
-          min_preparer_level: initial.min_preparer_level || 4,
-          assigned_reviewer_id: initial.assigned_reviewer_id || '',
-          assigned_approver_id: initial.assigned_approver_id || ''
-        });
-      })
-      .catch((err) => {
-        toast.error('ไม่สามารถโหลดข้อมูลแบบฟอร์มควบคุมได้: ' + (err.message || ''));
-      })
-      .finally(() => {
-        if (isMounted) setLoadingProfiles(false);
-      });
-    return () => { isMounted = false; };
-  }, [open, selectedDept]);
-
-  if (!open) return null;
-
-  const addProvider = () => {
-    const trimmed = newProvider.trim();
-    if (!trimmed || draftProviders.includes(trimmed)) return;
-    setDraftProviders([...draftProviders, trimmed]);
-    setNewProvider('');
-  };
-
-  const handleSelectDept = (dept) => {
-    setSelectedDept(dept);
-    const p = profiles[dept] || {};
-    setDeptDraft({
-      document_code: p.document_code || '',
-      revision: p.revision || '',
-      form_issue_date: p.form_issue_date || '',
-      title_th: p.title_th || '',
-      min_preparer_level: p.min_preparer_level || 4,
-      assigned_reviewer_id: p.assigned_reviewer_id || '',
-      assigned_approver_id: p.assigned_approver_id || ''
-    });
-  };
-
-  const handleSaveDepartmentProfile = async () => {
-    setSavingDeptProfile(true);
-    try {
-      const payload = {
-        document_code: deptDraft.document_code,
-        revision: deptDraft.revision,
-        form_issue_date: deptDraft.form_issue_date,
-        title_th: deptDraft.title_th,
-        min_preparer_level: Number(deptDraft.min_preparer_level || 4),
-        assigned_reviewer_id: deptDraft.assigned_reviewer_id || null,
-        assigned_approver_id: deptDraft.assigned_approver_id || null
-      };
-      const res = await saveVccDocumentProfile(selectedDept, payload);
-      setProfiles((prev) => ({ ...prev, [selectedDept]: res.profile || payload }));
-      toast.success(`บันทึกแบบฟอร์มควบคุมแผนก ${selectedDept} สำเร็จ`);
-    } catch (err) {
-      toast.error(err.message || 'บันทึกแบบฟอร์มควบคุมไม่สำเร็จ');
-    } finally {
-      setSavingDeptProfile(false);
-    }
-  };
-
-  return (
-    <>
-      <div
-        className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4"
-        onClick={handleBackdropClick}
-      >
-        <div
-          ref={dialogRef}
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="plan-settings-title"
-          tabIndex="-1"
-          className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-2xl w-full overflow-hidden outline-none flex flex-col max-h-[90vh]"
-        >
-          {/* Header */}
-          <div className="px-6 py-4.5 border-b border-slate-200 flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
-                <Settings2 size={20} />
-              </div>
-              <div>
-                <h2 id="plan-settings-title" className="text-xl font-bold text-slate-900 tracking-tight">ตั้งค่าแผนประจำปีและเกณฑ์ควบคุม (DCC)</h2>
-                <p className="text-xs text-slate-500">จัดการหน่วยงานทวนสอบ, แบบฟอร์มควบคุม และสายการอนุมัติรายแผนก</p>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={requestClose}
-              aria-label="ปิดหน้าต่าง"
-              className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
-            >
-              <X size={20} />
-            </button>
-          </div>
-
-          {/* Navigation Tabs */}
-          <div className="px-6 pt-3 border-b border-slate-200 flex gap-2">
-            <button
-              type="button"
-              onClick={() => setActiveTab('general')}
-              className={`px-4 py-2 text-sm font-semibold rounded-t-xl border-b-2 transition-colors cursor-pointer ${
-                activeTab === 'general'
-                  ? 'border-indigo-600 text-indigo-600 bg-indigo-50/50'
-                  : 'border-transparent text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              ทั่วไปและหน่วยงานทวนสอบ
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab('profiles')}
-              className={`px-4 py-2 text-sm font-semibold rounded-t-xl border-b-2 transition-colors cursor-pointer ${
-                activeTab === 'profiles'
-                  ? 'border-indigo-600 text-indigo-600 bg-indigo-50/50'
-                  : 'border-transparent text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              แบบฟอร์มควบคุมและผู้รับผิดชอบ (QC / LAB)
-            </button>
-          </div>
-
-          {/* Content Body */}
-          <div className="p-6 space-y-4 overflow-y-auto flex-1">
-            {activeTab === 'general' ? (
-              <>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">ประเภทเอกสารใน Approval Matrix</label>
-                    <select
-                      value={draftSettings.approval_doc_type}
-                      onChange={(e) => setDraftSettings({ ...draftSettings, approval_doc_type: e.target.value })}
-                      className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium bg-white"
-                    >
-                      <option value="FM">FM (แบบฟอร์ม)</option>
-                      <option value="WI">WI (วิธีปฏิบัติงาน)</option>
-                      <option value="SOP">SOP (ระเบียบปฏิบัติ)</option>
-                      <option value="QM">QM (คู่มือคุณภาพ)</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">กติกาวันครบกำหนดเริ่มต้น</label>
-                    <select
-                      value={draftSettings.due_date_rule}
-                      onChange={(e) => setDraftSettings({ ...draftSettings, due_date_rule: e.target.value })}
-                      className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium bg-white"
-                    >
-                      <option value="END_OF_MONTH">วันสิ้นเดือน</option>
-                      <option value="START_OF_MONTH">วันที่ 1 ของเดือน</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="space-y-2 pt-2">
-                  <label className="block text-sm font-semibold text-slate-700">รายชื่อสถาบัน / หน่วยงานที่ทวนสอบ</label>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={newProvider}
-                      onChange={(e) => setNewProvider(e.target.value)}
-                      placeholder="เพิ่มชื่อหน่วยงานทวนสอบ..."
-                      className="flex-1 h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium"
-                    />
-                    <button type="button" onClick={addProvider} className="h-10 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold transition-colors cursor-pointer">
-                      เพิ่ม
-                    </button>
-                  </div>
-                  <div className="border border-slate-200 rounded-xl divide-y divide-slate-200 max-h-48 overflow-y-auto">
-                    {draftProviders.map((p) => (
-                      <div key={p} className="px-3.5 py-2.5 flex items-center justify-between text-sm">
-                        <span className="font-medium text-slate-800">{p}</span>
-                        {draftProviders.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => setDraftProviders(draftProviders.filter((x) => x !== p))}
-                            className="text-rose-600 hover:bg-rose-50 p-1.5 rounded-lg cursor-pointer"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="pt-4 flex justify-end gap-2.5 border-t border-slate-100">
-                  <button type="button" onClick={requestClose} className="h-10 px-4 rounded-xl border border-slate-300 text-sm font-semibold hover:bg-slate-50 transition-colors cursor-pointer">
-                    ยกเลิก
-                  </button>
-                  <button
-                    type="button"
-                    disabled={saving}
-                    onClick={onSave}
-                    className="h-10 px-5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 transition-colors cursor-pointer shadow-2xs"
-                  >
-                    {saving ? 'กำลังบันทึก...' : 'บันทึกการตั้งค่าทั่วไป'}
-                  </button>
-                </div>
-              </>
-            ) : (
-              /* Department Profiles Tab */
-              <div className="space-y-4">
-                {/* Department Selector Pills */}
-                <div className="flex items-center gap-2 p-1 bg-slate-100 rounded-xl">
-                  <button
-                    type="button"
-                    onClick={() => handleSelectDept('QC')}
-                    className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                      selectedDept === 'QC'
-                        ? 'bg-white text-indigo-700 shadow-2xs'
-                        : 'text-slate-600 hover:text-slate-900'
-                    }`}
-                  >
-                    แผนก QC {profiles.QC?.document_code ? `(${profiles.QC.document_code})` : ''}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleSelectDept('LB')}
-                    className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                      selectedDept === 'LB'
-                        ? 'bg-white text-indigo-700 shadow-2xs'
-                        : 'text-slate-600 hover:text-slate-900'
-                    }`}
-                  >
-                    แผนก LAB {profiles.LB?.document_code ? `(${profiles.LB.document_code})` : ''}
-                  </button>
-                </div>
-
-                <div className="p-3 bg-indigo-50/50 rounded-xl border border-indigo-100 text-xs text-indigo-800 space-y-1">
-                  <div className="font-semibold flex items-center gap-1.5">
-                    <ShieldCheck size={14} className="text-indigo-600" />
-                    <span>นโยบายความปลอดภัยและแยกข้อมูลเฉพาะแผนก:</span>
-                  </div>
-                  <p>การตั้งค่านี้แยกอิสระระหว่างแผนก ไม่ส่งผลกระทบต่อกัน และตรวจสอบระดับสิทธิ์สดกับ Central RBAC</p>
-                </div>
-
-                {loadingProfiles ? (
-                  <div className="py-8 text-center text-sm text-slate-500">กำลังโหลดข้อมูลแบบฟอร์ม...</div>
-                ) : (
-                  <div className="space-y-3.5">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1">รหัสเอกสารอ้างอิง / Electronic ID (ถ้ามี)</label>
-                        <input
-                          type="text"
-                          value={deptDraft.document_code}
-                          onChange={(e) => setDeptDraft({ ...deptDraft, document_code: e.target.value })}
-                          placeholder={`เช่น VCC-PLAN-${selectedDept} หรือ รหัสเอกสารของบริษัท`}
-                          className="w-full h-10 px-3 rounded-xl border border-slate-300 text-sm font-medium"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1">ครั้งที่แก้ไข (Revision)</label>
-                        <input
-                          type="text"
-                          value={deptDraft.revision}
-                          onChange={(e) => setDeptDraft({ ...deptDraft, revision: e.target.value })}
-                          placeholder={selectedDept === 'QC' ? '01' : '02'}
-                          className="w-full h-10 px-3 rounded-xl border border-slate-300 text-sm font-medium"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1">วันที่เริ่มใช้แบบฟอร์ม (Form Issue Date)</label>
-                        <input
-                          type="text"
-                          value={deptDraft.form_issue_date}
-                          onChange={(e) => setDeptDraft({ ...deptDraft, form_issue_date: e.target.value })}
-                          placeholder={selectedDept === 'QC' ? '2026-06-09 (09/06/2569)' : '2026-08-10 (10/08/2026)'}
-                          className="w-full h-10 px-3 rounded-xl border border-slate-300 text-sm font-medium"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1">ระดับขั้นต่ำของผู้จัดทำ (Prepared By)</label>
-                        <select
-                          value={deptDraft.min_preparer_level}
-                          onChange={(e) => setDeptDraft({ ...deptDraft, min_preparer_level: Number(e.target.value) })}
-                          className="w-full h-10 px-3 rounded-xl border border-slate-300 text-sm font-medium bg-white"
-                        >
-                          <option value="4">L4+ (Supervisor ขึ้นไป)</option>
-                          <option value="5">L5+ (Assistant Manager ขึ้นไป)</option>
-                        </select>
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">ชื่อทางการของแบบฟอร์ม (Document Title)</label>
-                      <input
-                        type="text"
-                        value={deptDraft.title_th}
-                        onChange={(e) => setDeptDraft({ ...deptDraft, title_th: e.target.value })}
-                        placeholder="ชื่อแบบฟอร์มภาษาไทย..."
-                        className="w-full h-10 px-3 rounded-xl border border-slate-300 text-sm font-medium"
-                      />
-                    </div>
-
-                    {/* Authorized Reviewer Assignment */}
-                    <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <label className="block text-xs font-bold text-slate-800">
-                          ผู้ทบทวนที่ได้รับมอบหมาย (Authorized Reviewer)
-                        </label>
-                        <span className="text-[11px] font-semibold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100">
-                          {selectedDept === 'QC' ? 'ฝ่ายผลิต (PD L5+)' : 'ห้องแล็บ (LB L5+)'}
-                        </span>
-                      </div>
-                      <select
-                        value={deptDraft.assigned_reviewer_id}
-                        onChange={(e) => setDeptDraft({ ...deptDraft, assigned_reviewer_id: e.target.value })}
-                        className="w-full h-10 px-3 rounded-xl border border-slate-300 text-sm font-medium bg-white"
-                      >
-                        <option value="">-- ไม่ระบุ / กำหนดรายบุคคลตอนจัดทำแผน --</option>
-                        {(selectedDept === 'QC' ? candidates.qc_reviewers : candidates.lab_reviewers).map((u) => (
-                          <option key={u.id} value={u.id}>
-                            {u.name} ({u.position || 'เจ้าหน้าที่'}) — {u.department} L{u.approval_level}
-                          </option>
-                        ))}
-                      </select>
-                      <p className="text-[11px] text-slate-500">
-                        {selectedDept === 'QC'
-                          ? 'ผู้ทบทวน QC ต้องเป็นผู้ช่วยผู้จัดการฝ่ายผลิต (PD L5) ที่ได้รับมอบหมายข้ามแผนกแบบ Task-Scoped'
-                          : 'ผู้ทบทวน LAB ต้องเป็นผู้ช่วยผู้จัดการห้องปฏิบัติการ (LAB L5)'}
-                      </p>
-                    </div>
-
-                    {/* Authorized Approver Assignment */}
-                    <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <label className="block text-xs font-bold text-slate-800">
-                          ผู้อนุมัติที่ได้รับมอบหมาย (Authorized Approver)
-                        </label>
-                        <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">
-                          ฝ่ายบริหาร (MGT L6+)
-                        </span>
-                      </div>
-                      <select
-                        value={deptDraft.assigned_approver_id}
-                        onChange={(e) => setDeptDraft({ ...deptDraft, assigned_approver_id: e.target.value })}
-                        className="w-full h-10 px-3 rounded-xl border border-slate-300 text-sm font-medium bg-white"
-                      >
-                        <option value="">-- ไม่ระบุ / กำหนดรายบุคคลตอนจัดทำแผน --</option>
-                        {candidates.approvers.map((u) => (
-                          <option key={u.id} value={u.id}>
-                            {u.name} ({u.position || 'ผู้บริหาร'}) — MGT L{u.approval_level}
-                          </option>
-                        ))}
-                      </select>
-                      <p className="text-[11px] text-slate-500">
-                        ผู้อนุมัติต้องสังกัดฝ่ายบริหาร (MGT) และมีระดับ L6 ขึ้นไปตามเกณฑ์อำนาจอนุมัติ
-                      </p>
-                    </div>
-
-                    <div className="pt-3 flex justify-end gap-2.5 border-t border-slate-100">
-                      <button type="button" onClick={requestClose} className="h-10 px-4 rounded-xl border border-slate-300 text-sm font-semibold hover:bg-slate-50 transition-colors cursor-pointer">
-                        ปิด
-                      </button>
-                      <button
-                        type="button"
-                        disabled={savingDeptProfile}
-                        onClick={handleSaveDepartmentProfile}
-                        className="h-10 px-5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 transition-colors cursor-pointer shadow-2xs"
-                      >
-                        {savingDeptProfile ? 'กำลังบันทึก...' : `บันทึกแบบฟอร์มแผนก ${selectedDept}`}
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      <VccDiscardConfirmDialog
-      isOpen={showConfirmDiscard}
-      onConfirm={confirmDiscard}
-      onCancel={cancelDiscard}
-    />
-  </>
-);
-};
+export { PlanSettingsModal } from './PlanSettingsModal';
 
 export const PlanHistoryModal = ({ open, onClose, history = [] }) => {
   const {

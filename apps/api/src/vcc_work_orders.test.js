@@ -1,3 +1,4 @@
+import { installVccTestConfiguration } from './test/vccConfigurationFixture.js';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { getPlatformProxy } from 'wrangler';
 import app from './index.js';
@@ -36,10 +37,12 @@ describe('VCC Phase 3: Work Orders, Execution, Review, Close & Hold/NC Control',
       ].map(([id, level, dcc]) =>
         env.DB.prepare(
           `INSERT INTO users (id, name, email, password_hash, role, approval_level, primary_department, departments, is_dcc)
-           VALUES (?, ?, ?, ?, 'USER', ?, 'VWOQC', '["VWOQC"]', ?)`
-        ).bind(id, id, `${id}@vccwo.local`, hash, level, dcc)
+           VALUES (?, ?, ?, ?, 'USER', ?, ?, ?, ?)`
+        ).bind(id, id, `${id}@vccwo.local`, hash, level, dcc ? 'VWOQC' : 'WH', JSON.stringify([dcc ? 'VWOQC' : 'WH']), dcc)
       )
     ]);
+
+    await installVccTestConfiguration(env.DB, ["VWOQC"], {"VWOQC": {"assigned_reviewer_id": "VWO-REV4", "assigned_approver_id": "VWO-APP6"}});
 
     for (const id of ['VWO-DCC', 'VWO-L2', 'VWO-REV4', 'VWO-APP6']) {
       const res = await app.request(
