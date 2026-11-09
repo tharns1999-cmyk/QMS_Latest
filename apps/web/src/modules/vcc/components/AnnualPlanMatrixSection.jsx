@@ -626,7 +626,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
       const res = await saveVccPlanSettings({ providers: draftProviders, planSettings: draftSettings });
       setProviders(res.providers);
       setPlanSettings(res.planSettings);
-      setThresholds(res.thresholds);
+      await loadPlansAndMeta(planDetail?.plan?.id || '');
       toast.success('บันทึกการตั้งค่าแผนประจำปีแล้ว');
       setSettingsOpen(false);
     } catch (err) {
