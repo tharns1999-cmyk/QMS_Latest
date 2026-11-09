@@ -1,3 +1,4 @@
+import { installVccTestConfiguration } from './test/vccConfigurationFixture.js';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { getPlatformProxy } from 'wrangler';
 import app from './index.js';
@@ -41,10 +42,12 @@ describe('VCC Phase 2: Calibration Schedule Rules, Annual Plan Matrix & Plan App
       ].map(([id, level, dcc]) =>
         env.DB.prepare(
           `INSERT INTO users (id, name, email, password_hash, role, approval_level, primary_department, departments, is_dcc)
-           VALUES (?, ?, ?, ?, 'USER', ?, 'VPQC', '["VPQC"]', ?)`
-        ).bind(id, id, `${id}@vccplan.local`, hash, level, dcc)
+           VALUES (?, ?, ?, ?, 'USER', ?, ?, ?, ?)`
+        ).bind(id, id, `${id}@vccplan.local`, hash, level, dcc ? 'VPQC' : 'WH', JSON.stringify([dcc ? 'VPQC' : 'WH']), dcc)
       )
     ]);
+
+    await installVccTestConfiguration(env.DB, ["VPQC", "VPWH"], {"VPQC": {"assigned_reviewer_id": "VP-REV4", "assigned_approver_id": "VP-APP6"}, "VPWH": {"assigned_reviewer_id": "VP-REV4", "assigned_approver_id": "VP-APP6"}});
 
     for (const id of ['VP-DCC', 'VP-L2', 'VP-REV4', 'VP-APP6']) {
       const res = await app.request(

@@ -1,3 +1,4 @@
+import { installVccTestConfiguration } from './test/vccConfigurationFixture.js';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { getPlatformProxy } from 'wrangler';
 import app from './index.js';
@@ -40,10 +41,12 @@ describe('VCC Phase 4: Dashboard KPI, Notification Policy, Audit Log & CSV Expor
       ].map(([id, level, dcc]) =>
         env.DB.prepare(
           `INSERT INTO users (id, name, email, password_hash, role, approval_level, primary_department, departments, is_dcc)
-           VALUES (?, ?, ?, ?, 'USER', ?, 'VDSQC', '["VDSQC"]', ?)`
-        ).bind(id, id, `${id}@vccdash.local`, hash, level, dcc)
+           VALUES (?, ?, ?, ?, 'USER', ?, ?, ?, ?)`
+        ).bind(id, id, `${id}@vccdash.local`, hash, level, dcc ? 'VDSQC' : 'WH', JSON.stringify([dcc ? 'VDSQC' : 'WH']), dcc)
       )
     ]);
+
+    await installVccTestConfiguration(env.DB, ["VDSQC"]);
 
     for (const id of ['VDS-DCC', 'VDS-L2', 'VDS-REV4', 'VDS-APP6']) {
       const res = await app.request(
@@ -63,7 +66,7 @@ describe('VCC Phase 4: Dashboard KPI, Notification Policy, Audit Log & CSV Expor
     await proxy?.dispose();
   });
 
-  it('blocks non-DCC users from dashboard, notification settings, audit log, and exports', async () => {
+  it('blocks users from an unconfigured department from dashboard, notification settings, audit log, and exports', async () => {
     expect((await call('GET', '/api/vcc/dashboard', 'VDS-L2')).status).toBe(403);
     expect((await call('GET', '/api/vcc/notification-settings', 'VDS-L2')).status).toBe(403);
     expect((await call('PUT', '/api/vcc/notification-settings', 'VDS-L2', {})).status).toBe(403);

@@ -84,10 +84,10 @@ describe('VCC asset register — department-based management (RBAC)', () => {
   });
 
   it('shared helper: DCC all, L4+ own VCC departments only, seniority and QMR add nothing', () => {
-    expect(manageableVccDepartments({ isDcc: true })).toEqual(['DC', 'QC', 'QA', 'MGT', 'LB']);
-    expect(canManageVccAsset({ approval_level: 4, department: 'QC', depts: ['QC'] }, 'qc')).toBe(true);
-    expect(canManageVccAsset({ approval_level: 4, department: 'QC', depts: ['QC'] }, 'LB')).toBe(false);
-    expect(canManageVccAsset({ approval_level: 3, department: 'QC', depts: ['QC'] }, 'QC')).toBe(false);
+    expect(manageableVccDepartments({ isDcc: true, vccDepartments: ['DC','QC','QA','MGT','LB'] })).toEqual(['DC', 'QC', 'QA', 'MGT', 'LB']);
+    expect(canManageVccAsset({ approval_level: 4, department: 'QC', depts: ['QC'], vccDepartments: ['QC','LB'] }, 'qc')).toBe(true);
+    expect(canManageVccAsset({ approval_level: 4, department: 'QC', depts: ['QC'], vccDepartments: ['QC','LB'] }, 'LB')).toBe(false);
+    expect(canManageVccAsset({ approval_level: 3, department: 'QC', depts: ['QC'], vccDepartments: ['QC','LB'] }, 'QC')).toBe(false);
     expect(canManageVccAsset({ approval_level: 7, isQmr: true, department: 'MGT', depts: ['MGT'] }, 'QC')).toBe(false);
     expect(canManageVccAsset({ approval_level: 5, department: 'PD', depts: ['PD'] }, 'PD')).toBe(false);
   });

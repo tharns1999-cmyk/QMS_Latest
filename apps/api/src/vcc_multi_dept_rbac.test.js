@@ -1,3 +1,4 @@
+import { installVccTestConfiguration } from './test/vccConfigurationFixture.js';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { getPlatformProxy } from 'wrangler';
 import app from './index.js';
@@ -81,6 +82,7 @@ describe('VCC Multi-Department Access & Approval Workflow (RBAC & SoD)', () => {
           form_issue_date: '2026-06-25',
           title_th: 'แผนการทวนสอบเครื่องมือวัดประจำปี',
           reviewer_dept: 'PD',
+          approver_dept: 'MGT',
           required_reviewer_level: 5,
           required_approver_level: 6,
           min_preparer_level: 4,
@@ -93,6 +95,7 @@ describe('VCC Multi-Department Access & Approval Workflow (RBAC & SoD)', () => {
           form_issue_date: '2026-08-10',
           title_th: 'แผนการสอบเทียบเครื่องมือประจำปี',
           reviewer_dept: 'LB',
+          approver_dept: 'MGT',
           required_reviewer_level: 5,
           required_approver_level: 6,
           min_preparer_level: 4,
@@ -101,6 +104,8 @@ describe('VCC Multi-Department Access & Approval Workflow (RBAC & SoD)', () => {
         }
       }))
     ]);
+
+    await installVccTestConfiguration(env.DB, ["QC", "LB"]);
 
     for (const id of ['DCC-USER', 'QC-STAFF', 'QC-LEAD', 'QA-MGR', 'PD-USER', 'QC-L4-CREATOR', 'PD-QC-L5-REV', 'PD-ONLY-L5', 'QC-HOD-L5', 'QA-L4-STAFF', 'MGT-STAFF', 'LB-STAFF', 'WH-USER']) {
       const res = await app.request(

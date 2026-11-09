@@ -1,3 +1,4 @@
+import { installVccTestConfiguration } from './test/vccConfigurationFixture.js';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { getPlatformProxy } from 'wrangler';
 import app from './index.js';
@@ -94,6 +95,8 @@ describe('VCC Phase 3.4: Automated Notification & Escalation Engine Tests', () =
         VALUES ('QA-L4-N4', 'QA Officer', 'qa.l4.n4@vcc.local', ?, 'USER', 4, 'QA', '["QA","N4QA"]', 0)
       `).bind(hash)
     ]);
+
+    await installVccTestConfiguration(env.DB, ["N4QC", "N4QA"]);
 
     for (const id of ['DCC-N4', 'QC-L4-N4', 'QC-L5-N4', 'QA-L5-N4', 'QMR-L6-N4', 'QA-L4-N4']) {
       const email = `${id.toLowerCase().replace(/-/g, '.')}@vcc.local`;

@@ -1,3 +1,5 @@
+import { registerModuleGovernanceRoutes } from './moduleGovernance.js';
+import { requireVccModuleState, MODULE_LOCKED, protectGovernanceAccount } from './moduleAccess.js';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { secureHeaders } from 'hono/secure-headers';
@@ -62,6 +64,8 @@ app.use('/api/*', (c, next) => cors({ origin: c.env.ALLOWED_ORIGIN.split(','), e
 // Anything a handler did not expect: log it with the reference id and answer with a message that carries the id but no internals.
 app.onError((err, c) => {
   if (err instanceof HTTPException) return err.getResponse();
+  if (/MODULE_LOCKED/.test(String(err.message))) return c.json(MODULE_LOCKED, 409);
+  if (/DEPARTMENT_DISABLED/.test(String(err.message))) return c.json({ code: 'DEPARTMENT_DISABLED', error: 'แผนกนี้ปิดรับทะเบียนและแผนใหม่แล้ว งานเดิมยังดำเนินการต่อได้' }, 403);
   const requestId = c.get('requestId') || crypto.randomUUID();
   logEvent('error', 'unhandled_error', {
     request_id: requestId,
@@ -1107,6 +1111,8 @@ app.patch('/api/users/:id', requireAuth, async (c) => {
   const actor = c.get('user');
   if (!actor.isDcc) return c.json(DCC_ONLY, 403);
   const db = c.env.DB;
+  const accountDenied = await protectGovernanceAccount(c, c.req.param('id'));
+  if (accountDenied) return accountDenied;
   const body = await readBody(c);
   const before = await db.prepare('SELECT * FROM users WHERE id = ?').bind(c.req.param('id')).first();
   if (!before) return c.json({ error: 'ไม่พบผู้ใช้' }, 404);
@@ -1142,6 +1148,8 @@ app.patch('/api/users/:id', requireAuth, async (c) => {
 app.post('/api/users/:id/reset-password', requireAuth, async (c) => {
   if (!c.get('user').isDcc) return c.json(DCC_ONLY, 403);
   const db = c.env.DB;
+  const accountDenied = await protectGovernanceAccount(c, c.req.param('id'));
+  if (accountDenied) return accountDenied;
   const password = tempPassword();
   const [updated] = await db.batch([
     db.prepare('UPDATE users SET password_hash = ?, must_change_password = 1, failed_logins = 0, password_changed_at = ? WHERE id = ? RETURNING id')
@@ -1330,6 +1338,8 @@ app.post('/api/auth/2fa/confirm', requireAuth, async (c) => {
 app.post('/api/users/:id/two-factor/reset', requireAuth, async (c) => {
   if (!c.get('user').isDcc) return c.json(DCC_ONLY, 403);
   const db = c.env.DB;
+  const accountDenied = await protectGovernanceAccount(c, c.req.param('id'));
+  if (accountDenied) return accountDenied;
   const id = c.req.param('id');
   const [cleared] = await db.batch([
     db.prepare('UPDATE users SET totp_secret = NULL, totp_confirmed_at = NULL, totp_last_step = 0, password_changed_at = ? WHERE id = ? RETURNING id').bind(Math.floor(Date.now() / 1000), id),
@@ -1532,6 +1542,8 @@ app.post('/api/client-errors', requireAuth, async (c) => {
   return c.body(null, 204);
 });
 
+registerModuleGovernanceRoutes(app, { requireAuth, audit });
+app.use('/api/vcc/*', requireAuth, requireVccModuleState);
 registerVccRoutes(app, { requireAuth, audit });
 
 // Workers calls scheduled() from the cron in wrangler.jsonc; tests call request() directly.

@@ -1,3 +1,5 @@
+import { isApiMode } from '../../api/client';
+import { useModuleAccess } from '../../shared/components/ModuleAccessProvider';
 import React, { useEffect } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import useStore from '../../store/useStore';
@@ -19,6 +21,7 @@ export const ProtectedRoute = ({
   children,
   requireDcc = false,
   requireVcc = false,
+  requireModuleManage = false,
   allowedDepartments = null,
   requireAdmin = false,
   redirectPath = '/dcc/dashboard',
@@ -26,6 +29,8 @@ export const ProtectedRoute = ({
 }) => {
   const currentUser = useStore(state => state.currentUser);
   const location = useLocation();
+  const moduleAccess = useModuleAccess();
+  const vcc = moduleAccess.modules?.find((m) => m.moduleId === 'vcc');
 
   const isDccUser = Boolean(
     currentUser?.isDcc || 
@@ -45,7 +50,7 @@ export const ProtectedRoute = ({
     .filter(Boolean)
     .map((d) => String(d).toUpperCase());
 
-  const isVccUser = Boolean(
+  const isVccUser = isApiMode ? Boolean(vcc?.allowed) : Boolean(
     currentUser?.isDcc ||
     currentUser?.isQmr ||
     Number(currentUser?.approval_level || currentUser?.level || 0) >= 6 ||
@@ -55,7 +60,10 @@ export const ProtectedRoute = ({
   let isAllowed = true;
   let fallbackMessage = 'คุณไม่มีสิทธิ์เข้าถึงหน้านี้';
 
-  if (requireAdmin) {
+  if (requireModuleManage) {
+    isAllowed = !isApiMode || Boolean(vcc?.canManage);
+    fallbackMessage = 'ต้องได้รับมอบหมายสิทธิ์จัดการระบบย่อย';
+  } else if (requireAdmin) {
     if (!isSystemAdmin(currentUser)) {
       isAllowed = false;
       fallbackMessage = deniedToastMessage || 'คุณไม่มีสิทธิ์เข้าถึงศูนย์จัดการข้อมูลหลัก';
@@ -80,16 +88,20 @@ export const ProtectedRoute = ({
   }
 
   useEffect(() => {
-    if (!isAllowed) {
+    if (!isAllowed && !(isApiMode && moduleAccess.loading && (requireVcc || requireModuleManage))) {
       toast.error(fallbackMessage, { id: 'rbac-denied-toast' });
     }
-  }, [isAllowed, fallbackMessage]);
+  }, [isAllowed, fallbackMessage, moduleAccess.loading, requireVcc, requireModuleManage]);
 
+  if (isApiMode && (requireVcc || requireModuleManage) && moduleAccess.loading) return <p role="status" className="p-6">กำลังตรวจสอบสิทธิ์ระบบย่อย…</p>;
+  if (isApiMode && (requireVcc || requireModuleManage) && moduleAccess.error) return <p role="alert" className="p-6 text-red-700">{moduleAccess.error}</p>;
+  if (isApiMode && requireVcc && vcc?.allowed && !vcc.canEnter) return <section className="space-y-3 p-6"><h1 className="text-xl font-semibold">{vcc.status === 'MAINTENANCE' ? 'VCC กำลังปรับปรุงระบบ' : 'VCC ปิดใช้งานชั่วคราว'}</h1><p>{vcc.maintenance_message || 'กรุณาติดต่อผู้ดูแลระบบ'}</p><a href="/portal" className="text-indigo-700 underline">กลับพอร์ทัล</a></section>;
+  if (isApiMode && requireVcc && vcc?.taskOnly && !location.pathname.startsWith('/vcc/tasks')) return <section className="space-y-3 p-6"><h1 className="text-xl font-semibold">สิทธิ์สำหรับงานที่ได้รับมอบหมาย</h1><p>คุณเข้าถึงแผนที่ได้รับมอบหมายผ่านหน้างานที่ต้องดำเนินการได้</p><a href="/vcc/tasks" className="text-indigo-700 underline">ไปงานที่ต้องดำเนินการ</a></section>;
   if (!isAllowed) {
     return <Navigate to={redirectPath} replace state={{ unauthorized: true, from: location }} />;
   }
 
-  return children;
+  return requireVcc && isApiMode && vcc?.status === 'READ_ONLY' ? <><p role="status" className="mb-4 rounded-xl bg-blue-50 p-4 text-sm text-blue-800">VCC เปิดให้อ่านอย่างเดียว ขณะนี้ไม่สามารถบันทึกหรืออนุมัติข้อมูลได้</p>{children}</> : children;
 };
 
 export default ProtectedRoute;

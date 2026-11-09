@@ -1,3 +1,4 @@
+import { installVccTestConfiguration, OFFICIAL_TEST_PROFILES } from './test/vccConfigurationFixture.js';
 import { describe, it, expect, beforeAll } from 'vitest';
 import { getPlatformProxy } from 'wrangler';
 import app from './index.js';
@@ -11,6 +12,12 @@ describe('VCC Phase 1 Step 3: Backend Workflow & Approval Security', () => {
   let activePlanId;
 
   const call = async (method, path, who, body, customEnv = null) => {
+    if(method==='PUT' && path.startsWith('/api/vcc/document-profiles/')) {
+      const dept=path.split('/').pop();
+      const current=JSON.parse((await env.DB.prepare("SELECT value FROM settings WHERE key='vcc_document_profiles'").first()).value)[dept];
+      body={...current,...body,reason:'[ข้อมูลทดสอบ] ตั้งค่าผู้รับผิดชอบ',version:(await env.DB.prepare("SELECT version FROM module_configuration WHERE module_id='vcc'").first()).version};
+      path=`/api/module-governance/vcc/profiles/${dept}`;
+    }
     const res = await app.request(
       path,
       {
@@ -93,6 +100,8 @@ describe('VCC Phase 1 Step 3: Backend Workflow & Approval Security', () => {
     );
 
     // Obtain JWT tokens for each test actor
+    await installVccTestConfiguration(env.DB, ["QC", "LB"], OFFICIAL_TEST_PROFILES);
+
     for (const [id] of testUsers) {
       const res = await app.request(
         '/api/auth/login',
@@ -108,6 +117,8 @@ describe('VCC Phase 1 Step 3: Backend Workflow & Approval Security', () => {
         tokens[id] = json.token;
       }
     }
+
+    await env.DB.prepare("INSERT INTO module_permission_grants(user_id,permission,module_id) VALUES('DCC-ADMIN','MODULE_MANAGE','vcc')").run();
 
     // 3. Configure Document Profiles for QC and LB as DCC-ADMIN
     await call('PUT', '/api/vcc/document-profiles/QC', 'DCC-ADMIN', {
@@ -438,15 +449,9 @@ describe('VCC Phase 1 Step 3: Backend Workflow & Approval Security', () => {
     expect(originalPlan.revision).toBe('01');
     expect(originalPlan.form_issue_date).toBe('2026-06-09');
 
-    // 2. DCC Admin updates the document profile for QC to Revision 02 and new dates
-    await call('PUT', '/api/vcc/document-profiles/QC', 'DCC-ADMIN', {
-      document_code: 'FM-QC-46',
-      revision: '02',
-      form_issue_date: '2027-01-01',
-      title_th: 'แผนการทวนสอบเครื่องมือประจำปี ฉบับปรับปรุงใหม่',
-      assigned_reviewer_id: 'PD-REV-L5',
-      assigned_approver_id: 'MGT-APP-L6'
-    });
+    // 2. Change the preparer policy; existing controlled-form snapshots must remain frozen.
+    const changedProfile = await call('PUT', '/api/vcc/document-profiles/QC', 'DCC-ADMIN', { min_preparer_level:5 });
+    expect(changedProfile.status).toBe(200);;
 
     // 3. Re-query original plan: It MUST retain Revision 01 and 2026-06-09!
     const recheckRes = await call('GET', `/api/vcc/plans/${originalPlan.id}`, 'QC-PREP-L4');
@@ -522,7 +527,7 @@ describe('VCC Phase 1 Step 3: Backend Workflow & Approval Security', () => {
   });
 
   // 13. Pure Electronic Paperless Quality System & Decoupled Dynamic PDF
-  it('supports 100% paperless electronic plans without paper FM codes and generates dynamic ISO 9001 PDF', async () => {
+  it('rejects a new controlled plan without a real mapping while retaining existing QA equipment', async () => {
     // Setup QA-PREP-L4 with L4+ approval in QA
     const hash = await hashPassword(PASSWORD);
     await env.DB.prepare(`
@@ -556,58 +561,9 @@ describe('VCC Phase 1 Step 3: Backend Workflow & Approval Security', () => {
       department: 'QA'
       // document_code is omitted on purpose
     });
-    expect(planRes.status).toBe(201);
-    const plan = planRes.body.plan;
-    expect(plan.document_code).toBe('VCC-PLAN-QA');
-    expect(plan.revision).toBe('01');
-    expect(plan.status).toBe('DRAFT');
+    expect(planRes.status).toBe(422);
+    expect(planRes.body.code).toBe('CONFIGURATION_INCOMPLETE');
+    expect(await env.DB.prepare("SELECT id FROM vcc_assets WHERE id='ASSET-QA-001'").first()).toBeTruthy();
 
-    // 2. Add planned item
-    const itemRes = await call('POST', `/api/vcc/plans/${plan.id}/items`, 'QA-PREP-L4', {
-      asset_id: 'ASSET-QA-001',
-      provider_name: 'External Lab',
-      responsible_dept: 'QA',
-      planned_months: [4, 10],
-      mpe: '±1 nm',
-      acceptance_criteria: 'Bandwidth 2 nm',
-      calibration_points: 'Holmium Oxide Wavelength'
-    });
-    expect(itemRes.status).toBe(201);
-
-    // 3. Submit plan (Maker-checker with QA-REV-L5 and MGT-APP-L6)
-    const submitRes = await call('POST', `/api/vcc/plans/${plan.id}/submit`, 'QA-PREP-L4', {
-      reviewer_id: 'QA-REV-L5',
-      approver_id: 'MGT-APP-L6'
-    });
-    expect(submitRes.status).toBe(200);
-    expect(submitRes.body.plan.status).toBe('PENDING_REVIEW');
-
-    // 4. Review plan (QA-REV-L5 token is from beforeAll)
-    const reviewRes = await call('POST', `/api/vcc/plans/${plan.id}/review`, 'QA-REV-L5', {
-      comment: 'QA electronic calibration schedule verified'
-    });
-    expect(reviewRes.status).toBe(200);
-    expect(reviewRes.body.plan.status).toBe('PENDING_APPROVAL');
-
-    // 5. Approve plan
-    const approveRes = await call('POST', `/api/vcc/plans/${plan.id}/approve`, 'MGT-APP-L6', {
-      comment: 'Approved pure electronic quality plan'
-    });
-    expect(approveRes.status).toBe(200);
-    const approvedPlan = approveRes.body.plan;
-    expect(approvedPlan.status).toBe('APPROVED');
-    expect(approvedPlan.document_code).toBe('VCC-PLAN-QA');
-    expect(approvedPlan.pdf_file_key).toContain(`vcc/plans/${plan.id}/VCC-PLAN-QA_2097_Rev01_`);
-
-    // 6. Verify PDF download and headers
-    const pdfRes = await app.request(`/api/vcc/plans/${plan.id}/pdf`, {
-      headers: { Authorization: `Bearer ${tokens['QA-PREP-L4']}` }
-    }, env);
-    expect(pdfRes.status).toBe(200);
-    expect(pdfRes.headers.get('content-type')).toBe('application/pdf');
-    expect(pdfRes.headers.get('content-disposition')).toContain('VCC-PLAN-QA_2097_Rev01_Approved.pdf');
-
-    const pdfBuffer = await pdfRes.arrayBuffer();
-    expect(pdfBuffer.byteLength).toBeGreaterThan(1000);
   });
 });

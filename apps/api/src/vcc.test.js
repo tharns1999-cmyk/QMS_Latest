@@ -1,3 +1,4 @@
+import { installVccTestConfiguration } from './test/vccConfigurationFixture.js';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { getPlatformProxy } from 'wrangler';
 import app from './index.js';
@@ -32,10 +33,12 @@ describe('VCC Phase 1: Asset Register', () => {
       ...[['VCC-DCC', 1], ['VCC-USER', 0]].map(([id, dcc]) =>
         env.DB.prepare(
           `INSERT INTO users (id, name, email, password_hash, role, approval_level, primary_department, departments, is_dcc)
-           VALUES (?, ?, ?, ?, 'USER', 4, 'VCCQ', '["VCCQ"]', ?)`
-        ).bind(id, id, `${id}@vcc.local`, hash, dcc)
+           VALUES (?, ?, ?, ?, 'USER', 4, ?, ?, ?)`
+        ).bind(id, id, `${id}@vcc.local`, hash, dcc ? 'VCCQ' : 'VCCX', JSON.stringify([dcc ? 'VCCQ' : 'VCCX']), dcc)
       )
     ]);
+    await installVccTestConfiguration(env.DB, ["VCCQ", "VCCS"]);
+
     for (const id of ['VCC-DCC', 'VCC-USER']) {
       const res = await app.request(
         '/api/auth/login',
@@ -55,7 +58,7 @@ describe('VCC Phase 1: Asset Register', () => {
     await proxy?.dispose();
   });
 
-  it('rejects non-DCC users on every VCC endpoint with 403', async () => {
+  it('rejects users from an unconfigured department on every VCC endpoint with 403', async () => {
     expect((await call('GET', '/api/vcc/assets', 'VCC-USER')).status).toBe(403);
     expect((await call('GET', '/api/vcc/assets/any-id', 'VCC-USER')).status).toBe(403);
     expect((await call('POST', '/api/vcc/assets', 'VCC-USER', { asset_code: 'ST999', name: 'x', asset_type: 'เทอร์โมมิเตอร์', department: 'VCCQ' })).status).toBe(403);

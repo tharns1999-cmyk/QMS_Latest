@@ -1,3 +1,4 @@
+import ModuleAccessProvider from '../shared/components/ModuleAccessProvider';
 import React, { useEffect, Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useParams, useLocation } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
@@ -8,6 +9,8 @@ import ProtectedRoute from './auth/ProtectedRoute';
 import ApiSessionGate from './auth/ApiSessionGate';
 import { isApiMode } from '../api/client';
 import { ADMIN_MASTER_DATA, ADMIN_AUDIT_LOG } from '../modules/admin/adminRoutes';
+
+const ModuleGovernancePage = lazy(() => import('../modules/admin/pages/ModuleGovernancePage'));
 
 const ADMIN_DENIED = 'คุณไม่มีสิทธิ์เข้าถึงศูนย์บริหารระบบ';
 
@@ -113,6 +116,7 @@ export const AliasRedirect = ({ to }) => {
 };
 
 function App() {
+  const currentUser = useStore(state => state.currentUser);
   const hydrateMasterData = useStore(state => state.hydrateMasterData);
   const initializePeriodicReviews = useStore(state => state.initializePeriodicReviews);
   const checkScheduledEffectiveDocs = useStore(state => state.checkScheduledEffectiveDocs);
@@ -132,6 +136,7 @@ function App() {
       <SLAEngine />
       <Routes>
         <Route path="/" element={<Layout />}>
+          <Route path="admin/modules" element={<ProtectedRoute requireModuleManage redirectPath="/portal">{withSuspense(ModuleGovernancePage)}</ProtectedRoute>} />
           <Route path="portal" element={withSuspense(PortalLandingPage)} />
           <Route
             path="vcc"
@@ -346,7 +351,7 @@ function App() {
       </Routes>
     </BrowserRouter>
   );
-  return isApiMode ? <ApiSessionGate>{app}</ApiSessionGate> : app;
+  return isApiMode ? <ApiSessionGate><ModuleAccessProvider userId={currentUser?.id}>{app}</ModuleAccessProvider></ApiSessionGate> : app;
 }
 
 export default App;

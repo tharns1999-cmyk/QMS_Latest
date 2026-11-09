@@ -68,6 +68,7 @@ const sendJson = (method) => async (path, body) =>
   (await request(path, { method, body: JSON.stringify(body), headers: { 'Content-Type': 'application/json' } })).json();
 export const apiPatch = sendJson('PATCH');
 export const apiPut = sendJson('PUT');
+export const apiDelete = sendJson('DELETE');
 export const apiUpload = async (path, file) =>
   (await request(path, { method: 'PUT', body: file, headers: { 'Content-Type': 'application/pdf' } })).json();
 // Why a file is being read; the server writes it to the audit log. Anything else is refused.

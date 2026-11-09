@@ -1,3 +1,4 @@
+import { installVccTestConfiguration } from './test/vccConfigurationFixture.js';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { getPlatformProxy } from 'wrangler';
 import app from './index.js';
@@ -62,7 +63,7 @@ describe('VCC Phase 3.2: Calibration Execution, Digital Certificates & Controlle
         ['M1-APP5-2', 5, 1, 'M1QC'],
         ['M1-PERF5', 5, 1, 'M1QC'],
         ['M1-OTHER', 4, 1, 'M1OTHER'],
-        ['M1-NONDCC', 4, 0, 'M1QC']
+        ['M1-NONDCC', 4, 0, 'WH']
       ].map(([id, level, dcc, dept]) =>
         env.DB.prepare(
           `INSERT INTO users (id, name, email, password_hash, role, approval_level, primary_department, departments, is_dcc)
@@ -70,6 +71,8 @@ describe('VCC Phase 3.2: Calibration Execution, Digital Certificates & Controlle
         ).bind(id, id, `${id}@vccm1.local`, hash, level, dept, JSON.stringify([dept]), dcc)
       )
     ]);
+
+    await installVccTestConfiguration(env.DB, ["M1QC", "M1OTHER"]);
 
     for (const id of ['M1-PERF', 'M1-REV4', 'M1-APP5', 'M1-APP5-2', 'M1-PERF5', 'M1-OTHER', 'M1-NONDCC']) {
       const res = await app.request(

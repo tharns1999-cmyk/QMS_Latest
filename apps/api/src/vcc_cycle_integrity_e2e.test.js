@@ -1,3 +1,4 @@
+import { installVccTestConfiguration } from './test/vccConfigurationFixture.js';
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
 import { getPlatformProxy } from 'wrangler';
 import app from './index.js';
@@ -65,6 +66,7 @@ describe('VCC Phase 2.5: Stable Planned Cycle Identity, Reconciliation & E2E Ver
           form_issue_date: '2026-06-25',
           title_th: 'แผนการทวนสอบเครื่องมือวัดประจำปี',
           reviewer_dept: 'PD',
+          approver_dept: 'MGT',
           required_reviewer_level: 5,
           required_approver_level: 6,
           min_preparer_level: 4,
@@ -73,6 +75,8 @@ describe('VCC Phase 2.5: Stable Planned Cycle Identity, Reconciliation & E2E Ver
         }
       }))
     ]);
+
+    await installVccTestConfiguration(env.DB, ["QC"]);
 
     for (const id of ['E2E-QC-STAFF', 'E2E-QC-SUP', 'E2E-QA-MGR', 'E2E-PD-STAFF']) {
       const res = await app.request(

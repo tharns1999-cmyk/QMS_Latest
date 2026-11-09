@@ -1,4 +1,5 @@
 // VCC (Verify and Calibration Center) — Phase 1: Asset Register API.
+import { canCreateVccDepartment } from './moduleAccess.js';
 import { registerVccPlanRoutes } from './vccPlans.js';
 import { registerVccWorkOrderRoutes } from './vccWorkOrders.js';
 import { registerVccDashboardRoutes } from './vccDashboard.js';
@@ -222,6 +223,10 @@ export const registerVccRoutes = (app, { requireAuth, audit }) => {
 
     const deptRow = await db.prepare("SELECT 1 FROM departments WHERE code = ? AND status = 'ACTIVE'").bind(department).first();
     if (!deptRow) return c.json({ error: 'ไม่พบแผนกที่ใช้งานอยู่ในระบบ' }, 400);
+
+    if (!await canCreateVccDepartment(db, department)) {
+      return c.json({ code: 'DEPARTMENT_DISABLED', error: 'แผนกนี้ปิดรับทะเบียนและแผนใหม่แล้ว งานเดิมยังดำเนินการต่อได้' }, 403);
+    }
 
     const id = crypto.randomUUID();
     try {
