@@ -1,7 +1,7 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import AnnualPlanLevel1Overview from '../components/AnnualPlanLevel1Overview';
+import AnnualPlanRegisterTable from '../components/AnnualPlanRegisterTable';
 import AnnualPlanWorkspaceHeader from '../components/AnnualPlanWorkspaceHeader';
 import { PlanRevisionModal } from '../components/AnnualPlanModals';
 import AssetRegisterPage from '../pages/AssetRegisterPage';
@@ -82,67 +82,88 @@ describe('VCC Master UX/UI Redesign — 2-Level Architecture & Controlled Revisi
     });
   });
 
-  it('1. LEVEL 1: Horizontal Year Tabs display actual years and plan counts without dropdowns', () => {
-    const setFilterYear = vi.fn();
-    render(
-      <AnnualPlanLevel1Overview
-        plans={mockPlans}
-        availableYears={[2027, 2026]}
-        filterYear="2026"
-        setFilterYear={setFilterYear}
-        activeDepartments={[{ code: 'QC', nameTh: 'ควบคุมคุณภาพ' }]}
-        statusTab="ALL"
-      />
-    );
-
-    // Shows horizontal year buttons directly on page
-    expect(screen.getByRole('button', { name: /ปี 2026/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /ปี 2027/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /ทุกปี \(3\)/ })).toBeInTheDocument();
-
-    // Clicking year switches filter immediately
-    fireEvent.click(screen.getByRole('button', { name: /ปี 2027/ }));
-    expect(setFilterYear).toHaveBeenCalledWith('2027');
-  });
-
-  it('2. LEVEL 1: Status Filter Chips show real item counts and allow direct 1-click filtering', () => {
-    const setStatusTab = vi.fn();
-    render(
-      <AnnualPlanLevel1Overview
-        plans={mockPlans}
-        availableYears={[2027, 2026]}
-        filterYear="2026"
-        statusTab="ALL"
-        setStatusTab={setStatusTab}
-        activeDepartments={[{ code: 'QC', nameTh: 'ควบคุมคุณภาพ' }]}
-      />
-    );
-
-    // Shows status filter chips with accurate live counts
-    expect(screen.getByRole('button', { name: /ทั้งหมด/ })).toHaveTextContent('2');
-    expect(screen.getByRole('button', { name: /ร่างแผน/ })).toHaveTextContent('1');
-    expect(screen.getByRole('button', { name: /อนุมัติแล้ว \/ บังคับใช้/ })).toHaveTextContent('1');
-
-    // 1-click to filter
-    fireEvent.click(screen.getByRole('button', { name: /อนุมัติแล้ว \/ บังคับใช้/ }));
-    expect(setStatusTab).toHaveBeenCalledWith('APPROVED');
-  });
-
-  it('3. LEVEL 1: Distinct "สร้างแผนประจำปี" CTA exists and clearly differs from revising a plan', () => {
+  it('1. PAGE A: Displays comprehensive register data table with structured columns', () => {
+    const onSelectPlan = vi.fn();
     const onOpenCreatePlan = vi.fn();
+
     render(
-      <AnnualPlanLevel1Overview
+      <AnnualPlanRegisterTable
         plans={mockPlans}
-        availableYears={[2027, 2026]}
-        filterYear="2026"
+        activeDepartments={[
+          { code: 'QC', nameTh: 'ควบคุมคุณภาพ' },
+          { code: 'LB', nameTh: 'ห้องปฏิบัติการ' }
+        ]}
+        userDept="QC"
+        onSelectPlan={onSelectPlan}
         onOpenCreatePlan={onOpenCreatePlan}
       />
     );
 
-    const createPlanBtn = screen.getByRole('button', { name: 'สร้างแผนประจำปี' });
-    expect(createPlanBtn).toBeInTheDocument();
-    fireEvent.click(createPlanBtn);
+    // Table headers exist
+    expect(screen.getByText('ปีของแผน')).toBeInTheDocument();
+    expect(screen.getByText('แผนก')).toBeInTheDocument();
+    expect(screen.getByText('รหัสเอกสาร')).toBeInTheDocument();
+    expect(screen.getByText('ฉบับแก้ไขแผน')).toBeInTheDocument();
+    expect(screen.getByText('ฉบับฟอร์ม')).toBeInTheDocument();
+    expect(screen.getByText('สถานะ')).toBeInTheDocument();
+    expect(screen.getByText('เครื่องมือ')).toBeInTheDocument();
+    expect(screen.getByText('รอบทวนสอบ')).toBeInTheDocument();
+    expect(screen.getByText('การดำเนินการ')).toBeInTheDocument();
+
+    // Top CTA "+ สร้างแผนประจำปี"
+    const topCreateBtn = screen.getByRole('button', { name: /สร้างแผนประจำปี/ });
+    expect(topCreateBtn).toBeInTheDocument();
+    fireEvent.click(topCreateBtn);
     expect(onOpenCreatePlan).toHaveBeenCalledTimes(1);
+
+    // Rows rendered
+    expect(screen.getAllByText('ปี 2026').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('ปี 2027').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('VCC-PLAN-QC').length).toBeGreaterThan(0);
+
+    // Action button opens plan
+    const actionBtns = screen.getAllByRole('button', { name: /เปิดแผนงาน|ดำเนินการต่อ/ });
+    expect(actionBtns.length).toBeGreaterThan(0);
+    fireEvent.click(actionBtns[0]);
+    expect(onSelectPlan).toHaveBeenCalled();
+  });
+
+  it('2. PAGE A: Supports live search filtering by title and quick status filters', () => {
+    render(
+      <AnnualPlanRegisterTable
+        plans={mockPlans}
+        activeDepartments={[{ code: 'QC', nameTh: 'ควบคุมคุณภาพ' }]}
+        userDept="QC"
+      />
+    );
+
+    // Search input
+    const searchInput = screen.getByPlaceholderText(/ค้นหารหัสแผน/);
+    expect(searchInput).toBeInTheDocument();
+
+    // Filter by search query '2027'
+    fireEvent.change(searchInput, { target: { value: '2027' } });
+    expect(screen.getAllByText('ปี 2027').length).toBeGreaterThan(0);
+    expect(screen.queryByText('ปี 2026')).not.toBeInTheDocument();
+  });
+
+  it('3. PAGE B: Header contains `← กลับหน้ารวมแผนประจำปี` back button that triggers onBackToRegister', () => {
+    const approvedPlan = mockPlans[0];
+    const onBackToRegister = vi.fn();
+    render(
+      <AnnualPlanWorkspaceHeader
+        activePlan={approvedPlan}
+        plans={[approvedPlan]}
+        selectedPlanId={approvedPlan.id}
+        statusTab="APPROVED"
+        onBackToRegister={onBackToRegister}
+      />
+    );
+
+    const backBtn = screen.getByRole('button', { name: /กลับหน้ารวมแผนประจำปี/ });
+    expect(backBtn).toBeInTheDocument();
+    fireEvent.click(backBtn);
+    expect(onBackToRegister).toHaveBeenCalledTimes(1);
   });
 
   it('4. LEVEL 2: Clearly separates Plan Revision from Form Template Revision', () => {

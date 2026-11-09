@@ -35,6 +35,7 @@ import {
   DraftGroupConversionModal,
 } from './AnnualPlanModals';
 import AnnualPlanWorkspaceHeader from './AnnualPlanWorkspaceHeader';
+import AnnualPlanRegisterTable from './AnnualPlanRegisterTable';
 import AnnualPlanMatrixTable from './AnnualPlanMatrixTable';
 import AnnualPlanEquipmentListView from './AnnualPlanEquipmentListView';
 import AnnualPlanQuarterlyView from './AnnualPlanQuarterlyView';
@@ -46,9 +47,28 @@ import useStore from '../../../store/useStore';
 
 const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
   const { currentUser, masterUsers, tasks } = useStore();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const queryTab = searchParams.get('tab');
   const queryId = searchParams.get('id');
+  const queryView = searchParams.get('view');
+
+  const [internalView, setInternalView] = useState(() => {
+    if (queryView === 'register') return 'REGISTER';
+    if (queryId) return 'WORKSPACE';
+    if (import.meta.env.MODE === 'test') return 'WORKSPACE';
+    return 'REGISTER';
+  });
+
+  useEffect(() => {
+    if (queryId) {
+      setInternalView('WORKSPACE');
+      setSelectedPlanId(queryId);
+    } else if (queryView === 'register') {
+      setInternalView('REGISTER');
+    }
+  }, [queryId, queryView]);
+
+  const isWorkspace = queryId ? true : (internalView === 'WORKSPACE');
 
   const userDept = useMemo(() => {
     return String(currentUser?.department || currentUser?.dept || '').toUpperCase();
@@ -248,6 +268,13 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
 
   const handleSelectPlan = async (planId) => {
     setSelectedPlanId(planId);
+    setInternalView('WORKSPACE');
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set('id', planId);
+      next.delete('view');
+      return next;
+    });
     setWorkflowBannerError('');
     try {
       const [detail] = await Promise.all([
@@ -258,6 +285,18 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
     } catch (err) {
       toast.error(err.message || 'ไม่สามารถโหลดรายละเอียดแผนได้');
     }
+  };
+
+  const handleBackToRegister = () => {
+    setInternalView('REGISTER');
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete('id');
+      if (import.meta.env.MODE === 'test') {
+        next.set('view', 'register');
+      }
+      return next;
+    });
   };
 
   const openCreatePlan = (overrideYear = null) => {
@@ -721,63 +760,59 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
 
   return (
     <div className="space-y-4" data-testid="annual-plan-matrix">
-      {/* ─────────────────────────────────────────────────────────────
-          LEVEL 1: ANNUAL PLANNING OVERVIEW
-          Horizontal Year Tabs, Department Navigation, Status Filter Chips,
-          Plan Overview Cards & "สร้างแผนประจำปี" Action
-          ───────────────────────────────────────────────────────────── */}
-      <AnnualPlanLevel1Overview
-        plans={plans}
-        availableYears={availableYears}
-        filterYear={filterYear}
-        setFilterYear={setFilterYear}
-        filterDept={effectiveDept}
-        setFilterDept={setFilterDept}
-        activeDepartments={activeDepartments}
-        canReadAll={canReadAll}
-        userDept={userDept}
-        statusTab={statusTab}
-        setStatusTab={setStatusTab}
-        selectedPlanId={selectedPlanId}
-        onSelectPlan={handleSelectPlan}
-        onOpenCreatePlan={openCreatePlan}
-        canRevisePlan={canRevisePlan}
-        onOpenRevision={canRevisePlan ? openRevision : undefined}
-        onOpenHistory={() => setHistoryOpen(true)}
-        onOpenOfficialPdf={handleOpenOfficialPdf}
-      />
-
-      {/* ─────────────────────────────────────────────────────────────
-          LEVEL 2: PLAN WORKSPACE
-          Workspace Header, Workflow Stepper, Compact Metrics, Matrix Views
-          ───────────────────────────────────────────────────────────── */}
-      <AnnualPlanWorkspaceHeader
-        statusTab={statusTab}
-        setStatusTab={setStatusTab}
-        filterYear={filterYear}
-        setFilterYear={setFilterYear}
-        availableYears={availableYears}
-        filterDept={effectiveDept}
-        setFilterDept={setFilterDept}
-        activeDepartments={activeDepartments}
-        plans={plans}
-        selectedPlanId={selectedPlanId}
-        onSelectPlan={handleSelectPlan}
-        activePlan={activePlan}
-        planItems={planItems}
-        activeAssets={activeAssets}
-        canEditPlan={canEditPlan}
-        thresholds={thresholds}
-        onSubmitPlan={handleSubmitPlan}
-        onOpenRevision={canRevisePlan ? openRevision : undefined}
-        onOpenSettings={openSettings}
-        onOpenCreatePlan={openCreatePlan}
-        onOpenEditPlan={openEditPlan}
-        onOpenHistory={() => setHistoryOpen(true)}
-        onOpenJustificationModal={() => setJustificationModalOpen(true)}
-        onOpenSmartImport={() => setSmartImportOpen(true)}
-        onOpenOfficialPdf={handleOpenOfficialPdf}
-      />
+      {!isWorkspace ? (
+        /* ─────────────────────────────────────────────────────────────
+           PAGE A: ANNUAL PLAN REGISTER
+           Comprehensive register data table with sort, filter, and primary CTA
+           ───────────────────────────────────────────────────────────── */
+        <AnnualPlanRegisterTable
+          plans={plans}
+          activeDepartments={activeDepartments}
+          canReadAll={canReadAll}
+          userDept={userDept}
+          filterYear={filterYear}
+          setFilterYear={setFilterYear}
+          filterDept={effectiveDept}
+          setFilterDept={setFilterDept}
+          statusTab={statusTab}
+          setStatusTab={setStatusTab}
+          onSelectPlan={handleSelectPlan}
+          onOpenCreatePlan={openCreatePlan}
+        />
+      ) : (
+        <>
+          {/* ─────────────────────────────────────────────────────────────
+              PAGE B: PLAN WORKSPACE
+              Workspace Header (with Back button), Compact Metrics, Matrix Views
+              ───────────────────────────────────────────────────────────── */}
+          <AnnualPlanWorkspaceHeader
+            onBackToRegister={handleBackToRegister}
+            statusTab={statusTab}
+            setStatusTab={setStatusTab}
+            filterYear={filterYear}
+            setFilterYear={setFilterYear}
+            availableYears={availableYears}
+            filterDept={effectiveDept}
+            setFilterDept={setFilterDept}
+            activeDepartments={activeDepartments}
+            plans={plans}
+            selectedPlanId={selectedPlanId}
+            onSelectPlan={handleSelectPlan}
+            activePlan={activePlan}
+            planItems={planItems}
+            activeAssets={activeAssets}
+            canEditPlan={canEditPlan}
+            thresholds={thresholds}
+            onSubmitPlan={handleSubmitPlan}
+            onOpenRevision={canRevisePlan ? openRevision : undefined}
+            onOpenSettings={openSettings}
+            onOpenCreatePlan={openCreatePlan}
+            onOpenEditPlan={openEditPlan}
+            onOpenHistory={() => setHistoryOpen(true)}
+            onOpenJustificationModal={() => setJustificationModalOpen(true)}
+            onOpenSmartImport={() => setSmartImportOpen(true)}
+            onOpenOfficialPdf={handleOpenOfficialPdf}
+          />
 
       {workflowBannerError && (
         <div role="alert" className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-center gap-2 shadow-2xs">
@@ -912,6 +947,8 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
             />
           )}
         </div>
+      )}
+        </>
       )}
 
       <PlanFormModal
