@@ -346,6 +346,12 @@ export const AnnualPlanWorkspaceHeader = ({
 
               {/* Inline Metadata Tags */}
               <div className="flex items-center gap-2 flex-wrap text-xs text-slate-600">
+                {activePlan.form_issue_date && (
+                  <span className="font-mono text-xs text-slate-600 bg-slate-50 px-2 py-0.5 rounded border border-slate-200/60" title="วันที่ประกาศใช้แบบฟอร์ม">
+                    ประกาศใช้: {activePlan.form_issue_date}
+                  </span>
+                )}
+
                 <span className="font-semibold text-slate-700 bg-slate-50 px-2 py-0.5 rounded border border-slate-200/60">
                   {activePlan.department_name_th
                     ? `${activePlan.department_name_th} (${activePlan.department})`
