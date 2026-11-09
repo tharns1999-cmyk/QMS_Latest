@@ -18,7 +18,7 @@ const formatThaiDateTime = (iso) => {
 };
 
 const StepRow = ({ label, name, at, done, current }) => (
-  <div className="flex items-start gap-2 text-xs">
+  <div aria-current={current ? "step" : undefined} className="flex items-start gap-2 text-xs">
     {done ? (
       <CheckCircle2 size={14} className="text-emerald-600 shrink-0 mt-0.5" />
     ) : (
@@ -36,33 +36,33 @@ const StepRow = ({ label, name, at, done, current }) => (
   </div>
 );
 
-/**
- * AnnualPlanApprovalChain - Collapsible 3-tier approval hierarchy drawer
- * Shows: ผู้จัดทำ (L1+), ผู้ทบทวน (L4+), ผู้อนุมัติ (L5+)
- */
+// Display recorded decisions and the effective approval policy.
 export const AnnualPlanApprovalChain = ({ activePlan, thresholds = {} }) => {
   if (!activePlan) return null;
 
   const dept = activePlan.department;
   const isDeptProfiled = dept === 'QC' || dept === 'LB';
   const preparerLabel = isDeptProfiled
-    ? `ผู้จัดทำ (L4+ · แผนก ${dept})`
+    ? `ผู้จัดทำ (L${thresholds.min_requester_level || 4}+ · แผนก ${dept})`
     : `ผู้จัดทำ (L${thresholds.min_requester_level || 1}+)`;
   const reviewerLabel = dept === 'QC'
-    ? 'ผู้ทบทวน (PD L5)'
+    ? `ผู้ทบทวน (PD L${thresholds.required_reviewer_level || 5})`
     : dept === 'LB'
-      ? 'ผู้ทบทวน (LB L5)'
+      ? `ผู้ทบทวน (LB L${thresholds.required_reviewer_level || 5})`
       : `ผู้ทบทวน (L${thresholds.required_reviewer_level || 4}+)`;
   const approverLabel = isDeptProfiled
-    ? 'ผู้อนุมัติ (MGT L6+)'
+    ? `ผู้อนุมัติ (MGT L${thresholds.required_approver_level || 6}+)`
     : `ผู้อนุมัติ (L${thresholds.required_approver_level || 5}+)`;
 
   return (
     <div
+      role="region"
+      aria-label="ขั้นตอนการอนุมัติแผนประจำปี"
       data-testid="annual-plan-approval-chain"
       className="mt-2.5 pt-2.5 border-t border-slate-100 bg-slate-50/80 p-3 rounded-xl border border-slate-200/60 grid grid-cols-1 md:grid-cols-3 gap-2"
     >
       <StepRow
+        current={activePlan.status === "DRAFT" || activePlan.status === "REJECTED"}
         label={preparerLabel}
         name={activePlan.prepared_by_name || activePlan.prepared_by || 'ยังไม่ส่ง'}
         at={formatThaiDateTime(activePlan.prepared_at)}

@@ -12,7 +12,8 @@ import {
   ArrowRight,
   Filter,
   CheckCircle2,
-  ExternalLink
+  ExternalLink,
+  RotateCcw
 } from 'lucide-react';
 import { toBuddhistYear, formatVccDateTime } from '../utils/vccDateUtils';
 import { getPlanStatusLabel, formatPlanDocCode } from '../utils/planLabels';
@@ -109,12 +110,15 @@ export const AnnualPlanRegisterTable = ({
   setFilterYear,
   filterDept = '',
   setFilterDept,
-  statusTab = 'ALL',
+  statusTab = 'DRAFT',
   setStatusTab,
   onSelectPlan,
   onOpenCreatePlan,
+  onClearAllPlans
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [clearing, setClearing] = useState(false);
 
   // Extract all available years from plans (descending order)
   const availableYears = useMemo(() => {
@@ -151,7 +155,7 @@ export const AnnualPlanRegisterTable = ({
       if (filterDept && p.department !== filterDept) return false;
 
       // 3. Status filter
-      if (statusTab && statusTab !== 'ALL') {
+      if (statusTab) {
         const isSuperseded =
           p.effective_status === 'SUPERSEDED' ||
           (p.status === 'APPROVED' && Number(p.is_current) === 0);
@@ -189,12 +193,12 @@ export const AnnualPlanRegisterTable = ({
     });
   }, [sortedPlans, filterYear, filterDept, statusTab, searchQuery]);
 
-  const hasActiveFilters = Boolean(filterYear || (filterDept && canReadAll) || (statusTab && statusTab !== 'ALL') || searchQuery);
+  const hasActiveFilters = Boolean(filterYear || (filterDept && canReadAll) || (statusTab && statusTab !== 'DRAFT') || searchQuery);
 
   const resetFilters = () => {
     if (setFilterYear) setFilterYear('');
     if (canReadAll && setFilterDept) setFilterDept('');
-    if (setStatusTab) setStatusTab('ALL');
+    if (setStatusTab) setStatusTab('DRAFT');
     setSearchQuery('');
   };
 
@@ -206,11 +210,11 @@ export const AnnualPlanRegisterTable = ({
       <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="space-y-1">
           <div className="flex items-center gap-2 flex-wrap">
-            <h1 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">
-              แผนการทวนสอบเครื่องมือประจำปี
-            </h1>
+            <h2 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">
+              ทะเบียนแผนประจำปี
+            </h2>
             <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 font-mono">
-              ทะเบียนแผนประจำปี (Annual Plan Register)
+              Annual Plan Register
             </span>
           </div>
           <p className="text-xs sm:text-sm text-slate-500">
@@ -219,6 +223,20 @@ export const AnnualPlanRegisterTable = ({
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
+          {onClearAllPlans && (
+            <button
+              type="button"
+              onClick={() => setShowClearConfirm(true)}
+              aria-label="ล้างข้อมูลแผนเพื่อทดสอบใหม่"
+              title="ล้างข้อมูลแผนงานและใบสั่งงานทั้งหมดเพื่อเริ่มทดสอบใหม่ (คงทะเบียนเครื่องมือไว้)"
+              className="inline-flex items-center gap-1.5 h-9.5 px-3 rounded-xl border border-rose-200 bg-rose-50/70 hover:bg-rose-100 text-rose-700 font-semibold text-xs transition-colors cursor-pointer"
+            >
+              <RotateCcw size={14} className="text-rose-600" />
+              <span className="hidden sm:inline">ล้างข้อมูลแผน (ทดสอบใหม่)</span>
+              <span className="sm:hidden">ล้างแผน</span>
+            </button>
+          )}
+
           <button
             type="button"
             onClick={() => onOpenCreatePlan && onOpenCreatePlan()}
@@ -320,7 +338,6 @@ export const AnnualPlanRegisterTable = ({
                 onChange={(e) => setStatusTab && setStatusTab(e.target.value)}
                 className="h-8 px-2.5 rounded-lg border border-slate-200 text-xs font-semibold bg-white text-slate-700 hover:border-slate-300 focus:outline-none focus:border-indigo-600 cursor-pointer"
               >
-                <option value="ALL">ทุกสถานะ</option>
                 <option value="DRAFT">ร่างแผน (Draft)</option>
                 <option value="PENDING_REVIEW">รอทบทวน (In Review)</option>
                 <option value="PENDING_APPROVAL">รออนุมัติ (Pending Approval)</option>
@@ -569,6 +586,66 @@ export const AnnualPlanRegisterTable = ({
                 </div>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {/* Confirmation Dialog for Clearing Plans */}
+      {showClearConfirm && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150"
+        >
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-md w-full p-5 space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+                <AlertTriangle size={20} />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-sm font-bold text-slate-900">
+                  ยืนยันการล้างข้อมูลแผนเพื่อทดสอบใหม่?
+                </h3>
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  ระบบจะล้างข้อมูลแผนประจำปีทั้งหมด รายการเครื่องมือในแผน และใบสั่งงาน เพื่อให้คุณสามารถเริ่มทดสอบสร้างแผนใหม่ได้ตั้งแต่เริ่มต้น
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center gap-2">
+              <ShieldCheck size={16} className="text-emerald-600 shrink-0" />
+              <span>
+                <strong>ปลอดภัย:</strong> ทะเบียนเครื่องมือวัดทั้งหมด (Asset Register) จะยังคงอยู่ครบถ้วน ไม่ถูกลบ
+              </span>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                disabled={clearing}
+                onClick={() => setShowClearConfirm(false)}
+                className="h-8.5 px-3.5 rounded-xl border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer disabled:opacity-50"
+              >
+                ยกเลิก
+              </button>
+              <button
+                type="button"
+                disabled={clearing}
+                onClick={async () => {
+                  setClearing(true);
+                  try {
+                    await onClearAllPlans();
+                    setShowClearConfirm(false);
+                  } finally {
+                    setClearing(false);
+                  }
+                }}
+                className="h-8.5 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+              >
+                <RotateCcw size={13} />
+                <span>{clearing ? 'กำลังล้าง...' : 'ยืนยันล้างข้อมูลแผน'}</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

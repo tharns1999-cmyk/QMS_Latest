@@ -136,22 +136,33 @@ const syncVccTasks = async (user) => {
   await syncVccWorkTasks();
 };
 
-const enrichLocalWo = (wo, allAssets, deptMap, allPlans) => {
+export const enrichLocalWo = (wo, allAssets, deptMap, allPlans) => {
   const asset = allAssets.find((a) => a.id === wo.asset_id) || {};
   const parent = asset.parent_id ? allAssets.find((p) => p.id === asset.parent_id) : null;
   const plan = wo.plan_id ? allPlans.find((pl) => pl.id === wo.plan_id) : null;
+  let snapshot = wo.asset_snapshot || null;
+  if (typeof snapshot === 'string') {
+    try { snapshot = JSON.parse(snapshot); } catch { snapshot = null; }
+  }
   return {
     ...wo,
-    asset_code: asset.asset_code || '-',
-    asset_name: asset.name || '-',
-    asset_type: asset.asset_type || '-',
+    asset_code: snapshot?.asset_code || asset.asset_code || '-',
+    asset_name: snapshot?.asset_name || asset.name || '-',
+    asset_type: snapshot?.asset_type || asset.asset_type || '-',
     department: asset.department || '',
-    location: asset.location || '',
-    group_nature: asset.group_nature || 'LOGICAL_GROUP',
-    composite_details: asset.composite_details || '',
-    parent_asset_code: parent?.asset_code || null,
+    location: snapshot?.location ?? asset.location ?? '',
+    group_nature: snapshot?.group_nature || asset.group_nature || 'LOGICAL_GROUP',
+    composite_details: snapshot?.composite_details ?? asset.composite_details ?? '',
+    serial_no: snapshot?.serial_no ?? asset.serial_no ?? '',
+    model: snapshot?.model ?? asset.model ?? '',
+    brand: snapshot?.brand ?? asset.brand ?? '',
+    is_group: snapshot?.is_group ?? asset.is_group ?? 0,
+    parent_id: snapshot?.parent_id ?? asset.parent_id ?? null,
+    parent_asset_code: snapshot?.parent_asset_code ?? parent?.asset_code ?? null,
     department_name_th: deptMap[asset.department] || asset.department,
-    plan_year: plan?.plan_year || null
+    plan_year: plan?.plan_year || null,
+    asset_snapshot: snapshot,
+    is_legacy_without_asset_snapshot: wo.status === 'CLOSED' && !snapshot
   };
 };
 
@@ -572,6 +583,9 @@ export const submitVccWorkOrderResult = async (id, payload) => {
   if (idx === -1) throw new Error('ไม่พบใบสั่งงานทวนสอบ/สอบเทียบ');
   const existing = allWos[idx];
 
+  if (!['OPEN', 'SCHEDULED', 'IN_PROGRESS', 'REJECTED'].includes(existing.status)) {
+    throw new Error('ใบสั่งงานนี้ไม่อยู่ในสถานะที่บันทึกผลได้');
+  }
   const performedAt = String(payload.performed_at || '').trim();
   const resultStatus = String(payload.result_status || '').trim().toUpperCase();
   const certificateNo = String(payload.certificate_no || '').trim();
@@ -616,6 +630,12 @@ export const submitVccWorkOrderResult = async (id, payload) => {
   const next = [...allWos];
   next[idx] = updated;
   setLocalWos(next);
+  if (resultStatus === 'FAIL' || resultStatus === 'INCONCLUSIVE') {
+    const assets = getLocalAssets();
+    writeJson('qms-vcc-local-assets-v1', assets.map((a) => a.id === existing.asset_id ? {
+      ...a, status: a.status === 'RETIRED' ? 'RETIRED' : 'ON_HOLD', hold_started_at: a.hold_started_at || updated.updated_at
+    } : a));
+  }
   appendLocalAudit('VCC_WO_RESULT_SUBMITTED', {
     wo_id: id,
     wo_code: existing.wo_code,
@@ -658,9 +678,12 @@ export const approveVccWorkOrder = async (id, comment = '') => {
   }
 
   const now = new Date().toISOString();
+  const acceptedAsset = enrichLocalWo(existing, getLocalAssets(), getDepartmentMap(), getLocalPlans());
+  const snapshotKeys = ['serial_no', 'model', 'brand', 'is_group', 'parent_id', 'asset_code', 'asset_name', 'asset_type', 'location', 'group_nature', 'composite_details', 'parent_asset_code', 'department', 'department_name_th'];
   const updated = {
     ...existing,
     status: 'CLOSED',
+    asset_snapshot: Object.fromEntries(snapshotKeys.map((key) => [key, acceptedAsset[key] ?? null])),
     reviewed_by: user.id,
     reviewed_by_name: user.name,
     reviewed_at: now,
@@ -776,6 +799,10 @@ export const releaseVccWorkOrderHold = async (id, impact_assessment = '', releas
     release_reason: trimmedReason,
     impact_assessment: trimmedImpact
   });
+  if (!next.some((wo) => wo.asset_id === existing.asset_id && wo.nc_status === 'OPEN')) {
+    writeJson('qms-vcc-local-assets-v1', getLocalAssets().map((a) => a.id === existing.asset_id && a.status === 'ON_HOLD'
+      ? { ...a, status: 'ACTIVE', hold_started_at: null } : a));
+  }
   return enrichLocalWo(updated, getLocalAssets(), getDepartmentMap(), getLocalPlans());
 };
 
@@ -955,6 +982,8 @@ export const rejectVccWorkOrderAmendment = async (id, requestId, payload = {}) =
       : `/api/vcc/work-orders/${encodeURIComponent(id)}/reject-amendment`;
     return await apiPost(url, payload);
   }
+  assertLocalVccAccess();
+  if (!String(payload.comment || payload.review_comment || payload.reason || '').trim()) throw new Error('กรุณาระบุเหตุผลที่ไม่อนุมัติคำขอแก้ไข');
   return { message: 'ปฏิเสธคำขอแก้ไขเรียบร้อยแล้ว', status: 'REJECTED' };
 };
 

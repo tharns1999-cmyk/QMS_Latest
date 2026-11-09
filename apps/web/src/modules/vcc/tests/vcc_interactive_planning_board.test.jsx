@@ -37,10 +37,9 @@ describe('VCC Interactive Planning Board (FM-QC-46 Redesign)', () => {
   });
 
   it('1. สลับมุมมองความหนาแน่น (สบายตา / กะทัดรัด) และโหมดแสดงผล (12 เดือนเต็ม / รายไตรมาส Q1-Q4) ได้อย่างถูกต้อง', async () => {
-    render(<AssetRegisterPage />);
+    render(<AssetRegisterPage initialEntries={['/vcc/plans?id=vcc-plan-2026-qc&tab=DRAFT']} />);
 
     // Go to Annual Plan tab
-    fireEvent.click(await screen.findByRole('button', { name: /แผนการทวนสอบประจำปี \(FM-QC-46\)/i }));
     expect(await screen.findByText('V001')).toBeInTheDocument();
 
     // Switch to 12-Month Matrix View to test interactive planning board features
@@ -72,9 +71,8 @@ describe('VCC Interactive Planning Board (FM-QC-46 Redesign)', () => {
   }, 15000);
 
   it('2. คลิก Cell ที่มีแผนอยู่แล้ว จะเปิด Popover แสดงรายละเอียดวันครบกำหนดและ Quick Actions ได้', async () => {
-    render(<AssetRegisterPage />);
+    render(<AssetRegisterPage initialEntries={['/vcc/plans?id=vcc-plan-2026-qc&tab=DRAFT']} />);
 
-    fireEvent.click(await screen.findByRole('button', { name: /แผนการทวนสอบประจำปี \(FM-QC-46\)/i }));
     expect(await screen.findByText('V001')).toBeInTheDocument();
 
     // Switch to 12-Month Matrix View to test cell popovers
@@ -105,9 +103,8 @@ describe('VCC Interactive Planning Board (FM-QC-46 Redesign)', () => {
   }, 15000);
 
   it('3. เปิด Side Inspector ดูรายละเอียดสเปกเครื่องมือ ข้อมูลสถานที่ และไทม์ไลน์ 12 เดือนแบบ On-demand', async () => {
-    render(<AssetRegisterPage />);
+    render(<AssetRegisterPage initialEntries={['/vcc/plans?id=vcc-plan-2026-qc&tab=DRAFT']} />);
 
-    fireEvent.click(await screen.findByRole('button', { name: /แผนการทวนสอบประจำปี \(FM-QC-46\)/i }));
     expect(await screen.findByText('V001')).toBeInTheDocument();
 
     // Click asset code link or "สเปก" button

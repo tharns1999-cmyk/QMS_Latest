@@ -17,12 +17,14 @@ export const getDueDateRuleLabel = (rule) => {
 };
 
 export const formatPlanDocCode = (plan) => {
-  if (!plan) return 'VCC-PLAN';
+  if (!plan) return '-';
   const raw = String(plan.document_code || '').trim();
-  if (!raw || raw === 'FM-QC-46' || raw === 'FM-LB-11' || raw.startsWith('FM-')) {
-    return `VCC-PLAN-${String(plan.department || 'QC').toUpperCase()}`;
+  if (raw.startsWith('VCC-PLAN-')) {
+    const dept = String(plan.department || '').toUpperCase();
+    if (dept === 'QC') return 'FM-QC-46';
+    if (dept === 'LB') return 'FM-LB-11';
   }
-  return raw;
+  return raw || '-';
 };
 
 export const getPlanStatusTone = (status) => {

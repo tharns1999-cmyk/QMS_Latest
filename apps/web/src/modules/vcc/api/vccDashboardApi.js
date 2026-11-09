@@ -4,13 +4,14 @@ import {
   readJson,
   writeJson,
   getLocalAssets,
+  getDepartmentMap,
   assertLocalDcc,
   assertLocalVccAccess,
   getLocalAudit,
   appendLocalAudit
 } from './vccApi';
 import { getLocalPlans, getLocalPlanItems } from './vccPlanApi';
-import { getLocalWos, getLocalWoThresholds } from './vccWorkOrderApi';
+import { getLocalWos, getLocalWoThresholds, enrichLocalWo } from './vccWorkOrderApi';
 import { canReleaseWorkOrderHold } from '../utils/workOrderPermissions';
 
 const STORAGE_NOTIFICATION_SETTINGS_KEY = 'qms-vcc-local-notification-settings-v1';
@@ -430,8 +431,10 @@ export const exportVccWorkOrdersCsv = async () => {
     return blob.text();
   }
   assertLocalVccAccess();
-  const allAssets = new Map(getLocalAssets().map((a) => [a.id, a]));
-  const wos = getLocalWos();
+  const assets = getLocalAssets();
+  const departments = getDepartmentMap();
+  const plans = getLocalPlans();
+  const wos = getLocalWos().map((wo) => enrichLocalWo(wo, assets, departments, plans));
   const header = [
     'เลขที่ใบสั่งงาน', 'รหัสเครื่องมือ', 'ชื่อเครื่องมือวัด', 'แผนก', 'หน่วยงานสอบเทียบ/ทวนสอบ',
     'เดือนตามแผน', 'วันครบกำหนดเดิม', 'วันครบกำหนดปัจจุบัน', 'วันที่ปฏิบัติงานจริง',
@@ -439,9 +442,8 @@ export const exportVccWorkOrdersCsv = async () => {
   ];
   const lines = [header.map(csvCell).join(',')];
   for (const w of wos) {
-    const asset = allAssets.get(w.asset_id) || {};
     lines.push([
-      w.wo_code, asset.asset_code || '', asset.name || '', asset.department || '',
+      w.wo_code, w.asset_code || '', w.asset_name || '', w.asset_snapshot?.department || w.department || '',
       w.provider_name, w.planned_month || '', w.original_due_date, w.due_date,
       w.performed_at || '', w.result_status, w.certificate_no || '',
       w.acceptance_criteria || '', w.status, w.nc_status || ''

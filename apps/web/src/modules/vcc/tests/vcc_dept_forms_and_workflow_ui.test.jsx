@@ -188,16 +188,16 @@ describe('VCC Phase 1 Step 4: QC/LAB Department Forms & Workflow UI', () => {
     fireEvent.change(deptSelect, { target: { value: 'QC' } });
 
     expect(currentForm.department).toBe('QC');
-    expect(currentForm.document_code).toBe('VCC-PLAN-QC');
+    expect(currentForm.document_code).toBe('FM-QC-46');
     expect(currentForm.revision).toBe('01');
-    expect(currentForm.title).toContain('แผนการทวนสอบเครื่องมือประจำปี 2026');
+    expect(currentForm.title).toContain('แผนการทวนสอบเครื่องมือประจำปี');
 
     // Simulate choosing LB
     fireEvent.change(deptSelect, { target: { value: 'LB' } });
     expect(currentForm.department).toBe('LB');
-    expect(currentForm.document_code).toBe('VCC-PLAN-LB');
+    expect(currentForm.document_code).toBe('FM-LB-11');
     expect(currentForm.revision).toBe('01');
-    expect(currentForm.title).toContain('แผนการทวนสอบเครื่องมือประจำปี 2026');
+    expect(currentForm.title).toContain('แผนการสอบเทียบเครื่องมือ');
   });
 
   it('6. PlanSubmitModal includes assigned PD reviewer for QC plan submission', () => {

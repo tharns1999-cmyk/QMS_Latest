@@ -29,10 +29,8 @@ describe('VCC Phase 4 — Dashboard KPI, Notification Policy, CSV Export & Audit
   });
 
   it('1. แสดง KPI แยกเครื่องมือรายตัวออกจากกลุ่มแม่, แยกแท็บแจ้งเตือนตามสถานะ (OVERDUE / ON_HOLD / DUE_SOON / PENDING_REVIEW) และบันทึกประวัติใน Audit Trail', async () => {
-    render(<AssetRegisterPage />);
+    render(<AssetRegisterPage initialEntries={['/vcc/dashboard']} />);
 
-    const dashNavBtn = await screen.findByRole('button', { name: /ภาพรวมและรายงาน/i });
-    fireEvent.click(dashNavBtn);
 
     await waitFor(() => {
       expect(screen.getByTestId('vcc-dashboard-section')).toBeTruthy();
@@ -53,9 +51,8 @@ describe('VCC Phase 4 — Dashboard KPI, Notification Policy, CSV Export & Audit
   });
 
   it('2. แก้ไขกติกาวันแจ้งเตือนล่วงหน้า/เลยกำหนดได้ในหน้าเว็บ แสดงข้อผิดพลาดเมื่อกรอกค่าไม่ถูกต้อง และส่งออกไฟล์ CSV พร้อมบันทึก Audit Trail', async () => {
-    render(<AssetRegisterPage />);
+    render(<AssetRegisterPage initialEntries={['/vcc/dashboard']} />);
 
-    fireEvent.click(await screen.findByRole('button', { name: /ภาพรวมและรายงาน/i }));
     await screen.findByTestId('vcc-dashboard-section');
 
     // Open notification settings modal

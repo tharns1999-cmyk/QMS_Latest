@@ -15,7 +15,7 @@ describe('VCC Master UX/UI Redesign — 2-Level Architecture & Controlled Revisi
       plan_year: 2026,
       department: 'QC',
       department_name_th: 'ควบคุมคุณภาพ',
-      document_code: 'VCC-PLAN-QC',
+      document_code: 'FM-QC-46',
       revision: '01',
       form_template_revision: '01',
       title: 'แผนการทวนสอบประจำปี 2026',
@@ -31,7 +31,7 @@ describe('VCC Master UX/UI Redesign — 2-Level Architecture & Controlled Revisi
       plan_year: 2026,
       department: 'QC',
       department_name_th: 'ควบคุมคุณภาพ',
-      document_code: 'VCC-PLAN-QC',
+      document_code: 'FM-QC-46',
       revision: '02',
       form_template_revision: '01',
       parent_plan_id: 'plan-2026-qc-v1',
@@ -49,7 +49,7 @@ describe('VCC Master UX/UI Redesign — 2-Level Architecture & Controlled Revisi
       plan_year: 2027,
       department: 'QC',
       department_name_th: 'ควบคุมคุณภาพ',
-      document_code: 'VCC-PLAN-QC',
+      document_code: 'FM-QC-46',
       revision: '01',
       form_template_revision: '01',
       title: 'แผนการทวนสอบประจำปี 2027',
@@ -119,7 +119,7 @@ describe('VCC Master UX/UI Redesign — 2-Level Architecture & Controlled Revisi
     // Rows rendered
     expect(screen.getAllByText('ปี 2026').length).toBeGreaterThan(0);
     expect(screen.getAllByText('ปี 2027').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('VCC-PLAN-QC').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('FM-QC-46').length).toBeGreaterThan(0);
 
     // Action button opens plan
     const actionBtns = screen.getAllByRole('button', { name: /เปิดแผนงาน|ดำเนินการต่อ/ });
@@ -128,22 +128,23 @@ describe('VCC Master UX/UI Redesign — 2-Level Architecture & Controlled Revisi
     expect(onSelectPlan).toHaveBeenCalled();
   });
 
-  it('2. PAGE A: Defaults to `ทุกสถานะ`, shows all plans, and supports live search filtering', () => {
+  it('2. PAGE A: Defaults to drafts without mixing statuses, and supports live search filtering', () => {
     const setStatusTab = vi.fn();
     render(
       <AnnualPlanRegisterTable
         plans={mockPlans}
         activeDepartments={[{ code: 'QC', nameTh: 'ควบคุมคุณภาพ' }]}
         userDept="QC"
-        statusTab="ALL"
+        statusTab="DRAFT"
         setStatusTab={setStatusTab}
       />
     );
 
     // Default status dropdown displays "ทุกสถานะ"
     const statusSelect = screen.getByLabelText(/กรองตามสถานะ/);
-    expect(statusSelect).toHaveValue('ALL');
-    expect(screen.getByRole('option', { name: 'ทุกสถานะ' })).toBeInTheDocument();
+    expect(statusSelect).toHaveValue('DRAFT');
+    expect(screen.queryByRole('option', { name: 'ทุกสถานะ' })).toBeNull();
+    expect(screen.queryByText('มีผลบังคับใช้ (Effective)', { selector: 'td span span' })).toBeNull();
 
     // Both APPROVED (2026) and DRAFT (2027) appear simultaneously by default
     expect(screen.getAllByText('ปี 2026').length).toBeGreaterThan(0);
@@ -159,8 +160,8 @@ describe('VCC Master UX/UI Redesign — 2-Level Architecture & Controlled Revisi
     expect(screen.queryByText('ปี 2026')).not.toBeInTheDocument();
   });
 
-  it('2.1 PAGE A: Filters by status and resets to ทุกสถานะ when clicking ล้างตัวกรอง', () => {
-    let currentStatus = 'DRAFT';
+  it('2.1 PAGE A: Filters by status and resets to drafts when clicking ล้างตัวกรอง', () => {
+    let currentStatus = 'APPROVED';
     const setStatusTab = vi.fn((val) => { currentStatus = val; });
 
     const { rerender } = render(
@@ -173,15 +174,14 @@ describe('VCC Master UX/UI Redesign — 2-Level Architecture & Controlled Revisi
       />
     );
 
-    // When status is DRAFT, only Drafts appear, Effective (APPROVED) is filtered out in table
-    expect(screen.queryByText('มีผลบังคับใช้ (Effective)', { selector: 'td span span' })).not.toBeInTheDocument();
-    expect(screen.getAllByText('ร่างแผน (Draft)', { selector: 'td span span' }).length).toBeGreaterThan(0);
+    expect(screen.getByText('มีผลบังคับใช้ (Effective)', { selector: 'td span span' })).toBeInTheDocument();
+    expect(screen.queryByText('ร่างแผน (Draft)', { selector: 'td span span' })).toBeNull();
 
     // Reset button appears
     const clearBtn = screen.getByRole('button', { name: /ล้างตัวกรอง/ });
     expect(clearBtn).toBeInTheDocument();
     fireEvent.click(clearBtn);
-    expect(setStatusTab).toHaveBeenCalledWith('ALL');
+    expect(setStatusTab).toHaveBeenCalledWith('DRAFT');
 
     // Re-render with ALL: both Effective and Drafts appear simultaneously
     rerender(
@@ -189,11 +189,11 @@ describe('VCC Master UX/UI Redesign — 2-Level Architecture & Controlled Revisi
         plans={mockPlans}
         activeDepartments={[{ code: 'QC', nameTh: 'ควบคุมคุณภาพ' }]}
         userDept="QC"
-        statusTab="ALL"
+        statusTab="DRAFT"
         setStatusTab={setStatusTab}
       />
     );
-    expect(screen.getByText('มีผลบังคับใช้ (Effective)', { selector: 'td span span' })).toBeInTheDocument();
+    expect(screen.queryByText('มีผลบังคับใช้ (Effective)', { selector: 'td span span' })).toBeNull();
     expect(screen.getAllByText('ร่างแผน (Draft)', { selector: 'td span span' }).length).toBeGreaterThan(0);
   });
 

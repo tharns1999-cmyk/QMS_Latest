@@ -723,6 +723,9 @@ export const reactivateVccAsset = async (id, reason) => {
   const before = all[index];
   const user = assertLocalAssetManager(before.department);
   if (before.status !== 'RETIRED') throw new Error('เครื่องมือนี้ไม่ได้อยู่ในสถานะปลดออก');
+  if (readJson('qms-vcc-local-work-orders-v1', () => []).some((wo) => wo.asset_id === id && wo.nc_status === 'OPEN')) {
+    throw new Error('เครื่องมือยังมี NC เปิดอยู่ ต้องจัดการและอนุมัติปลดระงับก่อนนำกลับมาใช้งาน');
+  }
   const now = new Date().toISOString();
   const updated = {
     ...before,

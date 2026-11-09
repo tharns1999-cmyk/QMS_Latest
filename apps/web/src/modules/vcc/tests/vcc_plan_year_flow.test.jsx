@@ -7,8 +7,7 @@ import { resetVccLocalStore } from '../api/vccApi';
 import { computeDueDateForMonth, computeDueDates, createVccPlan, fetchVccPlans } from '../api/vccPlanApi';
 
 const openPlanPage = async () => {
-  render(<AssetRegisterPage />);
-  fireEvent.click(await screen.findByRole('button', { name: /แผนการทวนสอบประจำปี \(FM-QC-46\)/i }));
+  render(<AssetRegisterPage initialEntries={['/vcc/plans?id=vcc-plan-2026-qc&tab=DRAFT']} />);
   await screen.findByText('V001');
 };
 
@@ -136,7 +135,7 @@ describe('VCC FM-QC-46 — ประสบการณ์การเลือ�
         revision: '01',
         title: 'แผนซ้ำ'
       })
-    ).rejects.toThrow(/แผนประจำปี 2026 ของแผนก QC \(Rev\.01\) มีอยู่ในระบบแล้ว/);
+    ).rejects.toThrow(/แผนประจำปี 2026 ของแผนก QC.*มีอยู่ในระบบแล้ว/);
 
     // แต่ถ้าต่าง Revision เช่น Rev.02 สามารถสร้างได้
     const newRev = await createVccPlan({

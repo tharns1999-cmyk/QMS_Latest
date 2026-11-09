@@ -38,9 +38,8 @@ describe('VCC Phase 3 — Work Orders, Execution, Review, Close & Hold/NC Contro
   });
 
   it('1. แยกลิสต์ใบสั่งงานตามสถานะ, บังคับกรอกเหตุผลเมื่อเลื่อนวันครบกำหนด, และเก็บวันครบกำหนดเดิม (original_due_date)', async () => {
-    render(<AssetRegisterPage />);
+    render(<AssetRegisterPage initialEntries={['/vcc/work-orders']} />);
 
-    fireEvent.click(await screen.findByRole('button', { name: /ใบสั่งงานและบันทึกผล \(Work Orders\)/i }));
 
     // Seed WO-2026-001 (ST002) is in OPEN tab
     expect(await screen.findByText('WO-2026-001')).toBeInTheDocument();
@@ -76,9 +75,8 @@ describe('VCC Phase 3 — Work Orders, Execution, Review, Close & Hold/NC Contro
   });
 
   it('2. บังคับกรอกเลขที่ใบรับรองและเกณฑ์ยอมรับก่อนส่งตรวจรับ, ห้ามผู้บันทึกผลตรวจรับงานตัวเอง, และเมื่อผู้ตรวจรับอนุมัติปิดงานจะอัปเดตแถว Act. ในแผนประจำปี', async () => {
-    render(<AssetRegisterPage />);
+    const { unmount: unmountPage } = render(<AssetRegisterPage initialEntries={['/vcc/work-orders']} />);
 
-    fireEvent.click(await screen.findByRole('button', { name: /ใบสั่งงานและบันทึกผล \(Work Orders\)/i }));
     fireEvent.click(await screen.findByRole('button', { name: /บันทึกผลและใบรับรอง/i }));
 
     const submitResultBtn = await screen.findByRole('button', { name: /ส่งผลให้ผู้ตรวจรับพิจารณา/i });
@@ -121,16 +119,16 @@ describe('VCC Phase 3 — Work Orders, Execution, Review, Close & Hold/NC Contro
     // Now in CLOSED tab
     expect(await screen.findByText('CERT-ST002-2026')).toBeInTheDocument();
 
-    // Verify Annual Plan Act. row updated to A3 and COMPLETED badge
-    fireEvent.click(screen.getByRole('button', { name: /แผนการทวนสอบประจำปี \(FM-QC-46\)/i }));
+    // Reopen the real plan route after completing the work order.
+    unmountPage();
+    render(<AssetRegisterPage initialEntries={['/vcc/plans?id=vcc-plan-2026-qc&tab=DRAFT']} />);
     expect(await screen.findByText(/ทวนสอบเสร็จแล้ว • มีใบรับรอง/i)).toBeInTheDocument();
     expect(screen.getByText('A3')).toBeInTheDocument();
   }, 15000);
 
   it('3. เมื่อผลเป็น FAIL จะขึ้นสถานะระงับใช้ (ON_HOLD) ทันที ไม่ปลดระงับอัตโนมัติเมื่อปิดใบงาน และต้องใช้ผู้อนุมัติ L5+ พร้อมระบุการประเมินผลกระทบจึงจะปลดระงับได้', async () => {
-    render(<AssetRegisterPage />);
+    render(<AssetRegisterPage initialEntries={['/vcc/work-orders']} />);
 
-    fireEvent.click(await screen.findByRole('button', { name: /ใบสั่งงานและบันทึกผล \(Work Orders\)/i }));
     fireEvent.click(await screen.findByRole('button', { name: /บันทึกผลและใบรับรอง/i }));
 
     fireEvent.change(screen.getByLabelText(/ผลการทวนสอบ/i), { target: { value: 'FAIL' } });
@@ -185,9 +183,8 @@ describe('VCC Phase 3 — Work Orders, Execution, Review, Close & Hold/NC Contro
   });
 
   it('4. ผลรอตรวจซ้ำ (INCONCLUSIVE) ระงับใช้ทันที ผู้ตรวจรับปิดงานไม่ได้ มีปุ่มเดียวคือส่งกลับตรวจซ้ำ', async () => {
-    render(<AssetRegisterPage />);
+    render(<AssetRegisterPage initialEntries={['/vcc/work-orders']} />);
 
-    fireEvent.click(await screen.findByRole('button', { name: /ใบสั่งงานและบันทึกผล \(Work Orders\)/i }));
     fireEvent.click(await screen.findByRole('button', { name: /บันทึกผลและใบรับรอง/i }));
     fireEvent.change(screen.getByLabelText(/ผลการทวนสอบ/i), { target: { value: 'INCONCLUSIVE' } });
     expect(screen.getByText(/ผลรอตรวจซ้ำปิดงานไม่ได้/)).toBeInTheDocument();
@@ -215,8 +212,7 @@ describe('VCC Phase 3 — Work Orders, Execution, Review, Close & Hold/NC Contro
     useStore.setState({
       currentUser: { id: 'qc2', name: 'QC พนักงาน (L2)', role: 'STAFF', department: 'QC', approval_level: 2, approvalLevel: 2, isDcc: false }
     });
-    const { unmount } = render(<AssetRegisterPage />);
-    fireEvent.click(await screen.findByRole('button', { name: /ใบสั่งงานและบันทึกผล \(Work Orders\)/i }));
+    const { unmount } = render(<AssetRegisterPage initialEntries={['/vcc/work-orders']} />);
     fireEvent.click(await screen.findByRole('button', { name: /การจัดการเพิ่มเติมสำหรับ WO-2026-001/ }));
     expect(screen.queryByRole('button', { name: /ยกเลิกใบสั่งงาน/ })).not.toBeInTheDocument();
     unmount();
@@ -224,8 +220,7 @@ describe('VCC Phase 3 — Work Orders, Execution, Review, Close & Hold/NC Contro
     useStore.setState({
       currentUser: { id: 'qc4', name: 'QC หัวหน้า (L4)', role: 'STAFF', department: 'QC', approval_level: 4, approvalLevel: 4, isDcc: false }
     });
-    render(<AssetRegisterPage />);
-    fireEvent.click(await screen.findByRole('button', { name: /ใบสั่งงานและบันทึกผล \(Work Orders\)/i }));
+    render(<AssetRegisterPage initialEntries={['/vcc/work-orders']} />);
     fireEvent.click(await screen.findByRole('button', { name: /การจัดการเพิ่มเติมสำหรับ WO-2026-001/ }));
     fireEvent.click(await screen.findByRole('button', { name: /ยกเลิกใบสั่งงาน/ }));
 

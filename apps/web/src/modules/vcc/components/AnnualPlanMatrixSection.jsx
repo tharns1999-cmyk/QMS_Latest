@@ -20,6 +20,7 @@ import {
   submitVccPlan,
   isUserAuthorizedForPlanDept,
   fetchApprovedPlanPdf,
+  clearVccPlanData,
 } from '../api/vccPlanApi';
 import { isApiMode } from '../../../api/client';
 import { fetchVccWorkOrders, createVccWorkOrder } from '../api/vccWorkOrderApi';
@@ -40,22 +41,20 @@ import AnnualPlanMatrixTable from './AnnualPlanMatrixTable';
 import AnnualPlanEquipmentListView from './AnnualPlanEquipmentListView';
 import AnnualPlanQuarterlyView from './AnnualPlanQuarterlyView';
 import AnnualPlanViewSwitcher from './AnnualPlanViewSwitcher';
-import AnnualPlanOverviewCards from './AnnualPlanOverviewCards';
-import AnnualPlanLevel1Overview from './AnnualPlanLevel1Overview';
 import SmartAssetImportModal from './SmartAssetImportModal';
 import useStore from '../../../store/useStore';
 
 const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
   const { currentUser, masterUsers, tasks } = useStore();
   const [searchParams, setSearchParams] = useSearchParams();
-  const queryTab = searchParams.get('tab');
+  const requestedTab = searchParams.get('tab');
+  const queryTab = ['DRAFT', 'PENDING_REVIEW', 'PENDING_APPROVAL', 'APPROVED', 'REJECTED', 'SUPERSEDED'].includes(requestedTab) ? requestedTab : null;
   const queryId = searchParams.get('id');
   const queryView = searchParams.get('view');
 
   const [internalView, setInternalView] = useState(() => {
     if (queryView === 'register') return 'REGISTER';
     if (queryId) return 'WORKSPACE';
-    if (import.meta.env.MODE === 'test') return 'WORKSPACE';
     return 'REGISTER';
   });
 
@@ -80,14 +79,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
     return Boolean(currentUser.isDcc || currentUser.isQmr || lvl >= 6);
   }, [currentUser]);
 
-  // Default status filter on Register is 'ALL' (ทุกสถานะ), unless explicitly provided via URL queryTab
-  const [statusTab, setStatusTab] = useState(() => {
-    if (queryTab) return queryTab;
-    if (import.meta.env.MODE === 'test' && queryView !== 'register') {
-      return 'DRAFT';
-    }
-    return 'ALL';
-  });
+  const [statusTab, setStatusTab] = useState(queryTab || 'DRAFT');
   const [filterYear, setFilterYear] = useState('');
   const [filterDept, setFilterDept] = useState(() => (!canReadAll && userDept ? userDept : ''));
 
@@ -123,7 +115,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
   const [activeAssets, setActiveAssets] = useState([]);
   const [providers, setProviders] = useState([]);
   const [planSettings, setPlanSettings] = useState({
-    default_doc_code: 'VCC-PLAN',
+    default_doc_code: '',
     approval_doc_type: 'FM',
     due_date_rule: 'END_OF_MONTH'
   });
@@ -141,7 +133,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
   const [planForm, setPlanForm] = useState({
     plan_year: new Date().getFullYear(),
     department: '',
-    document_code: 'VCC-PLAN',
+    document_code: '',
     revision: '01',
     title: '',
     due_date_rule: 'END_OF_MONTH'
@@ -234,6 +226,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
           loadPlanWorkOrders(targetId)
         ]);
         setPlanDetail(detail);
+      if (detail.thresholds) setThresholds(detail.thresholds);
       } else {
         setPlanDetail(null);
         setPlanWorkOrders([]);
@@ -265,6 +258,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
         loadPlanWorkOrders(planId)
       ]);
       setPlanDetail(detail);
+      if (detail.thresholds) setThresholds(detail.thresholds);
     } catch (err) {
       toast.error(err.message || 'ไม่สามารถโหลดรายละเอียดแผนได้');
     }
@@ -273,14 +267,12 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
   const handleBackToRegister = () => {
     setInternalView('REGISTER');
     if (!queryTab) {
-      setStatusTab('ALL');
+      setStatusTab('DRAFT');
     }
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
       next.delete('id');
-      if (import.meta.env.MODE === 'test') {
-        next.set('view', 'register');
-      }
+      next.set('view', 'register');
       return next;
     });
   };
@@ -291,13 +283,12 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
     const fixedYear = Number.isInteger(Number(overrideYear)) && Number(overrideYear) > 0 ? Number(overrideYear) : null;
     const targetYear = fixedYear || (Number(filterYear) > 0 ? Number(filterYear) : currentYear);
     const targetDept = (!canReadAll && userDept) || filterDept || activeDepartments[0]?.code || 'QC';
-    const defaultDocCode = targetDept ? `VCC-PLAN-${targetDept}` : (planSettings.default_doc_code || 'VCC-PLAN');
     setEditingPlan(null);
     setPlanFormError('');
     setPlanForm({
       plan_year: targetYear,
       department: targetDept,
-      document_code: defaultDocCode,
+      document_code: '',
       revision: '01',
       title: `แผนการทวนสอบเครื่องมือประจำปี ${targetYear}`,
       due_date_rule: planSettings.due_date_rule || 'END_OF_MONTH'
@@ -744,6 +735,20 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
     }
   };
 
+  const handleClearAllPlans = async () => {
+    try {
+      await clearVccPlanData();
+      toast.success('ล้างข้อมูลแผนงานประจำปีเรียบร้อยแล้ว');
+      setSelectedPlanId('');
+      setPlanDetail(null);
+      setPlanWorkOrders([]);
+      await loadPlansAndMeta('');
+      setInternalView('REGISTER');
+    } catch (err) {
+      toast.error('ไม่สามารถล้างข้อมูลแผนได้: ' + (err.message || ''));
+    }
+  };
+
   return (
     <div className="space-y-4" data-testid="annual-plan-matrix">
       {!isWorkspace ? (
@@ -764,6 +769,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
           setStatusTab={setStatusTab}
           onSelectPlan={handleSelectPlan}
           onOpenCreatePlan={openCreatePlan}
+          onClearAllPlans={handleClearAllPlans}
         />
       ) : (
         <>
@@ -947,6 +953,14 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
         saving={savingPlanForm}
         onSubmit={handleSavePlan}
         activeDepartments={activeDepartments}
+        existingPlans={plans}
+        onNavigateToPlan={handleSelectPlan}
+        onOpenRevision={(plan) => {
+          setActivePlan(plan);
+          setRevisionReason('');
+          setRevisionError('');
+          setRevisionOpen(true);
+        }}
       />
 
       <PlanRevisionModal

@@ -37,8 +37,7 @@ describe('VCC Work Orders — Enterprise UI/UX Redesign Tests', () => {
   });
 
   it('1. Information Bar สามารถกดขยายและพับเก็บกติกาได้ พร้อมคงข้อความกติกาครบถ้วน', async () => {
-    render(<AssetRegisterPage />);
-    fireEvent.click(await screen.findByRole('button', { name: /ใบสั่งงานและบันทึกผล \(Work Orders\)/i }));
+    render(<AssetRegisterPage initialEntries={['/vcc/work-orders']} />);
 
     const infoBarToggle = await screen.findByRole('button', {
       name: /กติกาใบสั่งงานทวนสอบ\/สอบเทียบ การตรวจรับผล และการระงับใช้/i
@@ -62,8 +61,7 @@ describe('VCC Work Orders — Enterprise UI/UX Redesign Tests', () => {
   });
 
   it('2. Status Navigation แสดงแท็บสถานะครบ 5 แท็บพร้อมจำนวนรายการ (Badge Count) และอัปเดตสถานะแบบ Single Row', async () => {
-    render(<AssetRegisterPage />);
-    fireEvent.click(await screen.findByRole('button', { name: /ใบสั่งงานและบันทึกผล \(Work Orders\)/i }));
+    render(<AssetRegisterPage initialEntries={['/vcc/work-orders']} />);
 
     const tabs = screen.getAllByRole('tab');
     expect(tabs).toHaveLength(5);
@@ -81,8 +79,7 @@ describe('VCC Work Orders — Enterprise UI/UX Redesign Tests', () => {
   });
 
   it('3. Toolbar Search กรองข้อมูลตามเลขใบงาน/เครื่องมือ และมีปุ่มล้างตัวกรองเมื่อค้นหา', async () => {
-    render(<AssetRegisterPage />);
-    fireEvent.click(await screen.findByRole('button', { name: /ใบสั่งงานและบันทึกผล \(Work Orders\)/i }));
+    render(<AssetRegisterPage initialEntries={['/vcc/work-orders']} />);
 
     expect(await screen.findByText('WO-2026-001')).toBeInTheDocument();
 
@@ -102,8 +99,7 @@ describe('VCC Work Orders — Enterprise UI/UX Redesign Tests', () => {
   });
 
   it('4. คลิกแถวใบสั่งงานเพื่อเปิด Side Drawer ตรวจสอบรายละเอียดและปิดได้', async () => {
-    render(<AssetRegisterPage />);
-    fireEvent.click(await screen.findByRole('button', { name: /ใบสั่งงานและบันทึกผล \(Work Orders\)/i }));
+    render(<AssetRegisterPage initialEntries={['/vcc/work-orders']} />);
 
     // Click on row to open Side Drawer
     const rowWo = await screen.findByText('WO-2026-001');

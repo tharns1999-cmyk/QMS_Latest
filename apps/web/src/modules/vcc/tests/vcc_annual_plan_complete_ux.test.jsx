@@ -1,7 +1,7 @@
 import React from 'react';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { AnnualPlanOverviewCards } from '../components/AnnualPlanOverviewCards';
+import { AnnualPlanWorkspaceHeader } from '../components/AnnualPlanWorkspaceHeader';
 import { AnnualPlanViewSwitcher } from '../components/AnnualPlanViewSwitcher';
 import { AnnualPlanEquipmentListView } from '../components/AnnualPlanEquipmentListView';
 import { AnnualPlanQuarterlyView } from '../components/AnnualPlanQuarterlyView';
@@ -18,6 +18,7 @@ describe('VCC Annual Plan — Complete UX Architecture Redesign', () => {
       asset_id: 'asset-1',
       asset_code: 'EQ-001',
       asset_name: 'Digital Caliper 150mm',
+      is_group: 0,
       asset_type: 'TOOL',
       location: 'Production Line A',
       provider_name: 'ทวนสอบภายใน',
@@ -32,6 +33,7 @@ describe('VCC Annual Plan — Complete UX Architecture Redesign', () => {
       asset_id: 'asset-2',
       asset_code: 'EQ-002',
       asset_name: 'Pressure Gauge 10 Bar',
+      is_group: 0,
       asset_type: 'GAUGE',
       location: 'Boiler Room',
       provider_name: 'ภายนอก (สอบเทียบ)',
@@ -46,6 +48,7 @@ describe('VCC Annual Plan — Complete UX Architecture Redesign', () => {
       asset_id: 'asset-3',
       asset_code: 'EQ-003',
       asset_name: 'Backup Thermometer',
+      is_group: 0,
       asset_type: 'TOOL',
       location: 'QC Lab',
       provider_name: 'ทวนสอบภายใน',
@@ -59,7 +62,7 @@ describe('VCC Annual Plan — Complete UX Architecture Redesign', () => {
   const mockPlan = {
     id: 'plan-2026',
     plan_year: 2026,
-    department_code: 'QC',
+    department: 'QC',
     status: 'DRAFT',
     form_code: 'FM-QC-46',
     revision: '01',
@@ -68,16 +71,16 @@ describe('VCC Annual Plan — Complete UX Architecture Redesign', () => {
   };
 
   const mockActiveAssets = [
-    { id: 'asset-1', asset_code: 'EQ-001', status: 'ACTIVE' },
-    { id: 'asset-2', asset_code: 'EQ-002', status: 'ACTIVE' },
-    { id: 'asset-3', asset_code: 'EQ-003', status: 'ACTIVE' },
-    { id: 'asset-4', asset_code: 'EQ-004', status: 'ACTIVE' } // Not in plan
+    { id: 'asset-1', asset_code: 'EQ-001', status: 'ACTIVE', is_group: 0, department: 'QC' },
+    { id: 'asset-2', asset_code: 'EQ-002', status: 'ACTIVE', is_group: 0, department: 'QC' },
+    { id: 'asset-3', asset_code: 'EQ-003', status: 'ACTIVE', is_group: 0, department: 'QC' },
+    { id: 'asset-4', asset_code: 'EQ-004', status: 'ACTIVE', is_group: 0, department: 'QC' } // Not in plan
   ];
 
-  describe('1. AnnualPlanOverviewCards', () => {
+  describe('1. AnnualPlanWorkspaceHeader', () => {
     it('แสดงตัวเลขสรุป 4 กล่อง (ในขอบเขต, มีแผนทวนสอบแล้ว, ยังไม่ได้วางแผน, รอบทวนสอบรวม) ได้ถูกต้อง', () => {
       render(
-        <AnnualPlanOverviewCards
+        <AnnualPlanWorkspaceHeader
           planItems={mockPlanItems}
           activePlan={mockPlan}
           activeAssets={mockActiveAssets}
@@ -86,25 +89,25 @@ describe('VCC Annual Plan — Complete UX Architecture Redesign', () => {
       );
 
       // In Scope: 3
-      expect(screen.getByText('เครื่องมือในขอบเขต')).toBeInTheDocument();
+      expect(screen.getByText('เครื่องมือในขอบเขต:')).toBeInTheDocument();
       const threes = screen.getAllByText('3');
       expect(threes.length).toBeGreaterThanOrEqual(2);
 
       // Planned: 2, Unplanned: 1
-      expect(screen.getByText('มีแผนทวนสอบแล้ว')).toBeInTheDocument();
+      expect(screen.getByText('มีแผนแล้ว:')).toBeInTheDocument();
       expect(screen.getByText('2')).toBeInTheDocument();
-      expect(screen.getByText('ยังไม่ได้วางแผน')).toBeInTheDocument();
+      expect(screen.getByText('ยังไม่มีแผน:')).toBeInTheDocument();
       const ones = screen.getAllByText('1');
       expect(ones.length).toBeGreaterThanOrEqual(1);
 
       // Total rounds: 1 + 2 = 3
-      expect(screen.getByText('รอบวางแผนรวม')).toBeInTheDocument();
+      expect(screen.getByText('รอบทวนสอบรวม:')).toBeInTheDocument();
     });
 
     it('แสดงการแจ้งเตือนเครื่องมือที่ยังไม่ได้วางแผนและยังไม่มีเหตุผลรองรับ พร้อมปุ่มระบุเหตุผล', () => {
       const handleOpenJustification = vi.fn();
       render(
-        <AnnualPlanOverviewCards
+        <AnnualPlanWorkspaceHeader
           planItems={mockPlanItems}
           activePlan={mockPlan}
           activeAssets={mockActiveAssets}
@@ -113,8 +116,7 @@ describe('VCC Annual Plan — Complete UX Architecture Redesign', () => {
         />
       );
 
-      expect(screen.getByText(/ยังมีเครื่องมืออีก/i)).toBeInTheDocument();
-      expect(screen.getByText(/ที่ยังไม่ได้กำหนดรอบทวนสอบและยังไม่ได้ระบุเหตุผล/i)).toBeInTheDocument();
+      expect(screen.getByText(/รอระบุเหตุผล 1/)).toBeInTheDocument();
 
       const btn = screen.getByRole('button', { name: /^ระบุเหตุผล$/i });
       fireEvent.click(btn);
@@ -124,7 +126,7 @@ describe('VCC Annual Plan — Complete UX Architecture Redesign', () => {
     it('แสดงแบนเนอร์แจ้งเตือนเมื่อมีเครื่องมือในทะเบียนที่ยังไม่ได้ถูกดึงเข้าแผน', () => {
       const handleOpenSmartImport = vi.fn();
       render(
-        <AnnualPlanOverviewCards
+        <AnnualPlanWorkspaceHeader
           planItems={mockPlanItems}
           activePlan={mockPlan}
           activeAssets={mockActiveAssets}
@@ -133,9 +135,9 @@ describe('VCC Annual Plan — Complete UX Architecture Redesign', () => {
         />
       );
 
-      expect(screen.getByText(/พบเครื่องมือใช้งานในทะเบียนที่ยังไม่ได้รวมอยู่ในแผนนี้จำนวน/i)).toBeInTheDocument();
+      expect(screen.getByText(/อยู่นอกแผนนี้ 1 เครื่อง/i)).toBeInTheDocument();
 
-      const importBtn = screen.getByRole('button', { name: /เพิ่มเข้าแผนจากทะเบียน/i });
+      const importBtn = screen.getByRole('button', { name: /เพิ่มเข้าแผนนี้/i });
       fireEvent.click(importBtn);
       expect(handleOpenSmartImport).toHaveBeenCalledTimes(1);
     });
@@ -301,8 +303,8 @@ describe('VCC Annual Plan — Complete UX Architecture Redesign', () => {
 
       // 3 Structured sections
       expect(screen.getByText(/1\. ข้อมูลพื้นฐานแผนประจำปี/i)).toBeInTheDocument();
-      expect(screen.getByText(/2\. ข้อมูลเอกสารคุณภาพ \(QMS\)/i)).toBeInTheDocument();
-      expect(screen.getByText(/3\. กติกาคำนวณวันครบกำหนด/i)).toBeInTheDocument();
+      expect(screen.getByText(/2\. เอกสารต้นแบบจาก DCC/i)).toBeInTheDocument();
+      expect(screen.getByText(/3\. การกำหนดแผนงานประจำปี/i)).toBeInTheDocument();
 
       // Badges when editing
       const lockBadges = screen.getAllByText('ล็อกอัตโนมัติ');
@@ -327,8 +329,8 @@ describe('VCC Annual Plan — Complete UX Architecture Redesign', () => {
           isQmr: false
         },
         masterDepartments: [
-          { code: 'QC', name_th: 'ควบคุมคุณภาพ', status: 'ACTIVE' },
-          { code: 'WH', name_th: 'คลังสินค้า', status: 'ACTIVE' }
+          { code: 'QC', name_th: 'ควบคุมคุณภาพ', status: 'ACTIVE', is_group: 0, department: 'QC' },
+          { code: 'WH', name_th: 'คลังสินค้า', status: 'ACTIVE', is_group: 0, department: 'QC' }
         ],
         masterUsers: [
           {
@@ -344,9 +346,8 @@ describe('VCC Annual Plan — Complete UX Architecture Redesign', () => {
     });
 
     it('เปิดหน้าแผนประจำปีโดยเริ่มต้นที่ Equipment List View และสามารถสลับมุมมองได้', async () => {
-      render(<AssetRegisterPage />);
+      render(<AssetRegisterPage initialEntries={['/vcc/plans?id=vcc-plan-2026-qc&tab=DRAFT']} />);
 
-      fireEvent.click(await screen.findByRole('button', { name: /แผนการทวนสอบประจำปี \(FM-QC-46\)/i }));
 
       // By default: AnnualPlanEquipmentListView is rendered
       expect(await screen.findByTestId('annual-plan-equipment-list-view')).toBeInTheDocument();

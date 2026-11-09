@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import toast from 'react-hot-toast';
-import { AlertTriangle, CheckCircle2, FolderTree, Trash2, X, Send, UserCheck, ShieldCheck, Calendar, FileText, Clock, Lock, Settings2 } from 'lucide-react';
-import { computeDueDates, computeDueDateForMonth, fetchVccDocumentProfiles, saveVccDocumentProfile, fetchVccPlanRevisions } from '../api/vccPlanApi';
+import { AlertTriangle, CheckCircle2, FolderTree, Trash2, X, Send, UserCheck, ShieldCheck, Calendar, FileText, Clock, Lock, Settings2, Edit3 } from 'lucide-react';
+import { computeDueDates, computeDueDateForMonth, fetchVccDocumentProfiles, saveVccDocumentProfile, fetchVccPlanRevisions, DEFAULT_LOCAL_DOCUMENT_PROFILES } from '../api/vccPlanApi';
 import { formatVccDateTime, formatVccDueDatesList } from '../utils/vccDateUtils';
 import { useVccModalAccessibility } from '../hooks/useVccModalAccessibility';
 import { VccDiscardConfirmDialog } from './VccDiscardConfirmDialog';
+import { getPlanStatusLabel } from '../utils/planLabels';
 
 const PLAN_AUDIT_LABELS = {
   VCC_PLAN_CREATED: { label: 'สร้างแผนประจำปีใหม่', badge: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
@@ -28,36 +29,62 @@ export const PlanFormModal = ({
   error,
   saving,
   onSubmit,
-  activeDepartments
+  activeDepartments = [],
+  existingPlans = [],
+  onNavigateToPlan,
+  onOpenRevision
 }) => {
-  const [docProfiles, setDocProfiles] = useState({});
+  const [docProfiles, setDocProfiles] = useState(DEFAULT_LOCAL_DOCUMENT_PROFILES || {});
 
   useEffect(() => {
     let alive = true;
     if (open) {
       fetchVccDocumentProfiles()
         .then((res) => {
-          if (alive && res?.profiles) setDocProfiles(res.profiles);
+          if (alive && res?.profiles) {
+            setDocProfiles(res.profiles);
+            // If creating a new plan and department has a profile, sync document_code and revision
+            if (!editingPlan && form.department && res.profiles[form.department]) {
+              const prof = res.profiles[form.department];
+              setForm((prev) => ({
+                ...prev,
+                document_code: prof.document_code || '',
+                revision: '01',
+                title: prev.title || (prof.title_th ? `${prof.title_th} ${prev.plan_year || ''}`.trim() : `แผนการทวนสอบเครื่องมือประจำปี ${prev.plan_year || ''}`.trim())
+              }));
+            }
+          }
         })
         .catch(() => {});
     }
     return () => {
       alive = false;
     };
-  }, [open]);
+  }, [open, editingPlan]);
+
+  const currentDept = String(form?.department || '').toUpperCase();
+  const currentDeptProfile = (docProfiles && docProfiles[currentDept]) || null;
+  const hasDccMapping = Boolean(currentDeptProfile?.document_code);
+
+  // Duplicate Plan Detection: check if a plan for (plan_year, department) already exists
+  const duplicatePlan = useMemo(() => {
+    if (editingPlan || !form?.plan_year || !form?.department) return null;
+    const yr = Number(form.plan_year);
+    const dept = String(form.department).toUpperCase();
+    return (existingPlans || []).find(
+      (p) => Number(p.plan_year) === yr && String(p.department).toUpperCase() === dept
+    ) || null;
+  }, [editingPlan, form?.plan_year, form?.department, existingPlans]);
 
   const isDirty = useMemo(() => {
     if (!form) return false;
     if (editingPlan) {
       return (
-        form.department !== editingPlan.department ||
-        form.document_code !== editingPlan.document_code ||
-        form.revision !== editingPlan.revision ||
         form.title !== editingPlan.title ||
         form.due_date_rule !== editingPlan.due_date_rule
       );
     }
-    return Boolean(form.plan_year || form.department || form.document_code || form.title);
+    return Boolean(form.plan_year || form.department);
   }, [form, editingPlan]);
 
   const {
@@ -86,7 +113,7 @@ export const PlanFormModal = ({
   return (
     <>
       <div
-        className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-150"
+        className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-in fade-in duration-150"
         onClick={handleBackdropClick}
       >
         <div
@@ -95,217 +122,376 @@ export const PlanFormModal = ({
           aria-modal="true"
           aria-labelledby="plan-form-modal-title"
           tabIndex="-1"
-          className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-lg w-full overflow-hidden my-auto outline-none"
+          className="bg-white rounded-2xl border border-slate-200/90 shadow-2xl max-w-[720px] w-full max-h-[min(90vh,780px)] flex flex-col my-auto outline-none overflow-hidden"
         >
-          <div className="px-6 py-4.5 border-b border-slate-200 flex items-center justify-between">
-            <h2 id="plan-form-modal-title" className="text-xl font-bold text-slate-900 tracking-tight">
-              {editingPlan ? `แก้ไขหัวแผนประจำปี ${editingPlan.plan_year}` : 'สร้างแผนการทวนสอบเครื่องมือประจำปีใหม่'}
-            </h2>
+          {/* Modal Header */}
+          <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between shrink-0 bg-white">
+            <div className="space-y-0.5">
+              <h2 id="plan-form-modal-title" className="text-lg font-bold text-slate-900 tracking-tight">
+                {editingPlan ? `แก้ไขหัวแผนประจำปี ${editingPlan.plan_year}` : 'สร้างแผนการทวนสอบเครื่องมือประจำปีใหม่'}
+              </h2>
+              <p className="text-[11px] text-slate-500">
+                {editingPlan ? 'ปรับปรุงรายละเอียดแผนงานและกติกาวันครบกำหนด' : 'กำหนดปี แผนก และแบบฟอร์มควบคุมสำหรับจัดทำแผนการทวนสอบประจำปี'}
+              </p>
+            </div>
             <button
               type="button"
               onClick={requestClose}
               aria-label="ปิดหน้าต่าง"
-              className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
+              className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
             >
-              <X size={20} />
+              <X size={18} />
             </button>
           </div>
 
-        <form onSubmit={onSubmit} className="p-6 space-y-4">
-          {error && (
-            <div role="alert" className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-sm font-semibold flex items-center gap-2">
-              <AlertTriangle size={17} className="text-rose-600 shrink-0" />
-              <span>{error}</span>
-            </div>
-          )}
-
-          {/* Section 1: ข้อมูลพื้นฐานแผนประจำปี */}
-          <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 space-y-3">
-            <div className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center justify-between">
-              <span className="flex items-center gap-1.5">
-                <Calendar size={13} className="text-indigo-600 shrink-0" />
-                <span>1. ข้อมูลพื้นฐานแผนประจำปี</span>
-              </span>
-              {editingPlan && (
-                <span className="inline-flex items-center gap-1 text-[10px] text-slate-500 font-medium bg-slate-200/80 px-1.5 py-0.5 rounded">
-                  <Lock size={10} />
-                  <span>ล็อกอัตโนมัติ</span>
-                </span>
+          <form onSubmit={onSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+            {/* Scrollable Form Body */}
+            <div className="px-6 py-4.5 overflow-y-auto space-y-4.5 flex-1 min-h-0">
+              {error && (
+                <div role="alert" className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-center gap-2">
+                  <AlertTriangle size={16} className="text-rose-600 shrink-0" />
+                  <span>{error}</span>
+                </div>
               )}
-            </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-              <div>
-                <label htmlFor="plan_year" className="block text-xs font-semibold text-slate-700 mb-1">
-                  ปี ค.ศ. ของแผน <span className="text-rose-600">*</span>
-                </label>
-                <input
-                  id="plan_year"
-                  type="number"
-                  required
-                  min={2000}
-                  max={2100}
-                  disabled={Boolean(editingPlan)}
-                  value={form.plan_year || ''}
-                  onChange={(e) => {
-                    const yr = Number(e.target.value);
-                    const isDefaultTitle = !form.title || form.title.startsWith('แผนการทวนสอบเครื่องมือประจำปี');
-                    setForm({
-                      ...form,
-                      plan_year: yr,
-                      title: isDefaultTitle && yr ? `แผนการทวนสอบเครื่องมือประจำปี ${yr}` : form.title
-                    });
-                  }}
-                  className="w-full h-9.5 px-3 rounded-lg border border-slate-300 text-xs font-semibold disabled:bg-slate-100/90 text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600"
-                />
-                <p className="mt-1 text-[11px] text-slate-500 font-medium">
-                  {form.plan_year && Number.isInteger(Number(form.plan_year)) && Number(form.plan_year) >= 2000 && Number(form.plan_year) <= 2100
-                    ? `ตรงกับ พ.ศ. ${Number(form.plan_year) + 543}`
-                    : 'รองรับ ค.ศ. 2000–2100'}
-                </p>
+              {/* Section 1: ข้อมูลพื้นฐานแผนประจำปี */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between pb-1.5 border-b border-slate-100">
+                  <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                    <Calendar size={13} className="text-indigo-600 shrink-0" />
+                    <span>1. ข้อมูลพื้นฐานแผนประจำปี</span>
+                  </span>
+                  {editingPlan && (
+                    <span className="inline-flex items-center gap-1 text-[10px] text-slate-500 font-medium bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200/80">
+                      <Lock size={10} />
+                      <span>ล็อกอัตโนมัติ</span>
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label htmlFor="plan_year" className="block text-xs font-semibold text-slate-700 mb-1">
+                      ปี ค.ศ. ของแผน <span className="text-rose-600">*</span>
+                    </label>
+                    <input
+                      id="plan_year"
+                      type="number"
+                      required
+                      min={2000}
+                      max={2100}
+                      disabled={Boolean(editingPlan)}
+                      value={form.plan_year || ''}
+                      onChange={(e) => {
+                        const yr = Number(e.target.value);
+                        const isDefaultTitle = !form.title || form.title.startsWith('แผนการทวนสอบเครื่องมือประจำปี') || (currentDeptProfile?.title_th && form.title.startsWith(currentDeptProfile.title_th));
+                        const baseTitle = currentDeptProfile?.title_th || 'แผนการทวนสอบเครื่องมือประจำปี';
+                        setForm({
+                          ...form,
+                          plan_year: yr,
+                          title: isDefaultTitle && yr ? `${baseTitle} ${yr}` : form.title
+                        });
+                      }}
+                      className="w-full h-9.5 px-3 rounded-xl border border-slate-300 text-xs font-semibold disabled:bg-slate-50 text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 transition-colors shadow-2xs"
+                    />
+                    <p className="mt-1 text-[11px] text-slate-500 font-medium">
+                      {form.plan_year && Number.isInteger(Number(form.plan_year)) && Number(form.plan_year) >= 2000 && Number(form.plan_year) <= 2100
+                        ? `ตรงกับ พ.ศ. ${Number(form.plan_year) + 543}`
+                        : 'รองรับ ค.ศ. 2000–2100'}
+                    </p>
+                  </div>
+
+                  <div>
+                    <label htmlFor="plan_department" className="block text-xs font-semibold text-slate-700 mb-1">
+                      แผนกเจ้าของแผน (Master Data) <span className="text-rose-600">*</span>
+                    </label>
+                    <select
+                      id="plan_department"
+                      required
+                      disabled={Boolean(editingPlan) || activeDepartments.length === 0}
+                      value={form.department}
+                      onChange={(e) => {
+                        const dept = e.target.value;
+                        const yr = form.plan_year ? String(form.plan_year) : '';
+                        if (editingPlan) {
+                          setForm({ ...form, department: dept });
+                        } else {
+                          const prof = (docProfiles && docProfiles[dept]) || {};
+                          const baseTitle = prof.title_th || 'แผนการทวนสอบเครื่องมือประจำปี';
+                          setForm({
+                            ...form,
+                            department: dept,
+                            document_code: prof.document_code || '',
+                            revision: '01',
+                            title: yr ? `${baseTitle} ${yr}` : baseTitle
+                          });
+                        }
+                      }}
+                      className="w-full h-9.5 px-3 rounded-xl border border-slate-300 text-xs font-medium bg-white disabled:bg-slate-50 text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 transition-colors shadow-2xs"
+                    >
+                      <option value="" disabled>
+                        {activeDepartments.length === 0 ? '-- โหลดแผนกไม่ได้ --' : '-- เลือกแผนก --'}
+                      </option>
+                      {activeDepartments.map((d) => (
+                        <option key={d.code} value={d.code}>
+                          {d.code} — {d.nameTh || d.name_th || d.name}
+                        </option>
+                      ))}
+                    </select>
+                    {activeDepartments.length === 0 && (
+                      <p className="mt-1 text-[11px] text-rose-600 font-semibold">
+                        ไม่สามารถโหลดแผนกจาก Master Data ได้ กรุณาตรวจสอบข้อมูลแผนกก่อนบันทึก
+                      </p>
+                    )}
+                  </div>
+                </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  แผนกเจ้าของแผน (Master Data) <span className="text-rose-600">*</span>
-                </label>
-                <select
-                  required
-                  disabled={Boolean(editingPlan) || activeDepartments.length === 0}
-                  value={form.department}
-                  onChange={(e) => {
-                    const dept = e.target.value;
-                    const yr = form.plan_year ? String(form.plan_year) : '';
-                    if (editingPlan) {
-                      setForm({ ...form, department: dept });
-                    } else {
-                      const prof = (docProfiles && docProfiles[dept]) || {};
-                      setForm({
-                        ...form,
-                        department: dept,
-                        document_code: prof.document_code || `VCC-PLAN-${dept}`,
-                        revision: prof.revision || '01',
-                        title: yr
-                          ? (prof.title_th ? `${prof.title_th} ${yr}` : `แผนการทวนสอบเครื่องมือประจำปี ${yr} (${dept})`)
-                          : (prof.title_th || `แผนการทวนสอบเครื่องมือประจำปี (${dept})`)
-                      });
-                    }
-                  }}
-                  className="w-full h-9.5 px-3 rounded-lg border border-slate-300 text-xs font-medium bg-white disabled:bg-slate-100/90 text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600"
-                >
-                  <option value="" disabled>
-                    {activeDepartments.length === 0 ? '-- โหลดแผนกไม่ได้ --' : '-- เลือกแผนก --'}
-                  </option>
-                  {activeDepartments.map((d) => (
-                    <option key={d.code} value={d.code}>
-                      {d.code} — {d.nameTh}
-                    </option>
-                  ))}
-                </select>
-                {activeDepartments.length === 0 && (
-                  <p className="mt-1 text-[11px] text-rose-600 font-semibold">
-                    ไม่สามารถโหลดแผนกจาก Master Data ได้ กรุณาตรวจสอบข้อมูลแผนกก่อนบันทึก
-                  </p>
+              {/* Duplicate Plan Detection Banner */}
+              {duplicatePlan && (
+                <div className="p-3 rounded-xl bg-amber-50/90 border border-amber-200 text-amber-900 space-y-2 animate-in fade-in duration-150">
+                  <div className="flex items-start gap-2.5">
+                    <AlertTriangle size={16} className="text-amber-600 shrink-0 mt-0.5" />
+                    <div className="text-xs space-y-1">
+                      <div className="font-bold text-amber-950 flex items-center gap-1.5 flex-wrap">
+                        <span>พบแผนประจำปี {duplicatePlan.plan_year} แผนก {duplicatePlan.department} อยู่ในระบบแล้ว</span>
+                        <span className="font-mono bg-amber-100 text-amber-800 px-1.5 py-0.2 rounded border border-amber-300/80">
+                          Rev.{duplicatePlan.revision}
+                        </span>
+                        <span className="font-semibold px-2 py-0.2 rounded-full text-[11px] bg-white border border-amber-200">
+                          สถานะ: {getPlanStatusLabel(duplicatePlan.status)}
+                        </span>
+                      </div>
+                      <p className="text-amber-800 leading-relaxed text-[11px]">
+                        ระบบไม่อนุญาตให้สร้างแผนฉบับเริ่มต้นซ้ำในปีและแผนกเดียวกัน คุณสามารถเปิดดูแผนเดิมหรือดำเนินการต่อได้ทันที
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 pt-0.5">
+                    {duplicatePlan.status === 'APPROVED' ? (
+                      onOpenRevision && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            requestClose();
+                            onOpenRevision(duplicatePlan);
+                          }}
+                          className="inline-flex items-center gap-1.5 h-7.5 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold cursor-pointer shadow-2xs"
+                        >
+                          <Edit3 size={12} />
+                          <span>สร้างฉบับแก้ไขใหม่ (Revise Plan)</span>
+                        </button>
+                      )
+                    ) : duplicatePlan.status === 'DRAFT' ? (
+                      onNavigateToPlan && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            requestClose();
+                            onNavigateToPlan(duplicatePlan.id);
+                          }}
+                          className="inline-flex items-center gap-1.5 h-7.5 px-3 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold cursor-pointer shadow-2xs"
+                        >
+                          <FileText size={12} />
+                          <span>เปิดฉบับร่างนี้ (Open Draft)</span>
+                        </button>
+                      )
+                    ) : duplicatePlan.status === 'REJECTED' ? (
+                      onNavigateToPlan && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            requestClose();
+                            onNavigateToPlan(duplicatePlan.id);
+                          }}
+                          className="inline-flex items-center gap-1.5 h-7.5 px-3 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold cursor-pointer shadow-2xs"
+                        >
+                          <Edit3 size={12} />
+                          <span>เปิดแก้ไขแผนงาน (Open Plan)</span>
+                        </button>
+                      )
+                    ) : (
+                      onNavigateToPlan && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            requestClose();
+                            onNavigateToPlan(duplicatePlan.id);
+                          }}
+                          className="inline-flex items-center gap-1.5 h-7.5 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold cursor-pointer shadow-2xs"
+                        >
+                          <FileText size={12} />
+                          <span>เปิดดูแผนงานที่กำลังดำเนินการ (View In-Progress Plan)</span>
+                        </button>
+                      )
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Section 2: เอกสารต้นแบบจาก DCC (DCC Controlled Template) — Compact Strip */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between pb-1.5 border-b border-slate-100">
+                  <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                    <FileText size={13} className="text-indigo-600 shrink-0" />
+                    <span>2. เอกสารต้นแบบจาก DCC (DCC Controlled Template)</span>
+                  </span>
+                  {hasDccMapping ? (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                      <ShieldCheck size={11} className="text-emerald-600 shrink-0" />
+                      <span>เชื่อมโยงกับ DCC แล้ว</span>
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-rose-50 text-rose-700 border border-rose-200">
+                      <AlertTriangle size={11} className="text-rose-600 shrink-0" />
+                      <span>ไม่พบการเชื่อมโยงเอกสาร</span>
+                    </span>
+                  )}
+                </div>
+
+                {hasDccMapping ? (
+                  <div className="bg-slate-50/70 rounded-xl p-3 border border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs">
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                      <div className="inline-flex items-center gap-1.5 bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs">
+                        <span className="text-[10px] uppercase font-semibold text-slate-400">แบบฟอร์ม:</span>
+                        <span className="font-mono font-bold text-xs text-slate-900">{currentDeptProfile.document_code}</span>
+                      </div>
+                      <span className="text-slate-300 hidden sm:inline">•</span>
+                      <div className="inline-flex items-center gap-1.5 bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs">
+                        <span className="text-[10px] uppercase font-semibold text-slate-400">ฉบับฟอร์ม:</span>
+                        <span className="font-mono font-bold text-xs text-slate-900">Rev.{currentDeptProfile.revision || '01'}</span>
+                      </div>
+                      {currentDeptProfile.form_issue_date && (
+                        <>
+                          <span className="text-slate-300 hidden sm:inline">•</span>
+                          <span className="text-slate-600 text-[11px] font-medium">
+                            ประกาศใช้: {currentDeptProfile.form_issue_date}
+                          </span>
+                        </>
+                      )}
+                    </div>
+
+                    {currentDeptProfile.title_th && (
+                      <span className="text-[11px] text-slate-500 font-medium truncate max-w-[260px]" title={currentDeptProfile.title_th}>
+                        {currentDeptProfile.title_th}
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  <div className="p-3 bg-rose-50/90 rounded-xl border border-rose-200 text-xs text-rose-800 flex items-start gap-2">
+                    <AlertTriangle size={15} className="text-rose-600 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-bold text-rose-900">ไม่พบ DCC Document Mapping สำหรับแผนก {form.department || '-'}</p>
+                      <p className="mt-0.5 text-rose-700 leading-relaxed text-[11px]">
+                        กรุณาติดต่อ DCC เพื่อขึ้นทะเบียนแบบฟอร์มแผนการทวนสอบประจำปีก่อนสร้างแผนงาน
+                      </p>
+                    </div>
+                  </div>
                 )}
               </div>
-            </div>
-          </div>
 
-          {/* Section 2: ข้อมูลเอกสารคุณภาพ (QMS) */}
-          <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 space-y-3">
-            <div className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-              <FileText size={13} className="text-indigo-600 shrink-0" />
-              <span>2. ข้อมูลเอกสารคุณภาพ (QMS)</span>
-            </div>
+              {/* Section 3: การกำหนดแผนงานประจำปี */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between pb-1.5 border-b border-slate-100">
+                  <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                    <Clock size={13} className="text-indigo-600 shrink-0" />
+                    <span>3. การกำหนดแผนงานประจำปี</span>
+                  </span>
+                </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  รหัสเอกสารอ้างอิง / Electronic ID (เว้นว่างได้)
-                </label>
-                <input
-                  type="text"
-                  placeholder={`เช่น VCC-PLAN-${form.department || 'QC'}`}
-                  value={form.document_code}
-                  onChange={(e) => setForm({ ...form, document_code: e.target.value })}
-                  className="w-full h-9.5 px-3 rounded-lg border border-slate-300 text-xs font-mono font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600"
-                />
+                <div>
+                  <label htmlFor="plan_title" className="block text-xs font-semibold text-slate-700 mb-1">
+                    ชื่อแผนประจำปี <span className="text-rose-600">*</span>
+                  </label>
+                  <input
+                    id="plan_title"
+                    type="text"
+                    required
+                    value={form.title || ''}
+                    onChange={(e) => setForm({ ...form, title: e.target.value })}
+                    placeholder="เช่น แผนการทวนสอบเครื่องมือประจำปี 2027"
+                    className="w-full h-9.5 px-3 rounded-xl border border-slate-300 text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 transition-colors shadow-2xs"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      ฉบับของแผนงาน (Plan Revision)
+                    </label>
+                    <div className="flex items-center justify-between h-9.5 px-3 rounded-xl border border-slate-200 bg-slate-50 text-xs font-mono font-bold text-slate-700 shadow-2xs">
+                      <span>Rev.{editingPlan ? editingPlan.revision : '01'}</span>
+                      <span className="font-sans font-normal text-[11px] text-slate-500">
+                        {editingPlan ? '(ฉบับปัจจุบัน)' : '(ฉบับเริ่มต้น)'}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-[10px] text-slate-400">
+                      {editingPlan ? 'ล็อกตามประวัติฉบับเดิม' : 'ระบบกำหนด Rev.01 ให้อัตโนมัติ'}
+                    </p>
+                  </div>
+
+                  <div>
+                    <label htmlFor="plan_due_date_rule" className="block text-xs font-semibold text-slate-700 mb-1">
+                      กติกาคำนวณวันครบกำหนด
+                    </label>
+                    <select
+                      id="plan_due_date_rule"
+                      value={form.due_date_rule || 'END_OF_MONTH'}
+                      onChange={(e) => setForm({ ...form, due_date_rule: e.target.value })}
+                      className="w-full h-9.5 px-3 rounded-xl border border-slate-300 text-xs font-medium bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 transition-colors shadow-2xs"
+                    >
+                      <option value="END_OF_MONTH">วันสิ้นเดือน (เช่น {endOfMonthPreview})</option>
+                      <option value="START_OF_MONTH">วันที่ 1 ของเดือน (เช่น {startOfMonthPreview})</option>
+                    </select>
+                  </div>
+                </div>
               </div>
+            </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Revision (ครั้งที่แก้ไข)</label>
-                <input
-                  type="text"
-                  required
-                  value={form.revision}
-                  onChange={(e) => setForm({ ...form, revision: e.target.value })}
-                  className="w-full h-9.5 px-3 rounded-lg border border-slate-300 text-xs font-mono font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600"
-                />
+            {/* Sticky Modal Footer */}
+            <div className="px-6 py-3.5 bg-slate-50/80 border-t border-slate-100 flex items-center justify-between gap-3 shrink-0">
+              <span className="text-[11px] text-slate-400 hidden sm:inline">
+                กด Esc เพื่อยกเลิก
+              </span>
+              <div className="flex items-center justify-end gap-2.5 w-full sm:w-auto">
+                <button
+                  type="button"
+                  onClick={requestClose}
+                  className="h-9.5 px-4 rounded-xl border border-slate-300 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer shadow-2xs"
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  type="submit"
+                  aria-label="บันทึกแผนประจำปี"
+                  disabled={saving || activeDepartments.length === 0 || !hasDccMapping || Boolean(duplicatePlan)}
+                  className="h-9.5 px-5 rounded-xl bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700 active:bg-indigo-800 disabled:opacity-50 shadow-xs transition-colors cursor-pointer"
+                >
+                  {saving
+                    ? 'กำลังบันทึก...'
+                    : duplicatePlan
+                    ? 'มีแผนปีนี้อยู่แล้ว'
+                    : (!hasDccMapping && activeDepartments.length > 0)
+                    ? 'ไม่พบการเชื่อมโยง DCC'
+                    : editingPlan
+                    ? 'บันทึกการแก้ไขหัวแผน'
+                    : 'บันทึกแผนประจำปี'}
+                </button>
               </div>
             </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">ชื่อแผนประจำปี</label>
-              <input
-                type="text"
-                required
-                value={form.title}
-                onChange={(e) => setForm({ ...form, title: e.target.value })}
-                className="w-full h-9.5 px-3 rounded-lg border border-slate-300 text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600"
-              />
-            </div>
-          </div>
-
-          {/* Section 3: กติกาคำนวณวันครบกำหนด */}
-          <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 space-y-2.5">
-            <div className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-              <Clock size={13} className="text-indigo-600 shrink-0" />
-              <span>3. กติกาคำนวณวันครบกำหนด</span>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                กำหนดวันครบกำหนด (เมื่อแผนระบุเฉพาะเดือน)
-              </label>
-              <select
-                value={form.due_date_rule}
-                onChange={(e) => setForm({ ...form, due_date_rule: e.target.value })}
-                className="w-full h-9.5 px-3 rounded-lg border border-slate-300 text-xs font-medium bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600"
-              >
-                <option value="END_OF_MONTH">วันสิ้นเดือนของเดือนที่วางแผน (เช่น {endOfMonthPreview})</option>
-                <option value="START_OF_MONTH">วันที่ 1 ของเดือนที่วางแผน (เช่น {startOfMonthPreview})</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="pt-2 flex justify-end gap-2.5">
-            <button
-              type="button"
-              onClick={requestClose}
-              className="h-9.5 px-4 rounded-xl border border-slate-300 text-xs font-semibold hover:bg-slate-50 transition-colors cursor-pointer"
-            >
-              ยกเลิก
-            </button>
-            <button
-              type="submit"
-              disabled={saving || activeDepartments.length === 0}
-              className="h-9.5 px-5 rounded-xl bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700 disabled:opacity-50 shadow-2xs transition-colors cursor-pointer"
-            >
-              {saving ? 'กำลังบันทึก...' : 'บันทึกแผนประจำปี'}
-            </button>
-          </div>
-        </form>
+          </form>
+        </div>
       </div>
-    </div>
 
-    <VccDiscardConfirmDialog
-      isOpen={showConfirmDiscard}
-      onConfirm={confirmDiscard}
-      onCancel={cancelDiscard}
-      title="ข้อมูลแผนประจำปียังไม่ได้บันทึก"
-      message="คุณมีข้อมูลแผนประจำปีที่กำลังแก้ไข ต้องการยกเลิกและปิดหน้าต่างใช่หรือไม่?"
-    />
-  </>
+      <VccDiscardConfirmDialog
+        isOpen={showConfirmDiscard}
+        onConfirm={confirmDiscard}
+        onCancel={cancelDiscard}
+        title="ข้อมูลแผนประจำปียังไม่ได้บันทึก"
+        message="คุณมีข้อมูลแผนประจำปีที่กำลังแก้ไข ต้องการยกเลิกและปิดหน้าต่างใช่หรือไม่?"
+      />
+    </>
   );
 };
 

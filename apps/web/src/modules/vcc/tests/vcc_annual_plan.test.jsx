@@ -37,16 +37,16 @@ describe('VCC Phase 2 — Annual Calibration Plan (FM-QC-46) & Approval Workflow
         },
         {
           id: 'qc4',
-          name: 'QC หัวหน้า (L4)',
+          name: 'QC หัวหน้า (L5)',
           department: 'QC',
-          approval_level: 4,
+          approval_level: 5,
           status: 'ACTIVE'
         },
         {
           id: 'qc5',
-          name: 'QC ผู้ช่วยผู้จัดการ (L5)',
+          name: 'QC ผู้ช่วยผู้จัดการ (L6)',
           department: 'QC',
-          approval_level: 5,
+          approval_level: 6,
           status: 'ACTIVE'
         }
       ],
@@ -62,10 +62,8 @@ describe('VCC Phase 2 — Annual Calibration Plan (FM-QC-46) & Approval Workflow
   });
 
   it('1. แยกสถานะแผนตามแท็บ (DRAFT / PENDING_REVIEW / PENDING_APPROVAL / APPROVED / REJECTED) และแสดง V001 เดือน 2 / V002 เดือน 9 พร้อมระบุว่าสีในแผนไม่ใช่หลักฐานว่าทำเสร็จแล้ว', async () => {
-    render(<AssetRegisterPage />);
+    render(<AssetRegisterPage initialEntries={['/vcc/plans?id=vcc-plan-2026-qc&tab=DRAFT']} />);
 
-    const planNavBtn = await screen.findByRole('button', { name: /แผนการทวนสอบประจำปี \(FM-QC-46\)/i });
-    fireEvent.click(planNavBtn);
 
     // Must display 2026 DRAFT plan with V001 (due 2026-02-28) and V002 (due 2026-09-30)
     expect(await screen.findByText('V001')).toBeInTheDocument();
@@ -119,9 +117,8 @@ describe('VCC Phase 2 — Annual Calibration Plan (FM-QC-46) & Approval Workflow
     });
     writeJson('qms-vcc-local-plan-items-v1', items);
 
-    render(<AssetRegisterPage />);
+    render(<AssetRegisterPage initialEntries={['/vcc/plans?id=vcc-plan-2026-qc&tab=DRAFT']} />);
 
-    fireEvent.click(await screen.findByRole('button', { name: /แผนการทวนสอบประจำปี \(FM-QC-46\)/i }));
     expect(await screen.findByText('ST002')).toBeInTheDocument();
 
     // Normal 2026 DRAFT plan must NOT contain GRP-SCALE
@@ -152,9 +149,8 @@ describe('VCC Phase 2 — Annual Calibration Plan (FM-QC-46) & Approval Workflow
   }, 15000);
 
   it('3. การอนุมัติแผน 3 ขั้นตอนผ่านหน้า Task Inbox, หน้าแผนไม่มีปุ่มอนุมัติ/ทบทวน, บังคับกรอกเหตุผลเมื่อส่งกลับแก้ไข, และป้องกันผู้จัดทำทบทวนเอง', async () => {
-    render(<AssetRegisterPage />);
+    const { unmount: unmountPlan } = render(<AssetRegisterPage initialEntries={['/vcc/plans?id=vcc-plan-2026-qc&tab=DRAFT']} />);
 
-    fireEvent.click(await screen.findByRole('button', { name: /แผนการทวนสอบประจำปี \(FM-QC-46\)/i }));
     expect(await screen.findByText('ST002')).toBeInTheDocument();
 
     // 1) Submit plan as dc4 -> opens PlanSubmitModal with controlled assignees
@@ -171,7 +167,8 @@ describe('VCC Phase 2 — Annual Calibration Plan (FM-QC-46) & Approval Workflow
     expect(screen.queryByRole('button', { name: /ส่งกลับแก้ไข/i })).toBeNull();
 
     // 2) Navigate to VCC Task Inbox as dc4 (requester) -> open the pending plan from WAITING_OTHERS tab
-    fireEvent.click(screen.getByRole('button', { name: /งานที่ต้องดำเนินการ \(VCC Task Inbox\)/i }));
+    unmountPlan();
+    render(<AssetRegisterPage initialEntries={['/vcc/tasks']} />);
     const trackingTab = await screen.findByTestId('vcc-inbox-tab-WAITING_OTHERS');
     fireEvent.click(trackingTab);
     fireEvent.click(await screen.findByTestId('vcc-inbox-open-vcc-plan-2026-qc'));
@@ -185,12 +182,12 @@ describe('VCC Phase 2 — Annual Calibration Plan (FM-QC-46) & Approval Workflow
     useStore.setState({
       currentUser: {
         id: 'qc4',
-        name: 'QC หัวหน้า (L4)',
+        name: 'QC หัวหน้า (L5)',
         role: 'STAFF',
         department: 'QC',
         position: 'QC Supervisor',
-        approval_level: 4,
-        approvalLevel: 4,
+        approval_level: 5,
+        approvalLevel: 6,
         isDcc: true
       }
     });
@@ -215,12 +212,12 @@ describe('VCC Phase 2 — Annual Calibration Plan (FM-QC-46) & Approval Workflow
     useStore.setState({
       currentUser: {
         id: 'qc5',
-        name: 'QC ผู้ช่วยผู้จัดการ (L5)',
+        name: 'QC ผู้ช่วยผู้จัดการ (L6)',
         role: 'STAFF',
         department: 'QC',
         position: 'Assistant QC Manager',
-        approval_level: 5,
-        approvalLevel: 5,
+        approval_level: 6,
+        approvalLevel: 6,
         isDcc: true
       }
     });
@@ -236,8 +233,7 @@ describe('VCC Phase 2 — Annual Calibration Plan (FM-QC-46) & Approval Workflow
   it('4. เมื่อโหลดแผนกจาก Master Data ไม่ได้ จะแสดงข้อความแจ้งเตือนและปิดปุ่มบันทึกแผนประจำปี', async () => {
     useStore.setState({ masterDepartments: [], departments: [] });
 
-    render(<AssetRegisterPage />);
-    fireEvent.click(await screen.findByRole('button', { name: /แผนการทวนสอบประจำปี \(FM-QC-46\)/i }));
+    render(<AssetRegisterPage initialEntries={['/vcc/plans?id=vcc-plan-2026-qc&tab=DRAFT']} />);
 
     fireEvent.click(await screen.findByRole('button', { name: 'เมนูเพิ่มเติมของแผน' }));
     fireEvent.click(await screen.findByRole('menuitem', { name: /สร้างแผนประจำปีใหม่/i }));

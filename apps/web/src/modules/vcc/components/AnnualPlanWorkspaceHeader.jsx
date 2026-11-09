@@ -20,7 +20,6 @@ import {
 } from 'lucide-react';
 import { PLAN_STATUS_OPTIONS, getPlanStatusLabel, getDueDateRuleLabel } from '../utils/planLabels';
 import AnnualPlanApprovalChain from './AnnualPlanApprovalChain';
-import AnnualPlanProgressStepper from './AnnualPlanProgressStepper';
 import { formatVccDateTime, toBuddhistYear } from '../utils/vccDateUtils';
 
 const useDismiss = (open, onClose) => {

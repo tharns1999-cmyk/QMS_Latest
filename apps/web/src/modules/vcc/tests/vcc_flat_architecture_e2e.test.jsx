@@ -25,9 +25,9 @@ const MASTER_USERS = [
   },
   {
     id: 'qc1',
-    name: 'QC ผู้จัดทำแผน (L2)',
+    name: 'QC ผู้จัดทำแผน (L4)',
     department: 'QC',
-    approval_level: 2,
+    approval_level: 4,
     status: 'ACTIVE',
     isDcc: true
   },
@@ -55,10 +55,10 @@ describe('VCC Flat Instrument Architecture — End-to-End Acceptance Criteria Su
     useStore.setState({
       currentUser: {
         id: 'qc1',
-        name: 'QC ผู้จัดทำแผน (L2)',
+        name: 'QC ผู้จัดทำแผน (L4)',
         department: 'QC',
-        approval_level: 2,
-        approvalLevel: 2,
+        approval_level: 4,
+        approvalLevel: 4,
         isDcc: true
       },
       departments: MASTER_DEPTS,
@@ -93,7 +93,7 @@ describe('VCC Flat Instrument Architecture — End-to-End Acceptance Criteria Su
 
     // 3. QC Annual Plan (2026) has all 5 active QC calibratable units (ST002, SW001, TC001, V001, V002) counted 1:1
     // AND clearly explains why the 6th active instrument (SC-WH-001 in WH) is outside the QC plan scope, with direct "+ เพิ่มเข้าแผนนี้"
-    render(<AssetRegisterPage initialEntries={['/vcc/plans']} />);
+    render(<AssetRegisterPage initialEntries={['/vcc/plans?id=vcc-plan-2026-qc&tab=DRAFT']} />);
     expect(await screen.findByText('SW001')).toBeInTheDocument();
     expect(screen.getByText('V001')).toBeInTheDocument();
     expect(screen.getByText('V002')).toBeInTheDocument();
@@ -172,7 +172,7 @@ describe('VCC Flat Instrument Architecture — End-to-End Acceptance Criteria Su
       ]
     });
 
-    render(<AssetRegisterPage initialEntries={['/vcc/plans']} />);
+    render(<AssetRegisterPage initialEntries={['/vcc/plans?id=vcc-plan-2025-wh-draft&tab=DRAFT']} />);
     expect(await screen.findByText(/พบรายการกลุ่มเดิม \(GRP-SCALE\) ค้างอยู่ในแผนฉบับร่าง/i)).toBeInTheDocument();
 
     // 1. Attempting to click "ส่งทบทวนแผน" while GRP-SCALE is unconverted MUST block submission and open Conversion Modal!

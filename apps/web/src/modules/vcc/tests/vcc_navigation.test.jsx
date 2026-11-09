@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import useStore from '../../../store/useStore';
 import { resetVccLocalStore } from '../api/vccApi';
@@ -33,7 +33,7 @@ describe('VCC Enterprise Navigation & Sidebar Spoke Integration Tests', () => {
   it('1. Sidebar adapts to VCC Spoke when in /vcc route: shows VCC brand badge, "กลับสู่พอร์ทัลหลัก", and all 4 Enterprise navigation items', () => {
     render(
       <MemoryRouter initialEntries={['/vcc/dashboard']}>
-        <Sidebar />
+        <Sidebar isOpen />
       </MemoryRouter>
     );
 
@@ -86,7 +86,7 @@ describe('VCC Enterprise Navigation & Sidebar Spoke Integration Tests', () => {
       </MemoryRouter>
     );
     await waitFor(() => {
-      expect(screen.getByTestId('annual-plan-matrix')).toBeTruthy();
+      expect(screen.getByTestId('annual-plan-register-page')).toBeTruthy();
     });
     unmountPlan();
 
@@ -101,10 +101,10 @@ describe('VCC Enterprise Navigation & Sidebar Spoke Integration Tests', () => {
     });
   });
 
-  it('3. Preserves backward compatibility: default view and in-page buttons continue switching views seamlessly', async () => {
+  it('3. Uses real sidebar links to switch between the VCC routes', async () => {
     render(
-      <MemoryRouter initialEntries={['/']}>
-        <AssetRegisterPage />
+      <MemoryRouter initialEntries={['/vcc/assets']}>
+        <Sidebar isOpen /><AssetRegisterPage />
       </MemoryRouter>
     );
 
@@ -112,32 +112,30 @@ describe('VCC Enterprise Navigation & Sidebar Spoke Integration Tests', () => {
     expect(screen.getByRole('button', { name: /^เพิ่มเครื่องมือ$/i })).toBeTruthy();
 
     // Clicking top switcher buttons switches views
-    fireEvent.click(screen.getByRole('button', { name: /ภาพรวมและรายงาน/i }));
+    fireEvent.click(screen.getByRole('link', { name: /ภาพรวมและแจ้งเตือน/i }));
     await waitFor(() => {
       expect(screen.getByTestId('vcc-dashboard-section')).toBeTruthy();
     });
 
-    fireEvent.click(screen.getByRole('button', { name: /ใบสั่งงานและบันทึกผล/i }));
+    fireEvent.click(screen.getByRole('link', { name: /ใบสั่งงานและบันทึกผล/i }));
     await waitFor(() => {
       expect(screen.getByTestId('vcc-work-order-section')).toBeTruthy();
     });
 
-    fireEvent.click(screen.getByRole('button', { name: /แผนการทวนสอบประจำปี/i }));
+    fireEvent.click(screen.getByRole('link', { name: /แผนการทวนสอบประจำปี/i }));
     await waitFor(() => {
       expect(screen.getByTestId('annual-plan-matrix')).toBeTruthy();
     });
   });
 
-  it('3b. The hidden fallback menu is not in the Tab order (keyboard focus never lands on invisible buttons)', () => {
+  it('3b. Does not ship an invisible duplicate navigation menu', () => {
     render(
       <MemoryRouter initialEntries={['/vcc/assets']}>
         <AssetRegisterPage />
       </MemoryRouter>
     );
 
-    const buttons = within(screen.getByRole('navigation', { name: 'เมนูย่อยระบบ VCC' })).getAllByRole('button');
-    expect(buttons).toHaveLength(5);
-    for (const b of buttons) expect(b).toHaveAttribute('tabindex', '-1');
+    expect(screen.queryByRole('navigation', { name: 'เมนูย่อยระบบ VCC' })).toBeNull();
   });
 
   it('4. Renders clean Enterprise Page Header: no breadcrumb trail, title without redundant module prefix, and eliminates duplicate header tabs in visual UI', async () => {

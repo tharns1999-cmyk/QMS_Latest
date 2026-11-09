@@ -52,6 +52,7 @@ export const DigitalRecordModal = ({
 
   const isFail = workOrder.result_status === 'FAIL';
   const isPass = workOrder.result_status === 'PASS';
+  const instrument = workOrder.asset_snapshot || workOrder;
 
   return (
     <div
@@ -168,6 +169,11 @@ export const DigitalRecordModal = ({
 
           {/* Section 1: Instrument & Organization Information */}
           <div className="space-y-2 vcc-print-section">
+            {workOrder.is_legacy_without_asset_snapshot && (
+              <p role="status" className="p-2.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-xs">
+                งานประวัติเดิมยังไม่มีข้อมูลเครื่องมือที่เก็บ ณ วันปิดงาน ข้อมูลเครื่องมือที่แสดงอ้างอิงทะเบียนปัจจุบัน
+              </p>
+            )}
             <h2 className="text-xs font-bold uppercase tracking-wider text-slate-900 flex items-center gap-1.5">
               <Building2 size={14} className="text-indigo-600" />
               <span>1. ข้อมูลเครื่องมือวัดและสถานที่ (Instrument Identification)</span>
@@ -175,11 +181,11 @@ export const DigitalRecordModal = ({
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-xs">
               <div>
                 <span className="text-slate-400 block text-xs">รหัสเครื่องมือ:</span>
-                <span className="font-mono font-bold text-slate-900">{workOrder.asset_code || '-'}</span>
+                <span className="font-mono font-bold text-slate-900">{instrument.asset_code || '-'}</span>
               </div>
               <div>
                 <span className="text-slate-400 block text-xs">ชื่อเครื่องมือ:</span>
-                <span className="font-semibold text-slate-900">{workOrder.asset_name || '-'}</span>
+                <span className="font-semibold text-slate-900">{instrument.asset_name || '-'}</span>
                 {workOrder.group_nature === 'COMPOSITE_SET' && (
                   <span className="inline-block mt-0.5 px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-200 text-[10px] font-bold">
                     ชุดเครื่องมือผสม (Composite Set)
@@ -188,7 +194,7 @@ export const DigitalRecordModal = ({
               </div>
               <div>
                 <span className="text-slate-400 block text-xs">แผนกผู้ครอบครอง:</span>
-                <span className="font-semibold text-slate-900">{workOrder.department_name_th || workOrder.department || '-'}</span>
+                <span className="font-semibold text-slate-900">{instrument.department_name_th || instrument.department || '-'}</span>
               </div>
               <div>
                 <span className="text-slate-400 block text-xs">หน่วยงานผู้สอบเทียบ:</span>

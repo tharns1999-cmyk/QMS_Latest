@@ -22,24 +22,24 @@ const MOCK_USERS = [
     id: 'emp_qc_l1',
     name: 'สมชาย ผู้จัดทำ (QC L1)',
     department: 'QC',
-    approval_level: 1,
-    status: 'ACTIVE',
-    isDcc: true
-  },
-  {
-    id: 'emp_qc_l4',
-    name: 'สมศรี ผู้ทบทวน (QC L4)',
-    department: 'QC',
     approval_level: 4,
     status: 'ACTIVE',
     isDcc: true
   },
   {
-    id: 'emp_pd_l5_with_qc',
-    name: 'สมศักดิ์ ผู้จัดการผลิต (PD L5 + รอง QC)',
-    department: 'PD',
-    secondaryDepartments: ['QC'],
+    id: 'emp_qc_l4',
+    name: 'สมศรี ผู้ทบทวน (QC L5)',
+    department: 'QC',
     approval_level: 5,
+    status: 'ACTIVE',
+    isDcc: true
+  },
+  {
+    id: 'emp_pd_l5_with_qc',
+    name: 'สมศักดิ์ ผู้จัดการผลิต (MGT L6 + รอง QC)',
+    department: 'MGT',
+    secondaryDepartments: ['QC'],
+    approval_level: 6,
     status: 'ACTIVE',
     isDcc: true
   },
@@ -105,7 +105,7 @@ describe('VCC Approval Workflow Redesign — Clean, Minimal & Task-Centric (16 E
     expect(draftDetail.plan.status).toBe('DRAFT');
 
     // 2. เปิดหน้า /vcc/plans แล้วกดส่งทบทวนแผนผ่าน Confirmation Dialog
-    render(<AssetRegisterPage initialEntries={['/vcc/plans']} />);
+    render(<AssetRegisterPage initialEntries={['/vcc/plans?id=vcc-plan-2026-qc&tab=DRAFT']} />);
 
     const submitBtn = await screen.findByRole('button', { name: 'ส่งทบทวนแผน' });
     fireEvent.click(submitBtn);

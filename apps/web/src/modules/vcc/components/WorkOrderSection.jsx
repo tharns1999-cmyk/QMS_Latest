@@ -678,7 +678,7 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
           </div>
 
           <p className="text-sm text-slate-500">
-            พื้นที่ติดตาม ค้นหา และบันทึกผลใบสั่งงานทั้งหมดของแผนก · หากต้องการดูเฉพาะงานที่คุณต้องทำ ไปที่{' '}
+            เปิดใบสั่งงานตามแผน ติดตาม ค้นหา และบันทึกผลของแผนก · หากต้องการดูเฉพาะงานที่คุณต้องทำ ไปที่{' '}
             <Link to="/vcc/tasks" className="text-indigo-600 hover:text-indigo-800 underline font-semibold">
               งานที่ต้องดำเนินการ (Task Inbox)
             </Link>

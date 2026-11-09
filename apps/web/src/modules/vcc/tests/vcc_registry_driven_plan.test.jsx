@@ -9,8 +9,7 @@ import { UnplannedJustificationModal } from '../components/AnnualPlanModals';
 import { resetVccLocalStore } from '../api/vccApi';
 
 const openPlanPage = async () => {
-  render(<AssetRegisterPage />);
-  fireEvent.click(await screen.findByRole('button', { name: /แผนการทวนสอบประจำปี \(FM-QC-46\)/i }));
+  render(<AssetRegisterPage initialEntries={['/vcc/plans?id=vcc-plan-2026-qc&tab=DRAFT']} />);
   await screen.findByText('V001');
 };
 

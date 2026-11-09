@@ -14,7 +14,6 @@ import {
   Archive,
   RotateCcw,
   CheckCircle2,
-  XCircle,
   AlertTriangle,
   Layers,
   X
@@ -514,52 +513,7 @@ const AssetRegisterPageInner = () => {
 
   return (
     <div className="w-full min-w-0 space-y-4 pb-8">
-      {/* Test-only switcher: the sidebar (desktop, and the mobile drawer) is the real menu for every one of these views, so shipping
-          this clipped duplicate would only add an invisible landmark and Tab stops. Not rendered in production builds. */}
-      {import.meta.env.MODE === 'test' && (
-        <div className="sr-only" role="navigation" aria-label="เมนูย่อยระบบ VCC">
-          <button
-            type="button"
-            tabIndex={-1}
-            onClick={() => setModuleView('DASHBOARD')}
-            aria-label="ภาพรวมและรายงาน (Dashboard & Export)"
-          >
-            ภาพรวมและรายงาน (Dashboard & Export)
-          </button>
-          <button
-            type="button"
-            tabIndex={-1}
-            onClick={() => setModuleView('WORK_ORDERS')}
-            aria-label="ใบสั่งงานและบันทึกผล (Work Orders)"
-          >
-            ใบสั่งงานและบันทึกผล (Work Orders)
-          </button>
-          <button
-            type="button"
-            tabIndex={-1}
-            onClick={() => setModuleView('ANNUAL_PLAN')}
-            aria-label="แผนการทวนสอบประจำปี (FM-QC-46)"
-          >
-            แผนการทวนสอบประจำปี (FM-QC-46)
-          </button>
-          <button
-            type="button"
-            tabIndex={-1}
-            onClick={() => setModuleView('TASKS')}
-            aria-label="งานที่ต้องดำเนินการ (VCC Task Inbox)"
-          >
-            งานที่ต้องดำเนินการ (VCC Task Inbox)
-          </button>
-          <button
-            type="button"
-            tabIndex={-1}
-            onClick={() => setModuleView('ASSETS')}
-            aria-label="ทะเบียนเครื่องมือ (Asset Register)"
-          >
-            ทะเบียนเครื่องมือ (Asset Register)
-          </button>
-        </div>
-      )}
+
 
       {/* Compact Page Header: title + one-line description + primary actions */}
       {moduleView !== 'WORK_ORDERS' && (
@@ -569,11 +523,9 @@ const AssetRegisterPageInner = () => {
               <h1 className={`${moduleView === 'ANNUAL_PLAN' ? 'text-lg md:text-xl font-bold' : 'text-xl md:text-2xl font-bold'} text-slate-900 tracking-tight break-words`}>
                 {pageMeta.title}
               </h1>
-              {moduleView !== 'ANNUAL_PLAN' && (
-                <p className="hidden md:block text-sm text-slate-500">
-                  {pageMeta.description}
-                </p>
-              )}
+              <p className="hidden md:block text-sm text-slate-500">
+                {pageMeta.description}
+              </p>
             </div>
 
             {moduleView === 'ASSETS' && (

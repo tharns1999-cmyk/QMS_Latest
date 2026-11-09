@@ -3,7 +3,6 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import useStore from '../../../store/useStore';
 import AnnualPlanMatrixTable from '../components/AnnualPlanMatrixTable';
-import AnnualPlanCategoryChips from '../components/AnnualPlanCategoryChips';
 import { DraftGroupConversionModal } from '../components/AnnualPlanModals';
 import AnnualPlanMonthCell from '../components/AnnualPlanMonthCell';
 import { resetVccLocalStore } from '../api/vccApi';
@@ -115,56 +114,16 @@ describe('VCC Category-Based Overview & Flat Instrument Planning Matrix', () => 
     expect(screen.queryByRole('button', { name: /ย่อกลุ่มเครื่องมือ/i })).toBeNull();
   });
 
-  it('2. Category Overview: Clean & minimal category chips with accurate separation of instrument units vs cycle counts', () => {
-    const items = [sampleChild1, sampleChild2, sampleCompositeSet, sampleScale];
-    // Work order closing Month 2 of V001
-    const closedWo = {
-      id: 'WO-V001-M2',
-      plan_item_id: 'PI-CH-01',
-      asset_id: 'ASSET-CH-01',
-      planned_month: 2,
-      status: 'CLOSED',
-      result_status: 'PASS',
-      certificate_no: 'CER-2026-001'
-    };
-
-    const onSelectCategory = vi.fn();
-
-    render(
-      <AnnualPlanCategoryChips
-        planItems={items}
-        workOrders={[closedWo]}
-        selectedCategory=""
-        onSelectCategory={onSelectCategory}
-      />
-    );
-
-    // Instruments count: 4 total instruments, all 4 planned, 1 completed (V001 completed all planned cycles)
-    expect(screen.getByText(/เครื่องมือในขอบเขต:/i)).toBeInTheDocument();
-    expect(screen.getAllByText('4').length).toBeGreaterThanOrEqual(1); // total instruments & pending cycles
-
-    // Cycle counts strictly separated:
-    // sampleChild1: 1 cycle (m2)
-    // sampleChild2: 1 cycle (m9)
-    // sampleCompositeSet: 1 cycle (m5)
-    // sampleScale: 2 cycles (m1, m7)
-    // Total planned cycles = 1 + 1 + 1 + 2 = 5
-    // Completed cycles = 1 (closedWo)
-    // Pending cycles = 4
-    expect(screen.getByText(/รอบตามแผน:/i)).toBeInTheDocument();
-    expect(screen.getByText('5')).toBeInTheDocument(); // total planned cycles
-    expect(screen.getByText(/ปิดงานแล้ว:/i)).toBeInTheDocument();
-    expect(screen.getAllByText('1').length).toBeGreaterThanOrEqual(1); // total completed cycles & completed instruments
-    expect(screen.getByText(/ค้างดำเนินการ:/i)).toBeInTheDocument();
-
-    // Verify category chips
-    expect(screen.getByText('Vernier Caliper')).toBeInTheDocument();
-    expect(screen.getByText('Standard Weight Set')).toBeInTheDocument();
-    expect(screen.getByText('Digital Scale')).toBeInTheDocument();
-
-    // Clicking a category chip triggers selection callback
-    fireEvent.click(screen.getByText('Vernier Caliper'));
-    expect(onSelectCategory).toHaveBeenCalledWith('Vernier Caliper');
+  it('2. Category filter keeps independent instrument rows and approved evidence', () => {
+    const props = { planItems: [sampleChild1, sampleChild2, sampleCompositeSet, sampleScale], activePlan: { id: 'PLAN-001', status: 'APPROVED', plan_year: 2026 }, workOrders: [{ id: 'WO-V001-M2', plan_item_id: 'PI-CH-01', asset_id: 'ASSET-CH-01', planned_month: 2, status: 'CLOSED', result_status: 'PASS', certificate_no: 'CER-2026-001' }] };
+    const { rerender } = render(<AnnualPlanMatrixTable {...props} categoryFilter="Vernier Caliper" />);
+    expect(screen.getByText('V001')).toBeInTheDocument();
+    expect(screen.getByText('V002')).toBeInTheDocument();
+    expect(screen.queryByText('SW001')).toBeNull();
+    expect(screen.queryByText('SC-WH-001')).toBeNull();
+    rerender(<AnnualPlanMatrixTable {...props} categoryFilter="" />);
+    expect(screen.getByText('SW001')).toBeInTheDocument();
+    expect(screen.getByText('SC-WH-001')).toBeInTheDocument();
   });
 
   it('3. Approved Plan Historical Freeze: Preserves historical group items without auto-mutation or deletion', () => {
