@@ -3,6 +3,7 @@ import { registerVccPlanRoutes } from './vccPlans.js';
 import { registerVccWorkOrderRoutes } from './vccWorkOrders.js';
 import { registerVccDashboardRoutes } from './vccDashboard.js';
 import { registerVccNotificationRoutes } from './vccNotifications.js';
+import { assertRowUpdated, runTransition } from './vccTransitions.js';
 import {
   requireVccAccess, requireDccOnly, canReadVccDepartment, vccDeptScopeSql, VCC_DEPT_FORBIDDEN,
   canManageVccAsset, manageableVccDepartments, VCC_ASSET_MANAGE_FORBIDDEN, VCC_ASSET_TRANSFER_FORBIDDEN
@@ -397,12 +398,13 @@ export const registerVccRoutes = (app, { requireAuth, audit }) => {
       return c.json({ error: 'ไม่สามารถปลดออกกลุ่มเครื่องมือได้ เนื่องจากยังมีเครื่องมือลูกที่ใช้งานอยู่ (ACTIVE)' }, 409);
     }
 
-    await db.batch([
+    const conflict = await runTransition(c, db, [
       db.prepare(
         `UPDATE vcc_assets
          SET status = 'RETIRED', retired_reason = ?, retired_at = ${NOW}, retired_by = ?, updated_at = ${NOW}, updated_by = ?
-         WHERE id = ?`
-      ).bind(reason, user.id, user.id, id),
+         WHERE id = ? AND status = ?`
+      ).bind(reason, user.id, user.id, id, before.status),
+      assertRowUpdated(db),
       audit(db, user.id, 'VCC_ASSET_RETIRED', {
         asset_id: id,
         asset_code: before.asset_code,
@@ -413,6 +415,7 @@ export const registerVccRoutes = (app, { requireAuth, audit }) => {
         impact
       })
     ]);
+    if (conflict) return conflict;
 
     return c.json({ asset: await fetchAsset(db, id) });
   });
@@ -429,13 +432,17 @@ export const registerVccRoutes = (app, { requireAuth, audit }) => {
     if (!before) return c.json({ error: 'ไม่พบเครื่องมือ' }, 404);
     if (!canManageVccAsset(user, before.department)) return c.json(VCC_ASSET_MANAGE_FORBIDDEN, 403);
     if (before.status !== 'RETIRED') return c.json({ error: 'เครื่องมือนี้ไม่ได้อยู่ในสถานะปลดออก' }, 409);
+    const openNc = await db.prepare("SELECT 1 FROM vcc_work_orders WHERE asset_id = ? AND nc_status = 'OPEN' LIMIT 1").bind(id).first();
+    if (openNc) return c.json({ error: 'เครื่องมือยังมี NC เปิดอยู่ ต้องจัดการและอนุมัติปลดระงับก่อนนำกลับมาใช้งาน' }, 409);
 
-    await db.batch([
+    const conflict = await runTransition(c, db, [
       db.prepare(
         `UPDATE vcc_assets
          SET status = 'ACTIVE', retired_reason = NULL, retired_at = NULL, retired_by = NULL, updated_at = ${NOW}, updated_by = ?
-         WHERE id = ?`
-      ).bind(user.id, id),
+         WHERE id = ? AND status = 'RETIRED'
+           AND NOT EXISTS (SELECT 1 FROM vcc_work_orders WHERE asset_id = ? AND nc_status = 'OPEN')`
+      ).bind(user.id, id, id),
+      assertRowUpdated(db),
       audit(db, user.id, 'VCC_ASSET_REACTIVATED', {
         asset_id: id,
         asset_code: before.asset_code,
@@ -445,6 +452,7 @@ export const registerVccRoutes = (app, { requireAuth, audit }) => {
         after: { status: 'ACTIVE' }
       })
     ]);
+    if (conflict) return conflict;
 
     return c.json({ asset: await fetchAsset(db, id) });
   });

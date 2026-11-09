@@ -2,6 +2,8 @@ import { requireVccAccess, requireDccOnly, canReadAllVccDepartments, canReadVccD
 import { isUserAuthorizedForPlanDept, getUserDepartments } from './vccPlans.js';
 import { getThresholds } from './approval.js';
 import { readWorkOrderSettings } from './vccWorkOrders.js';
+import { loadLatestAcceptedCertificates } from './vccCertificates.js';
+import { withAssetSnapshot } from './vccRecordSnapshots.js';
 
 // Same range the plan list accepts. Empty means "use the current year in Bangkok" (a plain getFullYear() lags a day behind New Year there).
 const parseYearParam = (raw) => {
@@ -189,20 +191,24 @@ export const registerVccDashboardRoutes = (app, { requireAuth, audit }) => {
 
     const notificationSettings = await loadNotificationSettings(db);
 
-    const { results: rawAssetRows } = await db.prepare('SELECT id, asset_code, name, department, is_group, group_nature, status, location, asset_type FROM vcc_assets').all();
-    const assetRows = rawAssetRows.filter((a) => isDeptAllowed(a.department));
+    const scope = vccDeptScopeSql(user, 'a.department');
+    const conditions = [...(scope ? [scope.sql] : []), ...(queryDept ? ['a.department = ?'] : [])];
+    const args = [...(scope?.args || []), ...(queryDept ? [queryDept] : [])];
+    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+    const { results: assetRows } = await db.prepare(`SELECT id, asset_code, name, department, is_group, group_nature, status, location, asset_type FROM vcc_assets a ${where}`).bind(...args).all();
 
-    const { results: rawWoRows } = await db
+    const { results: woRows } = await db
       .prepare(
         `SELECT w.*, a.asset_code, a.name AS asset_name, a.department, a.status AS asset_status,
                 a.location, a.asset_type, pi.frequency_label
          FROM vcc_work_orders w
          JOIN vcc_assets a ON a.id = w.asset_id
          LEFT JOIN vcc_annual_plan_items pi ON pi.id = w.plan_item_id
+          ${where}
          ORDER BY w.due_date ASC, w.wo_code ASC`
       )
+      .bind(...args)
       .all();
-    const woRows = rawWoRows.filter((w) => isDeptAllowed(w.department));
 
     const onHoldAssetIds = new Set(woRows.filter((w) => w.nc_status === 'OPEN').map((w) => w.asset_id));
     for (const a of assetRows) {
@@ -216,7 +222,8 @@ export const registerVccDashboardRoutes = (app, { requireAuth, audit }) => {
     const assetsWithOverdue = new Set();
     const assetsWithDueSoon = new Set();
     const assetsCompletedPass = new Set();
-    const latestCertPerAsset = new Map();
+    const latestCertificates = await loadLatestAcceptedCertificates(db, conditions.length ? { sql: conditions.join(' AND '), args } : null);
+    const latestCertPerAsset = new Map(latestCertificates.map((row) => [row.asset_id, row]));
 
     // Non-overlapping Due Soon buckets (0-7, 8-15, 16-30 days)
     let due0To7Days = 0;
@@ -262,22 +269,6 @@ export const registerVccDashboardRoutes = (app, { requireAuth, audit }) => {
           message: 'ระงับใช้งานชั่วคราว (ON_HOLD) — ผลตรวจไม่ผ่านเกณฑ์ รอผู้อนุมัติ L5+ ประเมินผลกระทบ',
           recommended_action: 'ผู้มีอำนาจระดับ L5+ ทำการประเมินผลกระทบย้อนหลังและดำเนินการปลดระงับ หรือเปิดใบสั่งงานแก้ไข'
         });
-      }
-
-      // Track latest certificate validity per asset
-      if (wo.certificate_valid_until) {
-        const existingCert = latestCertPerAsset.get(wo.asset_id);
-        if (!existingCert || (wo.performed_at && (!existingCert.performed_at || wo.performed_at > existingCert.performed_at))) {
-          latestCertPerAsset.set(wo.asset_id, {
-            asset_id: wo.asset_id,
-            asset_code: wo.asset_code,
-            asset_name: wo.asset_name,
-            department: wo.department,
-            certificate_no: wo.certificate_no,
-            certificate_valid_until: wo.certificate_valid_until,
-            performed_at: wo.performed_at
-          });
-        }
       }
 
       if (wo.status === 'CLOSED') {
@@ -548,13 +539,16 @@ export const registerVccDashboardRoutes = (app, { requireAuth, audit }) => {
       actual_closed: 0
     }));
 
-    for (const plan of approvedPlans) {
-      const { results: planItems } = await db
-        .prepare('SELECT id, planned_months FROM vcc_annual_plan_items WHERE plan_id = ?')
-        .bind(plan.id)
-        .all();
-
-      for (const item of planItems) {
+    const planScope = vccDeptScopeSql(user, 'p.department');
+    const planConditions = [...(planScope ? [planScope.sql] : []), ...(queryDept ? ['p.department = ?'] : [])];
+    const { results: planItems } = await db.prepare(`
+      SELECT i.planned_months FROM vcc_annual_plan_items i
+      JOIN vcc_annual_plans p ON p.id = i.plan_id
+      WHERE p.plan_year = ? AND p.status = 'APPROVED'
+        AND (p.effective_status = 'CURRENT' OR (p.effective_status IS NULL AND p.is_current = 1))
+        ${planConditions.length ? `AND ${planConditions.join(' AND ')}` : ''}
+    `).bind(year, ...(planScope?.args || []), ...(queryDept ? [queryDept] : [])).all();
+    for (const item of planItems) {
         let months = [];
         try {
           months = JSON.parse(item.planned_months || '[]');
@@ -564,7 +558,6 @@ export const registerVccDashboardRoutes = (app, { requireAuth, audit }) => {
         for (const m of months) {
           if (m >= 1 && m <= 12) monthlyComparison[m - 1].planned += 1;
         }
-      }
     }
 
     for (const wo of woRows) {
@@ -1284,13 +1277,13 @@ export const registerVccDashboardRoutes = (app, { requireAuth, audit }) => {
     ];
 
     const lines = [header.map(csvCell).join(',')];
-    for (const w of results) {
+    for (const w of results.map(withAssetSnapshot)) {
       lines.push(
         [
           w.wo_code,
           w.asset_code,
           w.asset_name,
-          w.department,
+          w.asset_snapshot?.department || w.department,
           w.provider_name,
           w.planned_month || '',
           w.original_due_date,

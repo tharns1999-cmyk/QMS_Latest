@@ -1,6 +1,8 @@
 import { requireVccAccess, requireDccOnly, canReadAllVccDepartments } from './vccAuth.js';
 import { isUserAuthorizedForPlanDept, getUserDepartments } from './vccPlans.js';
 import { DEFAULT_NOTIFICATION_SETTINGS } from './vccDashboard.js';
+import { loadLatestAcceptedCertificates } from './vccCertificates.js';
+import { assertRowUpdated, runTransition } from './vccTransitions.js';
 
 const NOW = "strftime('%Y-%m-%dT%H:%M:%SZ', 'now')";
 
@@ -95,7 +97,7 @@ export const runVccNotificationSweep = async (db, options = {}) => {
     SELECT wo.*, a.asset_code, a.name AS asset_name, a.department AS asset_dept, a.location AS asset_location
     FROM vcc_work_orders wo
     JOIN vcc_assets a ON a.id = wo.asset_id
-    WHERE wo.status IN ('SCHEDULED', 'IN_PROGRESS', 'PENDING_REVIEW', 'DRAFT')
+    WHERE wo.status IN ('OPEN', 'SCHEDULED', 'IN_PROGRESS', 'PENDING_REVIEW', 'REJECTED')
   `).all();
 
   for (const wo of (activeWos || [])) {
@@ -263,16 +265,7 @@ export const runVccNotificationSweep = async (db, options = {}) => {
   // ─────────────────────────────────────────────────────────────────────────────
   // 2. CERTIFICATE EXPIRATION: Independent Lifecycle (Assets & Closed WOs)
   // ─────────────────────────────────────────────────────────────────────────────
-  const { results: certAssets } = await db.prepare(`
-    SELECT a.id AS asset_id, a.asset_code, a.name AS asset_name, a.department,
-           wo.certificate_no, wo.certificate_valid_until, wo.id AS wo_id
-    FROM vcc_assets a
-    JOIN vcc_work_orders wo ON wo.asset_id = a.id
-    WHERE a.status != 'RETIRED' AND wo.status = 'CLOSED' AND wo.result_status = 'PASS'
-      AND wo.certificate_valid_until IS NOT NULL
-    GROUP BY a.id
-    HAVING wo.certificate_valid_until = MAX(wo.certificate_valid_until)
-  `).all();
+  const certAssets = await loadLatestAcceptedCertificates(db);
 
   for (const row of (certAssets || [])) {
     const validUntil = String(row.certificate_valid_until).slice(0, 10);
@@ -662,7 +655,7 @@ export const registerVccNotificationRoutes = (app, { requireAuth, audit }) => {
 
     // Rule: "Acknowledgement ห้ามเปลี่ยนสถานะ Work Order, Asset, NC หรือ Approval"
     // We update ONLY vcc_notifications
-    const [ackResult] = await db.batch([
+    const conflict = await runTransition(c, db, [
       db.prepare(`
         UPDATE vcc_notifications
         SET status = 'ACKNOWLEDGED',
@@ -672,6 +665,7 @@ export const registerVccNotificationRoutes = (app, { requireAuth, audit }) => {
             updated_at = ${NOW}
         WHERE id = ? AND status = 'PENDING'
       `).bind(user.id, note, id),
+      assertRowUpdated(db),
       audit(db, user.id, 'VCC_NOTIFICATION_ACKNOWLEDGED', {
         notification_id: id,
         notification_type: notif.notification_type,
@@ -683,9 +677,7 @@ export const registerVccNotificationRoutes = (app, { requireAuth, audit }) => {
       })
     ]);
     // Lost a race (swept/acknowledged between the read above and the write)
-    if (!ackResult.meta?.changes) {
-      return c.json({ error: 'สถานะการแจ้งเตือนเปลี่ยนไปแล้ว กรุณารีเฟรชแล้วลองอีกครั้ง' }, 409);
-    }
+    if (conflict) return conflict;
 
     const updated = await db.prepare(`
       SELECT n.*, a.asset_code, a.name AS asset_name, u.name AS acknowledged_by_name

@@ -31,7 +31,7 @@ describe('VCC Phase 1-2: Automatic Work Order Generation, Lifecycle & Idempotenc
       env.DB.prepare("INSERT OR IGNORE INTO departments (code, name_th, status) VALUES ('AUTOQC', 'ควบคุมคุณภาพ AutoWO', 'ACTIVE')"),
       env.DB.prepare("INSERT OR IGNORE INTO departments (code, name_th, status) VALUES ('RECONQC', 'ควบคุมคุณภาพ ReconWO', 'ACTIVE')"),
       ...[
-        ['AUTO-PREP', 2, 1], // Requester / Preparer (L2, DCC)
+        ['AUTO-PREP', 4, 1], // Requester / Preparer (L4, DCC)
         ['AUTO-REV4', 4, 1], // Reviewer (L4, DCC)
         ['AUTO-APP6', 6, 1]  // Approver (L6, DCC)
       ].map(([id, level, dcc]) =>

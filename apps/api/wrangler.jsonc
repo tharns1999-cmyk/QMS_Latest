@@ -2,6 +2,7 @@
   "name": "qms-api",
   "main": "src/index.js",
   "compatibility_date": "2026-10-01",
+  "rules": [{ "type": "Data", "globs": ["**/vcc-fonts/*.ttf"], "fallthrough": true }],
   "d1_databases": [
     {
       "binding": "DB",

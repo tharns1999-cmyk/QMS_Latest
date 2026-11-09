@@ -91,6 +91,7 @@ describe('VCC Phase 3: Work Orders, Execution, Review, Close & Hold/NC Control',
     const planRes = await call('POST', '/api/vcc/plans', 'VWO-DCC', {
       plan_year: 2026,
       department: 'VWOQC',
+      document_code: 'VCC-PLAN-VWOQC',
       title: '[ข้อมูลทดสอบ] แผนปี 2026 WO'
     });
     const planId = planRes.body.plan.id;

@@ -26,6 +26,21 @@ describe('VCC Multi-Department Access & Approval Workflow (RBAC & SoD)', () => {
     return { status: res.status, body: await res.json() };
   };
 
+  const completeTestScope = async (planId, who, targetId, months) => {
+    const detail = await call('GET', `/api/vcc/plans/${planId}`, who);
+    for (const item of detail.body.items) {
+      const saved = await call('POST', `/api/vcc/plans/${planId}/items`, who, {
+        asset_id: item.asset_id,
+        provider_name: 'ทวนสอบภายใน',
+        planned_months: item.asset_id === targetId ? months : [],
+        responsible_dept: 'QC',
+        remarks: item.asset_id === targetId ? '' : '[ข้อมูลทดสอบ] ไม่วางแผนในกรณีทดสอบนี้'
+      });
+      expect([200, 201]).toContain(saved.status);
+    }
+    return (await call('GET', `/api/vcc/plans/${planId}`, who)).body.items.find((item) => item.asset_id === targetId);
+  };
+
   beforeAll(async () => {
     proxy = await getPlatformProxy({ persist: { path: '.wrangler/test/v3' } });
     env = { ...proxy.env, JWT_SECRET: 'test-secret' };
@@ -208,7 +223,7 @@ describe('VCC Multi-Department Access & Approval Workflow (RBAC & SoD)', () => {
       responsible_dept: 'QC'
     });
     expect(addItemRes.status).toBe(201);
-    const planItemId = addItemRes.body.items[0].id;
+    const planItemId = (await completeTestScope(planId, 'QC-STAFF', assetId, [3, 9])).id;
 
     // Submit plan
     const submitRes = await call('POST', `/api/vcc/plans/${planId}/submit`, 'QC-STAFF', {});
@@ -358,17 +373,8 @@ describe('VCC Multi-Department Access & Approval Workflow (RBAC & SoD)', () => {
     expect(planRes.status).toBe(201);
     const planId = planRes.body.plan.id;
 
-    // Add plan items for all eligible items so submission gate passes
-    const planDetailRes = await call('GET', `/api/vcc/plans/${planId}`, 'QC-L4-CREATOR');
-    for (const item of (planDetailRes.body.items || [])) {
-      await call('POST', `/api/vcc/plans/${planId}/items`, 'QC-L4-CREATOR', {
-        asset_id: item.asset_id,
-        provider_name: 'ทวนสอบภายใน',
-        planned_months: [5, 11],
-        responsible_dept: 'QC',
-        remarks: 'วางแผนรอบทวนสอบเรียบร้อย'
-      });
-    }
+    // Keep each register item explicit, including instruments paused by earlier test cases.
+    await completeTestScope(planId, 'QC-L4-CREATOR', assetId, [5, 11]);
 
     // 3. QC L4 Creator submits plan -> status becomes PENDING_REVIEW
     const submitRes = await call('POST', `/api/vcc/plans/${planId}/submit`, 'QC-L4-CREATOR', {});
@@ -400,7 +406,7 @@ describe('VCC Multi-Department Access & Approval Workflow (RBAC & SoD)', () => {
     const reviewTask = pdQcTasks.body.tasks.find(t => t.planId === planId && t.type === 'Review');
     expect(reviewTask).toBeDefined();
     expect(reviewTask.department).toBe('QC');
-    expect(reviewTask.required_approval_level).toBe(4);
+    expect(reviewTask.required_approval_level).toBe(5);
 
     // 5. PD-QC-L5-REV reviews the plan successfully -> PENDING_APPROVAL
     const reviewRes = await call('POST', `/api/vcc/plans/${planId}/review`, 'PD-QC-L5-REV', { comment: 'ทบทวนผ่านโดยผู้ชำนาญการ PD สังกัดร่วม QC' });

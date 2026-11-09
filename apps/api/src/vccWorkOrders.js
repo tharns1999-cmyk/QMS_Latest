@@ -1,23 +1,11 @@
 import { getThresholds } from './approval.js';
 import { computeDueDateForMonth, isUserAuthorizedForPlanDept, getUserDepartments } from './vccPlans.js';
 import { requireVccAccess, requireDccOnly, canReadVccDepartment, vccDeptScopeSql, VCC_DEPT_FORBIDDEN, canManageVccAsset } from './vccAuth.js';
+import { assertRowUpdated, runTransition, STATE_CHANGED } from './vccTransitions.js';
+import { makeAssetSnapshot, withAssetSnapshot } from './vccRecordSnapshots.js';
 
 const NOW = "strftime('%Y-%m-%dT%H:%M:%SZ', 'now')";
 
-// Goes right after a status-guarded UPDATE inside db.batch(): when that UPDATE matched no row (a double click, or another
-// request changed the state first) json() raises, D1 rolls the whole batch back, so no second or contradicting audit row is kept.
-const assertRowUpdated = (db) => db.prepare("SELECT json(CASE WHEN changes() = 0 THEN 'stale' ELSE '1' END)");
-const STATE_CHANGED = { error: 'สถานะของรายการนี้ถูกเปลี่ยนไปแล้ว (อาจกดซ้ำหรือมีผู้อื่นดำเนินการก่อน) กรุณารีเฟรชหน้าจอ' };
-// Runs a state-transition batch; returns a 409 response when the guard fired, otherwise null.
-const runTransition = async (c, db, statements) => {
-  try {
-    await db.batch(statements);
-    return null;
-  } catch (err) {
-    if (/malformed JSON/.test(String(err?.message))) return c.json(STATE_CHANGED, 409);
-    throw err;
-  }
-};
 const DCC_ONLY = { error: 'เฉพาะเจ้าหน้าที่ DCC เท่านั้นที่เข้าถึงระบบ VCC ได้' };
 
 const WORK_ORDER_SETTINGS_KEY = 'vcc_work_order_settings';
@@ -91,6 +79,9 @@ const fetchWorkOrder = async (db, id) => {
       a.asset_code,
       a.name AS asset_name,
       a.asset_type,
+      a.serial_no,
+      a.model,
+      a.brand,
       a.department,
       a.location,
       a.is_group,
@@ -151,11 +142,11 @@ const fetchWorkOrder = async (db, id) => {
     childAssets = results || [];
   }
 
-  return {
+  return withAssetSnapshot({
     ...wo,
     child_assets: Array.isArray(childAssets) ? childAssets : [],
     is_legacy_without_snapshot: isLegacyWithoutSnapshot
-  };
+  });
 };
 
 export const generateWorkOrdersForApprovedPlan = async (db, planId, actorId, audit) => {
@@ -357,7 +348,7 @@ export const buildWorkOrderReconciliationStatements = async (db, planId, actorId
   const { results: existingWos } = await db
     .prepare(`
       SELECT id, wo_code, cycle_id, cycle_key, plan_id, plan_item_id, asset_id, planned_month, due_date,
-             original_due_date, scheduled_date, baseline_planned_date, required_due_date, reschedule_reason, status, result_status
+             original_due_date, scheduled_date, baseline_planned_date, required_due_date, reschedule_reason, status, result_status, nc_status
       FROM vcc_work_orders
       WHERE status != 'CANCELLED'
         AND (plan_id = ? OR ((plan_year = ? OR substr(due_date, 1, 4) = ?) AND asset_id IN (SELECT asset_id FROM vcc_annual_plan_items WHERE plan_id = ?)))
@@ -373,6 +364,7 @@ export const buildWorkOrderReconciliationStatements = async (db, planId, actorId
   }
 
   // Controlled cancellation for cycles removed in this revision
+  const cancelledWorkOrderIds = new Set();
   for (const c of (existingCycles || [])) {
     const cycleIdentity = c.initial_cycle_id || c.id;
     if (!activeCycleIdsInNewRevision.has(cycleIdentity)) {
@@ -380,6 +372,9 @@ export const buildWorkOrderReconciliationStatements = async (db, planId, actorId
       // Historical Evidence Protection: NEVER cancel or modify CLOSED work orders
       if (existingWo && existingWo.status === 'CLOSED') {
         continue;
+      }
+      if (existingWo?.nc_status === 'OPEN') {
+        return { error: `ไม่สามารถตัดรอบสอบเทียบของใบสั่งงาน ${existingWo.wo_code} ที่ยังมี NC เปิดอยู่ กรุณาจัดการ NC ก่อนปรับแผน`, batchStatements: [], generated: [], reconciled: [], skipped: [] };
       }
       if (c.cycle_status !== 'CANCELLED' && c.cycle_status !== 'CLOSED') {
         cycleBatchInserts.push(
@@ -392,7 +387,8 @@ export const buildWorkOrderReconciliationStatements = async (db, planId, actorId
           `).bind(actorId, c.id)
         );
       }
-      if (existingWo && existingWo.status !== 'CLOSED' && existingWo.status !== 'CANCELLED') {
+      if (existingWo && existingWo.status !== 'CLOSED' && existingWo.status !== 'CANCELLED' && !cancelledWorkOrderIds.has(existingWo.id)) {
+        cancelledWorkOrderIds.add(existingWo.id);
         cycleBatchInserts.push(
           db.prepare(`
             UPDATE vcc_work_orders
@@ -403,8 +399,9 @@ export const buildWorkOrderReconciliationStatements = async (db, planId, actorId
                 cancelled_at = ${NOW},
                 updated_at = ${NOW},
                 updated_by = ?
-            WHERE id = ? AND status != 'CLOSED' AND status != 'CANCELLED'
-          `).bind(actorId, actorId, existingWo.id)
+             WHERE id = ? AND status != 'CLOSED' AND status != 'CANCELLED' AND nc_status IS NOT 'OPEN'
+           `).bind(actorId, actorId, existingWo.id),
+          assertRowUpdated(db)
         );
       }
     }
@@ -862,7 +859,7 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
       ORDER BY w.due_date ASC, w.wo_code ASC
     `).bind(...params).all();
 
-    return c.json({ workOrders: results });
+    return c.json({ workOrders: results.map(withAssetSnapshot) });
   });
 
   app.get('/api/vcc/work-orders/:id', requireAuth, requireVccAccess, async (c) => {
@@ -1713,7 +1710,7 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
       batchStmts.push(
         db.prepare(`
           UPDATE vcc_assets
-          SET status = 'ON_HOLD',
+          SET status = CASE WHEN status = 'RETIRED' THEN 'RETIRED' ELSE 'ON_HOLD' END,
               hold_started_at = COALESCE(hold_started_at, ${NOW}),
               updated_at = ${NOW}
           WHERE id = ?
@@ -1782,10 +1779,11 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
             reviewed_at = ${NOW},
             review_comment = ?,
             child_assets_snapshot = COALESCE(?, child_assets_snapshot),
+            asset_snapshot = ?,
             updated_at = ${NOW},
             updated_by = ?
         WHERE id = ? AND status = 'PENDING_REVIEW' AND result_status IS NOT 'INCONCLUSIVE'
-      `).bind(user.id, comment, childAssetsSnapshot, user.id, id),
+      `).bind(user.id, comment, childAssetsSnapshot, makeAssetSnapshot(existing), user.id, id),
       assertRowUpdated(db),
       audit(db, user.id, 'VCC_WO_APPROVED', {
         wo_id: id,
@@ -1930,7 +1928,7 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
         SET status = 'ACTIVE',
             hold_started_at = NULL,
             updated_at = ${NOW}
-        WHERE id = ?
+        WHERE id = ? AND status = 'ON_HOLD'
           AND NOT EXISTS (
             SELECT 1 FROM vcc_work_orders
             WHERE asset_id = ? AND id != ? AND nc_status = 'OPEN'
@@ -2180,66 +2178,80 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
     const nextVersion = (latestVersionRow?.max_v || 0) + 1;
     const certRecordId = crypto.randomUUID();
 
-    await db.batch([
-      db.prepare(`
-        INSERT INTO vcc_work_order_certificates (
-          id, work_order_id, version, file_key, file_name, file_size, file_hash,
-          certificate_no, issue_date, valid_until, uploaded_by, uploaded_at, change_reason, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${NOW}, ?, ${NOW})
-      `).bind(
-        certRecordId,
-        existing.id,
-        nextVersion,
-        key,
-        fileName,
-        file.byteLength,
-        fileHash,
-        certificateNo,
-        issueDate,
-        validUntil,
-        user.id,
-        changeReason
-      ),
-      db.prepare(`
-        UPDATE vcc_work_orders
-        SET certificate_file_key = ?,
-            certificate_file_name = ?,
-            certificate_file_size = ?,
-            certificate_file_hash = ?,
-            certificate_version = ?,
-            certificate_uploaded_at = ${NOW},
-            certificate_uploaded_by = ?,
-            certificate_no = COALESCE(?, certificate_no),
-            certificate_issue_date = COALESCE(?, certificate_issue_date),
-            certificate_valid_until = COALESCE(?, certificate_valid_until),
-            updated_at = ${NOW},
-            updated_by = ?
-        WHERE id = ?
-      `).bind(
-        key,
-        fileName,
-        file.byteLength,
-        fileHash,
-        nextVersion,
-        user.id,
-        certificateNo,
-        issueDate,
-        validUntil,
-        user.id,
-        existing.id
-      ),
-      audit(db, user.id, 'VCC_WO_CERTIFICATE_ATTACHED', {
-        wo_id: existing.id,
-        wo_code: existing.wo_code,
-        asset_id: existing.asset_id,
-        version: nextVersion,
-        file_key: key,
-        file_name: fileName,
-        file_size: file.byteLength,
-        file_hash: fileHash,
-        certificate_no: certificateNo
-      })
-    ]);
+    let conflict;
+    try {
+      conflict = await runTransition(c, db, [
+        db.prepare(`
+          INSERT INTO vcc_work_order_certificates (
+            id, work_order_id, version, file_key, file_name, file_size, file_hash,
+            certificate_no, issue_date, valid_until, uploaded_by, uploaded_at, change_reason, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${NOW}, ?, ${NOW})
+        `).bind(
+          certRecordId,
+          existing.id,
+          nextVersion,
+          key,
+          fileName,
+          file.byteLength,
+          fileHash,
+          certificateNo,
+          issueDate,
+          validUntil,
+          user.id,
+          changeReason
+        ),
+        db.prepare(`
+          UPDATE vcc_work_orders
+          SET certificate_file_key = ?,
+              certificate_file_name = ?,
+              certificate_file_size = ?,
+              certificate_file_hash = ?,
+              certificate_version = ?,
+              certificate_uploaded_at = ${NOW},
+              certificate_uploaded_by = ?,
+              certificate_no = COALESCE(?, certificate_no),
+              certificate_issue_date = COALESCE(?, certificate_issue_date),
+              certificate_valid_until = COALESCE(?, certificate_valid_until),
+              updated_at = ${NOW},
+              updated_by = ?
+          WHERE id = ? AND status = ? AND certificate_file_key IS ?
+        `).bind(
+          key,
+          fileName,
+          file.byteLength,
+          fileHash,
+          nextVersion,
+          user.id,
+          certificateNo,
+          issueDate,
+          validUntil,
+          user.id,
+          existing.id,
+          existing.status,
+          existing.certificate_file_key
+        ),
+        assertRowUpdated(db),
+        audit(db, user.id, 'VCC_WO_CERTIFICATE_ATTACHED', {
+          wo_id: existing.id,
+          wo_code: existing.wo_code,
+          asset_id: existing.asset_id,
+          version: nextVersion,
+          file_key: key,
+          file_name: fileName,
+          file_size: file.byteLength,
+          file_hash: fileHash,
+          certificate_no: certificateNo
+        })
+      ]);
+    } catch (err) {
+      if (/UNIQUE.*vcc_work_order_certificates/.test(String(err?.message))) conflict = c.json(STATE_CHANGED, 409);
+      else throw err;
+    }
+    if (conflict) {
+      // This UUID key was never committed; accepted certificate evidence is untouched.
+      try { await c.env.FILES.delete(key); } catch (cleanupErr) { console.error('Uncommitted certificate cleanup failed:', cleanupErr); }
+      return conflict;
+    }
 
     return c.json({ workOrder: await fetchWorkOrder(db, id), certificate_version: nextVersion, file_hash: fileHash });
   });
@@ -2661,7 +2673,7 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
       batchStmts.push(
         db.prepare(`
           UPDATE vcc_assets
-          SET status = 'ON_HOLD',
+          SET status = CASE WHEN status = 'RETIRED' THEN 'RETIRED' ELSE 'ON_HOLD' END,
               hold_started_at = COALESCE(hold_started_at, ${NOW}),
               updated_at = ${NOW}
           WHERE id = ?
@@ -2731,7 +2743,8 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
       return c.json({ error: `ผู้มีอำนาจปฏิเสธคำขอแก้ไขต้องมีระดับอนุมัติ L${requiredLevel} ขึ้นไป` }, 403);
     }
 
-    const reviewComment = body.comment || body.review_comment || body.reason || null;
+    const reviewComment = String(body.comment || body.review_comment || body.reason || '').trim();
+    if (!reviewComment) return c.json({ error: 'กรุณาระบุเหตุผลที่ปฏิเสธคำขอแก้ไข' }, 400);
 
     const conflict = await runTransition(c, db, [
       db.prepare(`

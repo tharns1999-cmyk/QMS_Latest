@@ -260,7 +260,7 @@ describe('VCC Phase 1 Step 3: Backend Workflow & Approval Security', () => {
     }
 
     const submitRes = await call('POST', `/api/vcc/plans/${planId}/submit`, 'QC-PREP-L4', {});
-    expect(submitRes.status).toBe(200);
+    expect(submitRes.status, JSON.stringify(submitRes.body)).toBe(200);
 
     // QA-REV-L5 is L5 but NOT the assigned reviewer for QC (which is PD-REV-L5)
     const unauthReview = await call('POST', `/api/vcc/plans/${planId}/review`, 'QA-REV-L5', {
@@ -550,11 +550,13 @@ describe('VCC Phase 1 Step 3: Backend Workflow & Approval Security', () => {
       ) ON CONFLICT(id) DO NOTHING
     `).run();
 
-    // 1. Create plan WITHOUT document_code (Pure Electronic Mode)
+    // 1. An unmapped department needs an explicit controlled digital reference; paper FM codes remain optional.
+    const unmapped = await call('POST', '/api/vcc/plans', 'QA-PREP-L4', { plan_year: 2097, department: 'QA' });
+    expect(unmapped.status).toBe(422);
     const planRes = await call('POST', '/api/vcc/plans', 'QA-PREP-L4', {
       plan_year: 2097,
-      department: 'QA'
-      // document_code is omitted on purpose
+      department: 'QA',
+      document_code: 'VCC-PLAN-QA'
     });
     expect(planRes.status).toBe(201);
     const plan = planRes.body.plan;
@@ -573,6 +575,19 @@ describe('VCC Phase 1 Step 3: Backend Workflow & Approval Security', () => {
       calibration_points: 'Holmium Oxide Wavelength'
     });
     expect(itemRes.status).toBe(201);
+
+    // Other suites share the register: explicitly justify their instruments instead of inventing schedules.
+    const scope = await call('GET', `/api/vcc/plans/${plan.id}`, 'QA-PREP-L4');
+    for (const item of scope.body.items.filter((row) => row.asset_id !== 'ASSET-QA-001')) {
+      const saved = await call('POST', `/api/vcc/plans/${plan.id}/items`, 'QA-PREP-L4', {
+        asset_id: item.asset_id,
+        provider_name: 'External Lab',
+        responsible_dept: 'QA',
+        planned_months: [],
+        remarks: '[ข้อมูลทดสอบ] เครื่องมือจากกรณีทดสอบอื่น ไม่มีรอบปฏิบัติงานในกรณีนี้'
+      });
+      expect(saved.status, JSON.stringify(saved.body)).toBe(201);
+    }
 
     // 3. Submit plan (Maker-checker with QA-REV-L5 and MGT-APP-L6)
     const submitRes = await call('POST', `/api/vcc/plans/${plan.id}/submit`, 'QA-PREP-L4', {

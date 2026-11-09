@@ -42,6 +42,7 @@ describe('checkDecisionRights', () => {
 describe('approval matrix API', () => {
   let proxy;
   let env;
+  let originalEntries = [];
   const tokens = {};
   const call = (path, token, init = {}) => app.request(path, {
     ...init,
@@ -51,6 +52,7 @@ describe('approval matrix API', () => {
   beforeAll(async () => {
     proxy = await getPlatformProxy({ persist: { path: '.wrangler/test/v3' } });
     env = { ...proxy.env, JWT_SECRET: 'test-secret' };
+    originalEntries = (await env.DB.prepare("SELECT * FROM approval_matrix WHERE doc_type IN ('WI', 'SD')").all()).results;
     const hash = await hashPassword('matrix-pass');
     await env.DB.batch([
       env.DB.prepare(`INSERT INTO users (id, name, email, password_hash, role, approval_level, primary_department, departments, is_dcc)
@@ -64,7 +66,20 @@ describe('approval matrix API', () => {
     }
   });
 
-  afterAll(() => proxy?.dispose());
+  afterAll(async () => {
+    try {
+      if (originalEntries.length) {
+        await env.DB.batch(originalEntries.map((entry) => env.DB.prepare(`
+          UPDATE approval_matrix SET min_requester_level = ?, required_reviewer_level = ?,
+            required_approver_level = ?, obsolete_approver_level = ?, updated_by = ?, updated_at = ?
+          WHERE doc_type = ?
+        `).bind(entry.min_requester_level, entry.required_reviewer_level, entry.required_approver_level,
+          entry.obsolete_approver_level, entry.updated_by, entry.updated_at, entry.doc_type)));
+      }
+    } finally {
+      await proxy?.dispose();
+    }
+  });
 
   it('serves the seeded matrix to any signed-in user', async () => {
     const res = await call('/api/approval-matrix', tokens.pd);
