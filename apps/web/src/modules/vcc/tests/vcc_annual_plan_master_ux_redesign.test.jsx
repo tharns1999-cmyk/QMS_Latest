@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import AnnualPlanRegisterTable from '../components/AnnualPlanRegisterTable';
 import AnnualPlanWorkspaceHeader from '../components/AnnualPlanWorkspaceHeader';
@@ -166,7 +166,7 @@ describe('VCC Master UX/UI Redesign — 2-Level Architecture & Controlled Revisi
     expect(onBackToRegister).toHaveBeenCalledTimes(1);
   });
 
-  it('4. LEVEL 2: Clearly separates Plan Revision from Form Template Revision', () => {
+  it('4. LEVEL 2: Displays clean paperless revision badge without residual form codes or template tags', () => {
     const approvedPlan = mockPlans[0];
     render(
       <AnnualPlanWorkspaceHeader
@@ -179,8 +179,8 @@ describe('VCC Master UX/UI Redesign — 2-Level Architecture & Controlled Revisi
 
     // Plan Revision badge
     expect(screen.getByText('Rev.01')).toBeInTheDocument();
-    // Template Revision badge
-    expect(screen.getByText('Template Rev.01')).toBeInTheDocument();
+    // Residual form codes and template tags are strictly omitted
+    expect(screen.queryByText(/FM-QC-46|VCC-PLAN-QC|Template Rev/)).not.toBeInTheDocument();
   });
 
   it('5. LEVEL 2: Displays prominent primary "สร้างฉบับแก้ไขใหม่ (Revise Plan)" CTA for Effective Plan', () => {
@@ -218,8 +218,8 @@ describe('VCC Master UX/UI Redesign — 2-Level Architecture & Controlled Revisi
     );
 
     // Explains source protection
-    expect(screen.getByText(/VCC-PLAN-QC Rev\.01/)).toBeInTheDocument();
-    expect(screen.getByText(/VCC-PLAN-QC Rev\.02/)).toBeInTheDocument();
+    expect(screen.getByText('Rev.01')).toBeInTheDocument();
+    expect(screen.getByText(/Rev\.02 \(ร่างแผน\)/)).toBeInTheDocument();
     expect(screen.getByText(/การสร้าง Revision ใหม่จะไม่เปลี่ยนแปลงแผนฉบับปัจจุบัน Rev\.01/)).toBeInTheDocument();
 
     // Mandatory reason field

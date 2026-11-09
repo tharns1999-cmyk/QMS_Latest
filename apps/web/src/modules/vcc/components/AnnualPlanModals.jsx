@@ -369,13 +369,13 @@ export const PlanRevisionModal = ({ open, onClose, plan, reason, setReason, erro
               <div className="flex items-center justify-between">
                 <span className="text-slate-500 font-medium">แผนต้นฉบับ (Source):</span>
                 <span className="font-mono font-bold text-slate-800 bg-white px-2 py-0.5 rounded border border-slate-200">
-                  {plan.document_code || `VCC-PLAN-${plan.department || 'QC'}`} Rev.{plan.revision}
+                  Rev.{plan.revision}
                 </span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-slate-500 font-medium">ฉบับใหม่ที่จะสร้าง (New Revision):</span>
                 <span className="font-mono font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
-                  {plan.document_code || `VCC-PLAN-${plan.department || 'QC'}`} Rev.{String(Number(plan.revision || 1) + 1).padStart(2, '0')} (ร่างแผน)
+                  Rev.{String(Number(plan.revision || 1) + 1).padStart(2, '0')} (ร่างแผน)
                 </span>
               </div>
             </div>

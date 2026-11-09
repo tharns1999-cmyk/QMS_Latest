@@ -18,7 +18,7 @@ import {
   FilePlus,
   ArrowLeft
 } from 'lucide-react';
-import { PLAN_STATUS_OPTIONS, getPlanStatusLabel, getDueDateRuleLabel, formatPlanDocCode } from '../utils/planLabels';
+import { PLAN_STATUS_OPTIONS, getPlanStatusLabel, getDueDateRuleLabel } from '../utils/planLabels';
 import AnnualPlanApprovalChain from './AnnualPlanApprovalChain';
 import AnnualPlanProgressStepper from './AnnualPlanProgressStepper';
 import { formatVccDateTime, toBuddhistYear } from '../utils/vccDateUtils';
@@ -340,19 +340,10 @@ export const AnnualPlanWorkspaceHeader = ({
               {/* Inline Metadata Tags */}
               <div className="flex items-center gap-2 flex-wrap text-xs text-slate-600">
                 <span
-                  className="font-mono font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded border border-slate-200/80 shadow-2xs inline-flex items-center gap-1.5"
+                  className="font-mono font-bold text-slate-800 bg-slate-100 px-2.5 py-0.5 rounded border border-slate-200/80 shadow-2xs"
                   title={`ฉบับแก้ไขแผนงาน (Plan Revision) Rev.${activePlan.revision}`}
                 >
-                  <span>{formatPlanDocCode(activePlan)}</span>
-                  <span className="text-slate-400">·</span>
-                  <span>Rev.{activePlan.revision}</span>
-                </span>
-
-                <span
-                  className="font-mono text-xs text-slate-600 bg-slate-50 px-2 py-0.5 rounded border border-slate-200/60"
-                  title="ฉบับประกาศใช้แบบฟอร์มเอกสาร (Form Template Revision)"
-                >
-                  Template Rev.{activePlan.form_template_revision || activePlan.template_revision || '01'}
+                  Rev.{activePlan.revision}
                 </span>
 
                 {activePlan.form_issue_date && (
