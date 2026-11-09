@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import useStore from '../../../store/useStore';
 import {
@@ -668,12 +668,20 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
       {/* 1. Page Header (Single H1 Title, One-line Description, Header Actions) */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-slate-200">
         <div className="space-y-0.5 min-w-0">
-          <h1 className="text-xl md:text-2xl font-bold text-slate-900 tracking-tight">
-            ใบสั่งงานและบันทึกผล (Work Orders)
-          </h1>
+          <div className="flex items-center gap-2 flex-wrap">
+            <h1 className="text-xl md:text-2xl font-bold text-slate-900 tracking-tight">
+              ใบสั่งงานและบันทึกผล (Work Orders)
+            </h1>
+            <span className="text-xs font-semibold font-mono text-slate-700 bg-slate-100 px-2.5 py-0.5 rounded-full border border-slate-200">
+              พื้นที่ปฏิบัติงาน (Operational Workspace)
+            </span>
+          </div>
 
           <p className="text-sm text-slate-500">
-            เปิดใบสั่งงานตามแผน เลื่อนวันครบกำหนด บันทึกผลพร้อมใบรับรอง ตรวจรับปิดงาน และควบคุมการระงับใช้
+            พื้นที่ติดตาม ค้นหา และบันทึกผลใบสั่งงานทั้งหมดของแผนก · หากต้องการดูเฉพาะงานที่คุณต้องทำ ไปที่{' '}
+            <Link to="/vcc/tasks" className="text-indigo-600 hover:text-indigo-800 underline font-semibold">
+              งานที่ต้องดำเนินการ (Task Inbox)
+            </Link>
           </p>
         </div>
 

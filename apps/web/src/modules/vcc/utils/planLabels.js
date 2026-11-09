@@ -1,9 +1,9 @@
 // ป้ายข้อความภาษาไทยของสถานะแผนและกติกาวันครบกำหนด (ค่า enum ภายในไม่แสดงต่อผู้ใช้)
 export const PLAN_STATUS_OPTIONS = [
+  { key: 'APPROVED', label: 'อนุมัติแล้ว' },
   { key: 'DRAFT', label: 'ร่างแผน' },
   { key: 'PENDING_REVIEW', label: 'รอทบทวน' },
   { key: 'PENDING_APPROVAL', label: 'รออนุมัติ' },
-  { key: 'APPROVED', label: 'อนุมัติแล้ว' },
   { key: 'REJECTED', label: 'ส่งกลับแก้ไข' }
 ];
 

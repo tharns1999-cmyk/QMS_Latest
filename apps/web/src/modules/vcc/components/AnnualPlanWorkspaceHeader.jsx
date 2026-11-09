@@ -14,7 +14,8 @@ import {
   ChevronDown,
   ChevronUp,
   Users,
-  Filter
+  Filter,
+  FilePlus
 } from 'lucide-react';
 import { PLAN_STATUS_OPTIONS, getPlanStatusLabel, getDueDateRuleLabel } from '../utils/planLabels';
 import AnnualPlanApprovalChain from './AnnualPlanApprovalChain';
@@ -43,6 +44,9 @@ const useDismiss = (open, onClose) => {
 
 const getNextStepText = (plan, thresholds = {}) => {
   if (!plan) return '';
+  if (plan.effective_status === 'SUPERSEDED' || (plan.status === 'APPROVED' && Number(plan.is_current) === 0)) {
+    return 'ฉบับประวัติศาสตร์ที่ถูกแทนที่แล้ว (ห้ามแก้ไข)';
+  }
   switch (plan.status) {
     case 'DRAFT':
       return 'เพิ่มรายการเครื่องมือให้ครบ แล้วส่งทบทวนแผน';
@@ -72,6 +76,8 @@ const getNextStepText = (plan, thresholds = {}) => {
 
 const getStatusBadgeStyle = (status) => {
   switch (status) {
+    case 'SUPERSEDED':
+      return 'text-slate-700 bg-slate-100 border-slate-300';
     case 'APPROVED':
       return 'text-emerald-700 bg-emerald-50 border-emerald-200/80';
     case 'PENDING_APPROVAL':
@@ -87,6 +93,8 @@ const getStatusBadgeStyle = (status) => {
 
 const StatusIcon = ({ status }) => {
   switch (status) {
+    case 'SUPERSEDED':
+      return <Clock size={12} className="text-slate-500 shrink-0" />;
     case 'APPROVED':
       return <ShieldCheck size={12} className="text-emerald-600 shrink-0" />;
     case 'PENDING_APPROVAL':
@@ -267,14 +275,10 @@ export const AnnualPlanWorkspaceHeader = ({
   const menuItemClass =
     'w-full flex items-center gap-2.5 px-3.5 py-2 text-left text-xs font-medium text-slate-700 hover:bg-slate-50 cursor-pointer';
 
-  const planDocCode = useMemo(() => {
-    if (!activePlan) return '';
-    const raw = activePlan.document_code;
-    if (!raw || raw.startsWith('FM-')) {
-      return `VCC-PLAN-${activePlan.department || 'QC'}`;
-    }
-    return raw;
-  }, [activePlan]);
+  const isSuperseded = Boolean(
+    activePlan &&
+    (activePlan.effective_status === 'SUPERSEDED' || (activePlan.status === 'APPROVED' && Number(activePlan.is_current) === 0))
+  );
 
   return (
     <div
@@ -303,20 +307,33 @@ export const AnnualPlanWorkspaceHeader = ({
                 </h2>
 
                 <span
-                  className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold border shrink-0 ${getStatusBadgeStyle(
-                    activePlan.status
-                  )}`}
+                  className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold border shrink-0 ${
+                    isSuperseded
+                      ? getStatusBadgeStyle('SUPERSEDED')
+                      : getStatusBadgeStyle(activePlan.status)
+                  }`}
                 >
-                  <StatusIcon status={activePlan.status} />
-                  <span>สถานะ: {getPlanStatusLabel(activePlan.status)}</span>
+                  <StatusIcon status={isSuperseded ? 'SUPERSEDED' : activePlan.status} />
+                  <span>
+                    สถานะ: {isSuperseded ? 'ถูกแทนที่แล้ว (SUPERSEDED)' : getPlanStatusLabel(activePlan.status)}
+                  </span>
                 </span>
               </div>
 
               {/* Inline Metadata Tags */}
               <div className="flex items-center gap-2 flex-wrap text-xs text-slate-600">
-                <span className="font-mono font-semibold text-slate-800 bg-slate-100 px-2 py-0.5 rounded border border-slate-200/80 shadow-2xs">
-                  {planDocCode && <span>{planDocCode}&nbsp;</span>}
-                  <span>Rev.{activePlan.revision}</span>
+                <span
+                  className="font-mono font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded border border-slate-200/80 shadow-2xs"
+                  title={`ฉบับแก้ไขแผนงาน (Plan Revision) Rev.${activePlan.revision}`}
+                >
+                  Rev.{activePlan.revision}
+                </span>
+
+                <span
+                  className="font-mono text-xs text-slate-600 bg-slate-50 px-2 py-0.5 rounded border border-slate-200/60"
+                  title="ฉบับประกาศใช้แบบฟอร์มเอกสาร (Form Template Revision)"
+                >
+                  Template Rev.{activePlan.form_template_revision || activePlan.template_revision || '01'}
                 </span>
 
                 {activePlan.form_issue_date && (
@@ -387,6 +404,59 @@ export const AnnualPlanWorkspaceHeader = ({
           </select>
         </div>
       </div>
+
+      {/* ─────────────────────────────────────────────────────────────
+          SUPERSEDED HISTORICAL CALLOUT: ชี้แจงว่าเป็นฉบับประวัติศาสตร์ที่ถูกแทนที่แล้ว
+          ───────────────────────────────────────────────────────────── */}
+      {isSuperseded && (
+        <div
+          role="status"
+          data-testid="plan-superseded-banner"
+          className="p-3 rounded-xl bg-slate-100 border border-slate-300 text-slate-800 text-xs flex flex-wrap items-center justify-between gap-3 shadow-2xs"
+        >
+          <div className="flex items-center gap-2">
+            <Clock size={15} className="text-slate-600 shrink-0" />
+            <div>
+              <span className="font-bold">ฉบับประวัติศาสตร์ที่ถูกแทนที่แล้ว (SUPERSEDED):</span>{' '}
+              <span>
+                แผนฉบับนี้ถูกแทนที่โดยฉบับแก้ไขที่ใหม่กว่า ข้อมูลถูกเก็บรักษาไว้เพื่อการตรวจสอบย้อนหลังตามมาตรฐาน ISO 9001 (ห้ามแก้ไข)
+              </span>
+            </div>
+          </div>
+          {effectivePlans.find((p) => Number(p.is_current) === 1) && (
+            <button
+              type="button"
+              onClick={() => onSelectPlan && onSelectPlan(effectivePlans.find((p) => Number(p.is_current) === 1).id)}
+              className="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs transition-colors cursor-pointer"
+            >
+              สลับไปดูฉบับปัจจุบัน
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* ─────────────────────────────────────────────────────────────
+          DRAFT REVISION CONTEXT CALLOUT: ชี้แจงสถานะฉบับแก้ไขที่กำลังจัดทำ
+          ───────────────────────────────────────────────────────────── */}
+      {Boolean(activePlan && activePlan.parent_plan_id && activePlan.status === 'DRAFT') && (
+        <div
+          role="status"
+          data-testid="plan-draft-revision-banner"
+          className="p-3 rounded-xl bg-amber-50 border border-amber-300 text-amber-900 text-xs flex flex-wrap items-center justify-between gap-3 shadow-2xs"
+        >
+          <div className="flex items-center gap-2">
+            <AlertTriangle size={15} className="text-amber-600 shrink-0" />
+            <div>
+              <span className="font-bold">
+                กำลังจัดทำฉบับแก้ไข Rev.{activePlan.revision} — แผนเดิม Rev.{activePlan.parent_revision || '01'} ยังคงมีผลบังคับใช้
+              </span>
+              <span className="block sm:inline sm:ml-1 text-amber-800">
+                (การแก้ไขในฉบับนี้จะไม่กระทบแผนฉบับเดิม จนกว่าฉบับใหม่นี้จะได้รับการอนุมัติอย่างเป็นทางการ)
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ─────────────────────────────────────────────────────────────
           TIER 2: Filter Toolbar (ซ้าย) + Primary & Secondary Actions (ขวา)
@@ -464,13 +534,15 @@ export const AnnualPlanWorkspaceHeader = ({
             </button>
           )}
 
-          {activePlan && activePlan.status === 'APPROVED' && onOpenRevision && (
+          {activePlan && activePlan.status === 'APPROVED' && !isSuperseded && onOpenRevision && (
             <button
               type="button"
               onClick={onOpenRevision}
-              title="คัดลอกแผนที่อนุมัติแล้วเป็นฉบับร่างใหม่เพื่อแก้ไข"
-              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-indigo-300 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold text-xs shadow-2xs transition-colors cursor-pointer"
+              aria-label="สร้างฉบับแก้ไข (Revision)"
+              title="สร้างฉบับแก้ไขใหม่ (Revision) สำหรับแผนประจำปีนี้"
+              className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer"
             >
+              <FilePlus size={13} />
               <span>สร้างฉบับแก้ไข (Revision)</span>
             </button>
           )}
@@ -479,11 +551,15 @@ export const AnnualPlanWorkspaceHeader = ({
             <button
               type="button"
               onClick={onOpenOfficialPdf}
-              title="เปิดดูเอกสารทางการ PDF ที่ได้รับการอนุมัติ"
-              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-semibold text-xs shadow-2xs transition-colors cursor-pointer"
+              title={isSuperseded ? 'เปิดดูเอกสารทางการ PDF ฉบับเดิมที่ได้รับการอนุมัติ' : 'เปิดดูเอกสารทางการ PDF ที่ได้รับการอนุมัติ'}
+              className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border font-semibold text-xs shadow-2xs transition-colors cursor-pointer ${
+                isSuperseded
+                  ? 'border-slate-300 bg-slate-50 hover:bg-slate-100 text-slate-700'
+                  : 'border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-800'
+              }`}
             >
-              <BookOpen size={13} className="text-emerald-700" />
-              <span>เปิดดูเอกสาร PDF ทางการ</span>
+              <BookOpen size={13} className={isSuperseded ? 'text-slate-600' : 'text-emerald-700'} />
+              <span>{isSuperseded ? 'เปิดดู PDF ทางการ (ฉบับเดิม)' : 'เปิดดูเอกสาร PDF ทางการ'}</span>
             </button>
           )}
 

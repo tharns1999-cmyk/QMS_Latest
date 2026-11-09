@@ -29,6 +29,7 @@ export const AnnualPlanProgressStepper = ({
   const isPendingReview = status === 'PENDING_REVIEW';
   const isPendingApproval = status === 'PENDING_APPROVAL';
   const isApproved = status === 'APPROVED';
+  const isSuperseded = activePlan.effective_status === 'SUPERSEDED' || (isApproved && Number(activePlan.is_current) === 0);
 
   // Step 1: Draft
   const step1State = isRejected
@@ -54,7 +55,11 @@ export const AnnualPlanProgressStepper = ({
     : 'UPCOMING';
 
   // Step 4: Approved & Effective
-  const step4State = isApproved ? 'COMPLETED' : 'UPCOMING';
+  const step4State = isSuperseded
+    ? 'SUPERSEDED'
+    : isApproved
+    ? 'COMPLETED'
+    : 'UPCOMING';
 
   const steps = [
     {
@@ -92,12 +97,12 @@ export const AnnualPlanProgressStepper = ({
     {
       id: 'step-approved',
       stepNum: 4,
-      title: 'มีผลบังคับใช้',
-      role: 'พร้อมออกใบสั่งงาน',
+      title: isSuperseded ? 'ถูกแทนที่แล้ว' : 'มีผลบังคับใช้',
+      role: isSuperseded ? 'ฉบับประวัติศาสตร์' : 'พร้อมออกใบสั่งงาน',
       state: step4State,
       actor: null,
       timestamp: null,
-      icon: isApproved ? CheckCircle2 : Check
+      icon: isSuperseded ? Clock : isApproved ? CheckCircle2 : Check
     }
   ];
 
@@ -113,6 +118,7 @@ export const AnnualPlanProgressStepper = ({
           const isStepCurrent = step.state === 'CURRENT' || step.state === 'RETURNED_EDIT';
           const isStepCompleted = step.state === 'COMPLETED';
           const isStepReturned = step.state === 'RETURNED' || step.state === 'RETURNED_EDIT';
+          const isStepSuperseded = step.state === 'SUPERSEDED';
 
           const StepIcon = step.icon;
 
@@ -127,6 +133,8 @@ export const AnnualPlanProgressStepper = ({
                   ? 'bg-white border-indigo-300 text-indigo-900 font-bold shadow-2xs ring-2 ring-indigo-500/10'
                   : isStepCompleted
                   ? 'bg-emerald-50/70 border-emerald-200/80 text-emerald-900 font-medium'
+                  : isStepSuperseded
+                  ? 'bg-slate-100/90 border-slate-300 text-slate-700 font-medium'
                   : 'bg-white/60 border-slate-200/60 text-slate-500 font-normal'
               }`}
             >
@@ -139,6 +147,8 @@ export const AnnualPlanProgressStepper = ({
                     ? 'bg-indigo-600 text-white shadow-2xs'
                     : isStepCompleted
                     ? 'bg-emerald-600 text-white'
+                    : isStepSuperseded
+                    ? 'bg-slate-500 text-white'
                     : 'bg-slate-200 text-slate-600'
                 }`}
               >

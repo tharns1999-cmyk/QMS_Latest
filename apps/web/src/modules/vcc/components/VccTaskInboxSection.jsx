@@ -827,6 +827,36 @@ export const VccTaskInboxSection = () => {
   // ─────────────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-4" data-testid="vcc-task-inbox-section">
+      {/* Role & Scope Clarification Banner (My Action Center) */}
+      <div className="bg-white rounded-2xl border border-slate-200/90 p-3.5 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-8 h-8 rounded-xl bg-indigo-50 border border-indigo-200 flex items-center justify-center shrink-0">
+            <CheckSquare size={16} className="text-indigo-600" />
+          </div>
+          <div className="min-w-0">
+            <h2 className="text-sm font-bold text-slate-900 tracking-tight flex items-center gap-2">
+              <span>ศูนย์รวมงานที่ต้องดำเนินการ (My Action Center)</span>
+              <span className="text-[10px] font-semibold font-mono text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-200/60">
+                สิทธิ์จริงเฉพาะคุณ
+              </span>
+            </h2>
+            <p className="text-xs text-slate-500 truncate">
+              แสดงเฉพาะงานที่คุณต้องดำเนินการจริงตามบทบาทหน้าที่ (บันทึกผล, ทบทวน, อนุมัติ, หรือปลดระงับ)
+            </p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => navigate('/vcc/work-orders')}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-semibold cursor-pointer shrink-0 transition-colors shadow-2xs"
+          title="ไปที่พื้นที่ปฏิบัติงานใบสั่งงานทั้งหมด"
+        >
+          <span>ไปที่พื้นที่ปฏิบัติงานใบสั่งงาน (Work Orders)</span>
+          <ArrowRight size={13} className="text-slate-500" />
+        </button>
+      </div>
+
       {/* Category Filter Tabs */}
       <div className="bg-white rounded-2xl border border-slate-200/90 p-3 shadow-2xs flex items-center flex-wrap gap-1.5">
         {TABS.map((tab) => {

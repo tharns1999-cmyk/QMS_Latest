@@ -40,6 +40,7 @@ import AnnualPlanEquipmentListView from './AnnualPlanEquipmentListView';
 import AnnualPlanQuarterlyView from './AnnualPlanQuarterlyView';
 import AnnualPlanViewSwitcher from './AnnualPlanViewSwitcher';
 import AnnualPlanOverviewCards from './AnnualPlanOverviewCards';
+import AnnualPlanLevel1Overview from './AnnualPlanLevel1Overview';
 import SmartAssetImportModal from './SmartAssetImportModal';
 import useStore from '../../../store/useStore';
 
@@ -307,11 +308,10 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
         const created = await createVccPlan(planForm);
         toast.success(`สร้างแผนประจำปี ${created.plan_year} แล้ว`);
         setPlanFormOpen(false);
-        if (statusTab !== 'DRAFT') {
+        if (statusTab !== 'ALL' && statusTab !== 'DRAFT') {
           setStatusTab('DRAFT');
-        } else {
-          await loadPlansAndMeta(created.id);
         }
+        await loadPlansAndMeta(created.id);
       }
     } catch (err) {
       setPlanFormError(err.message || 'ไม่สามารถบันทึกแผนได้');
@@ -720,7 +720,37 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
   };
 
   return (
-    <div className="space-y-3" data-testid="annual-plan-matrix">
+    <div className="space-y-4" data-testid="annual-plan-matrix">
+      {/* ─────────────────────────────────────────────────────────────
+          LEVEL 1: ANNUAL PLANNING OVERVIEW
+          Horizontal Year Tabs, Department Navigation, Status Filter Chips,
+          Plan Overview Cards & "สร้างแผนประจำปี" Action
+          ───────────────────────────────────────────────────────────── */}
+      <AnnualPlanLevel1Overview
+        plans={plans}
+        availableYears={availableYears}
+        filterYear={filterYear}
+        setFilterYear={setFilterYear}
+        filterDept={effectiveDept}
+        setFilterDept={setFilterDept}
+        activeDepartments={activeDepartments}
+        canReadAll={canReadAll}
+        userDept={userDept}
+        statusTab={statusTab}
+        setStatusTab={setStatusTab}
+        selectedPlanId={selectedPlanId}
+        onSelectPlan={handleSelectPlan}
+        onOpenCreatePlan={openCreatePlan}
+        canRevisePlan={canRevisePlan}
+        onOpenRevision={canRevisePlan ? openRevision : undefined}
+        onOpenHistory={() => setHistoryOpen(true)}
+        onOpenOfficialPdf={handleOpenOfficialPdf}
+      />
+
+      {/* ─────────────────────────────────────────────────────────────
+          LEVEL 2: PLAN WORKSPACE
+          Workspace Header, Workflow Stepper, Compact Metrics, Matrix Views
+          ───────────────────────────────────────────────────────────── */}
       <AnnualPlanWorkspaceHeader
         statusTab={statusTab}
         setStatusTab={setStatusTab}
@@ -815,16 +845,6 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
         </div>
       ) : (
         <div className="space-y-3">
-          {/* Plan Overview KPI Cards */}
-          <AnnualPlanOverviewCards
-            planItems={planItems}
-            activePlan={activePlan}
-            activeAssets={activeAssets}
-            canEditPlan={canEditPlan}
-            onOpenJustificationModal={() => setJustificationModalOpen(true)}
-            onOpenSmartImport={() => setSmartImportOpen(true)}
-          />
-
           {/* Segmented View Switcher */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-0.5">
             <AnnualPlanViewSwitcher
@@ -980,7 +1000,9 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
       <PlanHistoryModal
         open={historyOpen}
         onClose={() => setHistoryOpen(false)}
+        plan={activePlan}
         history={planDetail?.history || []}
+        onOpenOfficialPdf={handleOpenOfficialPdf}
       />
 
       <UnplannedJustificationModal

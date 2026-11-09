@@ -3275,6 +3275,7 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
         p_parent.revision AS parent_revision,
         d.name_th AS department_name_th,
         u_prep.name AS prepared_by_name,
+        u_rev.name AS reviewed_by_name,
         u_app.name AS approved_by_name,
         (SELECT COUNT(*) FROM vcc_annual_plan_items i WHERE i.plan_id = p.id) AS item_count,
         (SELECT COUNT(*) FROM vcc_plan_cycles c WHERE c.plan_id = p.id) AS cycle_count
@@ -3282,6 +3283,7 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
       LEFT JOIN vcc_annual_plans p_parent ON p_parent.id = p.parent_plan_id
       LEFT JOIN departments d ON d.code = p.department
       LEFT JOIN users u_prep ON u_prep.id = p.prepared_by
+      LEFT JOIN users u_rev ON u_rev.id = p.reviewed_by
       LEFT JOIN users u_app ON u_app.id = p.approved_by
       WHERE p.plan_year = ? AND p.department = ?
       ORDER BY p.revision ASC

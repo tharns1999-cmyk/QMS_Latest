@@ -926,7 +926,26 @@ export const fetchVccPlanDetail = async (id) => {
   return { plan, items, thresholds, history };
 };
 
-// New revision of an approved plan. Only the server holds the plan data, so the demo (local) mode cannot do it.
+// Get revision history for a plan (all revisions for plan_year & department)
+export const fetchVccPlanRevisions = async (planId) => {
+  if (isApiMode) {
+    return await apiGet(`/api/vcc/plans/${encodeURIComponent(planId)}/revisions`);
+  }
+  const allPlans = getLocalPlans();
+  const sourcePlan = allPlans.find((p) => p.id === planId);
+  if (!sourcePlan) throw new Error('ไม่พบแผนการสอบเทียบประจำปี');
+  const revisions = allPlans
+    .filter((p) => p.plan_year === sourcePlan.plan_year && p.department === sourcePlan.department)
+    .sort((a, b) => String(a.revision).localeCompare(String(b.revision)));
+  return {
+    plan_year: sourcePlan.plan_year,
+    department: sourcePlan.department,
+    current_plan_id: sourcePlan.id,
+    revisions
+  };
+};
+
+// New revision of an approved plan. Only the server holds the plan data, so demo (local) mode cannot do it.
 export const createVccPlanRevision = async (planId, { revision_reason, title } = {}) => {
   if (!isApiMode) throw new Error('การสร้าง Revision ใช้ได้เมื่อเชื่อมต่อเซิร์ฟเวอร์เท่านั้น');
   const { plan } = await apiPost(`/api/vcc/plans/${encodeURIComponent(planId)}/revisions`, { revision_reason, title });

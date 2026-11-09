@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import toast from 'react-hot-toast';
 import { AlertTriangle, CheckCircle2, FolderTree, Trash2, X, Send, UserCheck, ShieldCheck, Calendar, FileText, Clock, Lock, Settings2 } from 'lucide-react';
-import { computeDueDates, computeDueDateForMonth, fetchVccDocumentProfiles, saveVccDocumentProfile } from '../api/vccPlanApi';
+import { computeDueDates, computeDueDateForMonth, fetchVccDocumentProfiles, saveVccDocumentProfile, fetchVccPlanRevisions } from '../api/vccPlanApi';
 import { formatVccDateTime, formatVccDueDatesList } from '../utils/vccDateUtils';
 import { useVccModalAccessibility } from '../hooks/useVccModalAccessibility';
 import { VccDiscardConfirmDialog } from './VccDiscardConfirmDialog';
@@ -363,9 +363,34 @@ export const PlanRevisionModal = ({ open, onClose, plan, reason, setReason, erro
                 <span>{error}</span>
               </div>
             )}
-            <p className="text-sm text-slate-600 font-medium">
-              ระบบจะคัดลอกแผน {plan.department} Rev.{plan.revision} เป็นฉบับร่างใหม่ แผนเดิมยังใช้งานต่อจนกว่าฉบับใหม่จะผ่านการทบทวนและอนุมัติ
-            </p>
+
+            {/* Revision Lineage Comparison */}
+            <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500 font-medium">แผนต้นฉบับ (Source):</span>
+                <span className="font-mono font-bold text-slate-800 bg-white px-2 py-0.5 rounded border border-slate-200">
+                  {plan.document_code || `VCC-PLAN-${plan.department || 'QC'}`} Rev.{plan.revision}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500 font-medium">ฉบับใหม่ที่จะสร้าง (New Revision):</span>
+                <span className="font-mono font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
+                  {plan.document_code || `VCC-PLAN-${plan.department || 'QC'}`} Rev.{String(Number(plan.revision || 1) + 1).padStart(2, '0')} (ร่างแผน)
+                </span>
+              </div>
+            </div>
+
+            {/* Mandatory Controlled Impact Callout */}
+            <div className="p-3.5 rounded-xl bg-indigo-50/70 border border-indigo-200 text-xs text-indigo-950 space-y-1">
+              <div className="font-bold flex items-center gap-1.5 text-indigo-900">
+                <ShieldCheck size={14} className="text-indigo-600 shrink-0" />
+                <span>ข้อกำหนดการควบคุมฉบับแก้ไข (Controlled Plan Revision)</span>
+              </div>
+              <p className="leading-relaxed">
+                การสร้าง Revision ใหม่จะไม่เปลี่ยนแปลงแผนฉบับปัจจุบัน Rev.{plan.revision} ซึ่งยังคงมีผลบังคับใช้จนกว่า Revision ใหม่จะผ่านการอนุมัติและถึงวันที่มีผลบังคับใช้
+              </p>
+            </div>
+
             <div>
               <label htmlFor="plan_revision_reason" className="block text-sm font-semibold text-slate-700 mb-1.5">
                 เหตุผลการขอปรับปรุงแผน <span className="text-rose-600">*</span>
@@ -376,7 +401,7 @@ export const PlanRevisionModal = ({ open, onClose, plan, reason, setReason, erro
                 required
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
-                placeholder="เช่น เพิ่มเครื่องมือใหม่เข้าแผน / เปลี่ยนรอบทวนสอบ..."
+                placeholder="ระบุเหตุผล เช่น เพิ่มเครื่องมือใหม่เข้าสู่กระบวนการผลิต / ปรับเปลี่ยนความถี่รอบการทวนสอบ..."
                 className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-medium focus:outline-none focus:border-indigo-600"
               />
             </div>
@@ -391,9 +416,10 @@ export const PlanRevisionModal = ({ open, onClose, plan, reason, setReason, erro
               <button
                 type="submit"
                 disabled={saving || !reason.trim()}
-                className="h-10 px-5 rounded-xl bg-indigo-600 text-white text-sm font-bold hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
+                aria-label="สร้างฉบับแก้ไข"
+                className="h-10 px-5 rounded-xl bg-indigo-600 text-white text-sm font-bold hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer shadow-xs"
               >
-                {saving ? 'กำลังสร้าง...' : 'สร้างฉบับแก้ไข'}
+                {saving ? 'กำลังสร้าง...' : `สร้างฉบับแก้ไข (Rev.${String(Number(plan.revision || 1) + 1).padStart(2, '0')})`}
               </button>
             </div>
           </form>
@@ -1658,7 +1684,33 @@ export const PlanSettingsModal = ({
 );
 };
 
-export const PlanHistoryModal = ({ open, onClose, history = [] }) => {
+export const PlanHistoryModal = ({ open, onClose, plan, history = [], onOpenOfficialPdf }) => {
+  const [activeTab, setActiveTab] = useState('REVISIONS');
+  const [revisions, setRevisions] = useState([]);
+  const [loadingRevisions, setLoadingRevisions] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    if (open && plan?.id) {
+      setLoadingRevisions(true);
+      fetchVccPlanRevisions(plan.id)
+        .then((res) => {
+          if (alive && res?.revisions) {
+            setRevisions(res.revisions);
+          }
+        })
+        .catch(() => {})
+        .finally(() => {
+          if (alive) setLoadingRevisions(false);
+        });
+    } else {
+      setRevisions([]);
+    }
+    return () => {
+      alive = false;
+    };
+  }, [open, plan?.id]);
+
   const {
     dialogRef,
     requestClose,
@@ -1681,10 +1733,19 @@ export const PlanHistoryModal = ({ open, onClose, history = [] }) => {
         aria-modal="true"
         aria-labelledby="plan-history-title"
         tabIndex="-1"
-        className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-xl w-full overflow-hidden outline-none"
+        className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-2xl w-full overflow-hidden outline-none flex flex-col max-h-[85vh]"
       >
-        <div className="px-6 py-4.5 border-b border-slate-200 flex items-center justify-between">
-          <h2 id="plan-history-title" className="text-xl font-bold text-slate-900 tracking-tight">ประวัติการอนุมัติและแก้ไขแผน (Audit Log)</h2>
+        <div className="px-6 py-4.5 border-b border-slate-200 flex items-center justify-between shrink-0">
+          <div>
+            <h2 id="plan-history-title" className="text-lg font-bold text-slate-900 tracking-tight">
+              ประวัติการอนุมัติและแก้ไขแผนประจำปี
+            </h2>
+            {plan && (
+              <p className="text-xs text-slate-500 mt-0.5">
+                ปี {plan.plan_year} · แผนก {plan.department} · Rev.{plan.revision}
+              </p>
+            )}
+          </div>
           <button
             type="button"
             onClick={requestClose}
@@ -1694,8 +1755,138 @@ export const PlanHistoryModal = ({ open, onClose, history = [] }) => {
             <X size={20} />
           </button>
         </div>
-        <div className="p-6 max-h-[75vh] overflow-y-auto space-y-3.5">
-          {history.length === 0 ? (
+
+        {/* Tab Switcher */}
+        <div className="px-6 pt-3 shrink-0 flex items-center gap-2 border-b border-slate-100">
+          <button
+            type="button"
+            onClick={() => setActiveTab('REVISIONS')}
+            className={`pb-2.5 px-2 text-xs font-semibold border-b-2 transition-colors cursor-pointer ${
+              activeTab === 'REVISIONS'
+                ? 'border-indigo-600 text-indigo-700'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <span>ลำดับการแก้ไขแผน (Revision Lineage)</span>
+            <span className="ml-1.5 px-1.5 py-0.5 rounded-full text-[10px] font-mono bg-slate-100 text-slate-600">
+              {revisions.length}
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('AUDIT')}
+            className={`pb-2.5 px-2 text-xs font-semibold border-b-2 transition-colors cursor-pointer ${
+              activeTab === 'AUDIT'
+                ? 'border-indigo-600 text-indigo-700'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <span>บันทึกการกระทำ (Audit Log)</span>
+            <span className="ml-1.5 px-1.5 py-0.5 rounded-full text-[10px] font-mono bg-slate-100 text-slate-600">
+              {history.length}
+            </span>
+          </button>
+        </div>
+
+        {/* Tab Content */}
+        <div className="p-6 overflow-y-auto space-y-3.5 flex-1">
+          {activeTab === 'REVISIONS' ? (
+            loadingRevisions ? (
+              <div className="text-center py-8 text-xs text-slate-400">กำลังโหลดประวัติ Revision...</div>
+            ) : revisions.length === 0 ? (
+              <div className="text-sm text-slate-500 text-center py-8 font-medium">
+                {plan ? `แผนปี ${plan.plan_year} แผนก ${plan.department} มีฉบับเดียว (Rev.${plan.revision})` : 'ไม่พบข้อมูลฉบับแก้ไข'}
+              </div>
+            ) : (
+              revisions.map((rev) => {
+                const isCurrentActive = rev.id === plan?.id;
+                const isApproved = rev.status === 'APPROVED';
+                const isSuperseded = rev.effective_status === 'SUPERSEDED' || (isApproved && Number(rev.is_current) === 0);
+
+                return (
+                  <div
+                    key={rev.id}
+                    data-testid={`revision-item-rev-${rev.revision}`}
+                    className={`p-4 rounded-xl border text-xs space-y-2.5 transition-all ${
+                      isCurrentActive
+                        ? 'bg-indigo-50/40 border-indigo-300 ring-1 ring-indigo-200'
+                        : 'bg-white border-slate-200'
+                    }`}
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-bold text-slate-800 bg-slate-100 px-2.5 py-0.5 rounded border border-slate-300 text-xs">
+                          Rev.{rev.revision}
+                        </span>
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[11px] font-semibold border ${
+                            isSuperseded
+                              ? 'bg-slate-100 text-slate-700 border-slate-300'
+                              : isApproved
+                              ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                              : rev.status === 'REJECTED'
+                              ? 'bg-rose-50 text-rose-800 border-rose-200'
+                              : 'bg-amber-50 text-amber-800 border-amber-200'
+                          }`}
+                        >
+                          {isSuperseded ? 'ถูกแทนที่แล้ว (SUPERSEDED)' : isApproved ? 'มีผลบังคับใช้ (EFFECTIVE)' : rev.status}
+                        </span>
+                        {isCurrentActive && (
+                          <span className="text-[10px] bg-indigo-600 text-white font-bold px-2 py-0.5 rounded-full">
+                            ฉบับที่กำลังเปิดดู
+                          </span>
+                        )}
+                      </div>
+                      {rev.effective_date && (
+                        <span className="text-[11px] text-slate-500 font-mono">
+                          วันที่มีผล: {formatVccDateTime(rev.effective_date)}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="text-slate-800 font-medium">
+                      <strong className="text-slate-600">เหตุผลการขอแก้ไข:</strong>{' '}
+                      <span className="italic">{rev.revision_reason || 'ฉบับเริ่มต้น (Initial Revision)'}</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-slate-600 text-[11px] bg-slate-50 p-2.5 rounded-lg border border-slate-200/60">
+                      <div>
+                        <span className="text-slate-400 block">ผู้จัดทำ:</span>
+                        <span className="font-semibold text-slate-700">{rev.prepared_by_name || rev.prepared_by || '-'}</span>
+                        {rev.prepared_at && <div className="text-slate-400 font-mono text-[10px]">{formatVccDateTime(rev.prepared_at)}</div>}
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block">ผู้ทบทวน:</span>
+                        <span className="font-semibold text-slate-700">{rev.reviewed_by_name || rev.reviewed_by || '-'}</span>
+                        {rev.reviewed_at && <div className="text-slate-400 font-mono text-[10px]">{formatVccDateTime(rev.reviewed_at)}</div>}
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block">ผู้อนุมัติ:</span>
+                        <span className="font-semibold text-slate-700">{rev.approved_by_name || rev.approved_by || '-'}</span>
+                        {rev.approved_at && <div className="text-slate-400 font-mono text-[10px]">{formatVccDateTime(rev.approved_at)}</div>}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-100">
+                      <span className="text-slate-500 text-[11px]">
+                        เครื่องมือในแผน: <strong className="text-slate-700">{rev.item_count ?? '-'}</strong> เครื่อง ({rev.cycle_count ?? '-'} รอบ)
+                      </span>
+                      {isApproved && onOpenOfficialPdf && (
+                        <button
+                          type="button"
+                          onClick={() => onOpenOfficialPdf(rev)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-xs font-semibold cursor-pointer transition-colors"
+                        >
+                          <FileText size={12} />
+                          <span>เปิดดูเอกสาร PDF ทางการ</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+            )
+          ) : history.length === 0 ? (
             <div className="text-sm text-slate-500 text-center py-8 font-medium">ยังไม่มีประวัติการดำเนินการ</div>
           ) : (
             history.map((h) => {
