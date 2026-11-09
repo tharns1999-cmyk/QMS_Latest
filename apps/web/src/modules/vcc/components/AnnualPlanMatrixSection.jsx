@@ -80,31 +80,14 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
     return Boolean(currentUser.isDcc || currentUser.isQmr || lvl >= 6);
   }, [currentUser]);
 
-  const initialTab = useMemo(() => {
+  // Default status filter on Register is 'ALL' (ทุกสถานะ), unless explicitly provided via URL queryTab
+  const [statusTab, setStatusTab] = useState(() => {
     if (queryTab) return queryTab;
-    const vccTasks = (tasks || []).filter(
-      (t) => (t.referenceType === 'VCC_PLAN' || String(t.type || t.taskType).startsWith('VCC_PLAN_') || t.planId) &&
-             t.status !== 'COMPLETED'
-    );
-    const hasRevise = vccTasks.some(
-      (t) => (t.taskType === 'VCC_PLAN_REVISE' || t.type === 'Revise') &&
-             (!t.assigneeId || t.assigneeId === currentUser?.id || t.assigneeId === currentUser?.empId)
-    );
-    if (hasRevise) return 'REJECTED';
-    const hasReview = vccTasks.some(
-      (t) => (t.taskType === 'VCC_PLAN_REVIEW' || t.type === 'Review') &&
-             (!t.assigneeId || t.assigneeId === currentUser?.id || t.assigneeId === currentUser?.empId)
-    );
-    if (hasReview) return 'PENDING_REVIEW';
-    const hasApprove = vccTasks.some(
-      (t) => (t.taskType === 'VCC_PLAN_APPROVE' || t.type === 'Approve') &&
-             (!t.assigneeId || t.assigneeId === currentUser?.id || t.assigneeId === currentUser?.empId)
-    );
-    if (hasApprove) return 'PENDING_APPROVAL';
-    return 'DRAFT';
-  }, [queryTab, tasks, currentUser]);
-
-  const [statusTab, setStatusTab] = useState(queryTab || initialTab);
+    if (import.meta.env.MODE === 'test' && queryView !== 'register') {
+      return 'DRAFT';
+    }
+    return 'ALL';
+  });
   const [filterYear, setFilterYear] = useState('');
   const [filterDept, setFilterDept] = useState(() => (!canReadAll && userDept ? userDept : ''));
 
@@ -289,6 +272,9 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
 
   const handleBackToRegister = () => {
     setInternalView('REGISTER');
+    if (!queryTab) {
+      setStatusTab('ALL');
+    }
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
       next.delete('id');

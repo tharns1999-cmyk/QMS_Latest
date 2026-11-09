@@ -320,7 +320,7 @@ export const AnnualPlanRegisterTable = ({
                 onChange={(e) => setStatusTab && setStatusTab(e.target.value)}
                 className="h-8 px-2.5 rounded-lg border border-slate-200 text-xs font-semibold bg-white text-slate-700 hover:border-slate-300 focus:outline-none focus:border-indigo-600 cursor-pointer"
               >
-                <option value="ALL">สถานะทั้งหมด</option>
+                <option value="ALL">ทุกสถานะ</option>
                 <option value="DRAFT">ร่างแผน (Draft)</option>
                 <option value="PENDING_REVIEW">รอทบทวน (In Review)</option>
                 <option value="PENDING_APPROVAL">รออนุมัติ (Pending Approval)</option>

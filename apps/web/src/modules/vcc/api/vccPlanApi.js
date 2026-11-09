@@ -823,7 +823,7 @@ export const saveVccDocumentProfile = async (dept, profileData) => {
   return { department: normDept, profile: updated[normDept], allProfiles: updated };
 };
 
-export const fetchVccPlans = async ({ status = 'DRAFT', year = '', department = '' } = {}) => {
+export const fetchVccPlans = async ({ status = 'ALL', year = '', department = '' } = {}) => {
   if (isApiMode) {
     if (status === 'ALL' || !status) {
       const statuses = ['DRAFT', 'PENDING_REVIEW', 'PENDING_APPROVAL', 'APPROVED', 'REJECTED'];

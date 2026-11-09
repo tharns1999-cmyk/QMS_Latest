@@ -128,14 +128,26 @@ describe('VCC Master UX/UI Redesign — 2-Level Architecture & Controlled Revisi
     expect(onSelectPlan).toHaveBeenCalled();
   });
 
-  it('2. PAGE A: Supports live search filtering by title and quick status filters', () => {
+  it('2. PAGE A: Defaults to `ทุกสถานะ`, shows all plans, and supports live search filtering', () => {
+    const setStatusTab = vi.fn();
     render(
       <AnnualPlanRegisterTable
         plans={mockPlans}
         activeDepartments={[{ code: 'QC', nameTh: 'ควบคุมคุณภาพ' }]}
         userDept="QC"
+        statusTab="ALL"
+        setStatusTab={setStatusTab}
       />
     );
+
+    // Default status dropdown displays "ทุกสถานะ"
+    const statusSelect = screen.getByLabelText(/กรองตามสถานะ/);
+    expect(statusSelect).toHaveValue('ALL');
+    expect(screen.getByRole('option', { name: 'ทุกสถานะ' })).toBeInTheDocument();
+
+    // Both APPROVED (2026) and DRAFT (2027) appear simultaneously by default
+    expect(screen.getAllByText('ปี 2026').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('ปี 2027').length).toBeGreaterThan(0);
 
     // Search input
     const searchInput = screen.getByPlaceholderText(/ค้นหารหัสแผน/);
@@ -145,6 +157,44 @@ describe('VCC Master UX/UI Redesign — 2-Level Architecture & Controlled Revisi
     fireEvent.change(searchInput, { target: { value: '2027' } });
     expect(screen.getAllByText('ปี 2027').length).toBeGreaterThan(0);
     expect(screen.queryByText('ปี 2026')).not.toBeInTheDocument();
+  });
+
+  it('2.1 PAGE A: Filters by status and resets to ทุกสถานะ when clicking ล้างตัวกรอง', () => {
+    let currentStatus = 'DRAFT';
+    const setStatusTab = vi.fn((val) => { currentStatus = val; });
+
+    const { rerender } = render(
+      <AnnualPlanRegisterTable
+        plans={mockPlans}
+        activeDepartments={[{ code: 'QC', nameTh: 'ควบคุมคุณภาพ' }]}
+        userDept="QC"
+        statusTab={currentStatus}
+        setStatusTab={setStatusTab}
+      />
+    );
+
+    // When status is DRAFT, only Drafts appear, Effective (APPROVED) is filtered out in table
+    expect(screen.queryByText('มีผลบังคับใช้ (Effective)', { selector: 'td span span' })).not.toBeInTheDocument();
+    expect(screen.getAllByText('ร่างแผน (Draft)', { selector: 'td span span' }).length).toBeGreaterThan(0);
+
+    // Reset button appears
+    const clearBtn = screen.getByRole('button', { name: /ล้างตัวกรอง/ });
+    expect(clearBtn).toBeInTheDocument();
+    fireEvent.click(clearBtn);
+    expect(setStatusTab).toHaveBeenCalledWith('ALL');
+
+    // Re-render with ALL: both Effective and Drafts appear simultaneously
+    rerender(
+      <AnnualPlanRegisterTable
+        plans={mockPlans}
+        activeDepartments={[{ code: 'QC', nameTh: 'ควบคุมคุณภาพ' }]}
+        userDept="QC"
+        statusTab="ALL"
+        setStatusTab={setStatusTab}
+      />
+    );
+    expect(screen.getByText('มีผลบังคับใช้ (Effective)', { selector: 'td span span' })).toBeInTheDocument();
+    expect(screen.getAllByText('ร่างแผน (Draft)', { selector: 'td span span' }).length).toBeGreaterThan(0);
   });
 
   it('3. PAGE B: Header contains `← กลับหน้ารวมแผนประจำปี` back button that triggers onBackToRegister', () => {
