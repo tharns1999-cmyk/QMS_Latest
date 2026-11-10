@@ -368,11 +368,11 @@ export const AnnualPlansHub = ({
               <tr className="bg-slate-50/80 border-b border-slate-200/80 text-slate-600 font-semibold">
                 <th className="py-2.5 px-3.5 w-16 text-center">ปี</th>
                 <th className="py-2.5 px-3.5 w-36">ฝ่าย/แผนก</th>
-                <th className="py-2.5 px-3.5 min-w-44">รหัสแผนงานดิจิทัล / ฉบับแก้ไข</th>
+                <th className="py-2.5 px-3.5 min-w-[200px]">รหัสแผนงานดิจิทัล / ฉบับแก้ไข</th>
                 <th className="py-2.5 px-3.5 w-36">สถานะ</th>
                 <th className="py-2.5 px-3.5 w-40 text-center">ความครอบคลุม</th>
                 <th className="py-2.5 px-3.5 w-40">ปรับปรุงล่าสุด</th>
-                <th className="py-2.5 px-3.5 w-44 text-right">การจัดการ</th>
+                <th className="py-2.5 px-3.5 w-auto min-w-[170px] text-right">การจัดการ</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -410,32 +410,32 @@ export const AnnualPlansHub = ({
                   return (
                     <tr key={plan.id} className="hover:bg-slate-50/70 transition-colors">
                       {/* Year */}
-                      <td className="py-3 px-3.5 text-center font-bold font-mono text-slate-800">
+                      <td className="align-middle py-3.5 px-3.5 text-center font-bold font-mono text-slate-800">
                         {plan.plan_year}
                       </td>
 
                       {/* Department */}
-                      <td className="py-3 px-3.5">
+                      <td className="align-middle py-3.5 px-3.5">
                         <DepartmentBadge department={dept} label={`${deptName} (${dept})`} />
                       </td>
 
                       {/* Digital Plan Code & Revision */}
-                      <td className="py-3 px-3.5">
-                        <div className="font-mono font-semibold text-slate-900 flex items-center gap-1.5">
-                          <span>{digitalCode}</span>
-                          <span className="text-[10px] font-mono font-bold bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded border border-slate-200">
+                      <td className="align-middle py-3.5 px-3.5">
+                        <div className="inline-flex items-center gap-2">
+                          <span className="whitespace-nowrap font-mono font-bold tracking-tight text-slate-900">{digitalCode}</span>
+                          <span className="whitespace-nowrap text-[10px] font-mono font-bold bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded border border-slate-200">
                             Rev.{plan.revision || '01'}
                           </span>
                         </div>
                       </td>
 
                       {/* Status Badge */}
-                      <td className="py-3 px-3.5">
+                      <td className="align-middle py-3.5 px-3.5">
                         {getStatusBadge(plan.status)}
                       </td>
 
                       {/* Coverage with sleek Mini Progress Bar */}
-                      <td className="py-3 px-3.5">
+                      <td className="align-middle py-3.5 px-3.5">
                         <div className="flex flex-col items-center gap-1">
                           <div className="font-semibold text-slate-800 text-center">
                             <span>{plannedCount}</span>
@@ -454,7 +454,7 @@ export const AnnualPlansHub = ({
                       </td>
 
                       {/* Last Updated */}
-                      <td className="py-3 px-3.5">
+                      <td className="align-middle py-3.5 px-3.5">
                         <div className="text-[11px]">
                           <div className="text-slate-700 font-medium">
                             {formatVccDateTime(plan.updated_at || plan.created_at)}
@@ -468,14 +468,14 @@ export const AnnualPlansHub = ({
                       </td>
 
                       {/* Actions */}
-                      <td className="py-3 px-3.5 text-right">
-                        <div className="inline-flex items-center gap-1.5 justify-end">
+                      <td className="align-middle py-3.5 px-3.5 text-right w-auto min-w-[170px]">
+                        <div className="flex items-center justify-end gap-1.5 flex-nowrap">
                           {/* Print Icon Button */}
                           <button
                             type="button"
                             onClick={() => onPrintPlan && onPrintPlan(plan)}
                             title="พิมพ์แบบฟอร์มเอกสารควบคุม (A4 แนวนอน)"
-                            className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors cursor-pointer"
+                            className="shrink-0 p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors cursor-pointer"
                           >
                             <Printer size={13} />
                           </button>
@@ -485,7 +485,7 @@ export const AnnualPlansHub = ({
                             type="button"
                             onClick={() => onOpenHistory && onOpenHistory(plan)}
                             title="ดูประวัติการแก้ไขและเวอร์ชัน (Revisions)"
-                            className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors cursor-pointer"
+                            className="shrink-0 p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors cursor-pointer"
                           >
                             <History size={13} />
                           </button>
@@ -494,10 +494,10 @@ export const AnnualPlansHub = ({
                           <button
                             type="button"
                             onClick={() => onOpenPlan && onOpenPlan(plan.id)}
-                            className="inline-flex items-center gap-1 h-7.5 px-3 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold text-xs transition-colors cursor-pointer"
+                            className="whitespace-nowrap inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg shrink-0 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 transition-colors cursor-pointer"
                           >
                             <span>เปิดแผนงาน</span>
-                            <ArrowRight size={12} />
+                            <ArrowRight size={12} className="shrink-0" />
                           </button>
                         </div>
                       </td>
