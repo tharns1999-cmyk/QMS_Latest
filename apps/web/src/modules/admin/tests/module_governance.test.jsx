@@ -85,6 +85,36 @@ describe('Module Governance interface', () => {
     config.module.status='MAINTENANCE';show();await screen.findByRole('button',{name:'ตั้งค่า QC'});fireEvent.click(screen.getByRole('tab',{name:'การแจ้งเตือนค้าง (0)'}));
     expect(screen.getByText('ไม่มีการแจ้งเตือนในสถานะนี้')).toBeVisible();expect(screen.getByText(/ไม่มีการเลื่อนวันครบกำหนดหรือยืนยันรับทราบแทน/)).toBeVisible();
   });
+  it('supports split-pane master-detail module switching and search filtering', async () => {
+    show();
+    await screen.findByRole('button', { name: 'ตั้งค่า QC' });
+
+    // 1. Verify module rail lists DCC, CAPA, and Training
+    expect(screen.getByText('ระบบควบคุมเอกสาร · DCC')).toBeVisible();
+    expect(screen.getByText('ระบบจัดการข้อบกพร่อง · CAPA')).toBeVisible();
+    expect(screen.getByText('ระบบฝึกอบรมและทักษะ · Training')).toBeVisible();
+
+    // 2. Click DCC -> detail pane shows DCC baseline overview
+    fireEvent.click(screen.getByText('ระบบควบคุมเอกสาร · DCC'));
+    expect(screen.getByText('ระบบควบคุมเอกสาร (DCC)')).toBeVisible();
+    expect(screen.getByText(/แกนกลางการควบคุมสารสนเทศเอกสารและระเบียบปฏิบัติงานขององค์กร/)).toBeVisible();
+    expect(screen.getByRole('link', { name: /เปิดดูทะเบียนเอกสารควบคุม/ })).toBeVisible();
+
+    // 3. Click CAPA -> detail pane shows Coming Soon view
+    fireEvent.click(screen.getByText('ระบบจัดการข้อบกพร่อง · CAPA'));
+    expect(screen.getByText('ระบบจัดการข้อบกพร่องและการปฏิบัติการแก้ไข (CAPA)')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'สลับกลับไปจัดการโมดูลศูนย์ทวนสอบ (VCC)' })).toBeVisible();
+
+    // 4. Click back button to VCC
+    fireEvent.click(screen.getByRole('button', { name: 'สลับกลับไปจัดการโมดูลศูนย์ทวนสอบ (VCC)' }));
+    expect(screen.getByRole('button', { name: 'ตั้งค่า QC' })).toBeVisible();
+
+    // 5. Test search filter in module rail
+    const searchInput = screen.getByPlaceholderText('ค้นหาโมดูล...');
+    fireEvent.change(searchInput, { target: { value: 'CAPA' } });
+    expect(screen.getByText('ระบบจัดการข้อบกพร่อง · CAPA')).toBeVisible();
+    expect(screen.queryByText('ระบบฝึกอบรมและทักษะ · Training')).not.toBeInTheDocument();
+  });
 });
 
 describe('Portal and route guards use backend capabilities',()=>{
