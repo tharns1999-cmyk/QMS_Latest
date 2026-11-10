@@ -90,6 +90,8 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
     return Boolean(currentUser.isDcc || currentUser.isQmr || lvl >= 6);
   }, [currentUser]);
 
+  const canManageSettings = canReadAll;
+
   const createDepartments = useMemo(() => {
     if (currentUser?.vccReadOnly) return [];
     const enabledDepts = currentUser?.vccEnabledDepartments;
@@ -711,6 +713,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
   };
 
   const openSettings = () => {
+    if (!canManageSettings) return;
     setDraftProviders([...providers]);
     setNewProvider('');
     setDraftSettings({ ...planSettings });
@@ -873,7 +876,8 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
             thresholds={thresholds}
             onSubmitPlan={handleSubmitPlan}
             onOpenRevision={canRevisePlan ? openRevision : undefined}
-            onOpenSettings={openSettings}
+            canManageSettings={canManageSettings}
+            onOpenSettings={canManageSettings ? openSettings : undefined}
             onOpenCreatePlan={openCreatePlan}
             onOpenEditPlan={openEditPlan}
             onOpenHistory={() => setHistoryOpen(true)}
@@ -1110,6 +1114,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
         setDraftSettings={setDraftSettings}
         saving={savingSettings}
         onSave={handleSaveSettings}
+        currentUser={currentUser}
       />
 
       <SmartAssetImportModal

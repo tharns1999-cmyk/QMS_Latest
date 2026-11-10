@@ -1,15 +1,26 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { CheckCircle2, AlertTriangle, FileText, Shield, UserCheck, Edit3, Save, X, ExternalLink } from 'lucide-react';
 import { fetchVccDocumentProfiles, saveVccDocumentProfile } from '../api/vccPlanApi';
+import useStore from '../../../store/useStore';
+import { getUserDeptCodes } from '../utils/departmentScope';
 
-export default function VccDocumentProfilesSummary() {
+export default function VccDocumentProfilesSummary({ currentUser: propUser }) {
+  const storeUser = useStore((s) => s.currentUser);
+  const currentUser = propUser || storeUser;
+
   const [data, setData] = useState(null);
   const [selected, setSelected] = useState('');
   const [error, setError] = useState('');
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState('');
+
+  const isOrgWide = Boolean(
+    currentUser?.isDcc ||
+    currentUser?.isQmr ||
+    Number(currentUser?.approval_level ?? currentUser?.approvalLevel ?? currentUser?.level ?? 0) >= 6
+  );
 
   const [draft, setDraft] = useState({
     document_code: '',
@@ -30,20 +41,34 @@ export default function VccDocumentProfilesSummary() {
       .then((res) => {
         if (!alive) return;
         setData(res);
-        if (!selected) {
-          const firstDept = Object.keys(res.profiles || {})[0] || (res.departments?.[0]?.code) || '';
-          setSelected(firstDept);
-        }
       })
       .catch((err) => {
         if (alive) setError(err.message);
       });
     return () => { alive = false; };
-  }, [selected]);
+  }, []);
 
   useEffect(() => {
     return loadData();
   }, [loadData]);
+
+  const availableDepts = useMemo(() => {
+    if (!data?.profiles) return [];
+    const all = Object.keys(data.profiles);
+    if (!currentUser || isOrgWide) return all;
+    const userDepts = getUserDeptCodes(currentUser);
+    return all.filter((d) => userDepts.includes(String(d).toUpperCase()));
+  }, [data?.profiles, currentUser, isOrgWide]);
+
+  useEffect(() => {
+    if (availableDepts.length > 0) {
+      if (!selected || !availableDepts.includes(selected)) {
+        setSelected(availableDepts[0]);
+      }
+    } else if (availableDepts.length === 0 && selected) {
+      setSelected('');
+    }
+  }, [availableDepts, selected]);
 
   const profile = data?.profiles?.[selected] || null;
 
@@ -94,7 +119,6 @@ export default function VccDocumentProfilesSummary() {
   if (error && !data) return <p role="alert" className="text-sm text-red-700 bg-red-50 p-3 rounded-xl">{error}</p>;
   if (!data) return <p role="status" className="text-sm text-slate-500 py-4">กำลังโหลดค่าตั้งค่าแผนก…</p>;
 
-  const availableDepts = Object.keys(data.profiles || {});
   const forms = data.forms || [];
   const users = data.allActiveUsers || [];
   const activeDepts = data.departments || [];
@@ -109,14 +133,19 @@ export default function VccDocumentProfilesSummary() {
           แผนกที่ตั้งค่าแล้ว
           <select
             value={selected}
+            disabled={availableDepts.length === 0}
             onChange={(e) => { setSelected(e.target.value); setEditing(false); setError(''); setSaveSuccess(''); }}
-            className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-600"
+            className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-600 disabled:bg-slate-100 disabled:text-slate-400"
           >
-            {availableDepts.map((dept) => (
-              <option key={dept} value={dept}>
-                {dept}
-              </option>
-            ))}
+            {availableDepts.length === 0 ? (
+              <option value="">-- ไม่พบแผนกที่สังกัดในระบบ --</option>
+            ) : (
+              availableDepts.map((dept) => (
+                <option key={dept} value={dept}>
+                  {dept}
+                </option>
+              ))
+            )}
           </select>
         </label>
       </div>

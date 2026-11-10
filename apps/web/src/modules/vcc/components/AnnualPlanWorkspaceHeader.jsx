@@ -21,6 +21,7 @@ import { PLAN_STATUS_OPTIONS, getPlanStatusLabel, getDueDateRuleLabel } from '..
 import AnnualPlanApprovalChain from './AnnualPlanApprovalChain';
 import AnnualPlanProgressStepper from './AnnualPlanProgressStepper';
 import { formatVccDateTime, toBuddhistYear } from '../utils/vccDateUtils';
+import useStore from '../../../store/useStore';
 
 const useDismiss = (open, onClose) => {
   const ref = useRef(null);
@@ -141,6 +142,7 @@ export const AnnualPlanWorkspaceHeader = ({
   activeAssets = [],
   canEditPlan = false,
   canCreatePlan = true,
+  canManageSettings,
   thresholds = {},
   onSubmitPlan,
   onOpenRevision,
@@ -157,6 +159,11 @@ export const AnnualPlanWorkspaceHeader = ({
   const [menuOpen, setMenuOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
+
+  const storeUser = useStore((s) => s.currentUser);
+  const isAllowedSettings = canManageSettings !== undefined
+    ? Boolean(canManageSettings)
+    : Boolean(storeUser?.isDcc || storeUser?.isQmr || Number(storeUser?.approval_level ?? storeUser?.approvalLevel ?? 1) >= 6);
 
   const menuRef = useDismiss(menuOpen, () => setMenuOpen(false));
 
@@ -657,7 +664,7 @@ export const AnnualPlanWorkspaceHeader = ({
                     <span>ประวัติการอนุมัติ</span>
                   </button>
                 )}
-                {onOpenSettings && (
+                {onOpenSettings && isAllowedSettings && (
                   <button
                     type="button"
                     role="menuitem"

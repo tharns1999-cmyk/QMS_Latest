@@ -14,7 +14,8 @@ export const PlanSettingsModal = ({
   draftSettings,
   setDraftSettings,
   saving,
-  onSave
+  onSave,
+  currentUser
 }) => {
   const [activeTab, setActiveTab] = useState('general'); // 'general' | 'profiles'
   const isDirty = Boolean(newProvider?.trim());
@@ -181,7 +182,7 @@ export const PlanSettingsModal = ({
                 </div>
               </>
             ) : (
-              <VccDocumentProfilesSummary />
+              <VccDocumentProfilesSummary currentUser={currentUser} />
             )}
           </div>
         </div>
