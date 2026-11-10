@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { VCC_TOKENS, VccSkeleton } from '../components/VccDesignSystem';
 import { AnnualPlanMatrixTable } from '../components/AnnualPlanMatrixTable';
 import { AssetFormModal, AssetStatusModal, AssetDetailHistoryModal, AssetTypesModal } from '../components/AssetRegisterModals';
@@ -35,7 +35,7 @@ describe('VCC Round E4 — Final Technical Quality & Accessibility Hardening', (
       expect(skeletonRoot).toHaveAttribute('aria-label', 'กำลังโหลดข้อมูล');
     });
 
-    it('AnnualPlanMatrixTable density and view mode buttons declare aria-pressed for assistive technologies', () => {
+    it('AnnualPlanMatrixTable toolbar provides accessible search input and omits duplicate density/view buttons', () => {
       render(
         <AnnualPlanMatrixTable
           planItems={[]}
@@ -45,20 +45,10 @@ describe('VCC Round E4 — Final Technical Quality & Accessibility Hardening', (
         />
       );
 
-      const comfortableBtn = screen.getByRole('button', { name: 'สบายตา' });
-      const compactBtn = screen.getByRole('button', { name: 'กะทัดรัด' });
-      const fullMonthsBtn = screen.getByRole('button', { name: '12 เดือน (เต็ม)' });
-      const quarterlyBtn = screen.getByRole('button', { name: 'รายไตรมาส (Q1-Q4)' });
-
-      expect(comfortableBtn).toHaveAttribute('aria-pressed');
-      expect(compactBtn).toHaveAttribute('aria-pressed');
-      expect(fullMonthsBtn).toHaveAttribute('aria-pressed');
-      expect(quarterlyBtn).toHaveAttribute('aria-pressed');
-
-      // Click compact to toggle
-      fireEvent.click(compactBtn);
-      expect(compactBtn).toHaveAttribute('aria-pressed', 'true');
-      expect(comfortableBtn).toHaveAttribute('aria-pressed', 'false');
+      expect(screen.getByLabelText('ค้นหารหัสหรือชื่อเครื่องมือในตาราง')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'สบายตา' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'กะทัดรัด' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: '12 เดือน (เต็ม)' })).not.toBeInTheDocument();
     });
   });
 

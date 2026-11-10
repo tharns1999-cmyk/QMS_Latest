@@ -155,24 +155,31 @@ export const AnnualPlanMonthCell = ({
   };
 
   const isCompact = density === 'compact';
+  const rawProvider = String(item?.provider_name || '').trim();
+  const isExternalProvider =
+    Boolean(rawProvider) &&
+    !rawProvider.includes('ภายใน') &&
+    rawProvider.toLowerCase() !== 'internal';
 
   return (
     <td
       ref={cellRef}
-      className={`relative text-center border-l border-b border-slate-100 transition-colors select-none ${
-        isCompact ? 'py-1 px-0.5' : 'py-2 px-1'
+      className={`group/cell relative text-center border-l border-b border-slate-100 transition-colors select-none align-middle ${
+        isCompact ? 'py-2 px-1' : 'py-2.5 px-1.5'
       } ${
         hasHoldOrNc
-          ? 'bg-rose-50/40'
+          ? 'bg-rose-50/30'
           : hasClosedPass
-          ? 'bg-emerald-50/40'
+          ? 'bg-emerald-50/30'
           : hasOpenWo
-          ? 'bg-amber-50/40'
+          ? 'bg-amber-50/30'
           : isPlanned
-          ? 'bg-indigo-50/30'
+          ? isExternalProvider
+            ? 'bg-sky-50/20'
+            : 'bg-indigo-50/20'
           : canEditPlan
-          ? 'hover:bg-slate-50/80 cursor-pointer'
-          : 'bg-white'
+          ? 'bg-transparent hover:bg-slate-50/60 cursor-pointer'
+          : 'bg-transparent'
       }`}
       onClick={(e) => {
         if (!hasAnyActivity) {
@@ -187,7 +194,7 @@ export const AnnualPlanMonthCell = ({
       }}
     >
       {/* Cell Badge Trigger */}
-      <div className="flex items-center justify-center gap-1 min-h-[44px] sm:min-h-[26px] flex-wrap">
+      <div className="flex items-center justify-center gap-1 min-h-[44px] sm:min-h-[30px] flex-wrap">
         {hasAnyActivity ? (
           <div className="inline-flex items-center gap-1 flex-wrap justify-center">
             {/* Planned Cycle Badge */}
@@ -210,52 +217,54 @@ export const AnnualPlanMonthCell = ({
                     ? 'ส่งผลแล้ว รอผู้ตรวจรับ'
                     : cycleWo?.status === 'OPEN'
                     ? 'มีใบสั่งงานกำลังดำเนินการ'
-                    : 'รอบตามแผนประจำปี'
+                    : isExternalProvider
+                    ? 'รอบสอบเทียบภายนอกตามแผน'
+                    : 'รอบทวนสอบภายในตามแผน'
                 }`}
-                className={`min-h-[44px] sm:min-h-[24px] min-w-[44px] sm:min-w-0 inline-flex items-center justify-center gap-0.5 rounded font-mono font-bold transition-transform cursor-pointer shadow-2xs hover:scale-105 motion-safe:active:scale-95 select-none ${
-                  isCompact ? 'px-1 py-0.5 text-xs' : 'px-1.5 py-0.5 text-xs'
-                } ${
+                className={`inline-flex items-center justify-center gap-1 min-h-[44px] sm:min-h-[24px] min-w-[44px] rounded-full px-2 py-0.5 text-[11px] font-semibold whitespace-nowrap border transition-all cursor-pointer shadow-2xs hover:scale-105 motion-safe:active:scale-95 select-none ${
                   cycleWo?.nc_status === 'OPEN' || cycleWo?.result_status === 'FAIL'
-                    ? 'bg-rose-600 text-white ring-1 ring-rose-400'
-                    : cycleWo?.status === 'CLOSED' && !cycleIsDifferentMonth
-                    ? 'bg-emerald-600 text-white ring-1 ring-emerald-400'
-                    : cycleWo?.status === 'CLOSED' && cycleIsDifferentMonth
-                    ? 'bg-indigo-700 text-white ring-1 ring-indigo-400'
+                    ? 'bg-rose-50 text-rose-700 border-rose-300 font-bold'
+                    : cycleWo?.status === 'CLOSED'
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-300 font-bold'
                     : cycleWo?.status === 'PENDING_REVIEW'
-                    ? 'bg-amber-500 text-white ring-1 ring-amber-300'
+                    ? 'bg-amber-50 text-amber-800 border-amber-300 font-semibold'
                     : cycleWo?.status === 'OPEN'
-                    ? 'bg-sky-600 text-white ring-1 ring-sky-400'
-                    : 'bg-indigo-600 text-white ring-1 ring-indigo-400'
+                    ? 'bg-sky-100 text-sky-800 border-sky-300 font-semibold'
+                    : isExternalProvider
+                    ? 'bg-sky-50 text-sky-700 border-sky-200/90 hover:bg-sky-100/80'
+                    : 'bg-indigo-50 text-indigo-700 border-indigo-200/90 hover:bg-indigo-100/80'
                 }`}
               >
                 {cycleWo?.nc_status === 'OPEN' || cycleWo?.result_status === 'FAIL' ? (
-                  <span className="flex items-center gap-0.5">
-                    <AlertTriangle size={11} />
+                  <span className="inline-flex items-center gap-0.5">
+                    <AlertTriangle size={11} className="text-rose-600 shrink-0" />
                     <span>NC</span>
                   </span>
                 ) : cycleWo?.status === 'CLOSED' ? (
-                  cycleIsDifferentMonth ? (
-                    <span className="flex items-center gap-0.5" title={`ทำจริง ${cycleActualDate}`}>
-                      <span>P{month}✓</span>
-                    </span>
-                  ) : (
-                    <span className="flex items-center gap-0.5">
-                      <CheckCircle2 size={11} />
-                      <span>A{month}</span>
-                    </span>
-                  )
+                  <span className="inline-flex items-center gap-0.5" title={cycleIsDifferentMonth ? `ทำจริง ${cycleActualDate}` : undefined}>
+                    <CheckCircle2 size={11} className="text-emerald-600 shrink-0" />
+                    <span>✓</span>
+                  </span>
                 ) : cycleWo?.status === 'PENDING_REVIEW' ? (
-                  <span className="flex items-center gap-0.5">
-                    <Clock size={11} />
-                    <span>REV</span>
+                  <span className="inline-flex items-center gap-0.5">
+                    <Clock size={11} className="text-amber-600 shrink-0" />
+                    <span>รอตรวจ</span>
                   </span>
                 ) : cycleWo?.status === 'OPEN' ? (
-                  <span className="flex items-center gap-0.5">
-                    <Clock size={11} />
-                    <span>WO</span>
+                  <span className="inline-flex items-center gap-0.5">
+                    <Clock size={11} className="text-sky-600 shrink-0" />
+                    <span>ใบงาน</span>
+                  </span>
+                ) : isExternalProvider ? (
+                  <span className="inline-flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-sky-500 shrink-0" />
+                    <span>ภายนอก</span>
                   </span>
                 ) : (
-                  <span>P{month}</span>
+                  <span className="inline-flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0" />
+                    <span>ภายใน</span>
+                  </span>
                 )}
               </button>
             )}
@@ -275,18 +284,16 @@ export const AnnualPlanMonthCell = ({
                     setIsOpen((prev) => !prev);
                   }}
                   title={`ทำจริง ${extWo.performed_at} (${pMonth ? `จากรอบแผนเดือน ${pMonth}` : 'นอกแผน'})`}
-                  className={`min-h-[44px] sm:min-h-[24px] min-w-[44px] sm:min-w-0 inline-flex items-center justify-center gap-0.5 rounded font-mono font-bold transition-transform cursor-pointer shadow-2xs hover:scale-105 motion-safe:active:scale-95 select-none ${
-                    isCompact ? 'px-1 py-0.5 text-xs' : 'px-1.5 py-0.5 text-xs'
-                  } ${
+                  className={`inline-flex items-center justify-center gap-0.5 rounded-full px-2 py-0.5 text-[11px] font-semibold border transition-transform cursor-pointer shadow-2xs hover:scale-105 motion-safe:active:scale-95 select-none ${
                     isNc
-                      ? 'bg-rose-700 text-white ring-1 ring-rose-400'
+                      ? 'bg-rose-50 text-rose-700 border-rose-300 font-bold'
                       : isClosed
-                      ? 'bg-emerald-600 text-white ring-1 ring-emerald-400'
-                      : 'bg-amber-600 text-white ring-1 ring-amber-400'
+                      ? 'bg-emerald-50 text-emerald-700 border-emerald-300 font-bold'
+                      : 'bg-amber-50 text-amber-800 border-amber-300'
                   }`}
                 >
-                  {isClosed ? <CheckCircle2 size={11} /> : <Clock size={11} />}
-                  <span>A({pMonth ? THAI_MONTH_NAMES_SHORT[pMonth - 1] : 'นอก'})</span>
+                  {isClosed ? <CheckCircle2 size={11} className="text-emerald-600" /> : <Clock size={11} />}
+                  <span>✓ ({pMonth ? THAI_MONTH_NAMES_SHORT[pMonth - 1] : 'นอก'})</span>
                 </button>
               );
             })}
@@ -304,12 +311,12 @@ export const AnnualPlanMonthCell = ({
             }}
             title={`คลิกเพื่อกำหนดเป้าหมายทวนสอบเดือน ${month}`}
             aria-label={`กำหนดเป้าหมายเดือน ${month}`}
-            className="min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 sm:w-5 sm:h-5 rounded-lg sm:rounded flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 hover:border hover:border-indigo-200 transition-all opacity-0 group-hover:opacity-100 focus:opacity-100 hover:opacity-100 cursor-pointer motion-safe:active:scale-95"
+            className="w-full min-w-[44px] min-h-[44px] sm:min-h-[26px] px-1.5 rounded-lg border border-transparent group-hover/cell:border-dashed group-hover/cell:border-indigo-300 hover:border-dashed hover:border-indigo-300 flex items-center justify-center text-slate-300 hover:text-indigo-600 hover:bg-indigo-50/40 transition-all opacity-0 group-hover/cell:opacity-100 focus:opacity-100 hover:opacity-100 cursor-pointer motion-safe:active:scale-95"
           >
-            <Plus size={14} className="sm:w-3 sm:h-3" />
+            <Plus size={13} />
           </button>
         ) : (
-          <span className="text-slate-300 font-mono text-xs">-</span>
+          <span className="text-slate-200 font-mono text-xs">·</span>
         )}
       </div>
 

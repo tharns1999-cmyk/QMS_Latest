@@ -1,25 +1,20 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import {
   FolderTree,
-  CheckCircle2,
-  Clock,
-  Edit2,
   Trash2,
   ShieldAlert,
   Plus,
   Sparkles,
   Search,
-  Maximize2,
-  Info,
   AlertTriangle,
-  Check,
-  X,
-  ListFilter
+  ListFilter,
+  Settings,
+  ChevronDown,
+  X
 } from 'lucide-react';
 import AnnualPlanMonthCell from './AnnualPlanMonthCell';
 import { isSavedPlanItem } from '../utils/planLabels';
 import AnnualPlanSideInspector from './AnnualPlanSideInspector';
-import { formatVccDueDatesList } from '../utils/vccDateUtils';
 import { VccScrollIndicator } from './VccDesignSystem';
 
 const useDismiss = (open, onClose) => {
@@ -49,12 +44,28 @@ const MONTH_LABELS = [
   'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'
 ];
 
-const QUARTERS = [
-  { key: 'Q1', label: 'Q1 (ม.ค.-มี.ค.)', months: [1, 2, 3] },
-  { key: 'Q2', label: 'Q2 (เม.ย.-มิ.ย.)', months: [4, 5, 6] },
-  { key: 'Q3', label: 'Q3 (ก.ค.-ก.ย.)', months: [7, 8, 9] },
-  { key: 'Q4', label: 'Q4 (ต.ค.-ธ.ค.)', months: [10, 11, 12] }
-];
+const formatCleanAssetName = (rawName) => {
+  if (!rawName) return '-';
+  return String(rawName).replace(/^\[ข้อมูลทดสอบ\]\s*/g, '').trim();
+};
+
+const formatCleanSecondLine = (item) => {
+  const rawProvider = String(item?.provider_name || 'ทวนสอบภายใน').trim();
+  const isExternal =
+    Boolean(rawProvider) &&
+    !rawProvider.includes('ภายใน') &&
+    rawProvider.toLowerCase() !== 'internal';
+  const providerDisplay = isExternal
+    ? rawProvider.includes('ภายนอก')
+      ? rawProvider
+      : `สอบเทียบภายนอก (${rawProvider})`
+    : rawProvider || 'ทวนสอบภายใน';
+
+  const rawFreq = String(item?.frequency_label || 'รายปี').trim();
+  const freqDisplay = rawFreq.startsWith('ความถี่') ? rawFreq : `ความถี่${rawFreq}`;
+
+  return `${providerDisplay} · ${freqDisplay}`;
+};
 
 export const AnnualPlanMatrixTable = ({
   planItems = [],
@@ -77,41 +88,27 @@ export const AnnualPlanMatrixTable = ({
   onQuickRemoveMonth,
   onCreateWorkOrder
 }) => {
-  const [viewMode, setViewMode] = useState(() => {
-    if (typeof window !== 'undefined' && window.innerWidth < 768) {
-      return 'QUARTERLY';
-    }
-    return '12_MONTHS';
-  });
-  const userExplicitlySetMode = useRef(false);
-
-  const handleSetViewMode = (mode) => {
-    userExplicitlySetMode.current = true;
-    setViewMode(mode);
-  };
-
-  useEffect(() => {
-    const handleResize = () => {
-      // Auto-adapt view mode on viewport change ONLY if user hasn't explicitly chosen
-      if (!userExplicitlySetMode.current && typeof window !== 'undefined') {
-        const isMobile = window.innerWidth < 768;
-        setViewMode(isMobile ? 'QUARTERLY' : '12_MONTHS');
-      }
-    };
-
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
-  const [density, setDensity] = useState('compact'); // default to compact per UX Round C
   const [tableSearch, setTableSearch] = useState('');
+  const [localCategory, setLocalCategory] = useState('');
   const [inspectorItem, setInspectorItem] = useState(null);
   const [savingCellKey, setSavingCellKey] = useState('');
-  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+  const [confirmDeleteItem, setConfirmDeleteItem] = useState(null);
   const [filterOpen, setFilterOpen] = useState(false);
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
 
   const filterRef = useDismiss(filterOpen, () => setFilterOpen(false));
+  const addMenuRef = useDismiss(addMenuOpen, () => setAddMenuOpen(false));
+
   const extraFilterCount = (filterYear ? 1 : 0) + (filterDept ? 1 : 0);
-  const activeCategory = (categoryFilter || selectedCategory || '').trim();
+  const activeCategory = (categoryFilter || selectedCategory || localCategory || '').trim();
+
+  const availableCategories = useMemo(() => {
+    const set = new Set();
+    planItems.forEach((item) => {
+      if (item?.asset_type) set.add(item.asset_type);
+    });
+    return Array.from(set);
+  }, [planItems]);
 
   const tableContainerRef = useRef(null);
   const [canScrollRight, setCanScrollRight] = useState(false);
@@ -129,13 +126,11 @@ export const AnnualPlanMatrixTable = ({
     const q = tableSearch.toLowerCase().trim();
 
     return planItems.filter((item) => {
-      // 1. Category Filter
       if (activeCategory) {
         const itemCat = item.asset_type || 'ไม่ระบุประเภท';
         if (itemCat !== activeCategory) return false;
       }
 
-      // 2. Search Query Filter
       if (q) {
         const code = (item.asset_code || '').toLowerCase();
         const name = (item.asset_name || '').toLowerCase();
@@ -197,61 +192,55 @@ export const AnnualPlanMatrixTable = ({
     checkScroll();
     window.addEventListener('resize', checkScroll);
     return () => window.removeEventListener('resize', checkScroll);
-  }, [checkScroll, flatInstrumentRows.length, viewMode]);
-
-
+  }, [checkScroll, flatInstrumentRows.length]);
 
   return (
-    <div data-testid="annual-plan-matrix-table" className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-hidden">
-      {/* Table Control Toolbar */}
-      <div className="px-4 py-2.5 bg-slate-50/80 border-b border-slate-200/80 flex flex-wrap items-center justify-between gap-3 text-sm">
+    <div
+      data-testid="annual-plan-matrix-table"
+      className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-hidden"
+    >
+      {/* Clean Enterprise Toolbar: Left = Search + Filters, Right = Primary Import CTA */}
+      <div className="px-4 py-3 bg-slate-50/80 border-b border-slate-200/80 flex flex-wrap items-center justify-between gap-3 text-sm">
+        {/* Left: Search + Category Filter + Year/Dept Filter */}
         <div className="flex flex-wrap items-center gap-2.5">
-          {/* งานหลักของผู้ใช้: เลือกเครื่องมือจากทะเบียนเข้าแผน */}
-          {canEditPlan && onOpenSmartImport && (
-            <button
-              type="button"
-              onClick={onOpenSmartImport}
-              className="inline-flex items-center justify-center h-9 px-4 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-sm font-semibold transition-colors cursor-pointer shadow-2xs focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+          <div className="relative">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              value={tableSearch}
+              onChange={(e) => setTableSearch(e.target.value)}
+              placeholder="ค้นหารหัส / ชื่อเครื่องมือ..."
+              aria-label="ค้นหารหัสหรือชื่อเครื่องมือในตาราง"
+              className="h-9 pl-9 pr-7 rounded-xl border border-slate-300 text-xs sm:text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 w-52 sm:w-64 text-slate-800 placeholder-slate-400 shadow-2xs"
+            />
+            {tableSearch && (
+              <button
+                type="button"
+                onClick={() => setTableSearch('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs p-0.5 cursor-pointer"
+                title="ล้างคำค้นหา"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+
+          {availableCategories.length > 0 && (
+            <select
+              aria-label="กรองตามประเภทเครื่องมือ"
+              value={activeCategory}
+              onChange={(e) => setLocalCategory(e.target.value)}
+              className="h-9 px-3 rounded-xl border border-slate-300 bg-white text-xs font-medium text-slate-700 hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 shadow-2xs cursor-pointer"
             >
-              <span>เพิ่มเครื่องมือจากทะเบียน</span>
-            </button>
-          )}
-          {canEditPlan && (
-            <button
-              type="button"
-              onClick={() => onOpenAddItem(null)}
-              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-xl border border-slate-300 text-slate-700 hover:text-slate-900 hover:bg-slate-100 text-sm font-medium transition-colors cursor-pointer"
-            >
-              <Plus size={14} />
-              <span>กำหนดรายการเอง</span>
-            </button>
+              <option value="">ทุกประเภทเครื่องมือ</option>
+              {availableCategories.map((cat) => (
+                <option key={cat} value={cat}>
+                  {cat}
+                </option>
+              ))}
+            </select>
           )}
 
-          {/* Quick Table Search */}
-          {planItems.length > 2 && (
-            <div className="relative">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                value={tableSearch}
-                onChange={(e) => setTableSearch(e.target.value)}
-                placeholder="ค้นหารหัส / ชื่อในตาราง..."
-                className="h-9 pl-9 pr-7 rounded-xl border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 w-48 sm:w-56 text-slate-800 placeholder-slate-400"
-              />
-              {tableSearch && (
-                <button
-                  type="button"
-                  onClick={() => setTableSearch('')}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs p-0.5 cursor-pointer"
-                  title="ล้างคำค้นหา"
-                >
-                  ✕
-                </button>
-              )}
-            </div>
-          )}
-
-          {/* กรองปี/แผนก ใน Table Toolbar */}
           {(availableYears.length > 0 || activeDepartments.length > 0) && (
             <div className="relative" ref={filterRef}>
               <button
@@ -281,7 +270,7 @@ export const AnnualPlanMatrixTable = ({
                       <option value="">ทุกปี</option>
                       {availableYears.map((yr) => (
                         <option key={yr} value={String(yr)}>
-                          {yr} (พ.ศ. {yr + 543})
+                          {yr} (พ.ศ. {Number(yr) + 543})
                         </option>
                       ))}
                     </select>
@@ -297,7 +286,7 @@ export const AnnualPlanMatrixTable = ({
                       <option value="">ทุกแผนก</option>
                       {activeDepartments.map((d) => (
                         <option key={d.code} value={d.code}>
-                          {d.code} — {d.nameTh}
+                          {d.code} — {d.nameTh || d.name_th}
                         </option>
                       ))}
                     </select>
@@ -308,67 +297,68 @@ export const AnnualPlanMatrixTable = ({
           )}
         </div>
 
-        {/* View & Density Controls & Smart Import */}
-        <div className="flex items-center gap-2">
-          {/* Density Switcher */}
-          <div className="inline-flex items-center gap-1 bg-slate-200/70 p-1 rounded-xl text-xs" role="group" aria-label="ระดับความแน่นของตาราง">
-            <button
-              type="button"
-              aria-pressed={density === 'comfortable'}
-              onClick={() => setDensity('comfortable')}
-              className={`min-h-[32px] sm:min-h-[28px] px-2.5 py-1 rounded-lg font-semibold transition-all cursor-pointer ${
-                density === 'comfortable'
-                  ? 'bg-white text-slate-900 shadow-2xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              สบายตา
-            </button>
-            <button
-              type="button"
-              aria-pressed={density === 'compact'}
-              onClick={() => setDensity('compact')}
-              className={`min-h-[32px] sm:min-h-[28px] px-2.5 py-1 rounded-lg font-semibold transition-all cursor-pointer ${
-                density === 'compact'
-                  ? 'bg-white text-slate-900 shadow-2xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              กะทัดรัด
-            </button>
-          </div>
+        {/* Right: Single Primary Action Button (+ เพิ่มเครื่องมือจากทะเบียน) with Secondary Dropdown */}
+        {canEditPlan && (onOpenSmartImport || onOpenAddItem) && (
+          <div className="relative inline-flex items-center" ref={addMenuRef}>
+            {onOpenSmartImport ? (
+              <button
+                type="button"
+                onClick={onOpenSmartImport}
+                className={`inline-flex items-center justify-center gap-1.5 h-9 px-3.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs sm:text-sm font-semibold transition-colors cursor-pointer shadow-2xs focus:outline-none focus:ring-2 focus:ring-indigo-500/20 ${
+                  onOpenAddItem ? 'rounded-l-xl' : 'rounded-xl'
+                }`}
+              >
+                <Plus size={15} />
+                <span>เพิ่มเครื่องมือจากทะเบียน</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => onOpenAddItem(null)}
+                className="inline-flex items-center justify-center gap-1.5 h-9 px-3.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs sm:text-sm font-semibold transition-colors cursor-pointer shadow-2xs"
+              >
+                <Plus size={15} />
+                <span>เพิ่มเครื่องมือจากทะเบียน</span>
+              </button>
+            )}
 
-          {/* View Mode: 12 Months vs Quarterly */}
-          <div className="inline-flex items-center gap-1 bg-slate-200/70 p-1 rounded-xl text-xs" role="group" aria-label="มุมมองตารางเวลา">
-            <button
-              type="button"
-              aria-pressed={viewMode === '12_MONTHS'}
-              onClick={() => handleSetViewMode('12_MONTHS')}
-              className={`min-h-[32px] sm:min-h-[28px] px-2.5 py-1 rounded-lg font-semibold transition-all cursor-pointer ${
-                viewMode === '12_MONTHS'
-                  ? 'bg-white text-slate-900 shadow-2xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              12 เดือน (เต็ม)
-            </button>
-            <button
-              type="button"
-              aria-pressed={viewMode === 'QUARTERLY'}
-              onClick={() => handleSetViewMode('QUARTERLY')}
-              className={`min-h-[32px] sm:min-h-[28px] px-2.5 py-1 rounded-lg font-semibold transition-all cursor-pointer ${
-                viewMode === 'QUARTERLY'
-                  ? 'bg-white text-slate-900 shadow-2xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              รายไตรมาส (Q1-Q4)
-            </button>
+            {onOpenSmartImport && onOpenAddItem && (
+              <>
+                <button
+                  type="button"
+                  aria-label="ตัวเลือกการเพิ่มเครื่องมือเพิ่มเติม"
+                  aria-expanded={addMenuOpen}
+                  onClick={() => setAddMenuOpen((v) => !v)}
+                  className="inline-flex items-center justify-center h-9 px-2 rounded-r-xl bg-indigo-700 hover:bg-indigo-800 text-white border-l border-indigo-500 transition-colors cursor-pointer"
+                >
+                  <ChevronDown size={14} />
+                </button>
+                {addMenuOpen && (
+                  <div
+                    role="menu"
+                    className="absolute right-0 top-full mt-1.5 z-40 w-48 bg-white rounded-xl border border-slate-200 shadow-lg py-1.5 text-xs"
+                  >
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setAddMenuOpen(false);
+                        onOpenAddItem(null);
+                      }}
+                      className="w-full flex items-center gap-2 px-3.5 py-2 text-left font-medium text-slate-700 hover:bg-slate-50 cursor-pointer"
+                    >
+                      <Plus size={14} className="text-indigo-600" />
+                      <span>กำหนดรายการเอง</span>
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
           </div>
-        </div>
+        )}
       </div>
 
-      {/* Main Single-Row Interactive Matrix Table */}
+      {/* Main 12-Month Interactive Matrix Table (No middle Due Date column) */}
       <div className="relative">
         <div
           ref={tableContainerRef}
@@ -378,418 +368,236 @@ export const AnnualPlanMatrixTable = ({
           <table className="w-full text-left border-collapse text-sm">
             <thead className="sticky top-0 z-20 bg-slate-50/95 backdrop-blur-xs shadow-2xs">
               <tr className="border-b border-slate-200 text-slate-700 text-xs font-bold tracking-wider uppercase">
-                {/* Sticky Column: Asset Code & Name */}
-                <th className="py-2.5 sm:py-3 px-2 sm:px-3.5 sticky left-0 z-30 bg-slate-50 shadow-[1px_0_0_0_#e2e8f0] w-[130px] min-w-[130px] max-w-[140px] sm:w-[220px] sm:min-w-[220px] xl:min-w-[260px] xl:w-[260px]">
+                {/* Column 1: Sticky Asset Code & Name */}
+                <th className="py-3 px-3.5 sticky left-0 z-30 bg-slate-50 shadow-[1px_0_0_0_#e2e8f0] min-w-[230px] sm:min-w-[280px] xl:min-w-[320px]">
                   รายการเครื่องมือวัด
                 </th>
 
-                {/* Due Date & Evidence Summary (Essential for audit & automated verification) */}
-                <th className="py-3 px-3.5 border-l border-slate-200/70 min-w-[180px] w-[180px] whitespace-nowrap xl:sticky xl:left-[260px] xl:z-30 xl:bg-slate-50 xl:shadow-[1px_0_0_0_#e2e8f0]">
-                  วันครบกำหนด / สถานะหลักฐาน
-                </th>
-
-              {/* Month or Quarter Columns */}
-              {viewMode === '12_MONTHS'
-                ? MONTHS.map((m) => (
-                    <th
-                      key={m}
-                      className="py-2.5 px-1.5 text-center min-w-[56px] w-[56px] border-l border-slate-200/70 text-slate-800 font-mono whitespace-nowrap"
-                    >
-                      <div className="text-xs text-slate-500 font-medium">{MONTH_LABELS[m - 1]}</div>
-                      <div className="text-xs font-bold">ด.{m}</div>
-                    </th>
-                  ))
-                : QUARTERS.map((q) => (
-                    <th
-                      key={q.key}
-                      className="py-3 px-2 text-center min-w-[100px] w-[100px] border-l border-slate-200/70 text-slate-800 font-mono text-xs font-bold whitespace-nowrap"
-                    >
-                      {q.label}
-                    </th>
-                  ))}
-
-              {/* Context Actions Header (Compact 104px) */}
-              <th className="py-3 px-2.5 text-right w-[104px] min-w-[104px] max-w-[104px] text-xs font-bold tracking-wider uppercase text-slate-700 whitespace-nowrap">
-                การจัดการ
-              </th>
-            </tr>
-          </thead>
-
-          <tbody className="divide-y divide-slate-100">
-            {flatInstrumentRows.length === 0 ? (
-              <tr>
-                <td colSpan={viewMode === '12_MONTHS' ? 15 : 7} className="py-12 text-center text-slate-500 bg-white">
-                  <div className="max-w-md mx-auto space-y-3">
-                    <div className="w-12 h-12 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center mx-auto text-indigo-600">
-                      <Sparkles size={22} />
-                    </div>
-                    <div>
-                      <h4 className="text-sm font-bold text-slate-800">
-                        {planItems.length === 0
-                          ? 'แผนประจำปีฉบับนี้ยังไม่มีรายการเครื่องมือวัด'
-                          : activeCategory
-                          ? `ไม่พบเครื่องมือในประเภท “${activeCategory}”`
-                          : 'ไม่พบเครื่องมือที่ตรงกับคำค้นหา'}
-                      </h4>
-                      <p className="text-xs text-slate-500 mt-1">
-                        {planItems.length === 0
-                          ? canEditPlan
-                            ? 'กดปุ่ม “เพิ่มเครื่องมือจากทะเบียน” ด้านบน เพื่อเลือกเครื่องมือและกำหนดรอบการทวนสอบ'
-                            : 'แผนในสถานะนี้ไม่สามารถเพิ่มรายการได้'
-                          : activeCategory
-                          ? `ไม่พบเครื่องมือประเภท "${activeCategory}" ในแผนฉบับนี้`
-                          : `ไม่พบข้อมูลที่ตรงกับ "${tableSearch}" ในตาราง`}
-                      </p>
-                    </div>
-
-                    {planItems.length === 0 ? null : (
-                      <div className="pt-1">
-                        <button
-                          type="button"
-                          onClick={() => setTableSearch('')}
-                          className="px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
-                        >
-                          ล้างคำค้นหา
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            ) : (
-              flatInstrumentRows.map((item) => {
-                const isGroup = Number(item.is_group) === 1;
-                const isCompositeSet = item.is_composite_set || item.group_nature === 'COMPOSITE_SET';
-                const isLogicalGroup = isGroup && !isCompositeSet;
-
-                const itemWos = (workOrders || []).filter(
-                  (w) => w.plan_item_id === item.id || (w.plan_id === activePlan?.id && w.asset_id === item.asset_id)
-                );
-                const hasHoldOrNc = itemWos.some((w) => w.nc_status === 'OPEN' || w.result_status === 'FAIL') || item.asset_status === 'ON_HOLD';
-                const closedPassCount = itemWos.filter((w) => w.status === 'CLOSED' && w.result_status === 'PASS').length;
-                const plannedMonthsCount = (item.planned_months || []).length;
-
-                return (
-                  <tr
-                    key={item.id}
-                    className={`transition-colors group hover:bg-slate-50/60 ${
-                      isLogicalGroup ? 'bg-slate-50/50' : 'bg-white'
-                    }`}
+                {/* Columns 2-13: 12 Months (ม.ค. - ธ.ค.) */}
+                {MONTHS.map((m) => (
+                  <th
+                    key={m}
+                    className="py-3 px-1.5 text-center min-w-[68px] border-l border-slate-200/70 text-slate-700 font-semibold whitespace-nowrap"
                   >
-                    {/* Sticky Left: Asset Code & Operation Context (Flat Row, Zero Indentation) */}
-                    <td className={`py-2 sm:py-2.5 px-2 sm:px-3.5 align-middle sticky left-0 z-10 shadow-[1px_0_0_0_#e2e8f0] w-[130px] min-w-[130px] max-w-[140px] sm:w-[220px] sm:min-w-[220px] xl:min-w-[260px] xl:w-[260px] ${
-                      isLogicalGroup ? 'bg-slate-50 group-hover:bg-slate-100' : 'bg-white group-hover:bg-slate-50'
-                    }`}>
-                      <div className="flex items-start justify-between gap-1.5 sm:gap-2">
-                        <div className="space-y-1 min-w-0 flex-1">
-                          <div className="flex items-center gap-1.5 flex-wrap">
+                    {MONTH_LABELS[m - 1]}
+                  </th>
+                ))}
+
+                {/* Column 14: Actions */}
+                <th className="py-3 px-3.5 text-right w-auto min-w-[156px] text-xs font-bold tracking-wider uppercase text-slate-700 whitespace-nowrap border-l border-slate-200/70">
+                  การจัดการ
+                </th>
+              </tr>
+            </thead>
+
+            <tbody className="divide-y divide-slate-100">
+              {flatInstrumentRows.length === 0 ? (
+                <tr>
+                  <td colSpan={14} className="py-12 text-center text-slate-500 bg-white">
+                    <div className="max-w-md mx-auto space-y-3">
+                      <div className="w-12 h-12 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center mx-auto text-indigo-600">
+                        <Sparkles size={22} />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-bold text-slate-800">
+                          {planItems.length === 0
+                            ? 'แผนประจำปีฉบับนี้ยังไม่มีรายการเครื่องมือวัด'
+                            : activeCategory
+                            ? `ไม่พบเครื่องมือในประเภท “${activeCategory}”`
+                            : 'ไม่พบเครื่องมือที่ตรงกับคำค้นหา'}
+                        </h4>
+                        <p className="text-xs text-slate-500 mt-1">
+                          {planItems.length === 0
+                            ? canEditPlan
+                              ? 'กดปุ่ม “เพิ่มเครื่องมือจากทะเบียน” ด้านบน เพื่อเลือกเครื่องมือและกำหนดรอบการทวนสอบ'
+                              : 'แผนในสถานะนี้ไม่สามารถเพิ่มรายการได้'
+                            : activeCategory
+                            ? `ไม่พบเครื่องมือประเภท "${activeCategory}" ในแผนฉบับนี้`
+                            : `ไม่พบข้อมูลที่ตรงกับ "${tableSearch}" ในตาราง`}
+                        </p>
+                      </div>
+
+                      {planItems.length === 0 ? null : (
+                        <div className="pt-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setTableSearch('');
+                              setLocalCategory('');
+                            }}
+                            className="px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
+                          >
+                            ล้างคำค้นหา
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                flatInstrumentRows.map((item) => {
+                  const isGroup = Number(item.is_group) === 1;
+                  const isCompositeSet = item.is_composite_set || item.group_nature === 'COMPOSITE_SET';
+                  const isLogicalGroup = isGroup && !isCompositeSet;
+                  const plannedMonthsCount = (item.planned_months || []).length;
+                  const cleanName = formatCleanAssetName(item.asset_name);
+
+                  return (
+                    <tr
+                      key={item.id}
+                      className={`transition-colors group hover:bg-slate-50/60 ${
+                        isLogicalGroup ? 'bg-slate-50/50' : 'bg-white'
+                      }`}
+                    >
+                      {/* Column 1: Clean 2-Line Instrument Identity */}
+                      <td
+                        className={`py-3 px-3.5 align-middle sticky left-0 z-10 shadow-[1px_0_0_0_#e2e8f0] min-w-[230px] sm:min-w-[280px] xl:min-w-[320px] ${
+                          isLogicalGroup ? 'bg-slate-50 group-hover:bg-slate-100' : 'bg-white group-hover:bg-slate-50'
+                        }`}
+                      >
+                        <div className="space-y-1 min-w-0">
+                          {/* Line 1: Monospace Bold Asset Code + Instrument Name + Essential Status Badges */}
+                          <div className="flex items-center gap-2 flex-wrap">
                             <button
                               type="button"
                               onClick={() => setInspectorItem(item)}
                               title="คลิกเพื่อดูรายละเอียดและสเปกเครื่องมือ"
-                              className="text-left font-mono font-bold text-indigo-700 hover:text-indigo-900 hover:underline text-xs sm:text-sm tracking-tight cursor-pointer truncate max-w-full"
+                              aria-label={`ดูสเปกและรายละเอียดเครื่องมือ ${item.asset_code}`}
+                              className="inline-flex items-baseline gap-2 text-left group/title cursor-pointer max-w-full"
                             >
-                              {item.asset_code}
+                              <span className="font-mono font-bold text-indigo-700 group-hover/title:text-indigo-900 group-hover/title:underline text-xs sm:text-sm tracking-tight shrink-0">
+                                {item.asset_code}
+                              </span>
+                              <span className="text-xs sm:text-sm font-semibold text-slate-900 group-hover/title:text-indigo-900 truncate">
+                                {cleanName}
+                              </span>
                             </button>
 
                             {item.asset_status === 'ON_HOLD' && (
-                              <span className="px-1.5 py-0.5 rounded bg-rose-100 text-rose-800 text-xs font-bold border border-rose-200">
+                              <span className="px-1.5 py-0.5 rounded bg-rose-100 text-rose-800 text-[11px] font-bold border border-rose-200 whitespace-nowrap">
                                 ระงับใช้งาน
                               </span>
                             )}
 
-                            {/* Clean Badges: Composite Set / Historical Frozen Group */}
                             {isCompositeSet ? (
-                              <span className="inline-flex items-center gap-1 px-1.5 sm:px-2 py-0.5 rounded-md bg-teal-50 border border-teal-200 text-teal-800 font-semibold text-xs">
-                                <span className="hidden sm:inline">ชุดเครื่องมือ (Composite Set)</span>
-                                <span className="inline sm:hidden">ชุดเครื่องมือ</span>
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-teal-50 border border-teal-200 text-teal-800 font-semibold text-[11px] whitespace-nowrap">
+                                ชุดเครื่องมือ
                               </span>
                             ) : isLogicalGroup ? (
-                              <span className="inline-flex items-center gap-1 px-1.5 sm:px-2 py-0.5 rounded-md bg-purple-50 border border-purple-200 text-purple-900 font-bold text-xs">
-                                <FolderTree size={12} className="text-purple-600 shrink-0" />
-                                <span className="hidden sm:inline">กลุ่มเครื่องมือ (Group)</span>
-                                <span className="inline sm:hidden">กลุ่ม</span>
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-purple-50 border border-purple-200 text-purple-900 font-bold text-[11px] whitespace-nowrap">
+                                <FolderTree size={11} className="text-purple-600 shrink-0" />
+                                <span>กลุ่มเครื่องมือ</span>
                               </span>
                             ) : null}
                           </div>
 
-                          <div className="text-xs sm:text-sm font-semibold text-slate-900 leading-snug line-clamp-2 break-words flex items-center gap-1.5 flex-wrap">
-                            <span>{item.asset_name}</span>
-                            {item.brand && (
-                              <span className="text-slate-500 font-normal text-xs">({item.brand})</span>
+                          {/* Line 2: Single-line Method & Frequency + Unplanned / Unsaved Note */}
+                          <div className="flex items-center gap-2 flex-wrap text-xs text-slate-500">
+                            <span className="font-medium text-slate-600">
+                              {formatCleanSecondLine(item)}
+                            </span>
+
+                            {plannedMonthsCount === 0 && (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-700 text-[11px] font-medium">
+                                {item.remarks ? `ไม่วางแผน (${item.remarks})` : 'ยังไม่ได้วางแผน'}
+                              </span>
                             )}
-                          </div>
-                          {(item.mpe || item.acceptance_criteria || item.calibration_points) && (
-                            <div className="flex items-center gap-1 flex-wrap text-[10px] pt-0.5">
-                              {item.mpe && (
-                                <span className="bg-amber-50 text-amber-900 border border-amber-200/80 px-1.5 py-0.2 rounded font-medium">
-                                  MPE: {item.mpe}
-                                </span>
-                              )}
-                              {item.calibration_points && (
-                                <span className="bg-blue-50 text-blue-900 border border-blue-200/80 px-1.5 py-0.2 rounded font-medium">
-                                  จุดวัด: {item.calibration_points}
-                                </span>
-                              )}
-                              {item.acceptance_criteria && (
-                                <span className="bg-emerald-50 text-emerald-900 border border-emerald-200/80 px-1.5 py-0.2 rounded font-medium">
-                                  เกณฑ์: {item.acceptance_criteria}
-                                </span>
-                              )}
-                            </div>
-                          )}
-                          {isCompositeSet && item.composite_details && (
-                            <div className="text-xs text-teal-800 leading-snug line-clamp-2">
-                              อุปกรณ์ในชุด: {item.composite_details}
-                            </div>
-                          )}
-                          <div className="text-xs text-slate-500 flex flex-wrap items-center gap-1 sm:gap-1.5 pt-0.5">
-                            <span className="font-semibold text-slate-700">{item.frequency_label || 'รายปี'}</span>
-                            <span>•</span>
-                            <span className="truncate max-w-[80px] sm:max-w-none">{item.provider_name || 'ทวนสอบภายใน'}</span>
-                            <span>•</span>
-                            <span className="text-slate-600 truncate max-w-[70px] sm:max-w-none">แผนก {item.responsible_dept || item.asset_department}</span>
-                            {item.asset_type && (
-                              <>
-                                <span>•</span>
-                                <span className="text-slate-500 font-medium truncate max-w-[60px] sm:max-w-none">{item.asset_type}</span>
-                              </>
+
+                            {!isSavedPlanItem(item) && (
+                              <span className="text-[11px] text-slate-400">
+                                อยู่ในทะเบียนเครื่องมือ • ยังไม่บันทึกเข้าแผน
+                              </span>
                             )}
                           </div>
 
                           {isLogicalGroup && !canEditPlan && activePlan?.status === 'APPROVED' && onOpenGroupWorkOrderCheck && (
-                            <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                            <div className="pt-0.5">
                               <button
                                 type="button"
                                 onClick={() => onOpenGroupWorkOrderCheck(item)}
                                 title="ตรวจรหัสลูกก่อนออกใบงาน"
                                 aria-label="ตรวจรหัสลูกก่อนออกใบงาน"
-                                className="inline-flex items-center gap-1.5 px-1.5 sm:px-2 py-0.5 rounded-md bg-purple-100/70 hover:bg-purple-200 border border-purple-300 text-purple-950 font-bold text-xs transition-colors cursor-pointer text-left"
+                                className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-purple-100/70 hover:bg-purple-200 border border-purple-300 text-purple-950 font-bold text-xs transition-colors cursor-pointer"
                               >
                                 <ShieldAlert size={12} className="text-purple-700 shrink-0" />
-                                <span className="hidden sm:inline">ตรวจรหัสลูกก่อนออกใบงาน</span>
-                                <span className="inline sm:hidden">ตรวจรหัสลูก</span>
+                                <span>ตรวจรหัสลูกก่อนออกใบงาน</span>
                               </button>
-                            </div>
-                          )}
-
-                          {plannedMonthsCount === 0 && item.remarks && (
-                            <div className="text-xs text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 mt-1 inline-block">
-                              เหตุผลไม่วางแผน: {item.remarks}
                             </div>
                           )}
                         </div>
+                      </td>
 
-                        {/* Inspector trigger button */}
-                        <button
-                          type="button"
-                          onClick={() => setInspectorItem(item)}
-                          title="ดูรายละเอียดข้อมูลเครื่องมือ"
-                          aria-label={`ดูรายละเอียด ${item.asset_code}`}
-                          className="p-1 sm:p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer mt-0.5 shrink-0 opacity-80 group-hover:opacity-100"
-                        >
-                          <Info size={14} className="shrink-0" />
-                        </button>
-                      </div>
-                    </td>
+                      {/* Columns 2-13: 12-Month Cells */}
+                      {MONTHS.map((m) => (
+                        <AnnualPlanMonthCell
+                          key={`${item.id}-${m}`}
+                          month={m}
+                          item={item}
+                          plan={activePlan}
+                          workOrders={workOrders}
+                          canEditPlan={canEditPlan && (item.asset_status || 'ACTIVE') === 'ACTIVE'}
+                          isSaving={savingCellKey === `${item.id}-${m}`}
+                          onQuickAddMonth={handleCellAddMonth}
+                          onQuickRemoveMonth={handleCellRemoveMonth}
+                          onCreateWorkOrder={handleCellCreateWo}
+                          onOpenGroupCheck={onOpenGroupWorkOrderCheck}
+                          onOpenFullEdit={onOpenAddItem}
+                          density="compact"
+                        />
+                      ))}
 
-                    {/* Due Dates & Completion Evidence Summary */}
-                    <td className={`py-2.5 px-3.5 align-middle border-l border-slate-100 min-w-[180px] w-[180px] xl:sticky xl:left-[260px] xl:z-10 xl:shadow-[1px_0_0_0_#e2e8f0] ${
-                      isLogicalGroup ? 'xl:bg-slate-50 group-hover:xl:bg-slate-100' : 'xl:bg-white group-hover:xl:bg-slate-50'
-                    }`}>
-                      <div className="font-semibold text-slate-900 text-xs sm:text-sm font-sans" title={(item.due_dates || []).join(', ')}>
-                        {(item.due_dates || []).length > 0 ? (
-                          <>
-                            <span>{formatVccDueDatesList(item.due_dates, 2)}</span>
-                            <span className="block sm:inline text-slate-400 font-normal font-mono text-[11px] sm:text-xs sm:ml-1">
-                              (
-                              {(item.due_dates || []).slice(0, 2).map((d, idx) => (
-                                <React.Fragment key={d}>
-                                  {idx > 0 && ', '}
-                                  <span>{d}</span>
-                                </React.Fragment>
-                              ))}
-                              )
-                            </span>
-                          </>
-                        ) : (
-                          <span className="text-slate-400 font-sans text-xs">ไม่มีรอบวางแผน</span>
-                        )}
-                      </div>
-                      {hasHoldOrNc ? (
-                        <span className="mt-1 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-rose-50 border border-rose-200 text-rose-800 font-bold text-xs">
-                          <AlertTriangle size={12} className="text-rose-700 shrink-0" />
-                          <span>{item.asset_status === 'ON_HOLD' ? 'ระงับใช้' : 'พบข้อบกพร่อง / ระงับใช้ (NC)'}</span>
-                        </span>
-                      ) : plannedMonthsCount > 0 && closedPassCount >= plannedMonthsCount ? (
-                        <span className="mt-1 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-800 font-bold text-xs">
-                          <CheckCircle2 size={12} className="text-emerald-700 shrink-0" />
-                          <span>ทวนสอบเสร็จแล้ว • มีใบรับรอง</span>
-                        </span>
-                      ) : closedPassCount > 0 ? (
-                        <span className="mt-1 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-indigo-50 border border-indigo-200 text-indigo-900 font-bold text-xs">
-                          <CheckCircle2 size={12} className="text-indigo-700 shrink-0" />
-                          <span>เสร็จบางรอบ ({closedPassCount}/{plannedMonthsCount})</span>
-                        </span>
-                      ) : itemWos.some((w) => w.status === 'OPEN' || w.status === 'PENDING_REVIEW') ? (
-                        <span className="mt-1 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-sky-50 border border-sky-200 text-sky-900 font-bold text-xs">
-                          <Clock size={12} className="text-sky-700 shrink-0" />
-                          <span>มีใบงานกำลังดำเนินการ</span>
-                        </span>
-                      ) : plannedMonthsCount > 0 ? (
-                        <span className="mt-1 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-amber-50 border border-amber-200 text-amber-900 font-bold text-xs">
-                          <Clock size={12} className="text-amber-700 shrink-0" />
-                          <span>วางแผนเท่านั้น • ยังไม่มีหลักฐานใบงาน</span>
-                        </span>
-                      ) : (
-                        <span className="mt-1 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200 text-slate-700 text-xs">
-                          <span>{item.remarks ? `ไม่วางแผน (${item.remarks})` : 'ยังไม่ได้วางแผน'}</span>
-                        </span>
-                      )}
-                      {!isSavedPlanItem(item) && (
-                        <span className="mt-1 block text-xs text-slate-500">อยู่ในทะเบียนเครื่องมือ • ยังไม่บันทึกเข้าแผน</span>
-                      )}
-                    </td>
-
-                    {/* Month Columns: 12-Month Single-Row Interactive Grid */}
-                    {viewMode === '12_MONTHS'
-                      ? MONTHS.map((m) => (
-                          <AnnualPlanMonthCell
-                            key={`${item.id}-${m}`}
-                            month={m}
-                            item={item}
-                            plan={activePlan}
-                            workOrders={workOrders}
-                            // months can only be planned for an ACTIVE asset (the server refuses others); a paused one gets a reason instead
-                            canEditPlan={canEditPlan && (item.asset_status || 'ACTIVE') === 'ACTIVE'}
-                            isSaving={savingCellKey === `${item.id}-${m}`}
-                            onQuickAddMonth={handleCellAddMonth}
-                            onQuickRemoveMonth={handleCellRemoveMonth}
-                            onCreateWorkOrder={handleCellCreateWo}
-                            onOpenGroupCheck={onOpenGroupWorkOrderCheck}
-                            onOpenFullEdit={onOpenAddItem}
-                            density={density}
-                          />
-                        ))
-                      : QUARTERS.map((q) => {
-                          const plannedInQ = q.months.filter((m) =>
-                            (item.planned_months || []).includes(m)
-                          );
-                          const actualInQ = q.months.filter((m) =>
-                            (item.actual_months || []).includes(m)
-                          );
-
-                          return (
-                            <td
-                              key={`q-${item.id}-${q.key}`}
-                              className={`py-1.5 px-2 text-center border-l border-slate-100 ${
-                                actualInQ.length > 0
-                                  ? 'bg-emerald-50/30'
-                                  : plannedInQ.length > 0
-                                  ? 'bg-indigo-50/20'
-                                  : 'bg-white'
-                              }`}
-                            >
-                              <div className="flex flex-wrap items-center justify-center gap-1">
-                                {plannedInQ.map((m) => (
-                                  <span
-                                    key={`plan-${m}`}
-                                    className="py-0.5 px-1.5 rounded-md bg-indigo-600 text-white font-mono font-bold text-xs shadow-2xs"
-                                  >
-                                    P{m}
-                                  </span>
-                                ))}
-                                {actualInQ.map((m) => (
-                                  <span
-                                    key={`act-${m}`}
-                                    className="py-0.5 px-1.5 rounded-md bg-emerald-600 text-white font-mono font-bold text-xs shadow-2xs"
-                                  >
-                                    A{m}
-                                  </span>
-                                ))}
-                                {plannedInQ.length === 0 && actualInQ.length === 0 && (
-                                  <span className="text-slate-300 font-mono text-xs">-</span>
-                                )}
-                              </div>
-                            </td>
-                          );
-                        })}
-
-                    {/* Context Actions (Compact 104px) */}
-                    <td className="py-2 px-2.5 align-middle text-right w-[104px] min-w-[104px] max-w-[104px] whitespace-nowrap">
-                      <div className="flex items-center justify-end gap-1">
-                        <button
-                          type="button"
-                          onClick={() => setInspectorItem(item)}
-                          title="ดูสเปกและรายละเอียดเครื่องมือ"
-                          aria-label="ดูสเปกและรายละเอียดเครื่องมือ"
-                          className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-slate-300 shrink-0"
-                        >
-                          <Maximize2 size={15} />
-                        </button>
-
-                        {canEditPlan && (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => onOpenAddItem(item)}
-                              title="แก้ไขข้อมูลในแผน"
-                              aria-label="แก้ไขข้อมูลในแผน"
-                              className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-500/20 shrink-0"
-                            >
-                              <Edit2 size={15} />
-                            </button>
-
-                            {!isSavedPlanItem(item) ? null : confirmDeleteId === item.id ? (
-                              <div className="inline-flex items-center gap-0.5 bg-rose-50 border border-rose-200 rounded-lg p-0.5 animate-in fade-in duration-150 shrink-0">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    onDeleteItem(item);
-                                    setConfirmDeleteId(null);
-                                  }}
-                                  title="ยืนยันนำออกจากแผน (เครื่องมือยังอยู่ในทะเบียน)"
-                                  aria-label="ยืนยันนำออกจากแผน"
-                                  className="w-7 h-7 rounded-md flex items-center justify-center text-white bg-rose-600 hover:bg-rose-700 transition-colors cursor-pointer shadow-2xs"
-                                >
-                                  <Check size={14} />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setConfirmDeleteId(null)}
-                                  title="ยกเลิก"
-                                  aria-label="ยกเลิก"
-                                  className="w-7 h-7 rounded-md flex items-center justify-center text-slate-500 hover:text-slate-800 hover:bg-slate-200 transition-colors cursor-pointer"
-                                >
-                                  <X size={14} />
-                                </button>
-                              </div>
-                            ) : (
+                      {/* Column 14: Spaced-Out Actions ([⚙️ ตั้งค่ารอบ] + [🗑️]) */}
+                      <td className="py-3 px-3.5 align-middle text-right w-auto min-w-[156px] whitespace-nowrap border-l border-slate-100">
+                        <div className="flex items-center justify-end gap-2 flex-nowrap">
+                          {canEditPlan ? (
+                            <>
                               <button
                                 type="button"
-                                onClick={() => setConfirmDeleteId(item.id)}
-                                title="นำออกจากแผน (เครื่องมือยังอยู่ในทะเบียน)"
-                                aria-label="นำออกจากแผน"
-                                className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-rose-500/20 shrink-0"
+                                onClick={() => onOpenAddItem && onOpenAddItem(item)}
+                                title="แก้ไขข้อมูลในแผน"
+                                aria-label="ตั้งค่ารอบ / แก้ไขข้อมูลในแผน"
+                                className="whitespace-nowrap inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-indigo-50 hover:border-indigo-200 text-slate-700 hover:text-indigo-700 text-xs font-semibold transition-colors cursor-pointer shadow-2xs shrink-0"
                               >
-                                <Trash2 size={15} />
+                                <Settings size={13} className="text-slate-500 shrink-0" />
+                                <span>ตั้งค่ารอบ</span>
                               </button>
-                            )}
-                          </>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
+
+                              {isSavedPlanItem(item) && (
+                                <button
+                                  type="button"
+                                  onClick={() => setConfirmDeleteItem(item)}
+                                  title="นำออกจากแผน (เครื่องมือยังอยู่ในทะเบียน)"
+                                  aria-label="นำออกจากแผน"
+                                  className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-400 hover:text-rose-600 hover:bg-rose-50 hover:border-rose-200 transition-colors cursor-pointer shrink-0"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              )}
+                            </>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setInspectorItem(item)}
+                              title="ดูสเปกและรายละเอียดเครื่องมือ"
+                              aria-label="ดูสเปกและรายละเอียดเครื่องมือ"
+                              className="whitespace-nowrap inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 hover:text-slate-900 text-xs font-medium transition-colors cursor-pointer shrink-0"
+                            >
+                              <span>ดูรายละเอียด</span>
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
         </div>
         <VccScrollIndicator canScrollLeft={canScrollLeft} canScrollRight={canScrollRight} />
       </div>
 
-      {/* Discrete Table Footer with Legend & Summary (Linear style) */}
+      {/* Discrete Table Footer with Clean Legend */}
       <div className="bg-slate-50/90 border-t border-slate-200/80 px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-600">
         <div>
           {tableSearch.trim() || activeCategory ? (
@@ -798,29 +606,93 @@ export const AnnualPlanMatrixTable = ({
               {activeCategory && <span className="ml-1.5 text-slate-500">(ประเภท: “{activeCategory}”)</span>}
             </>
           ) : (
-            <span>รวมทั้งหมด <strong className="text-slate-900">{planItems.length}</strong> รายการเครื่องมือวัด</span>
+            <span>
+              รวมทั้งหมด <strong className="text-slate-900">{planItems.length}</strong> รายการเครื่องมือวัด
+            </span>
           )}
         </div>
 
         <div className="flex flex-wrap items-center gap-3.5 text-xs">
           <span className="inline-flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-sm bg-indigo-600 inline-block shadow-2xs" />
-            <span className="text-slate-700 font-medium">Plan (P): เป้าหมายตามแผน</span>
+            <span className="w-2 h-2 rounded-full bg-indigo-500 inline-block" />
+            <span className="text-slate-700 font-medium">ภายใน: ทวนสอบภายในตามแผน</span>
           </span>
           <span className="inline-flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-sm bg-amber-500 inline-block shadow-2xs" />
-            <span className="text-slate-700 font-medium">WO: มีใบสั่งงานกำลังดำเนินการ</span>
+            <span className="w-2 h-2 rounded-full bg-sky-500 inline-block" />
+            <span className="text-slate-700 font-medium">ภายนอก: สอบเทียบภายนอกตามแผน</span>
           </span>
           <span className="inline-flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-sm bg-emerald-600 inline-block shadow-2xs" />
-            <span className="text-slate-700 font-medium">✓: ปิดงานตรวจรับเสร็จสิ้นแล้ว</span>
+            <span className="w-2 h-2 rounded-full bg-emerald-600 inline-block" />
+            <span className="text-slate-700 font-medium">✓: ตรวจรับเสร็จสิ้นแล้ว</span>
           </span>
           <span className="inline-flex items-center gap-1.5">
-            <span className="px-1.5 py-0.5 rounded bg-teal-100 text-teal-800 text-xs font-bold">ชุดเครื่องมือ</span>
-            <span className="text-slate-700 font-medium">Composite Set (1 ใบรับรอง)</span>
+            <span className="w-2 h-2 rounded-full bg-rose-600 inline-block" />
+            <span className="text-slate-700 font-medium">NC: พบข้อบกพร่อง / ระงับใช้</span>
           </span>
         </div>
       </div>
+
+      {/* Confirmation Modal for Removing an Instrument from the Plan */}
+      {confirmDeleteItem && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="ยืนยันการนำเครื่องมือออกจากแผน"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4"
+        >
+          <div className="w-full max-w-md rounded-2xl bg-white border border-slate-200 shadow-xl p-5 space-y-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-rose-50 border border-rose-200 flex items-center justify-center text-rose-600 shrink-0">
+                  <AlertTriangle size={18} />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">ยืนยันนำเครื่องมือออกจากแผนประจำปี</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    ข้อมูลเครื่องมือจะยังคงอยู่ในทะเบียนเครื่องมือวัดตามปกติ
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setConfirmDeleteItem(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="rounded-xl bg-slate-50 border border-slate-200/80 px-3.5 py-2.5 text-xs text-slate-700">
+              <span className="font-mono font-bold text-indigo-700">{confirmDeleteItem.asset_code}</span>{' '}
+              <span className="font-semibold text-slate-900">
+                {formatCleanAssetName(confirmDeleteItem.asset_name)}
+              </span>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setConfirmDeleteItem(null)}
+                className="px-3.5 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold cursor-pointer"
+              >
+                ยกเลิก
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const target = confirmDeleteItem;
+                  setConfirmDeleteItem(null);
+                  if (onDeleteItem) onDeleteItem(target);
+                }}
+                aria-label="ยืนยันนำออกจากแผน"
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold shadow-2xs cursor-pointer"
+              >
+                ยืนยันนำออกจากแผน
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Side Inspector Drawer */}
       {inspectorItem && (

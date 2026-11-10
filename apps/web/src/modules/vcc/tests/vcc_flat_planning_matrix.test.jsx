@@ -108,7 +108,7 @@ describe('VCC Category-Based Overview & Flat Instrument Planning Matrix', () => 
     expect(screen.queryByText(/กลุ่ม:/)).toBeNull();
 
     // Verify Composite Set badge
-    expect(screen.getByText('ชุดเครื่องมือ (Composite Set)')).toBeInTheDocument();
+    expect(screen.getByText('ชุดเครื่องมือ')).toBeInTheDocument();
 
     // No tree chevrons (expand/collapse) exist in flat table
     expect(screen.queryByRole('button', { name: /ขยายกลุ่มเครื่องมือ/i })).toBeNull();
@@ -192,7 +192,7 @@ describe('VCC Category-Based Overview & Flat Instrument Planning Matrix', () => 
 
     // Historical group row is preserved intact in approved view
     expect(screen.getByText('GRP-HISTORICAL')).toBeInTheDocument();
-    expect(screen.getByText('กลุ่มเครื่องมือ (Group)')).toBeInTheDocument();
+    expect(screen.getByText('กลุ่มเครื่องมือ')).toBeInTheDocument();
 
     // In approved mode, Edit and Delete buttons are hidden
     expect(screen.queryByRole('button', { name: /แก้ไขข้อมูลในแผน/i })).toBeNull();
@@ -289,8 +289,8 @@ describe('VCC Category-Based Overview & Flat Instrument Planning Matrix', () => 
       </table>
     );
 
-    // Planned badge P2 is visible
-    const badge = screen.getByText('P2');
+    // Planned badge for month 2 is visible
+    const badge = screen.getByRole('button', { name: /เป้าหมายทวนสอบเดือน 2 \(P2\)/i });
     expect(badge).toBeInTheDocument();
 
     // Click badge opens floating overlay popover

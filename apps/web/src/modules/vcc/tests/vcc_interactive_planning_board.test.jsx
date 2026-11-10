@@ -36,39 +36,31 @@ describe('VCC Interactive Planning Board (FM-QC-46 Redesign)', () => {
     });
   });
 
-  it('1. สลับมุมมองความหนาแน่น (สบายตา / กะทัดรัด) และโหมดแสดงผล (12 เดือนเต็ม / รายไตรมาส Q1-Q4) ได้อย่างถูกต้อง', async () => {
+  it('1. แสดงตาราง 12 เดือนที่คลีน ไม่มีคอลัมน์วันครบกำหนดคั่นกลาง ไม่มีปุ่มซ้ำซ้อนใน Toolbar และสลับมุมมองรายไตรมาสจากด้านบนได้', async () => {
     render(<AssetRegisterPage />);
 
     // Go to Annual Plan tab
     fireEvent.click(await screen.findByRole('button', { name: /แผนการทวนสอบประจำปี \(FM-QC-46\)/i }));
     expect(await screen.findByText('V001')).toBeInTheDocument();
 
-    // Switch to 12-Month Matrix View to test interactive planning board features
-    fireEvent.click(screen.getByRole('button', { name: /ตารางแผน 12 เดือน/i }));
+    // Redundant density/view buttons and middle due-date column are removed
+    expect(screen.queryByRole('button', { name: 'กะทัดรัด' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'สบายตา' })).not.toBeInTheDocument();
+    expect(screen.queryByText('วันครบกำหนด / สถานะหลักฐาน')).not.toBeInTheDocument();
+    expect(screen.queryByText('ด.1')).not.toBeInTheDocument();
 
-    // Toggle Density
-    const compactBtn = screen.getByRole('button', { name: 'กะทัดรัด' });
-    const comfortableBtn = screen.getByRole('button', { name: 'สบายตา' });
-    expect(comfortableBtn).toBeInTheDocument();
-    expect(compactBtn).toBeInTheDocument();
+    // Clean 12 month headers exist
+    expect(screen.getByRole('columnheader', { name: 'ม.ค.' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'ธ.ค.' })).toBeInTheDocument();
 
-    fireEvent.click(compactBtn);
-    expect(compactBtn).toHaveClass('bg-white');
+    // Switch to Quarterly view via top-level view switcher
+    const quarterlyTab = screen.getByRole('button', { name: /มุมมองรายไตรมาส/i });
+    fireEvent.click(quarterlyTab);
 
-    fireEvent.click(comfortableBtn);
-    expect(comfortableBtn).toHaveClass('bg-white');
-
-    // Toggle View Mode: Quarterly
-    const quarterlyBtn = screen.getByRole('button', { name: /รายไตรมาส \(Q1-Q4\)/i });
-    fireEvent.click(quarterlyBtn);
-    expect(screen.getByText('Q1 (ม.ค.-มี.ค.)')).toBeInTheDocument();
-    expect(screen.getByText('Q4 (ต.ค.-ธ.ค.)')).toBeInTheDocument();
-
-    // Switch back to 12 Months
-    const full12Btn = screen.getByRole('button', { name: /12 เดือน \(เต็ม\)/i });
-    fireEvent.click(full12Btn);
-    expect(screen.getByText('ด.1')).toBeInTheDocument();
-    expect(screen.getByText('ด.12')).toBeInTheDocument();
+    // Switch back to 12-Month Matrix View
+    const matrixTab = screen.getByRole('button', { name: /ตารางแผน 12 เดือน/i });
+    fireEvent.click(matrixTab);
+    expect(screen.getByRole('columnheader', { name: 'ม.ค.' })).toBeInTheDocument();
   }, 15000);
 
   it('2. คลิก Cell ที่มีแผนอยู่แล้ว จะเปิด Popover แสดงรายละเอียดวันครบกำหนดและ Quick Actions ได้', async () => {

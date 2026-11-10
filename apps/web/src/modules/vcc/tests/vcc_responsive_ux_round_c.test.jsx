@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import AnnualPlanMatrixTable from '../components/AnnualPlanMatrixTable';
 import VccPlanActualChart from '../components/VccPlanActualChart';
@@ -60,7 +60,7 @@ describe('VCC Responsive UX Round C Quality Verification Tests', () => {
       }
     ];
 
-    it('adapts viewMode on screen resize if user has not explicitly chosen a view mode', () => {
+    it('renders clean 12-month matrix headers without redundant Д.1/Д.12 prefixes and displays internal/external chips', () => {
       window.innerWidth = 1024;
       render(
         <AnnualPlanMatrixTable
@@ -71,61 +71,17 @@ describe('VCC Responsive UX Round C Quality Verification Tests', () => {
         />
       );
 
-      // Desktop default: 12 months view mode
-      expect(screen.getByText('ด.1')).toBeInTheDocument();
-      expect(screen.getByText('ด.12')).toBeInTheDocument();
-
-      // Simulate viewport resizing to mobile (e.g. 500px)
-      act(() => {
-        window.innerWidth = 500;
-        window.dispatchEvent(new Event('resize'));
-      });
-
-      // Should automatically adapt to Quarterly view mode
-      expect(screen.getByText(/Q1 \(ม\.ค\.-มี\.ค\.\)/i)).toBeInTheDocument();
+      // Clean 12 month headers without "ด.1" / "ด.12"
+      expect(screen.getByRole('columnheader', { name: 'ม.ค.' })).toBeInTheDocument();
+      expect(screen.getByRole('columnheader', { name: 'ธ.ค.' })).toBeInTheDocument();
+      expect(screen.queryByText('ด.1')).not.toBeInTheDocument();
       expect(screen.queryByText('ด.12')).not.toBeInTheDocument();
+
+      // External vs Internal chips
+      expect(screen.getAllByText('ภายนอก').length).toBeGreaterThan(0);
     });
 
-    it('strictly preserves user explicit viewMode choice and does NOT revert on screen resize or device orientation', () => {
-      window.innerWidth = 500; // start on mobile
-      render(
-        <AnnualPlanMatrixTable
-          activePlan={mockPlan}
-          planItems={mockPlanItems}
-          workOrders={[]}
-          canEditPlan={true}
-        />
-      );
-
-      // Mobile default: Quarterly
-      expect(screen.getByText(/Q1 \(ม\.ค\.-มี\.ค\.\)/i)).toBeInTheDocument();
-
-      // User explicitly clicks "12 เดือน (เต็ม)"
-      const full12MonthsBtn = screen.getByRole('button', { name: /12 เดือน \(เต็ม\)/i });
-      fireEvent.click(full12MonthsBtn);
-
-      // Should be in 12 months mode
-      expect(screen.getByText('ด.12')).toBeInTheDocument();
-
-      // Now simulate resizing screen back to desktop or rotating device
-      act(() => {
-        window.innerWidth = 1200;
-        window.dispatchEvent(new Event('resize'));
-      });
-      expect(screen.getByText('ด.12')).toBeInTheDocument();
-
-      // And simulate resizing back to narrow mobile (360px)
-      act(() => {
-        window.innerWidth = 360;
-        window.dispatchEvent(new Event('resize'));
-      });
-
-      // User explicit choice of 12_MONTHS must be strictly preserved!
-      expect(screen.getByText('ด.12')).toBeInTheDocument();
-      expect(screen.queryByText(/Q1 \(ม\.ค\.-มี\.ค\.\)/i)).not.toBeInTheDocument();
-    });
-
-    it('renders responsive labels in sticky column preventing mobile overflow and verifies solid background against bleed-through', () => {
+    it('renders clean badges in sticky column and verifies solid background against bleed-through', () => {
       window.innerWidth = 375;
       render(
         <AnnualPlanMatrixTable
@@ -136,16 +92,13 @@ describe('VCC Responsive UX Round C Quality Verification Tests', () => {
         />
       );
 
-      // Composite set responsive badges:
-      // Contains both mobile-shortened span and desktop span
+      // Composite set badge:
       const compBadges = screen.getAllByText('ชุดเครื่องมือ');
       expect(compBadges.length).toBeGreaterThan(0);
-      expect(compBadges[0].className).toContain('inline sm:hidden');
 
-      // Group badge responsive labels:
-      const groupMobileBadges = screen.getAllByText('กลุ่ม');
-      expect(groupMobileBadges.length).toBeGreaterThan(0);
-      expect(groupMobileBadges[0].className).toContain('inline sm:hidden');
+      // Group badge:
+      const groupBadges = screen.getAllByText('กลุ่มเครื่องมือ');
+      expect(groupBadges.length).toBeGreaterThan(0);
 
       // Sticky cells have solid opaque background and shadow delimiter
       const stickyHeader = screen.getByRole('columnheader', { name: /รายการเครื่องมือวัด/i });
