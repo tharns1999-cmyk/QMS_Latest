@@ -510,21 +510,55 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
     }
   };
 
-  const handleQuickAddMonth = async (item, month) => {
+  const handleQuickAddMonth = async (item, month, options = {}) => {
     if (!planDetail?.plan) return;
     const currentMonths = item.planned_months || [];
-    if (currentMonths.includes(month)) return;
-    const updatedMonths = [...currentMonths, month].sort((a, b) => a - b);
+    const isAlreadyPlanned = currentMonths.includes(month);
+    const updatedMonths = isAlreadyPlanned
+      ? currentMonths
+      : [...currentMonths, month].sort((a, b) => a - b);
+
+    let resolvedProvider = options.provider_name;
+    if (!resolvedProvider) {
+      if (options.providerType === 'EXTERNAL') {
+        resolvedProvider = 'ห้องปฏิบัติการภายนอก';
+      } else if (options.providerType === 'INTERNAL') {
+        resolvedProvider = 'ทวนสอบภายใน';
+      } else {
+        resolvedProvider = item.provider_name || 'ทวนสอบภายใน';
+      }
+    }
+
     await saveVccPlanItem(planDetail.plan.id, {
       asset_id: item.asset_id,
-      provider_name: item.provider_name,
+      provider_name: resolvedProvider,
       frequency_label: item.frequency_label || 'รายปี',
       planned_months: updatedMonths,
-      responsible_dept: item.responsible_dept,
+      responsible_dept: item.responsible_dept || planDetail.plan.department,
       responsible_label: item.responsible_label || '',
       remarks: item.remarks || ''
     });
-    toast.success(`เพิ่มเป้าหมายเดือน ${month} สำหรับ ${item.asset_code} แล้ว`);
+    toast.success(`กำหนดรอบเดือน ${month} สำหรับ ${item.asset_code} แล้ว`);
+    const refreshed = await fetchVccPlanDetail(planDetail.plan.id);
+    setPlanDetail(refreshed);
+  };
+
+  const handleToggleProvider = async (item, targetProvider) => {
+    if (!planDetail?.plan) return;
+    const currentProvider = String(item.provider_name || '').trim();
+    const isCurrentExternal = Boolean(currentProvider) && !currentProvider.includes('ภายใน') && currentProvider.toLowerCase() !== 'internal';
+    const nextProvider = targetProvider || (isCurrentExternal ? 'ทวนสอบภายใน' : 'ห้องปฏิบัติการภายนอก');
+
+    await saveVccPlanItem(planDetail.plan.id, {
+      asset_id: item.asset_id,
+      provider_name: nextProvider,
+      frequency_label: item.frequency_label || 'รายปี',
+      planned_months: item.planned_months || [],
+      responsible_dept: item.responsible_dept || planDetail.plan.department,
+      responsible_label: item.responsible_label || '',
+      remarks: item.remarks || ''
+    });
+    toast.success(`สลับวิธีดำเนินการของ ${item.asset_code} เป็น${nextProvider}แล้ว`);
     const refreshed = await fetchVccPlanDetail(planDetail.plan.id);
     setPlanDetail(refreshed);
   };
@@ -1018,6 +1052,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
                   onOpenSmartImport={() => setSmartImportOpen(true)}
                   onQuickAddMonth={handleQuickAddMonth}
                   onQuickRemoveMonth={handleQuickRemoveMonth}
+                  onToggleProvider={handleToggleProvider}
                   onCreateWorkOrder={handleCreateWorkOrder}
                   onOpenJustificationModal={() => setJustificationModalOpen(true)}
                 />

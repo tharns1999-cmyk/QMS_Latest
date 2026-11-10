@@ -86,6 +86,7 @@ export const AnnualPlanMatrixTable = ({
   onOpenSmartImport,
   onQuickAddMonth,
   onQuickRemoveMonth,
+  onToggleProvider,
   onCreateWorkOrder
 }) => {
   const [tableSearch, setTableSearch] = useState('');
@@ -152,12 +153,12 @@ export const AnnualPlanMatrixTable = ({
     });
   }, [planItems, tableSearch, activeCategory]);
 
-  const handleCellAddMonth = async (item, month) => {
+  const handleCellAddMonth = async (item, month, options = {}) => {
     const key = `${item.id}-${month}`;
     setSavingCellKey(key);
     try {
       if (onQuickAddMonth) {
-        await onQuickAddMonth(item, month);
+        await onQuickAddMonth(item, month, options);
       }
     } finally {
       setSavingCellKey('');
@@ -365,11 +366,11 @@ export const AnnualPlanMatrixTable = ({
           onScroll={checkScroll}
           className="overflow-x-auto max-h-[calc(100vh-210px)]"
         >
-          <table className="w-full text-left border-collapse text-sm">
+          <table className="w-full text-left border-collapse text-sm border-t border-slate-200">
             <thead className="sticky top-0 z-20 bg-slate-50/95 backdrop-blur-xs shadow-2xs">
               <tr className="border-b border-slate-200 text-slate-700 text-xs font-bold tracking-wider uppercase">
                 {/* Column 1: Sticky Asset Code & Name */}
-                <th className="py-3 px-3.5 sticky left-0 z-30 bg-slate-50 shadow-[1px_0_0_0_#e2e8f0] min-w-[230px] sm:min-w-[280px] xl:min-w-[320px]">
+                <th className="py-3 px-3.5 sticky left-0 z-30 bg-slate-50 border-r border-slate-200 shadow-[1px_0_0_0_#e2e8f0] min-w-[230px] sm:min-w-[280px] xl:min-w-[320px]">
                   รายการเครื่องมือวัด
                 </th>
 
@@ -377,20 +378,20 @@ export const AnnualPlanMatrixTable = ({
                 {MONTHS.map((m) => (
                   <th
                     key={m}
-                    className="py-3 px-1.5 text-center min-w-[68px] border-l border-slate-200/70 text-slate-700 font-semibold whitespace-nowrap"
+                    className="py-3 px-1.5 text-center min-w-[68px] border-r border-slate-200 text-slate-700 font-semibold whitespace-nowrap bg-slate-50"
                   >
                     {MONTH_LABELS[m - 1]}
                   </th>
                 ))}
 
                 {/* Column 14: Actions */}
-                <th className="py-3 px-3.5 text-right w-auto min-w-[156px] text-xs font-bold tracking-wider uppercase text-slate-700 whitespace-nowrap border-l border-slate-200/70">
+                <th className="py-3 px-3.5 text-right w-auto min-w-[156px] text-xs font-bold tracking-wider uppercase text-slate-700 whitespace-nowrap">
                   การจัดการ
                 </th>
               </tr>
             </thead>
 
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-slate-200 bg-white">
               {flatInstrumentRows.length === 0 ? (
                 <tr>
                   <td colSpan={14} className="py-12 text-center text-slate-500 bg-white">
@@ -445,13 +446,13 @@ export const AnnualPlanMatrixTable = ({
                   return (
                     <tr
                       key={item.id}
-                      className={`transition-colors group hover:bg-slate-50/60 ${
+                      className={`transition-colors group hover:bg-slate-50/70 ${
                         isLogicalGroup ? 'bg-slate-50/50' : 'bg-white'
                       }`}
                     >
                       {/* Column 1: Clean 2-Line Instrument Identity */}
                       <td
-                        className={`py-3 px-3.5 align-middle sticky left-0 z-10 shadow-[1px_0_0_0_#e2e8f0] min-w-[230px] sm:min-w-[280px] xl:min-w-[320px] ${
+                        className={`py-3 px-3.5 align-middle sticky left-0 z-10 border-r border-slate-200 shadow-[1px_0_0_0_#e2e8f0] min-w-[230px] sm:min-w-[280px] xl:min-w-[320px] ${
                           isLogicalGroup ? 'bg-slate-50 group-hover:bg-slate-100' : 'bg-white group-hover:bg-slate-50'
                         }`}
                       >
@@ -539,6 +540,7 @@ export const AnnualPlanMatrixTable = ({
                           isSaving={savingCellKey === `${item.id}-${m}`}
                           onQuickAddMonth={handleCellAddMonth}
                           onQuickRemoveMonth={handleCellRemoveMonth}
+                          onToggleProvider={onToggleProvider}
                           onCreateWorkOrder={handleCellCreateWo}
                           onOpenGroupCheck={onOpenGroupWorkOrderCheck}
                           onOpenFullEdit={onOpenAddItem}
@@ -547,7 +549,7 @@ export const AnnualPlanMatrixTable = ({
                       ))}
 
                       {/* Column 14: Spaced-Out Actions ([⚙️ ตั้งค่ารอบ] + [🗑️]) */}
-                      <td className="py-3 px-3.5 align-middle text-right w-auto min-w-[156px] whitespace-nowrap border-l border-slate-100">
+                      <td className="py-3 px-3.5 align-middle text-right w-auto min-w-[156px] whitespace-nowrap">
                         <div className="flex items-center justify-end gap-2 flex-nowrap">
                           {canEditPlan ? (
                             <>
