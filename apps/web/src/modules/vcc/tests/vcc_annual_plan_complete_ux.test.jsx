@@ -3,7 +3,8 @@ import { render, screen, fireEvent, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AnnualPlanOverviewCards } from '../components/AnnualPlanOverviewCards';
 import { AnnualPlanViewSwitcher } from '../components/AnnualPlanViewSwitcher';
-import { AnnualPlanEquipmentListView } from '../components/AnnualPlanEquipmentListView';
+import { AnnualPlanMatrixTable } from '../components/AnnualPlanMatrixTable';
+import { AnnualPlanSideInspector } from '../components/AnnualPlanSideInspector';
 import { AnnualPlanQuarterlyView } from '../components/AnnualPlanQuarterlyView';
 import { PlanFormModal } from '../components/AnnualPlanModals';
 import AssetRegisterPage from '../pages/AssetRegisterPage';
@@ -142,22 +143,21 @@ describe('VCC Annual Plan — Complete UX Architecture Redesign', () => {
   });
 
   describe('2. AnnualPlanViewSwitcher', () => {
-    it('แสดงตัวเลือกมุมมอง 3 รูปแบบ และสลับสถานะ active ได้ถูกต้อง', () => {
+    it('แสดงตัวเลือกมุมมอง 2 รูปแบบ และสลับสถานะ active ได้ถูกต้อง', () => {
       const handleViewChange = vi.fn();
       const { rerender } = render(
         <AnnualPlanViewSwitcher
-          viewMode="LIST"
+          viewMode="MATRIX"
           onViewModeChange={handleViewChange}
         />
       );
 
-      const listTab = screen.getByRole('button', { name: /รายการเครื่องมือ/i });
-      const quarterlyTab = screen.getByRole('button', { name: /มุมมองรายไตรมาส/i });
       const matrixTab = screen.getByRole('button', { name: /ตารางแผน 12 เดือน/i });
+      const quarterlyTab = screen.getByRole('button', { name: /มุมมองรายไตรมาส/i });
 
-      expect(listTab).toHaveAttribute('aria-pressed', 'true');
+      expect(matrixTab).toHaveAttribute('aria-pressed', 'true');
       expect(quarterlyTab).toHaveAttribute('aria-pressed', 'false');
-      expect(matrixTab).toHaveAttribute('aria-pressed', 'false');
+      expect(screen.queryByRole('button', { name: /รายการเครื่องมือ/i })).not.toBeInTheDocument();
 
       fireEvent.click(quarterlyTab);
       expect(handleViewChange).toHaveBeenCalledWith('QUARTERLY');
@@ -169,13 +169,14 @@ describe('VCC Annual Plan — Complete UX Architecture Redesign', () => {
         />
       );
       expect(quarterlyTab).toHaveAttribute('aria-pressed', 'true');
+      expect(matrixTab).toHaveAttribute('aria-pressed', 'false');
     });
   });
 
-  describe('3. AnnualPlanEquipmentListView', () => {
-    it('แสดงรายการเครื่องมือแบบแถวเดี่ยว แถบเดือน 12 เดือน และข้อความมาตรฐาน ISO 9001', () => {
+  describe('3. AnnualPlanMatrixTable as Primary View', () => {
+    it('แสดงรายการเครื่องมือแบบตาราง 12 เดือน ครบถ้วนตามรหัสและชื่อ', () => {
       render(
-        <AnnualPlanEquipmentListView
+        <AnnualPlanMatrixTable
           planItems={mockPlanItems}
           activePlan={mockPlan}
           canEditPlan={true}
@@ -186,47 +187,20 @@ describe('VCC Annual Plan — Complete UX Architecture Redesign', () => {
       expect(screen.getByText('Digital Caliper 150mm')).toBeInTheDocument();
       expect(screen.getByText('EQ-002')).toBeInTheDocument();
       expect(screen.getByText('Pressure Gauge 10 Bar')).toBeInTheDocument();
-
-      // Check ISO 9001 compliance notice
-      expect(screen.getAllByText(/วางแผนเท่านั้น • ยังไม่มีหลักฐานใบงาน/i).length).toBeGreaterThanOrEqual(1);
+      expect(screen.getByText('EQ-003')).toBeInTheDocument();
+      expect(screen.getByText('Backup Thermometer')).toBeInTheDocument();
     });
 
-    it('กดเลือกเดือนเพื่อเพิ่มหรือลบเดือนในแถบกำหนดการ 12 เดือนได้', () => {
-      const handleQuickAddMonth = vi.fn();
-      const handleQuickRemoveMonth = vi.fn();
-
+    it('ค้นหาเครื่องมือในตารางตามรหัสหรือชื่อได้ถูกต้อง', () => {
       render(
-        <AnnualPlanEquipmentListView
-          planItems={mockPlanItems}
-          activePlan={mockPlan}
-          canEditPlan={true}
-          onQuickAddMonth={handleQuickAddMonth}
-          onQuickRemoveMonth={handleQuickRemoveMonth}
-        />
-      );
-
-      // EQ-001 has planned_months: [3]
-      // Button for Month 3 should be selected, clicking it should trigger remove
-      const m3Btn = screen.getByRole('button', { name: /EQ-001 มี\.ค\. ยกเลิกกำหนดการ/i });
-      fireEvent.click(m3Btn);
-      expect(handleQuickRemoveMonth).toHaveBeenCalledWith(mockPlanItems[0], 3);
-
-      // Month 5 is unselected, clicking it should trigger add
-      const m5Btn = screen.getByRole('button', { name: /EQ-001 พ\.ค\. กำหนดการ/i });
-      fireEvent.click(m5Btn);
-      expect(handleQuickAddMonth).toHaveBeenCalledWith(mockPlanItems[0], 5);
-    });
-
-    it('ค้นหาเครื่องมือตามรหัสหรือชื่อได้ถูกต้อง', () => {
-      render(
-        <AnnualPlanEquipmentListView
+        <AnnualPlanMatrixTable
           planItems={mockPlanItems}
           activePlan={mockPlan}
           canEditPlan={true}
         />
       );
 
-      const searchInput = screen.getByPlaceholderText(/ค้นหารหัส, ชื่อเครื่องมือ, สถานที่/i);
+      const searchInput = screen.getByPlaceholderText(/ค้นหารหัส \/ ชื่อในตาราง/i);
       fireEvent.change(searchInput, { target: { value: 'Pressure' } });
 
       expect(screen.getByText('EQ-002')).toBeInTheDocument();
@@ -234,20 +208,21 @@ describe('VCC Annual Plan — Complete UX Architecture Redesign', () => {
       expect(screen.queryByText('EQ-003')).not.toBeInTheDocument();
     });
 
-    it('กรองตามหมวดหมู่ประเภทเครื่องมือได้ถูกต้อง', () => {
+    it('แสดงปุ่มเพิ่มเครื่องมือจากทะเบียนเมื่อ canEditPlan เป็นจริง', () => {
+      const handleOpenSmartImport = vi.fn();
       render(
-        <AnnualPlanEquipmentListView
+        <AnnualPlanMatrixTable
           planItems={mockPlanItems}
           activePlan={mockPlan}
           canEditPlan={true}
+          onOpenSmartImport={handleOpenSmartImport}
         />
       );
 
-      const categorySelect = screen.getByLabelText(/กรองประเภทเครื่องมือ/i);
-      fireEvent.change(categorySelect, { target: { value: 'GAUGE' } });
-
-      expect(screen.getByText('EQ-002')).toBeInTheDocument();
-      expect(screen.queryByText('EQ-001')).not.toBeInTheDocument();
+      const importBtn = screen.getByRole('button', { name: /เพิ่มเครื่องมือจากทะเบียน/i });
+      expect(importBtn).toBeInTheDocument();
+      fireEvent.click(importBtn);
+      expect(handleOpenSmartImport).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -343,13 +318,14 @@ describe('VCC Annual Plan — Complete UX Architecture Redesign', () => {
       });
     });
 
-    it('เปิดหน้าแผนประจำปีโดยเริ่มต้นที่ Equipment List View และสามารถสลับมุมมองได้', async () => {
+    it('เปิดหน้าแผนประจำปีโดยเริ่มต้นที่ Matrix Table View และสามารถสลับมุมมองได้', async () => {
       render(<AssetRegisterPage />);
 
       fireEvent.click(await screen.findByRole('button', { name: /แผนการทวนสอบประจำปี \(FM-QC-46\)/i }));
 
-      // By default: AnnualPlanEquipmentListView is rendered
-      expect(await screen.findByTestId('annual-plan-equipment-list-view')).toBeInTheDocument();
+      // By default: AnnualPlanMatrixTable is rendered
+      expect(await screen.findByTestId('annual-plan-matrix-table')).toBeInTheDocument();
+      expect(screen.queryByTestId('annual-plan-equipment-list-view')).not.toBeInTheDocument();
 
       // Switch to Quarterly View
       const quarterlyBtn = screen.getByRole('button', { name: /มุมมองรายไตรมาส/i });
@@ -357,65 +333,44 @@ describe('VCC Annual Plan — Complete UX Architecture Redesign', () => {
 
       expect(await screen.findByTestId('annual-plan-quarterly-view')).toBeInTheDocument();
 
-      // Switch to Matrix View
+      // Switch back to Matrix View
       const matrixBtn = screen.getByRole('button', { name: /ตารางแผน 12 เดือน/i });
       fireEvent.click(matrixBtn);
 
       expect(await screen.findByTestId('annual-plan-matrix-table')).toBeInTheDocument();
-
-      // Switch back to List View
-      const listBtn = screen.getByRole('button', { name: /รายการเครื่องมือ/i });
-      fireEvent.click(listBtn);
-
-      expect(await screen.findByTestId('annual-plan-equipment-list-view')).toBeInTheDocument();
+      expect(screen.queryByTestId('annual-plan-equipment-list-view')).not.toBeInTheDocument();
     });
   });
 
-  describe('7. Mobile Ergonomics & Bottom Sheet Month Selector', () => {
-    it('สามารถเปิด Mobile Bottom Sheet เพื่อกำหนดเดือนทวนสอบ และปิดด้วยปุ่มเสร็จสิ้นหรือ Escape ได้', async () => {
-      const onQuickAddMonth = vi.fn();
-      const onQuickRemoveMonth = vi.fn();
-
+  describe('7. Mobile Ergonomics & Side Inspector', () => {
+    it('สามารถเปิด Side Inspector / Drawer แสดงข้อมูลเครื่องมือและปิดได้', () => {
+      const handleClose = vi.fn();
       render(
-        <AnnualPlanEquipmentListView
-          planItems={mockPlanItems}
-          activePlan={mockPlan}
+        <AnnualPlanSideInspector
+          item={mockPlanItems[0]}
+          plan={mockPlan}
           workOrders={[]}
           canEditPlan={true}
-          onQuickAddMonth={onQuickAddMonth}
-          onQuickRemoveMonth={onQuickRemoveMonth}
+          onClose={handleClose}
         />
       );
 
-      // Mobile button trigger with touch target
-      const mobileTrigger = screen.getByLabelText(/กำหนดเดือนสำหรับ EQ-001/i);
-      expect(mobileTrigger).toBeInTheDocument();
-
-      // Open bottom sheet
-      fireEvent.click(mobileTrigger);
-
-      // Dialog opens
-      const dialog = screen.getByRole('dialog', { name: /กำหนดเดือนทวนสอบ EQ-001/i });
+      const dialog = screen.getByRole('dialog', { name: /รายละเอียดเครื่องมือวัด/i });
       expect(dialog).toBeInTheDocument();
-      expect(dialog).toHaveTextContent(/Digital Caliper 150mm/i);
+      expect(dialog).toHaveTextContent('EQ-001');
+      expect(dialog).toHaveTextContent('Digital Caliper 150mm');
 
-      // Toggle month 5 inside bottom sheet
-      const mayBtn = within(dialog).getByRole('button', { name: /พ\.ค\./i });
-      fireEvent.click(mayBtn);
-      expect(onQuickAddMonth).toHaveBeenCalledWith(mockPlanItems[0], 5);
-
-      // Close via Done button
-      const doneBtn = within(dialog).getByRole('button', { name: /เสร็จสิ้น/i });
-      fireEvent.click(doneBtn);
-
-      expect(screen.queryByRole('dialog', { name: /กำหนดเดือนทวนสอบ EQ-001/i })).toBeNull();
+      // Close button
+      const closeBtn = screen.getByRole('button', { name: /ปิดหน้าต่างสเปก/i });
+      fireEvent.click(closeBtn);
+      expect(handleClose).toHaveBeenCalledTimes(1);
     });
   });
 
-  describe('8. Status Separation & Month Chips Styling', () => {
-    it('แยกสถานะการวางแผนออกจากสถานะหลักฐานอย่างชัดเจน และ month chips มี tooltip พร้อมสถานะ', () => {
+  describe('8. Status Separation & Month Badges in Matrix', () => {
+    it('แสดง badge กำหนดการเดือนตามแผน และมี aria-label กำกับถูกต้อง', () => {
       render(
-        <AnnualPlanEquipmentListView
+        <AnnualPlanMatrixTable
           planItems={mockPlanItems}
           activePlan={mockPlan}
           workOrders={[]}
@@ -423,19 +378,16 @@ describe('VCC Annual Plan — Complete UX Architecture Redesign', () => {
         />
       );
 
-      // Planning Status for item-1 (planned 1 round)
-      expect(screen.getByText('วางแผนแล้ว (1 รอบ)')).toBeInTheDocument();
+      // EQ-001 has planned_months: [3] -> Month 3 has P3 badge
+      const p3Badge = screen.getByRole('button', { name: /เป้าหมายทวนสอบเดือน 3 \(P3\)/i });
+      expect(p3Badge).toBeInTheDocument();
 
-      // Planning Status for item-3 (unplanned)
-      expect(screen.getAllByText('ยังไม่กำหนดรอบ').length).toBeGreaterThanOrEqual(1);
+      // EQ-002 has planned_months: [4, 10]
+      const p4Badge = screen.getByRole('button', { name: /เป้าหมายทวนสอบเดือน 4 \(P4\)/i });
+      expect(p4Badge).toBeInTheDocument();
 
-      // Compliance/Evidence status notice is distinct from planning status
-      expect(screen.getAllByText('วางแผนเท่านั้น • ยังไม่มีหลักฐานใบงาน').length).toBeGreaterThanOrEqual(1);
-
-      // Month chip has tooltip with human-friendly Thai month and round
-      const marChip = screen.getByTitle(/EQ-001 - มี\.ค\. \(รอบ P3\) — คลิกเพื่อยกเลิก/i);
-      expect(marChip).toBeInTheDocument();
-      expect(marChip).toHaveClass('bg-indigo-600');
+      const p10Badge = screen.getByRole('button', { name: /เป้าหมายทวนสอบเดือน 10 \(P10\)/i });
+      expect(p10Badge).toBeInTheDocument();
     });
   });
 });

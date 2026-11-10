@@ -4,7 +4,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import useStore from '../../../store/useStore';
 import { AnnualPlanWorkspaceHeader } from '../components/AnnualPlanWorkspaceHeader';
 import { AnnualPlanApprovalChain } from '../components/AnnualPlanApprovalChain';
-import { AnnualPlanEquipmentListView } from '../components/AnnualPlanEquipmentListView';
+import AnnualPlanMatrixTable from '../components/AnnualPlanMatrixTable';
 import { PlanFormModal, PlanSubmitModal } from '../components/AnnualPlanModals';
 
 describe('VCC Phase 1 Step 4: QC/LAB Department Forms & Workflow UI', () => {
@@ -149,7 +149,7 @@ describe('VCC Phase 1 Step 4: QC/LAB Department Forms & Workflow UI', () => {
     ];
 
     render(
-      <AnnualPlanEquipmentListView
+      <AnnualPlanMatrixTable
         planItems={testItems}
         activePlan={{ plan_year: 2026, due_date_rule: 'END_OF_MONTH' }}
       />
