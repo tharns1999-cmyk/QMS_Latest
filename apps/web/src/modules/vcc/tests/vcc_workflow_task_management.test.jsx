@@ -122,7 +122,8 @@ describe('VCC Approval Workflow Redesign — Clean, Minimal & Task-Centric (16 E
     fireEvent.click(screen.getByRole('button', { name: 'ยืนยันส่งทบทวนแผน' }));
 
     expect(await screen.findByText(/สถานะ: รอทบทวน/i, { selector: 'span' })).toBeInTheDocument();
-    const revTags = await screen.findAllByText(/ผู้ทบทวน: สมศรี ผู้ทบทวน/i);
+    // The compact stepper renders the label and the name in separate spans; the pair is on the name's title.
+    const revTags = await screen.findAllByTitle(/ผู้ทบทวน: สมศรี ผู้ทบทวน/i);
     expect(revTags.length).toBeGreaterThan(0);
   }, 20000);
 
