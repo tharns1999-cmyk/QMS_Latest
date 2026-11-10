@@ -54,7 +54,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const queryTab = searchParams.get('tab');
-  const queryId = searchParams.get('id');
+  const queryId = searchParams.get('id') || searchParams.get('planId');
 
   const isAnnualPlansHubPath = location?.pathname?.includes('/vcc/annual-plans');
   const [viewState, setViewState] = useState(() => {
@@ -64,6 +64,18 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
     if (isAnnualPlansHubPath) return 'HUB';
     return 'WORKSPACE';
   });
+
+  useEffect(() => {
+    if (queryId) {
+      setViewState('WORKSPACE');
+      setSelectedPlanId((prev) => (prev !== queryId ? queryId : prev));
+    } else if (searchParams.get('view') === 'workspace') {
+      setViewState('WORKSPACE');
+    } else if (searchParams.get('view') === 'hub' || isAnnualPlansHubPath) {
+      setViewState('HUB');
+      setSelectedPlanId('');
+    }
+  }, [queryId, searchParams, isAnnualPlansHubPath]);
 
   const [printPlan, setPrintPlan] = useState(null);
   const [printPlanItems, setPrintPlanItems] = useState([]);
@@ -239,7 +251,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
       const targetId =
         preferredPlanId && planList.some((p) => p.id === preferredPlanId)
           ? preferredPlanId
-          : planList[0]?.id || '';
+          : (viewState === 'HUB' && !queryId ? '' : (planList[0]?.id || ''));
       setSelectedPlanId(targetId);
 
       if (targetId) {
@@ -257,7 +269,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
     } finally {
       setLoading(false);
     }
-  }, [statusTab, filterYear, filterDept, canReadAll, userDept, loadPlanWorkOrders, viewState]);
+  }, [statusTab, filterYear, filterDept, canReadAll, userDept, loadPlanWorkOrders, viewState, queryId]);
 
   useEffect(() => {
     loadPlansAndMeta(queryId || '');
@@ -287,16 +299,19 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
       next.set('id', planId);
+      next.delete('planId');
       next.delete('view');
       return next;
     }, { replace: true });
   };
 
   const handleBackToHub = () => {
+    setSelectedPlanId('');
     setViewState('HUB');
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
       next.delete('id');
+      next.delete('planId');
       if (!isAnnualPlansHubPath) {
         next.set('view', 'hub');
       }

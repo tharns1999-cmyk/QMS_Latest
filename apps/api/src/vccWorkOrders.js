@@ -398,7 +398,7 @@ export const buildWorkOrderReconciliationStatements = async (db, planId, actorId
             UPDATE vcc_work_orders
             SET status = 'CANCELLED',
                 cancellation_category = 'PLAN_REVISION',
-                cancellation_reason = 'รอบสอบเทียบถูกตัดออกจากแผนในการปรับปรุงแผน (Revision)',
+                cancellation_reason = 'Cancelled by Plan Revision',
                 cancelled_by = ?,
                 cancelled_at = ${NOW},
                 updated_at = ${NOW},

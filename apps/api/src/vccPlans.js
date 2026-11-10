@@ -2728,7 +2728,7 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
 
   // Phase 3.1: Plan Revision Foundation
   // Create a new revision (e.g. Rev.01) from an APPROVED plan (Rev.00)
-  app.post('/api/vcc/plans/:id/revisions', requireAuth, requireVccAccess, async (c) => {
+  const handleCreatePlanRevision = async (c) => {
     const db = c.env.DB;
     const user = c.get('user');
     const sourcePlanId = c.req.param('id');
@@ -2957,7 +2957,10 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
       parent_plan: sourcePlan,
       cloned_items_count: itemInserts.length
     }, 201);
-  });
+  };
+
+  app.post('/api/vcc/plans/:id/revisions', requireAuth, requireVccAccess, handleCreatePlanRevision);
+  app.post('/api/vcc/plans/:id/revise', requireAuth, requireVccAccess, handleCreatePlanRevision);
 
   // Get revision history for a plan (all revisions for plan_year & department)
   app.get('/api/vcc/plans/:id/revisions', requireAuth, requireVccAccess, async (c) => {

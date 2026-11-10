@@ -505,7 +505,7 @@ const Sidebar = ({ isOpen = false, onClose = () => {} }) => {
 
             <SectionHeader title="แผนและการควบคุม" />
             <NavItem
-              to="/vcc/plans"
+              to="/vcc/annual-plans"
               icon={Calendar}
               label="แผนการทวนสอบประจำปี"
             />

@@ -246,6 +246,19 @@ describe('VCC Phase 3.1: Plan Revision Foundation & Diff Engine Tests', () => {
     expect(revListRes.body.revisions[1].revision).toBe('01');
   });
 
+  it('supports alias POST /api/vcc/plans/:id/revise to create a new revision', async () => {
+    const { planId: rev00Id } = await setupApprovedRev00Plan(2028);
+
+    const reviseRes = await call('POST', `/api/vcc/plans/${rev00Id}/revise`, 'REV-QC-STAFF', {
+      revision_reason: 'ทดสอบสร้าง Revision ผ่าน endpoint /revise'
+    });
+
+    expect(reviseRes.status).toBe(201);
+    expect(reviseRes.body.plan.revision).toBe('01');
+    expect(reviseRes.body.plan.status).toBe('DRAFT');
+    expect(reviseRes.body.plan.parent_plan_id).toBe(rev00Id);
+  });
+
   it('3. Snapshot of Rev.00 is immutable and protected from modifications', async () => {
     const { planId: rev00Id, asset1Id } = await setupApprovedRev00Plan(2026);
 

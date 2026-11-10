@@ -560,10 +560,11 @@ export const AnnualPlanWorkspaceHeader = ({
             <button
               type="button"
               onClick={onOpenRevision}
-              title="คัดลอกแผนที่อนุมัติแล้วเป็นฉบับร่างใหม่เพื่อแก้ไข"
+              aria-label="ขอจัดทำฉบับแก้ไข (Revise Plan) / สร้างฉบับแก้ไข (Revision)"
+              title="ขอจัดทำฉบับแก้ไข (Revise Plan) สำหรับแผนปีนี้"
               className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-indigo-300 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold text-xs shadow-2xs transition-colors cursor-pointer"
             >
-              <span>สร้างฉบับแก้ไข (Revision)</span>
+              <span>ขอจัดทำฉบับแก้ไข (Revise Plan)</span>
             </button>
           )}
 

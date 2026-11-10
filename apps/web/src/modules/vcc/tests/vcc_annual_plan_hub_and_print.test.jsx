@@ -6,6 +6,7 @@ import useStore from '../../../store/useStore';
 import AnnualPlansHub from '../components/AnnualPlansHub';
 import AnnualPlanPrintView from '../components/AnnualPlanPrintView';
 import AnnualPlanMatrixSection from '../components/AnnualPlanMatrixSection';
+import AnnualPlanWorkspaceHeader from '../components/AnnualPlanWorkspaceHeader';
 import { exportAnnualPlansMultiSheet } from '../utils/exportPlanSummary';
 import { resetVccLocalStore } from '../api/vccApi';
 import * as XLSX from 'xlsx';
@@ -374,6 +375,43 @@ describe('VCC Annual Plan Hub & Spoke Architecture and ISO Print View', () => {
       expect(optionTexts.some((t) => t.includes('QA'))).toBe(true);
       expect(optionTexts.some((t) => t.includes('MGT'))).toBe(true);
       expect(optionTexts.some((t) => t.includes('LB'))).toBe(true);
+    });
+
+    it('เมื่อเข้าผ่าน Deep link ?planId=... หรือ ?id=... จะเปิดเข้าหน้า Workspace ของแผนนั้นโดยตรง', async () => {
+      render(
+        <MemoryRouter initialEntries={['/vcc/annual-plans?planId=vcc-plan-2026-qc']}>
+          <AnnualPlanMatrixSection activeDepartments={[{ code: 'QC', nameTh: 'ควบคุมคุณภาพ' }]} />
+        </MemoryRouter>
+      );
+
+      // เปิดเข้าสู่หน้า Workspace ทันที
+      expect(await screen.findByTestId('annual-plan-workspace-header')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /กลับหน้ารวมสารบัญแผน/ })).toBeInTheDocument();
+    });
+
+    it('แสดงปุ่ม "ขอจัดทำฉบับแก้ไข (Revise Plan)" เมื่อแผนมีผลบังคับใช้ (APPROVED / Effective)', () => {
+      render(
+        <AnnualPlanWorkspaceHeader
+          statusTab="APPROVED"
+          setStatusTab={() => {}}
+          activePlan={{
+            id: 'vcc-plan-2026-qc',
+            plan_year: 2026,
+            department: 'QC',
+            document_code: 'FM-QC-46',
+            revision: '01',
+            status: 'APPROVED',
+            is_current: 1
+          }}
+          canCreatePlan={true}
+          canEditPlan={true}
+          onOpenRevision={vi.fn()}
+          plans={[]}
+          planItems={[]}
+        />
+      );
+
+      expect(screen.getByRole('button', { name: /ขอจัดทำฉบับแก้ไข/ })).toBeInTheDocument();
     });
   });
 
