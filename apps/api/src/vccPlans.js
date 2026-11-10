@@ -1474,7 +1474,8 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
 
     const body = await c.req.json().catch(() => ({}));
     const title = body.title !== undefined ? clean(body.title, 300) : existing.title;
-    const documentCode = body.document_code !== undefined ? clean(body.document_code, 50) : existing.document_code;
+    // The code is issued by the server when the plan is created; a draft edit cannot rename the controlled document.
+    const documentCode = existing.document_code;
     const revision = body.revision !== undefined ? clean(body.revision, 10) : existing.revision;
     const dueDateRule = body.due_date_rule !== undefined ? String(body.due_date_rule).toUpperCase() : existing.due_date_rule;
 
@@ -2521,6 +2522,9 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
     if (obj.httpEtag) headers.set('ETag', obj.httpEtag);
     const fileName = `${plan.document_code || `VCC-PLAN-${plan.department || 'GEN'}`}_${plan.plan_year}_Rev${plan.revision}_Approved.pdf`;
     headers.set('Content-Disposition', `inline; filename="${fileName}"`);
+    // Controlled record: every view is logged and no copy stays in a shared or browser cache.
+    headers.set('Cache-Control', 'private, no-store');
+    await audit(db, user.id, 'VCC_PLAN_PDF_VIEWED', { plan_id: plan.id, document_code: plan.document_code, revision: plan.revision, file_key: plan.pdf_file_key }).run();
 
     return new Response(obj.body, { headers });
   });
