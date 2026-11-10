@@ -3,7 +3,7 @@ import { render, screen, fireEvent, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import useStore from '../../../store/useStore';
-import AnnualPlansHub from '../components/AnnualPlansHub';
+import AnnualPlansHub, { resolveDigitalPlanCode } from '../components/AnnualPlansHub';
 import AnnualPlanPrintView from '../components/AnnualPlanPrintView';
 import AnnualPlanMatrixSection from '../components/AnnualPlanMatrixSection';
 import AnnualPlanWorkspaceHeader from '../components/AnnualPlanWorkspaceHeader';
@@ -165,6 +165,16 @@ describe('VCC Annual Plan Hub & Spoke Architecture and ISO Print View', () => {
     });
   });
 
+  describe('0. resolveDigitalPlanCode helper', () => {
+    it('แปลงรหัสแบบฟอร์มกระดาษ FM- เป็น VCC-AP-[DEPT]-[YEAR] เสมอ และคงค่า VCC-AP- เดิมไว้', () => {
+      expect(resolveDigitalPlanCode({ department: 'QC', plan_year: 2026, document_code: 'FM-QC-46' })).toBe('VCC-AP-QC-2026');
+      expect(resolveDigitalPlanCode({ department: 'QA', plan_year: 2026, document_code: 'FM-QA-11' })).toBe('VCC-AP-QA-2026');
+      expect(resolveDigitalPlanCode({ department: 'LB', plan_year: 2026, document_code: 'VCC-PLAN-LB' })).toBe('VCC-AP-LB-2026');
+      expect(resolveDigitalPlanCode({ department: 'QC', plan_year: 2027, document_code: 'VCC-AP-QC-2027' })).toBe('VCC-AP-QC-2027');
+      expect(resolveDigitalPlanCode(null)).toBe('VCC-AP-GEN-2026');
+    });
+  });
+
   describe('1. AnnualPlansHub (Level 1 Directory)', () => {
     it('เรนเดอร์แถบสรุปสถิติ KPI Strip ครบถ้วน (Active, Pending, Draft, ความครอบคลุม)', () => {
       render(
@@ -197,21 +207,24 @@ describe('VCC Annual Plan Hub & Spoke Architecture and ISO Print View', () => {
         />
       );
 
-      // เริ่มต้นแสดงทั้ง 3 แผน
-      expect(screen.getByText('FM-QC-42')).toBeInTheDocument();
-      expect(screen.getByText('FM-QA-11')).toBeInTheDocument();
-      expect(screen.getByText('FM-LB-11')).toBeInTheDocument();
-
-      // กรองเฉพาะ บังคับใช้ (Active)
-      fireEvent.click(screen.getByRole('button', { name: 'บังคับใช้ (Active)' }));
-      expect(screen.getByText('FM-QC-42')).toBeInTheDocument();
+      // เริ่มต้นแสดงทั้ง 3 แผนเป็นรหัสแผนดิจิทัล (VCC-AP-*) และไม่พบรหัสแบบฟอร์มกระดาษเดิม (FM-*)
+      expect(screen.getByText('VCC-AP-QC-2026')).toBeInTheDocument();
+      expect(screen.getByText('VCC-AP-QA-2026')).toBeInTheDocument();
+      expect(screen.getByText('VCC-AP-LB-2026')).toBeInTheDocument();
+      expect(screen.queryByText('FM-QC-42')).not.toBeInTheDocument();
       expect(screen.queryByText('FM-QA-11')).not.toBeInTheDocument();
       expect(screen.queryByText('FM-LB-11')).not.toBeInTheDocument();
 
+      // กรองเฉพาะ บังคับใช้ (Active)
+      fireEvent.click(screen.getByRole('button', { name: 'บังคับใช้ (Active)' }));
+      expect(screen.getByText('VCC-AP-QC-2026')).toBeInTheDocument();
+      expect(screen.queryByText('VCC-AP-QA-2026')).not.toBeInTheDocument();
+      expect(screen.queryByText('VCC-AP-LB-2026')).not.toBeInTheDocument();
+
       // กรองเฉพาะ ฉบับร่าง (Draft)
       fireEvent.click(screen.getByRole('button', { name: 'ฉบับร่าง (Draft)' }));
-      expect(screen.getByText('FM-LB-11')).toBeInTheDocument();
-      expect(screen.queryByText('FM-QC-42')).not.toBeInTheDocument();
+      expect(screen.getByText('VCC-AP-LB-2026')).toBeInTheDocument();
+      expect(screen.queryByText('VCC-AP-QC-2026')).not.toBeInTheDocument();
     });
 
     it('คลิกปุ่ม "เปิดแผนงาน" และ "พิมพ์เอกสาร" จะเรียก Callback ที่ถูกต้อง', () => {

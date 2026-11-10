@@ -2,9 +2,7 @@ import React, { useState, useMemo } from 'react';
 import {
   Calendar,
   Plus,
-  Download,
   Search,
-  Filter,
   ShieldCheck,
   Clock,
   Edit3,
@@ -15,9 +13,17 @@ import {
   FileSpreadsheet,
   CheckCircle2
 } from 'lucide-react';
-import { getPlanStatusLabel } from '../utils/planLabels';
 import { formatVccDateTime, toBuddhistYear } from '../utils/vccDateUtils';
 import DepartmentBadge from '../../../shared/components/ui/DepartmentBadge';
+
+export const resolveDigitalPlanCode = (plan) => {
+  if (!plan) return 'VCC-AP-GEN-2026';
+  const dept = String(plan.department || plan.department_code || 'GEN').toUpperCase().trim();
+  const year = plan.plan_year || plan.year || 2026;
+  const existingCode = String(plan.document_code || plan.form_code || '').trim();
+  if (existingCode && existingCode.startsWith('VCC-AP-')) return existingCode;
+  return `VCC-AP-${dept}-${year}`;
+};
 
 export const AnnualPlansHub = ({
   plans = [],
@@ -79,7 +85,9 @@ export const AnnualPlansHub = ({
         const q = searchQuery.toLowerCase().trim();
         const deptMatch = String(plan.department || '').toLowerCase().includes(q) ||
                           String(plan.department_name_th || '').toLowerCase().includes(q);
-        const codeMatch = String(plan.document_code || '').toLowerCase().includes(q);
+        const digitalCode = resolveDigitalPlanCode(plan).toLowerCase();
+        const rawCode = String(plan.document_code || '').toLowerCase();
+        const codeMatch = digitalCode.includes(q) || rawCode.includes(q);
         const titleMatch = String(plan.title || '').toLowerCase().includes(q);
         const yearMatch = String(plan.plan_year || '').includes(q);
         if (!deptMatch && !codeMatch && !titleMatch && !yearMatch) return false;
@@ -108,32 +116,32 @@ export const AnnualPlansHub = ({
     switch (status) {
       case 'APPROVED':
         return (
-          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-2 py-0.5 rounded-full">
-            <ShieldCheck size={11} className="text-emerald-600" /> บังคับใช้ (Active)
+          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200/80 px-2.5 py-0.5 rounded-full">
+            <ShieldCheck size={12} className="text-emerald-600" /> บังคับใช้ (Active)
           </span>
         );
       case 'PENDING_APPROVAL':
         return (
-          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200/80 px-2 py-0.5 rounded-full">
-            <Clock size={11} className="text-indigo-600" /> รออนุมัติ (L5+)
+          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-800 bg-indigo-50 border border-indigo-200/80 px-2.5 py-0.5 rounded-full">
+            <Clock size={12} className="text-indigo-600" /> รออนุมัติ (L5+)
           </span>
         );
       case 'PENDING_REVIEW':
         return (
-          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-800 bg-amber-50 border border-amber-200/80 px-2 py-0.5 rounded-full">
-            <Clock size={11} className="text-amber-600" /> รอทบทวน (L4)
+          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-800 bg-amber-50 border border-amber-200/80 px-2.5 py-0.5 rounded-full">
+            <Clock size={12} className="text-amber-600" /> รอทบทวน (L4)
           </span>
         );
       case 'REJECTED':
         return (
-          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-rose-700 bg-rose-50 border border-rose-200/80 px-2 py-0.5 rounded-full">
-            <AlertTriangle size={11} className="text-rose-600" /> ถูกส่งกลับ
+          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-rose-800 bg-rose-50 border border-rose-200/80 px-2.5 py-0.5 rounded-full">
+            <AlertTriangle size={12} className="text-rose-600" /> ถูกส่งกลับ
           </span>
         );
       default:
         return (
-          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-700 bg-slate-100 border border-slate-200/80 px-2 py-0.5 rounded-full">
-            <Edit3 size={11} className="text-slate-500" /> ฉบับร่าง (Draft)
+          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-800 bg-blue-50 border border-blue-200/80 px-2.5 py-0.5 rounded-full">
+            <Edit3 size={12} className="text-blue-600" /> ฉบับร่าง (Draft)
           </span>
         );
     }
@@ -340,11 +348,11 @@ export const AnnualPlansHub = ({
         </div>
 
         {/* Search Input */}
-        <div className="relative w-full sm:w-60">
+        <div className="relative w-full sm:w-64">
           <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
-            placeholder="ค้นหาแผนก, รหัสแบบฟอร์ม..."
+            placeholder="ค้นหารหัสแผน, ชื่อฝ่าย/แผนก, ปี..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-8 pr-3 py-1 text-xs rounded-lg border border-slate-200 bg-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
@@ -358,13 +366,13 @@ export const AnnualPlansHub = ({
           <table className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="bg-slate-50/80 border-b border-slate-200/80 text-slate-600 font-semibold">
-                <th className="py-2.5 px-3.5 w-16">ปี</th>
-                <th className="py-2.5 px-3.5 w-32">แผนก</th>
-                <th className="py-2.5 px-3.5 min-w-40">รหัสแบบฟอร์ม / Rev</th>
+                <th className="py-2.5 px-3.5 w-16 text-center">ปี</th>
+                <th className="py-2.5 px-3.5 w-36">ฝ่าย/แผนก</th>
+                <th className="py-2.5 px-3.5 min-w-44">รหัสแผนงานดิจิทัล / ฉบับแก้ไข</th>
                 <th className="py-2.5 px-3.5 w-36">สถานะ</th>
-                <th className="py-2.5 px-3.5 w-32 text-center">สัดส่วนรายการ</th>
-                <th className="py-2.5 px-3.5 w-36">ปรับปรุงล่าสุด</th>
-                <th className="py-2.5 px-3.5 w-48 text-right">การจัดการ</th>
+                <th className="py-2.5 px-3.5 w-40 text-center">ความครอบคลุม</th>
+                <th className="py-2.5 px-3.5 w-40">ปรับปรุงล่าสุด</th>
+                <th className="py-2.5 px-3.5 w-44 text-right">การจัดการ</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -381,13 +389,28 @@ export const AnnualPlansHub = ({
                   const dept = plan.department || 'GEN';
                   const deptObj = departments.find((d) => d.code === dept);
                   const deptName = plan.department_name_th || deptObj?.nameTh || dept;
-                  const docCode = plan.document_code || `FM-${dept}-42`;
+                  const digitalCode = resolveDigitalPlanCode(plan);
                   const plannedCount = Number(plan.planned_items_count || plan.item_count || 0);
+
+                  // Calculate department coverage against activeAssets
+                  const deptCalibratable = activeAssets.filter((a) => {
+                    if (a.status && a.status !== 'ACTIVE') return false;
+                    if (a.is_group && (Number(a.is_group) !== 0 && a.group_nature !== 'COMPOSITE_SET')) return false;
+                    return a.department === dept;
+                  });
+
+                  const totalDeptAssets = deptCalibratable.length > 0
+                    ? deptCalibratable.length
+                    : (Number(plan.total_items_count || plan.total_assets || plannedCount) || plannedCount);
+
+                  const coveragePct = totalDeptAssets > 0
+                    ? Math.min(100, Math.round((plannedCount / totalDeptAssets) * 100))
+                    : 100;
 
                   return (
                     <tr key={plan.id} className="hover:bg-slate-50/70 transition-colors">
                       {/* Year */}
-                      <td className="py-3 px-3.5 font-bold font-mono text-slate-800">
+                      <td className="py-3 px-3.5 text-center font-bold font-mono text-slate-800">
                         {plan.plan_year}
                       </td>
 
@@ -396,17 +419,14 @@ export const AnnualPlansHub = ({
                         <DepartmentBadge department={dept} label={`${deptName} (${dept})`} />
                       </td>
 
-                      {/* Document Code & Revision */}
+                      {/* Digital Plan Code & Revision */}
                       <td className="py-3 px-3.5">
                         <div className="font-mono font-semibold text-slate-900 flex items-center gap-1.5">
-                          <span>{docCode}</span>
-                          <span className="text-[10px] font-mono font-bold bg-slate-100 text-slate-600 px-1.5 py-0.2 rounded border border-slate-200">
+                          <span>{digitalCode}</span>
+                          <span className="text-[10px] font-mono font-bold bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded border border-slate-200">
                             Rev.{plan.revision || '01'}
                           </span>
                         </div>
-                        {plan.title && (
-                          <div className="text-[11px] text-slate-400 truncate max-w-64 mt-0.5">{plan.title}</div>
-                        )}
                       </td>
 
                       {/* Status Badge */}
@@ -414,20 +434,42 @@ export const AnnualPlansHub = ({
                         {getStatusBadge(plan.status)}
                       </td>
 
-                      {/* Items Ratio */}
-                      <td className="py-3 px-3.5 text-center">
-                        <span className="font-semibold text-slate-800">{plannedCount}</span>
-                        <span className="text-slate-400 text-[11px]"> รายการ</span>
+                      {/* Coverage with sleek Mini Progress Bar */}
+                      <td className="py-3 px-3.5">
+                        <div className="flex flex-col items-center gap-1">
+                          <div className="font-semibold text-slate-800 text-center">
+                            <span>{plannedCount}</span>
+                            <span className="text-slate-400 font-normal"> / {totalDeptAssets} เครื่อง</span>
+                            <span className={`ml-1 text-[11px] font-bold ${coveragePct === 100 ? 'text-emerald-600' : 'text-indigo-600'}`}>
+                              ({coveragePct}%)
+                            </span>
+                          </div>
+                          <div className="w-24 bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                            <div
+                              className={`h-1.5 rounded-full transition-all duration-300 ${coveragePct === 100 ? 'bg-emerald-500' : 'bg-indigo-600'}`}
+                              style={{ width: `${coveragePct}%` }}
+                            />
+                          </div>
+                        </div>
                       </td>
 
                       {/* Last Updated */}
-                      <td className="py-3 px-3.5 text-slate-500 text-[11px]">
-                        {formatVccDateTime(plan.updated_at || plan.created_at)}
+                      <td className="py-3 px-3.5">
+                        <div className="text-[11px]">
+                          <div className="text-slate-700 font-medium">
+                            {formatVccDateTime(plan.updated_at || plan.created_at)}
+                          </div>
+                          {(plan.updated_by || plan.approved_by || plan.reviewed_by || plan.prepared_by || plan.actor_name) && (
+                            <div className="text-slate-400 text-[10px] mt-0.5">
+                              โดย {plan.updated_by || plan.approved_by || plan.reviewed_by || plan.prepared_by || plan.actor_name}
+                            </div>
+                          )}
+                        </div>
                       </td>
 
                       {/* Actions */}
                       <td className="py-3 px-3.5 text-right">
-                        <div className="inline-flex items-center gap-1.5">
+                        <div className="inline-flex items-center gap-1.5 justify-end">
                           {/* Print Icon Button */}
                           <button
                             type="button"
