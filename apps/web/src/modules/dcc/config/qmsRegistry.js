@@ -25,6 +25,7 @@ export const MASTER_DEPARTMENTS = [
   { id: 'MKT', code: 'MKT', name: 'MKT (Marketing)', nameTh: 'ฝ่ายการตลาดและการขาย', nameEn: 'Marketing & Sales', headUserId: 'U010', headName: 'สมชาย การตลาด', status: 'ACTIVE', color: 'cyan', allowDarSubmit: true },
   { id: 'ST', code: 'ST', name: 'ST (Store)', nameTh: 'ฝ่ายจัดเก็บวัตถุดิบ', nameEn: 'Store & Inventory', headUserId: 'U005', headName: 'บีม', status: 'ACTIVE', color: 'slate', allowDarSubmit: true },
   { id: 'FIN', code: 'FIN', name: 'FIN (Finance)', nameTh: 'ฝ่ายการเงินและบัญชี', nameEn: 'Finance Department', status: 'ACTIVE', color: 'purple', allowDarSubmit: true },
+  { id: 'LB', code: 'LB', name: 'LB (Laboratory)', nameTh: 'ฝ่ายห้องปฏิบัติการจุลชีววิทยา', nameEn: 'Microbiology Laboratory', headUserId: 'U011', headName: 'สายรุ้ง', status: 'ACTIVE', color: 'emerald', allowDarSubmit: true },
   { id: 'MGMT', code: 'MGMT', name: 'ตัวแทนฝ่ายบริหาร/คุณภาพ (MGMT)', nameTh: 'ตัวแทนฝ่ายบริหาร/คุณภาพ', nameEn: 'Management / QMR', isCentral: true, allowDarSubmit: true, status: 'ACTIVE', color: 'rose' },
   { id: 'EXEC', code: 'EXEC', name: 'ผู้บริหารสูงสุด (EXEC)', nameTh: 'ผู้บริหารสูงสุด', nameEn: 'Executive Management', isCentral: true, allowDarSubmit: true, status: 'ACTIVE', color: 'indigo' }
 ];
