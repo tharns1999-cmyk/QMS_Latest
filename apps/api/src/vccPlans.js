@@ -1175,13 +1175,112 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
 
     const readiness = {};
     for (const [dept, profile] of Object.entries(profiles)) readiness[dept] = await vccProfileReadiness(db, profile);
-    return c.json({ profiles, candidates, allActiveUsers: activeUsers, readiness, canManage: await canManageModule(db, c.get('user'), 'vcc') });
+
+    const { results: activeDepts } = await db.prepare("SELECT code, name_th FROM departments WHERE status = 'ACTIVE' ORDER BY code ASC").all();
+    const { results: activeForms } = await db.prepare(`
+      SELECT id, doc_code, revision, name, department, effective_date
+      FROM documents
+      WHERE doc_type = 'FM' AND status = 'EFFECTIVE' AND effective_date IS NOT NULL AND date(effective_date) <= date('now', '+7 hours')
+      ORDER BY doc_code ASC, revision DESC
+    `).all();
+
+    return c.json({
+      profiles,
+      candidates,
+      allActiveUsers: activeUsers,
+      readiness,
+      departments: activeDepts || [],
+      forms: activeForms || [],
+      policy: await vccProfileThresholds(db),
+      canManage: await canManageModule(db, c.get('user'), 'vcc')
+    });
   });
 
-  // Department Document Profiles: Update profile for a specific department (DCC Admin only, per-dept safe merge)
+  // Department Document Profiles: Update profile for a specific department (DCC Admin or module manager)
   app.put('/api/vcc/document-profiles/:dept', requireAuth, async (c) => {
-    if (!await canManageModule(c.env.DB, c.get('user'), 'vcc')) return c.json({ error: 'ต้องได้รับมอบหมายสิทธิ์ MODULE_MANAGE' }, 403);
-    return c.json({ error: 'กรุณาเปลี่ยนค่าผ่านหน้าจัดการระบบย่อย เพื่อระบุเหตุผลและตรวจสอบผลกระทบ', code: 'GOVERNANCE_EDITOR_REQUIRED' }, 409);
+    const db = c.env.DB;
+    const user = c.get('user');
+    const department = String(c.req.param('dept') || '').toUpperCase().trim();
+    const canManage = (await canManageModule(db, user, 'vcc')) || Boolean(user?.isDcc);
+    if (!canManage) {
+      return c.json({ error: 'เฉพาะ DCC หรือผู้ได้รับมอบหมายสิทธิ์จัดการ VCC เท่านั้นที่สามารถตั้งค่าส่วนนี้ได้' }, 403);
+    }
+    const body = await c.req.json().catch(() => ({}));
+    const reason = (typeof body.reason === 'string' && body.reason.trim()) ? body.reason.trim() : 'บันทึกการตั้งค่าโปรไฟล์เอกสาร VCC';
+
+    if (!await db.prepare("SELECT 1 FROM departments WHERE code=? AND status='ACTIVE'").bind(department).first()) {
+      return c.json({ error: 'ไม่พบแผนกที่เปิดใช้งานในข้อมูลกลาง' }, 404);
+    }
+
+    const profiles = await loadVccProfiles(db);
+    const before = profiles[department] || null;
+    const profile = {};
+
+    for (const field of ['document_code', 'revision', 'reviewer_dept', 'approver_dept']) {
+      if (typeof body[field] !== 'string' || !body[field].trim() || body[field].length > 100) {
+        return c.json({ error: 'กรุณาระบุแบบฟอร์ม ฉบับ และแผนกของผู้รับผิดชอบให้ครบถ้วน' }, 400);
+      }
+      profile[field] = body[field].trim();
+    }
+
+    for (const stage of ['reviewer', 'approver']) {
+      if (!await db.prepare("SELECT 1 FROM departments WHERE code=? AND status='ACTIVE'").bind(profile[`${stage}_dept`]).first()) {
+        return c.json({ error: `แผนก${stage === 'reviewer' ? 'ผู้ทบทวน' : 'ผู้อนุมัติ'}ไม่พร้อมใช้งานในข้อมูลกลาง` }, 422);
+      }
+    }
+
+    const floor = await vccProfileThresholds(db, before || {});
+    for (const [field, min] of [
+      ['min_preparer_level', floor.min_requester_level],
+      ['required_reviewer_level', floor.required_reviewer_level],
+      ['required_approver_level', floor.required_approver_level]
+    ]) {
+      const val = Number(body[field]);
+      if (!Number.isInteger(val) || val < min || val > 8) {
+        return c.json({ error: `ระดับอนุมัติของ ${field} ต้องไม่ต่ำกว่า L${min} และไม่เกิน L8` }, 422);
+      }
+      profile[field] = val;
+    }
+
+    profile.assigned_reviewer_id = typeof body.assigned_reviewer_id === 'string' && body.assigned_reviewer_id.trim() ? body.assigned_reviewer_id.trim() : null;
+    profile.assigned_approver_id = typeof body.assigned_approver_id === 'string' && body.assigned_approver_id.trim() ? body.assigned_approver_id.trim() : null;
+
+    if (profile.assigned_reviewer_id && profile.assigned_reviewer_id === profile.assigned_approver_id) {
+      return c.json({ error: 'ผู้ทบทวนและผู้อนุมัติต้องไม่เป็นบุคคลเดียวกัน (Segregation of Duties)' }, 422);
+    }
+
+    const form = await controlledVccForm(db, profile);
+    if (!form) {
+      return c.json({ code: 'CONFIGURATION_INCOMPLETE', error: 'กรุณาเลือกแบบฟอร์ม DCC ที่มีผลบังคับใช้จริง' }, 422);
+    }
+    profile.document_id = form.id;
+    profile.title_th = form.name;
+    profile.form_issue_date = form.effective_date;
+
+    const readiness = await vccProfileReadiness(db, profile);
+    if (readiness.status !== 'READY') {
+      return c.json({ error: readiness.issues.join(' / '), code: readiness.status }, 422);
+    }
+
+    const newProfiles = { ...profiles, [department]: profile };
+    const statements = [
+      db.prepare(`UPDATE settings SET value = ?, updated_by = ?, updated_at = ${NOW} WHERE key = 'vcc_document_profiles'`)
+        .bind(JSON.stringify(newProfiles), user.id),
+      audit(db, user.id, 'VCC_DOCUMENT_PROFILE_UPDATED', {
+        department,
+        before,
+        after: profile,
+        reason
+      })
+    ];
+
+    statements.push(
+      db.prepare(`UPDATE module_configuration SET version = version + 1, updated_by = ?, updated_at = ${NOW} WHERE module_id = 'vcc'`)
+        .bind(user.id)
+    );
+
+    await db.batch(statements);
+    return c.json({ success: true, profile, readiness });
   });
 
   app.get('/api/vcc/plans', requireAuth, requireVccAccess, async (c) => {

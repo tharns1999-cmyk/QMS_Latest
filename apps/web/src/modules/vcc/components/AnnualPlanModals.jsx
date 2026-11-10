@@ -231,7 +231,7 @@ export const PlanFormModal = ({
                 </label>
                 <input
                   type="text"
-                  placeholder={`เช่น VCC-PLAN-${form.department || 'QC'}`}
+                  placeholder={form.department ? `เช่น VCC-PLAN-${form.department}` : 'เช่น VCC-PLAN-...'}
                   value={form.document_code}
                   onChange={(e) => setForm({ ...form, document_code: e.target.value })}
                   className="w-full h-9.5 px-3 rounded-lg border border-slate-300 text-xs font-mono font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600"
