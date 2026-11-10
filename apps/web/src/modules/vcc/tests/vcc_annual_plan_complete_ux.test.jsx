@@ -274,10 +274,11 @@ describe('VCC Annual Plan — Complete UX Architecture Redesign', () => {
         />
       );
 
-      // 3 Structured sections
-      expect(screen.getByText(/1\. ข้อมูลพื้นฐานแผนประจำปี/i)).toBeInTheDocument();
-      expect(screen.getByText(/2\. ข้อมูลเอกสารคุณภาพ \(QMS\)/i)).toBeInTheDocument();
-      expect(screen.getByText(/3\. กติกาคำนวณวันครบกำหนด/i)).toBeInTheDocument();
+      // Modern Clean Flowing sections & Live Preview Card
+      expect(screen.getByText('แผนกเจ้าของแผน')).toBeInTheDocument();
+      expect(screen.getByText('ปี ค.ศ. ของแผน')).toBeInTheDocument();
+      expect(screen.getByText('เอกสารดิจิทัลควบคุม (Digital Plan Preview)')).toBeInTheDocument();
+      expect(screen.getByText('ตั้งค่าขั้นสูง (Advanced Settings)')).toBeInTheDocument();
 
       // Badges when editing
       const lockBadges = screen.getAllByText('ล็อกอัตโนมัติ');

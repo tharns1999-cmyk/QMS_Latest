@@ -177,7 +177,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
   const [planForm, setPlanForm] = useState({
     plan_year: new Date().getFullYear(),
     department: '',
-    document_code: 'VCC-PLAN',
+    document_code: `VCC-AP-QC-${new Date().getFullYear()}`,
     revision: '01',
     title: '',
     due_date_rule: 'END_OF_MONTH'
@@ -380,7 +380,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
     const fixedYear = Number.isInteger(Number(overrideYear)) && Number(overrideYear) > 0 ? Number(overrideYear) : null;
     const targetYear = fixedYear || (Number(filterYear) > 0 ? Number(filterYear) : currentYear);
     const targetDept = (!canReadAll && userDept) || filterDept || activeDepartments[0]?.code || 'QC';
-    const defaultDocCode = targetDept ? `VCC-PLAN-${targetDept}` : (planSettings.default_doc_code || 'VCC-PLAN');
+    const defaultDocCode = `VCC-AP-${targetDept || 'QC'}-${targetYear}`;
     setEditingPlan(null);
     setPlanFormError('');
     setPlanForm({
@@ -388,7 +388,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
       department: targetDept,
       document_code: defaultDocCode,
       revision: '01',
-      title: `แผนการทวนสอบเครื่องมือประจำปี ${targetYear}`,
+      title: `แผนการทวนสอบเครื่องมือประจำปี ${targetYear} (${targetDept})`,
       due_date_rule: planSettings.due_date_rule || 'END_OF_MONTH'
     });
     setPlanFormOpen(true);

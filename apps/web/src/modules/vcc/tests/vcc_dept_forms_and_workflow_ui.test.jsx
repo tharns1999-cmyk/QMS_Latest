@@ -188,14 +188,14 @@ describe('VCC Phase 1 Step 4: QC/LAB Department Forms & Workflow UI', () => {
     fireEvent.change(deptSelect, { target: { value: 'QC' } });
 
     expect(currentForm.department).toBe('QC');
-    expect(currentForm.document_code).toBe('VCC-PLAN-QC');
+    expect(currentForm.document_code).toBe('VCC-AP-QC-2026');
     expect(currentForm.revision).toBe('01');
     expect(currentForm.title).toContain('แผนการทวนสอบเครื่องมือประจำปี 2026');
 
     // Simulate choosing LB
     fireEvent.change(deptSelect, { target: { value: 'LB' } });
     expect(currentForm.department).toBe('LB');
-    expect(currentForm.document_code).toBe('VCC-PLAN-LB');
+    expect(currentForm.document_code).toBe('VCC-AP-LB-2026');
     expect(currentForm.revision).toBe('01');
     expect(currentForm.title).toContain('แผนการทวนสอบเครื่องมือประจำปี 2026');
   });
