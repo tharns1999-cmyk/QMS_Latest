@@ -80,8 +80,6 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
   const [printPlan, setPrintPlan] = useState(null);
   const [printPlanItems, setPrintPlanItems] = useState([]);
 
-  const createDepartments = useMemo(() => !isApiMode ? activeDepartments : activeDepartments.filter((d) => !currentUser?.vccReadOnly && getUserDeptCodes(currentUser).includes(d.code) && currentUser.vccEnabledDepartments?.includes(d.code)), [activeDepartments, currentUser]);
-
   const userDept = useMemo(() => {
     return String(currentUser?.department || currentUser?.dept || '').toUpperCase();
   }, [currentUser]);
@@ -91,6 +89,17 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
     const lvl = Number(currentUser.approval_level ?? currentUser.approvalLevel ?? 1);
     return Boolean(currentUser.isDcc || currentUser.isQmr || lvl >= 6);
   }, [currentUser]);
+
+  const createDepartments = useMemo(() => {
+    if (currentUser?.vccReadOnly) return [];
+    const enabledDepts = currentUser?.vccEnabledDepartments;
+    return activeDepartments.filter((d) => {
+      if (enabledDepts && Array.isArray(enabledDepts) && !enabledDepts.includes(d.code)) {
+        return false;
+      }
+      return canReadAll || getUserDeptCodes(currentUser).includes(d.code);
+    });
+  }, [activeDepartments, currentUser, canReadAll]);
 
   const initialTab = useMemo(() => {
     if (queryTab) return queryTab;
