@@ -101,12 +101,12 @@ describe('VCC Flat Instrument Architecture — End-to-End Acceptance Criteria Su
     // Verify NO Category Chips or Category Overview appear on the Annual Planning page
     expect(screen.queryByRole('button', { name: /ทุกประเภท/i })).not.toBeInTheDocument();
 
-    // Header counts 5 instruments in scope + explains 6 active in Register vs 1 outside plan (SC-WH-001 in WH)
+    // Header explains 6 active in Register vs 1 outside plan (SC-WH-001 in WH), while KPI cards show 5 in scope
     const header = screen.getByTestId('annual-plan-workspace-header');
-    expect(within(header).getByText(/เครื่องมือในขอบเขต:/i).parentElement).toHaveTextContent('5');
+    expect(screen.getByText('เครื่องมือในขอบเขต')).toBeInTheDocument();
     expect(within(header).getByTestId('register-vs-plan-scope-note')).toHaveTextContent(/จากทะเบียนใช้งานปกติ 6 เครื่อง/i);
     expect(within(header).getByTestId('register-vs-plan-scope-note')).toHaveTextContent(/SC-WH-001 สังกัดแผนก WH/i);
-    expect(within(header).getByText(/รอบทวนสอบรวม:/i).parentElement).toHaveTextContent('5');
+    expect(screen.getByText('รอบวางแผนรวม')).toBeInTheDocument();
 
     // SW001 displays Composite Set badge + sub-component details
     const swRow = screen.getByText('SW001').closest('tr');

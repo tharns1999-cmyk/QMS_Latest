@@ -4,7 +4,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import useStore from '../../../store/useStore';
 import { AnnualPlanWorkspaceHeader } from '../components/AnnualPlanWorkspaceHeader';
 import { AnnualPlanApprovalChain } from '../components/AnnualPlanApprovalChain';
-import { AnnualPlanEquipmentListView } from '../components/AnnualPlanEquipmentListView';
+import AnnualPlanMatrixTable from '../components/AnnualPlanMatrixTable';
 import { PlanFormModal, PlanSubmitModal } from '../components/AnnualPlanModals';
 
 describe('VCC Phase 1 Step 4: QC/LAB Department Forms & Workflow UI', () => {
@@ -67,7 +67,7 @@ describe('VCC Phase 1 Step 4: QC/LAB Department Forms & Workflow UI', () => {
     // Verify form issue date
     expect(screen.getByText(/ประกาศใช้: 2026-06-09/i)).toBeInTheDocument();
     // Verify reviewer in metadata
-    expect(screen.getAllByText(/ผู้ทบทวน: PD Reviewer \(L5\)/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/PD Reviewer \(L5\)/i).length).toBeGreaterThan(0);
   });
 
   it('2. displays FM-LB-11 Rev.02 document profile and approval chain for LAB plan', () => {
@@ -124,7 +124,10 @@ describe('VCC Phase 1 Step 4: QC/LAB Department Forms & Workflow UI', () => {
       />
     );
 
-    const pdfBtn = screen.getByRole('button', { name: /เปิดดูเอกสาร PDF ทางการ/i });
+    const menuBtn = screen.getByRole('button', { name: 'เมนูเพิ่มเติมของแผน' });
+    fireEvent.click(menuBtn);
+
+    const pdfBtn = screen.getByRole('menuitem', { name: /เปิดดูเอกสาร PDF ทางการ/i });
     expect(pdfBtn).toBeInTheDocument();
     fireEvent.click(pdfBtn);
     expect(handleOpenPdf).toHaveBeenCalledTimes(1);
@@ -149,7 +152,7 @@ describe('VCC Phase 1 Step 4: QC/LAB Department Forms & Workflow UI', () => {
     ];
 
     render(
-      <AnnualPlanEquipmentListView
+      <AnnualPlanMatrixTable
         planItems={testItems}
         activePlan={{ plan_year: 2026, due_date_rule: 'END_OF_MONTH' }}
       />
@@ -188,14 +191,14 @@ describe('VCC Phase 1 Step 4: QC/LAB Department Forms & Workflow UI', () => {
     fireEvent.change(deptSelect, { target: { value: 'QC' } });
 
     expect(currentForm.department).toBe('QC');
-    expect(currentForm.document_code).toBe('VCC-PLAN-QC');
+    expect(currentForm.document_code).toBe('VCC-AP-QC-2026');
     expect(currentForm.revision).toBe('01');
     expect(currentForm.title).toContain('แผนการทวนสอบเครื่องมือประจำปี 2026');
 
     // Simulate choosing LB
     fireEvent.change(deptSelect, { target: { value: 'LB' } });
     expect(currentForm.department).toBe('LB');
-    expect(currentForm.document_code).toBe('VCC-PLAN-LB');
+    expect(currentForm.document_code).toBe('VCC-AP-LB-2026');
     expect(currentForm.revision).toBe('01');
     expect(currentForm.title).toContain('แผนการทวนสอบเครื่องมือประจำปี 2026');
   });

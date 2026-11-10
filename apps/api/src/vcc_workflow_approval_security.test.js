@@ -559,10 +559,10 @@ describe('VCC Phase 1 Step 3: Backend Workflow & Approval Security', () => {
     const planRes = await call('POST', '/api/vcc/plans', 'QA-PREP-L4', {
       plan_year: 2097,
       department: 'QA'
-      // document_code is omitted on purpose
+      // document_code is omitted on purpose -> auto generates VCC-AP-QA-2097
     });
-    expect(planRes.status).toBe(422);
-    expect(planRes.body.code).toBe('CONFIGURATION_INCOMPLETE');
+    expect(planRes.status).toBe(201);
+    expect(planRes.body.plan.document_code).toBe('VCC-AP-QA-2097');
     expect(await env.DB.prepare("SELECT id FROM vcc_assets WHERE id='ASSET-QA-001'").first()).toBeTruthy();
 
   });

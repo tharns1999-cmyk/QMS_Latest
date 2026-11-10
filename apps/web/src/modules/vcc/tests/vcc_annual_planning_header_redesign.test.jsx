@@ -68,10 +68,10 @@ describe('Annual Planning Header Redesign (FM-QC-46) — Compact 2-Tier Enterpri
     expect(onSubmitPlan).toHaveBeenCalledTimes(1);
   });
 
-  it('2. Tier 1: Plan switcher dropdown, status select, and secondary actions are accessible', () => {
+  it('2. Tier 1: Plan switcher dropdown, unified print button, and overflow menu are accessible without "+ สร้างแผนใหม่"', () => {
     const onSelectPlan = vi.fn();
     const setStatusTab = vi.fn();
-    const onOpenCreatePlan = vi.fn();
+    const onPrintPlan = vi.fn();
     const onOpenHistory = vi.fn();
 
     render(
@@ -82,7 +82,7 @@ describe('Annual Planning Header Redesign (FM-QC-46) — Compact 2-Tier Enterpri
         plans={[mockDraftPlan]}
         selectedPlanId={mockDraftPlan.id}
         onSelectPlan={onSelectPlan}
-        onOpenCreatePlan={onOpenCreatePlan}
+        onPrintPlan={onPrintPlan}
         onOpenHistory={onOpenHistory}
         planItems={mockItems}
       />
@@ -97,11 +97,14 @@ describe('Annual Planning Header Redesign (FM-QC-46) — Compact 2-Tier Enterpri
     const statusSelect = screen.getByLabelText('กรองตามสถานะแผน');
     expect(statusSelect).toBeInTheDocument();
 
-    // Secondary action: สร้างแผนใหม่
-    const createBtn = screen.getByRole('button', { name: /สร้างแผนใหม่/ });
-    expect(createBtn).toBeInTheDocument();
-    fireEvent.click(createBtn);
-    expect(onOpenCreatePlan).toHaveBeenCalledTimes(1);
+    // Unified Print / PDF button
+    const printBtn = screen.getByRole('button', { name: /พิมพ์ \/ ส่งออก PDF/ });
+    expect(printBtn).toBeInTheDocument();
+    fireEvent.click(printBtn);
+    expect(onPrintPlan).toHaveBeenCalledTimes(1);
+
+    // "+ สร้างแผนใหม่" is removed from Workspace Header (only on Hub)
+    expect(screen.queryByRole('button', { name: /สร้างแผนใหม่/ })).not.toBeInTheDocument();
 
     // Overflow menu: ...
     const menuBtn = screen.getByRole('button', { name: 'เมนูเพิ่มเติมของแผน' });
@@ -114,7 +117,7 @@ describe('Annual Planning Header Redesign (FM-QC-46) — Compact 2-Tier Enterpri
     expect(onOpenHistory).toHaveBeenCalledTimes(1);
   });
 
-  it('3. Tier 2: Displays 4 inline metrics without bulky cards, and resolves instrument de-duplication', () => {
+  it('3. Row 2: Renders compact single-row Inline Approval Stepper and removes duplicate KPI summary line', () => {
     render(
       <AnnualPlanWorkspaceHeader
         statusTab="DRAFT"
@@ -125,21 +128,13 @@ describe('Annual Planning Header Redesign (FM-QC-46) — Compact 2-Tier Enterpri
       />
     );
 
-    // 4 inline metrics are present
-    expect(screen.getByText(/เครื่องมือในขอบเขต:/)).toBeInTheDocument();
-    expect(screen.getByText(/มีแผนแล้ว:/)).toBeInTheDocument();
-    expect(screen.getByText(/ยังไม่มีแผน:/)).toBeInTheDocument();
-    expect(screen.getByText(/รอบทวนสอบรวม:/)).toBeInTheDocument();
+    // Compact Inline Approval Stepper is present
+    expect(screen.getByTestId('annual-plan-progress-stepper')).toBeInTheDocument();
+    expect(screen.getByText(/ผู้จัดทำ:/)).toBeInTheDocument();
+    expect(screen.getAllByText(/มีผลบังคับใช้/).length).toBeGreaterThan(0);
 
-    // De-duplication check:
-    // mockItems has 7 array elements (3 standalone + 1 unplanned + 1 group + 2 children)
-    // De-duplicated inScopeCount = 4 (standalone) + 2 (children) = 6 instruments!
-    const inScopeElement = screen.getByText(/เครื่องมือในขอบเขต:/).parentElement;
-    expect(inScopeElement).toHaveTextContent('6');
-
-    // Contextual workflow guidance
-    expect(screen.getByText(/ขั้นตอนถัดไป:/)).toBeInTheDocument();
-    expect(screen.getByText(/เพิ่มรายการเครื่องมือให้ครบ แล้วส่งทบทวนแผน/)).toBeInTheDocument();
+    // Duplicate inline KPI summary line ("เครื่องมือในขอบเขต: ... มีแผนแล้ว: ...") is removed from header
+    expect(screen.queryByText(/มีแผนแล้ว:/)).not.toBeInTheDocument();
   });
 
   it('4. Collapsible Approval Chain: Toggles 3-tier approval hierarchy cleanly via ผู้เกี่ยวข้อง', () => {

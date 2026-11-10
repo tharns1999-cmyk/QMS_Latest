@@ -32,6 +32,7 @@ import { fetchVccWorkTasks, syncVccWorkTasks } from '../api/vccWorkOrderApi';
 import { formatVccDueDate } from '../utils/vccDateUtils';
 import { describeWorkTask, sortWorkTasks } from '../utils/workTaskLabels';
 import { PlanWorkflowModal } from './AnnualPlanModals';
+import { AnnualPlanAuditTrailTimeline } from './AnnualPlanAuditTrailTimeline';
 
 const MONTH_LABELS = [
   'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.',
@@ -777,36 +778,10 @@ export const VccTaskInboxSection = () => {
             </div>
 
             {/* Historical Audit Trail Section */}
-            <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-5 space-y-3">
-              <div className="flex items-center gap-2 font-bold text-slate-800 text-sm">
-                <History size={16} className="text-slate-500" />
-                <span>ประวัติการดำเนินการและหลักฐาน (Audit Trail)</span>
-              </div>
-              {history.length === 0 ? (
-                <p className="text-xs text-slate-500">ยังไม่มีประวัติการดำเนินการ</p>
-              ) : (
-                <div className="divide-y divide-slate-100 text-xs">
-                  {history.map((h) => (
-                    <div key={h.id} className="py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-                      <div className="space-y-0.5">
-                        <span className="font-bold text-slate-800">{getActionLabelThai(h.action)}</span>
-                        <span className="text-slate-500 ml-2">
-                          โดย {h.actor_name || h.actor_id}
-                        </span>
-                        {(h.details?.comment || h.details?.reason) && (
-                          <div className="text-slate-700 font-medium">
-                            หมายเหตุ/เหตุผล: &ldquo;{h.details.comment || h.details.reason}&rdquo;
-                          </div>
-                        )}
-                      </div>
-                      <div className="text-slate-400 font-mono text-xs shrink-0">
-                        {formatThaiDateTime(h.at)}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+            <AnnualPlanAuditTrailTimeline
+              history={history}
+              plan={detailData?.plan}
+            />
           </>
         )}
 

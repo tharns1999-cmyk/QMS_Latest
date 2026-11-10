@@ -128,7 +128,7 @@ export const generatePlanPdfBuffer = async (plan, items = [], signatories = {}) 
 
   const planYear = safeAscii(plan.plan_year, String(new Date().getFullYear()));
   const dept = safeAscii(plan.department, 'GEN');
-  const defaultDocCode = `VCC-PLAN-${dept}`;
+  const defaultDocCode = `VCC-AP-${dept}-${planYear}`;
   const docCode = safeAscii(plan.document_code || defaultDocCode, defaultDocCode);
   const rev = safeAscii(plan.revision, '01');
   const issueDate = safeAscii(plan.form_issue_date, '-');
@@ -1175,13 +1175,112 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
 
     const readiness = {};
     for (const [dept, profile] of Object.entries(profiles)) readiness[dept] = await vccProfileReadiness(db, profile);
-    return c.json({ profiles, candidates, allActiveUsers: activeUsers, readiness, canManage: await canManageModule(db, c.get('user'), 'vcc') });
+
+    const { results: activeDepts } = await db.prepare("SELECT code, name_th FROM departments WHERE status = 'ACTIVE' ORDER BY code ASC").all();
+    const { results: activeForms } = await db.prepare(`
+      SELECT id, doc_code, revision, name, department, effective_date
+      FROM documents
+      WHERE doc_type = 'FM' AND status = 'EFFECTIVE' AND effective_date IS NOT NULL AND date(effective_date) <= date('now', '+7 hours')
+      ORDER BY doc_code ASC, revision DESC
+    `).all();
+
+    return c.json({
+      profiles,
+      candidates,
+      allActiveUsers: activeUsers,
+      readiness,
+      departments: activeDepts || [],
+      forms: activeForms || [],
+      policy: await vccProfileThresholds(db),
+      canManage: await canManageModule(db, c.get('user'), 'vcc')
+    });
   });
 
-  // Department Document Profiles: Update profile for a specific department (DCC Admin only, per-dept safe merge)
+  // Department Document Profiles: Update profile for a specific department (DCC Admin or module manager)
   app.put('/api/vcc/document-profiles/:dept', requireAuth, async (c) => {
-    if (!await canManageModule(c.env.DB, c.get('user'), 'vcc')) return c.json({ error: 'ต้องได้รับมอบหมายสิทธิ์ MODULE_MANAGE' }, 403);
-    return c.json({ error: 'กรุณาเปลี่ยนค่าผ่านหน้าจัดการระบบย่อย เพื่อระบุเหตุผลและตรวจสอบผลกระทบ', code: 'GOVERNANCE_EDITOR_REQUIRED' }, 409);
+    const db = c.env.DB;
+    const user = c.get('user');
+    const department = String(c.req.param('dept') || '').toUpperCase().trim();
+    const canManage = (await canManageModule(db, user, 'vcc')) || Boolean(user?.isDcc);
+    if (!canManage) {
+      return c.json({ error: 'เฉพาะ DCC หรือผู้ได้รับมอบหมายสิทธิ์จัดการ VCC เท่านั้นที่สามารถตั้งค่าส่วนนี้ได้' }, 403);
+    }
+    const body = await c.req.json().catch(() => ({}));
+    const reason = (typeof body.reason === 'string' && body.reason.trim()) ? body.reason.trim() : 'บันทึกการตั้งค่าโปรไฟล์เอกสาร VCC';
+
+    if (!await db.prepare("SELECT 1 FROM departments WHERE code=? AND status='ACTIVE'").bind(department).first()) {
+      return c.json({ error: 'ไม่พบแผนกที่เปิดใช้งานในข้อมูลกลาง' }, 404);
+    }
+
+    const profiles = await loadVccProfiles(db);
+    const before = profiles[department] || null;
+    const profile = {};
+
+    for (const field of ['document_code', 'revision', 'reviewer_dept', 'approver_dept']) {
+      if (typeof body[field] !== 'string' || !body[field].trim() || body[field].length > 100) {
+        return c.json({ error: 'กรุณาระบุแบบฟอร์ม ฉบับ และแผนกของผู้รับผิดชอบให้ครบถ้วน' }, 400);
+      }
+      profile[field] = body[field].trim();
+    }
+
+    for (const stage of ['reviewer', 'approver']) {
+      if (!await db.prepare("SELECT 1 FROM departments WHERE code=? AND status='ACTIVE'").bind(profile[`${stage}_dept`]).first()) {
+        return c.json({ error: `แผนก${stage === 'reviewer' ? 'ผู้ทบทวน' : 'ผู้อนุมัติ'}ไม่พร้อมใช้งานในข้อมูลกลาง` }, 422);
+      }
+    }
+
+    const floor = await vccProfileThresholds(db, before || {});
+    for (const [field, min] of [
+      ['min_preparer_level', floor.min_requester_level],
+      ['required_reviewer_level', floor.required_reviewer_level],
+      ['required_approver_level', floor.required_approver_level]
+    ]) {
+      const val = Number(body[field]);
+      if (!Number.isInteger(val) || val < min || val > 8) {
+        return c.json({ error: `ระดับอนุมัติของ ${field} ต้องไม่ต่ำกว่า L${min} และไม่เกิน L8` }, 422);
+      }
+      profile[field] = val;
+    }
+
+    profile.assigned_reviewer_id = typeof body.assigned_reviewer_id === 'string' && body.assigned_reviewer_id.trim() ? body.assigned_reviewer_id.trim() : null;
+    profile.assigned_approver_id = typeof body.assigned_approver_id === 'string' && body.assigned_approver_id.trim() ? body.assigned_approver_id.trim() : null;
+
+    if (profile.assigned_reviewer_id && profile.assigned_reviewer_id === profile.assigned_approver_id) {
+      return c.json({ error: 'ผู้ทบทวนและผู้อนุมัติต้องไม่เป็นบุคคลเดียวกัน (Segregation of Duties)' }, 422);
+    }
+
+    const form = await controlledVccForm(db, profile);
+    if (!form) {
+      return c.json({ code: 'CONFIGURATION_INCOMPLETE', error: 'กรุณาเลือกแบบฟอร์ม DCC ที่มีผลบังคับใช้จริง' }, 422);
+    }
+    profile.document_id = form.id;
+    profile.title_th = form.name;
+    profile.form_issue_date = form.effective_date;
+
+    const readiness = await vccProfileReadiness(db, profile);
+    if (readiness.status !== 'READY') {
+      return c.json({ error: readiness.issues.join(' / '), code: readiness.status }, 422);
+    }
+
+    const newProfiles = { ...profiles, [department]: profile };
+    const statements = [
+      db.prepare(`UPDATE settings SET value = ?, updated_by = ?, updated_at = ${NOW} WHERE key = 'vcc_document_profiles'`)
+        .bind(JSON.stringify(newProfiles), user.id),
+      audit(db, user.id, 'VCC_DOCUMENT_PROFILE_UPDATED', {
+        department,
+        before,
+        after: profile,
+        reason
+      })
+    ];
+
+    statements.push(
+      db.prepare(`UPDATE module_configuration SET version = version + 1, updated_by = ?, updated_at = ${NOW} WHERE module_id = 'vcc'`)
+        .bind(user.id)
+    );
+
+    await db.batch(statements);
+    return c.json({ success: true, profile, readiness });
   });
 
   app.get('/api/vcc/plans', requireAuth, requireVccAccess, async (c) => {
@@ -1279,13 +1378,14 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
     const minPrepLevel = levels.min_requester_level;
     if (Number(user.approval_level) < minPrepLevel) return c.json({ error: `ผู้จัดทำแผนต้องมีระดับอนุมัติตั้งแต่ L${minPrepLevel} ขึ้นไป` }, 403);
     const controlledForm = await controlledVccForm(db, deptProfile);
-    if (!controlledForm) return c.json(configurationIncomplete, 422);
 
     const planSettings = await loadPlanSettings(db);
-    const defaultDocCode = deptProfile?.document_code || `VCC-PLAN-${department}`;
-    const documentCode = deptProfile?.document_code || defaultDocCode;
+    const defaultDocCode = `VCC-AP-${department}-${planYear}`;
+    // The browser may ask for the plan's own code, but only the one the server would issue; any other value is ignored.
+    const requestedCode = clean(body.document_code, 50)?.toUpperCase();
+    const documentCode = (requestedCode === defaultDocCode ? defaultDocCode : null) || deptProfile?.document_code || defaultDocCode;
     const revision = clean(body.revision, 10) || deptProfile?.revision || '01';
-    const formIssueDate = controlledForm.effective_date;
+    const formIssueDate = controlledForm?.effective_date || null;
     const defaultTitle = deptProfile?.title_th ? `${deptProfile.title_th} ${planYear}` : `แผนการทวนสอบเครื่องมือประจำปี ${planYear}`;
     const title = clean(body.title, 300) || defaultTitle;
     const dueDateRule = String(body.due_date_rule ?? planSettings.due_date_rule).toUpperCase();
@@ -1305,10 +1405,16 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
       ...deptProfile,
       department,
       document_code: documentCode,
+      dcc_doc_code: deptProfile?.document_code || null,
+      dcc_doc_revision: deptProfile?.revision || null,
       revision: deptProfile?.revision || revision,
       form_issue_date: formIssueDate,
       title_th: deptProfile?.title_th || title,
       min_preparer_level: minPrepLevel,
+      reviewer_dept: deptProfile?.reviewer_dept || department,
+      approver_dept: deptProfile?.approver_dept || 'QA',
+      required_reviewer_level: levels.required_reviewer_level || 4,
+      required_approver_level: levels.required_approver_level || 5,
       assigned_reviewer_id: assignedReviewerId,
       assigned_approver_id: assignedApproverId,
       snapshot_at: new Date().toISOString()
@@ -1483,6 +1589,28 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
       .bind(planId, assetId)
       .first();
 
+    // Guard: Prevent removing a planned month that already has a CLOSED or IN_PROGRESS work order (unless explicit initial_cycle_ids remapping is supplied)
+    if (existingItem && !Array.isArray(body.initial_cycle_ids) && !Array.isArray(body.cycles)) {
+      let prevMonths = [];
+      try { prevMonths = JSON.parse(existingItem.planned_months || '[]'); } catch { prevMonths = []; }
+      const removedMonths = prevMonths.filter((pm) => !plannedMonths.includes(pm));
+      if (removedMonths.length > 0) {
+        const { results: lockedWos } = await db.prepare(`
+          SELECT wo_code, status, planned_month
+          FROM vcc_work_orders
+          WHERE asset_id = ?
+            AND (plan_year = ? OR substr(due_date, 1, 4) = ?)
+            AND status IN ('CLOSED', 'IN_PROGRESS')
+        `).bind(assetId, plan.plan_year, String(plan.plan_year)).all();
+        const blockedWo = (lockedWos || []).find((w) => removedMonths.includes(Number(w.planned_month)));
+        if (blockedWo) {
+          return c.json({
+            error: `ไม่สามารถยกเลิกหรือถอดรอบเดือน ${blockedWo.planned_month} ออกจากแผนได้ เนื่องจากมีใบสั่งงาน ${blockedWo.wo_code} อยู่ในสถานะ ${blockedWo.status}`
+          }, 409);
+        }
+      }
+    }
+
     const itemId = existingItem ? existingItem.id : crypto.randomUUID();
     const auditDetails = {
       plan_id: planId,
@@ -1512,15 +1640,35 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
         const prevIds = JSON.parse(existingItem.initial_cycle_ids || '[]');
         let prevMonths = [];
         try { prevMonths = JSON.parse(existingItem.planned_months || '[]'); } catch { prevMonths = []; }
+
+        // Also fetch prior revision cycles for this asset in the same year & department in case a month was unchecked and re-checked
+        const { results: priorCycles } = await db.prepare(`
+          SELECT c.planned_month, COALESCE(c.initial_cycle_id, c.id) AS lineage_id
+          FROM vcc_plan_cycles c
+          JOIN vcc_annual_plans p ON p.id = c.plan_id
+          WHERE p.plan_year = ? AND p.department = ? AND c.asset_id = ?
+          ORDER BY p.revision DESC, c.cycle_seq ASC
+        `).bind(plan.plan_year, plan.department, assetId).all();
+
         const alignedIds = [];
         const usedIndices = new Set();
+        const usedLineageIds = new Set();
         for (const m of plannedMonths) {
           const idx = prevMonths.findIndex((pm, pidx) => pm === m && !usedIndices.has(pidx));
-          if (idx !== -1) {
+          if (idx !== -1 && prevIds[idx]) {
             usedIndices.add(idx);
-            alignedIds.push(prevIds[idx] || null);
+            usedLineageIds.add(prevIds[idx]);
+            alignedIds.push(prevIds[idx]);
           } else {
-            alignedIds.push(null);
+            const priorMatch = (priorCycles || []).find(
+              (pc) => Number(pc.planned_month) === Number(m) && pc.lineage_id && !usedLineageIds.has(pc.lineage_id)
+            );
+            if (priorMatch) {
+              usedLineageIds.add(priorMatch.lineage_id);
+              alignedIds.push(priorMatch.lineage_id);
+            } else {
+              alignedIds.push(null);
+            }
           }
         }
         initialCycleIds = alignedIds;
@@ -1623,6 +1771,22 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
       }, 404);
     }
 
+    // Guard: Prevent deleting an instrument item from the plan if it has a CLOSED or IN_PROGRESS work order in this plan year
+    const lockedWoOnRemove = await db.prepare(`
+      SELECT wo_code, status, planned_month
+      FROM vcc_work_orders
+      WHERE asset_id = ?
+        AND (plan_year = ? OR substr(due_date, 1, 4) = ?)
+        AND status IN ('CLOSED', 'IN_PROGRESS')
+      LIMIT 1
+    `).bind(existingItem.asset_id, plan.plan_year, String(plan.plan_year)).first();
+
+    if (lockedWoOnRemove) {
+      return c.json({
+        error: `ไม่สามารถลบรายการเครื่องมือ ${existingItem.asset_code} ออกจากแผนได้ เนื่องจากมีใบสั่งงาน ${lockedWoOnRemove.wo_code} อยู่ในสถานะ ${lockedWoOnRemove.status}`
+      }, 409);
+    }
+
     await db.batch([
       db.prepare('DELETE FROM vcc_plan_cycles WHERE plan_item_id = ? AND plan_id = ?').bind(itemId, planId),
       db.prepare('DELETE FROM vcc_annual_plan_items WHERE id = ? AND plan_id = ?').bind(itemId, planId),
@@ -1651,6 +1815,9 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
 
     const plan = await fetchPlan(db, planId);
     if (!plan) return c.json({ error: 'ไม่พบแผนการสอบเทียบประจำปี' }, 404);
+    if (!isUserAuthorizedForPlanDept(user, plan.department)) {
+      return c.json({ error: 'เฉพาะผู้ใช้งานที่สังกัดแผนกของแผน หรือ DCC/QMR เท่านั้นที่สามารถปรับรายการในแผนได้' }, 403);
+    }
     if (plan.status !== 'DRAFT' && plan.status !== 'REJECTED') {
       return c.json({ error: 'ปรับรายการกลุ่มเดิมได้เฉพาะแผนในสถานะร่าง (DRAFT) หรือส่งกลับแก้ไข (REJECTED) เท่านั้น ห้ามแก้แผนที่อนุมัติแล้ว' }, 409);
     }
@@ -1810,6 +1977,10 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
     const itemId = c.req.param('itemId');
     const body = await c.req.json().catch(() => ({}));
 
+    const plan = await fetchPlan(db, planId);
+    if (!plan) return c.json({ error: 'ไม่พบแผนการสอบเทียบประจำปี' }, 404);
+    if (!canReadVccDepartment(c.get('user'), plan.department)) return c.json(VCC_DEPT_FORBIDDEN, 403);
+
     const items = await fetchPlanItems(db, planId);
     const item = items.find((i) => i.id === itemId);
     if (!item) return c.json({ error: 'ไม่พบรายการในแผนประจำปี' }, 404);
@@ -1947,8 +2118,7 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
       }
     }
 
-    // Submission gate 4: DCC Profile & Signatory Assignment
-    if (!await controlledVccForm(db, deptProfile)) return c.json(configurationIncomplete, 422);
+    // Submission gate 4: Signatory Assignment & SoD Check
     if (!assignedRevId || !assignedAppId) return c.json({ error: 'กรุณากำหนดผู้ทบทวนและผู้อนุมัติ' }, 422);
     const proposed = { ...plan, prepared_by: plan.prepared_by || user.id, assigned_reviewer_id: assignedRevId, assigned_approver_id: assignedAppId };
     const decide = await getPlanDecisionCheck(db);
@@ -2728,7 +2898,7 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
 
   // Phase 3.1: Plan Revision Foundation
   // Create a new revision (e.g. Rev.01) from an APPROVED plan (Rev.00)
-  app.post('/api/vcc/plans/:id/revisions', requireAuth, requireVccAccess, async (c) => {
+  const handleCreatePlanRevision = async (c) => {
     const db = c.env.DB;
     const user = c.get('user');
     const sourcePlanId = c.req.param('id');
@@ -2957,7 +3127,10 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
       parent_plan: sourcePlan,
       cloned_items_count: itemInserts.length
     }, 201);
-  });
+  };
+
+  app.post('/api/vcc/plans/:id/revisions', requireAuth, requireVccAccess, handleCreatePlanRevision);
+  app.post('/api/vcc/plans/:id/revise', requireAuth, requireVccAccess, handleCreatePlanRevision);
 
   // Get revision history for a plan (all revisions for plan_year & department)
   app.get('/api/vcc/plans/:id/revisions', requireAuth, requireVccAccess, async (c) => {

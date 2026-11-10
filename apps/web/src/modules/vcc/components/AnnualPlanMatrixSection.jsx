@@ -1,7 +1,7 @@
 import { getUserDeptCodes } from '../utils/departmentScope';
 import useVccPolicyUser from '../hooks/useVccPolicyUser';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useLocation } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { AlertTriangle, Plus } from 'lucide-react';
 import { getPlanStatusLabel, isSavedPlanItem } from '../utils/planLabels';
@@ -37,22 +37,48 @@ import {
   DraftGroupConversionModal,
 } from './AnnualPlanModals';
 import AnnualPlanWorkspaceHeader from './AnnualPlanWorkspaceHeader';
+import AnnualPlansHub from './AnnualPlansHub';
+import AnnualPlanPrintView from './AnnualPlanPrintView';
+import { exportAnnualPlansMultiSheet } from '../utils/exportPlanSummary';
 import AnnualPlanMatrixTable from './AnnualPlanMatrixTable';
-import AnnualPlanEquipmentListView from './AnnualPlanEquipmentListView';
 import AnnualPlanQuarterlyView from './AnnualPlanQuarterlyView';
 import AnnualPlanViewSwitcher from './AnnualPlanViewSwitcher';
 import AnnualPlanOverviewCards from './AnnualPlanOverviewCards';
+import { AnnualPlanAuditTrailTimeline } from './AnnualPlanAuditTrailTimeline';
 import SmartAssetImportModal from './SmartAssetImportModal';
 import useStore from '../../../store/useStore';
 
 const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
   const { currentUser: sessionUser, masterUsers, tasks } = useStore();
   const currentUser = useVccPolicyUser(sessionUser);
-  const [searchParams] = useSearchParams();
+  const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
   const queryTab = searchParams.get('tab');
-  const queryId = searchParams.get('id');
+  const queryId = searchParams.get('id') || searchParams.get('planId');
 
-  const createDepartments = useMemo(() => !isApiMode ? activeDepartments : activeDepartments.filter((d) => !currentUser?.vccReadOnly && getUserDeptCodes(currentUser).includes(d.code) && currentUser.vccEnabledDepartments?.includes(d.code)), [activeDepartments, currentUser]);
+  const isAnnualPlansHubPath = location?.pathname?.includes('/vcc/annual-plans');
+  const [viewState, setViewState] = useState(() => {
+    if (queryId) return 'WORKSPACE';
+    if (searchParams.get('view') === 'workspace') return 'WORKSPACE';
+    if (searchParams.get('view') === 'hub') return 'HUB';
+    if (isAnnualPlansHubPath) return 'HUB';
+    return 'WORKSPACE';
+  });
+
+  useEffect(() => {
+    if (queryId) {
+      setViewState('WORKSPACE');
+      setSelectedPlanId((prev) => (prev !== queryId ? queryId : prev));
+    } else if (searchParams.get('view') === 'workspace') {
+      setViewState('WORKSPACE');
+    } else if (searchParams.get('view') === 'hub' || isAnnualPlansHubPath) {
+      setViewState('HUB');
+      setSelectedPlanId('');
+    }
+  }, [queryId, searchParams, isAnnualPlansHubPath]);
+
+  const [printPlan, setPrintPlan] = useState(null);
+  const [printPlanItems, setPrintPlanItems] = useState([]);
 
   const userDept = useMemo(() => {
     return String(currentUser?.department || currentUser?.dept || '').toUpperCase();
@@ -63,6 +89,19 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
     const lvl = Number(currentUser.approval_level ?? currentUser.approvalLevel ?? 1);
     return Boolean(currentUser.isDcc || currentUser.isQmr || lvl >= 6);
   }, [currentUser]);
+
+  const canManageSettings = canReadAll;
+
+  const createDepartments = useMemo(() => {
+    if (currentUser?.vccReadOnly) return [];
+    const enabledDepts = currentUser?.vccEnabledDepartments;
+    return activeDepartments.filter((d) => {
+      if (enabledDepts && Array.isArray(enabledDepts) && !enabledDepts.includes(d.code)) {
+        return false;
+      }
+      return canReadAll || getUserDeptCodes(currentUser).includes(d.code);
+    });
+  }, [activeDepartments, currentUser, canReadAll]);
 
   const initialTab = useMemo(() => {
     if (queryTab) return queryTab;
@@ -113,8 +152,9 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
   }, [queryTab, queryId]);
 
   const [plans, setPlans] = useState([]);
+  const [planRevisions, setPlanRevisions] = useState([]);
   const [selectedPlanId, setSelectedPlanId] = useState('');
-  const [viewMode, setViewMode] = useState('LIST');
+  const [viewMode, setViewMode] = useState('MATRIX');
   const [planDetail, setPlanDetail] = useState(null);
   const [planWorkOrders, setPlanWorkOrders] = useState([]);
   const [activeAssets, setActiveAssets] = useState([]);
@@ -138,7 +178,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
   const [planForm, setPlanForm] = useState({
     plan_year: new Date().getFullYear(),
     department: '',
-    document_code: 'VCC-PLAN',
+    document_code: `VCC-AP-QC-${new Date().getFullYear()}`,
     revision: '01',
     title: '',
     due_date_rule: 'END_OF_MONTH'
@@ -183,19 +223,24 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
   const [submittingPlan, setSubmittingPlan] = useState(false);
   const [planSubmitError, setPlanSubmitError] = useState('');
 
-  const loadPlanWorkOrders = useCallback(async (planId) => {
+  const loadPlanWorkOrders = useCallback(async (planId, parentPlanId = '') => {
     if (!planId) {
       setPlanWorkOrders([]);
       return;
     }
     try {
+      const targetPlanIds = Array.from(new Set([planId, parentPlanId].filter(Boolean)));
       const statuses = ['OPEN', 'PENDING_REVIEW', 'REJECTED', 'CLOSED', 'CANCELLED'];
-      const results = await Promise.all(
-        statuses.map((st) => fetchVccWorkOrders({ plan_id: planId, status: st }).catch(() => []))
-      );
-      const holdRes = await fetchVccWorkOrders({ plan_id: planId, nc_status: 'OPEN' }).catch(() => []);
+      const queries = [];
+      for (const pid of targetPlanIds) {
+        for (const st of statuses) {
+          queries.push(fetchVccWorkOrders({ plan_id: pid, status: st }).catch(() => []));
+        }
+        queries.push(fetchVccWorkOrders({ plan_id: pid, nc_status: 'OPEN' }).catch(() => []));
+      }
+      const results = await Promise.all(queries);
       const map = new Map();
-      [...results.flat(), ...holdRes].forEach((w) => {
+      results.flat().forEach((w) => {
         if (w && w.id) map.set(w.id, w);
       });
       setPlanWorkOrders(Array.from(map.values()));
@@ -208,29 +253,38 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
     setLoading(true);
     try {
       const effectiveDept = (!canReadAll && userDept) ? userDept : filterDept;
-      const [settingsRes, planList, assetsList] = await Promise.all([
+      const targetStatus = viewState === 'HUB' ? 'ALL' : statusTab;
+      const [settingsRes, planList, allStatusPlans, assetsList] = await Promise.all([
         fetchVccPlanSettings(),
-        fetchVccPlans({ status: statusTab, year: filterYear, department: effectiveDept }),
+        fetchVccPlans({ status: targetStatus, year: filterYear, department: effectiveDept }),
+        viewState === 'HUB'
+          ? Promise.resolve([])
+          : fetchVccPlans({ status: 'ALL', year: filterYear, department: effectiveDept }).catch(() => []),
         fetchVccAssets({ status: 'ACTIVE', calibratable_only: true, department: effectiveDept })
       ]);
       setProviders(settingsRes.providers || []);
       setPlanSettings(settingsRes.planSettings || {});
       setThresholds(settingsRes.thresholds || { min_requester_level: 1, required_reviewer_level: 4, required_approver_level: 5 });
+
+      const mergedPlansMap = new Map();
+      [...planList, ...allStatusPlans].forEach((p) => {
+        if (p && p.id) mergedPlansMap.set(p.id, p);
+      });
+      const mergedPlans = Array.from(mergedPlansMap.values());
       setPlans(planList);
+      setPlanRevisions(mergedPlans.length > 0 ? mergedPlans : planList);
       setActiveAssets(assetsList);
 
       const targetId =
-        preferredPlanId && planList.some((p) => p.id === preferredPlanId)
+        preferredPlanId && (planList.some((p) => p.id === preferredPlanId) || mergedPlans.some((p) => p.id === preferredPlanId))
           ? preferredPlanId
-          : planList[0]?.id || '';
+          : (viewState === 'HUB' && !queryId ? '' : (planList[0]?.id || ''));
       setSelectedPlanId(targetId);
 
       if (targetId) {
-        const [detail] = await Promise.all([
-          fetchVccPlanDetail(targetId),
-          loadPlanWorkOrders(targetId)
-        ]);
+        const detail = await fetchVccPlanDetail(targetId);
         setPlanDetail(detail);
+        await loadPlanWorkOrders(targetId, detail?.plan?.parent_plan_id || '');
       } else {
         setPlanDetail(null);
         setPlanWorkOrders([]);
@@ -240,7 +294,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
     } finally {
       setLoading(false);
     }
-  }, [statusTab, filterYear, filterDept, canReadAll, userDept, loadPlanWorkOrders]);
+  }, [statusTab, filterYear, filterDept, canReadAll, userDept, loadPlanWorkOrders, viewState, queryId]);
 
   useEffect(() => {
     loadPlansAndMeta(queryId || '');
@@ -250,14 +304,89 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
     setSelectedPlanId(planId);
     setWorkflowBannerError('');
     try {
-      const [detail] = await Promise.all([
-        fetchVccPlanDetail(planId),
-        loadPlanWorkOrders(planId)
-      ]);
+      const detail = await fetchVccPlanDetail(planId);
       setPlanDetail(detail);
+      if (detail?.plan?.status && detail.plan.status !== statusTab) {
+        setStatusTab(detail.plan.status);
+      }
+      await loadPlanWorkOrders(planId, detail?.plan?.parent_plan_id || '');
     } catch (err) {
       toast.error(err.message || 'ไม่สามารถโหลดรายละเอียดแผนได้');
     }
+  };
+
+  const handleOpenPlanFromHub = async (planId) => {
+    await handleSelectPlan(planId);
+    setViewState('WORKSPACE');
+    const targetPlan = plans.find((p) => p.id === planId);
+    if (targetPlan?.status) {
+      setStatusTab(targetPlan.status);
+    }
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set('id', planId);
+      next.delete('planId');
+      next.delete('view');
+      return next;
+    }, { replace: true });
+  };
+
+  const handleBackToHub = () => {
+    setSelectedPlanId('');
+    setViewState('HUB');
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete('id');
+      next.delete('planId');
+      if (!isAnnualPlansHubPath) {
+        next.set('view', 'hub');
+      }
+      return next;
+    }, { replace: true });
+  };
+
+  const handlePrintPlan = async (planToPrint) => {
+    const target = planToPrint || planDetail?.plan || plans.find((p) => p.id === selectedPlanId) || plans[0];
+    if (!target) {
+      toast.error('ไม่พบแผนที่ต้องการพิมพ์');
+      return;
+    }
+    try {
+      if (planDetail?.plan?.id === target.id && planDetail?.items) {
+        setPrintPlan(target);
+        setPrintPlanItems(planDetail.items);
+      } else {
+        const detail = await fetchVccPlanDetail(target.id);
+        setPrintPlan(detail?.plan || target);
+        setPrintPlanItems(detail?.items || []);
+      }
+    } catch (err) {
+      toast.error('ไม่สามารถโหลดข้อมูลสำหรับพิมพ์ได้: ' + (err.message || ''));
+    }
+  };
+
+  const handleExportSummary = async () => {
+    try {
+      toast.loading('กำลังจัดเตรียมรายงานสรุปทุกแผนก...', { id: 'vcc-export-summary' });
+      const itemPromises = plans.map((p) =>
+        fetchVccPlanDetail(p.id)
+          .then((d) => (d?.items || []).map((i) => ({ ...i, plan_year: p.plan_year, department: p.department })))
+          .catch(() => [])
+      );
+      const allNested = await Promise.all(itemPromises);
+      const flattened = allNested.flat();
+      exportAnnualPlansMultiSheet(plans, flattened, filterYear || new Date().getFullYear());
+      toast.success('ส่งออกรายงานสรุปภาพรวมสำเร็จ', { id: 'vcc-export-summary' });
+    } catch (err) {
+      toast.error('ส่งออกรายงานสรุปล้มเหลว: ' + (err.message || ''), { id: 'vcc-export-summary' });
+    }
+  };
+
+  const handleExportPlanExcel = (planToExport) => {
+    const target = planToExport || planDetail?.plan || plans[0];
+    if (!target) return;
+    const items = printPlanItems.length > 0 ? printPlanItems : (planDetail?.items || []);
+    exportAnnualPlansMultiSheet([target], items, target.plan_year);
   };
 
   const openCreatePlan = (overrideYear = null) => {
@@ -266,7 +395,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
     const fixedYear = Number.isInteger(Number(overrideYear)) && Number(overrideYear) > 0 ? Number(overrideYear) : null;
     const targetYear = fixedYear || (Number(filterYear) > 0 ? Number(filterYear) : currentYear);
     const targetDept = (!canReadAll && userDept) || filterDept || activeDepartments[0]?.code || 'QC';
-    const defaultDocCode = targetDept ? `VCC-PLAN-${targetDept}` : (planSettings.default_doc_code || 'VCC-PLAN');
+    const defaultDocCode = `VCC-AP-${targetDept || 'QC'}-${targetYear}`;
     setEditingPlan(null);
     setPlanFormError('');
     setPlanForm({
@@ -274,7 +403,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
       department: targetDept,
       document_code: defaultDocCode,
       revision: '01',
-      title: `แผนการทวนสอบเครื่องมือประจำปี ${targetYear}`,
+      title: `แผนการทวนสอบเครื่องมือประจำปี ${targetYear} (${targetDept})`,
       due_date_rule: planSettings.due_date_rule || 'END_OF_MONTH'
     });
     setPlanFormOpen(true);
@@ -402,6 +531,18 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
 
   const handleQuickRemoveMonth = async (item, month) => {
     if (!planDetail?.plan) return;
+    const lockedWo = planWorkOrders.find(
+      (w) =>
+        w.status !== 'CANCELLED' &&
+        (w.status === 'CLOSED' || w.status === 'IN_PROGRESS' || w.status === 'PENDING_REVIEW') &&
+        Number(w.planned_month) === Number(month) &&
+        (w.plan_item_id === item.id || w.asset_id === item.asset_id)
+    );
+    if (lockedWo) {
+      const msg = `ไม่สามารถยกเลิกรอบเดือน ${month} ได้ เนื่องจากมีใบสั่งงานดำเนินการแล้วหรือกำลังดำเนินการ (${lockedWo.wo_code || lockedWo.status})`;
+      toast.error(msg);
+      throw new Error(msg);
+    }
     const currentMonths = item.planned_months || [];
     if (!currentMonths.includes(month)) return;
     const updatedMonths = currentMonths.filter((m) => m !== month);
@@ -599,6 +740,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
   };
 
   const openSettings = () => {
+    if (!canManageSettings) return;
     setDraftProviders([...providers]);
     setNewProvider('');
     setDraftSettings({ ...planSettings });
@@ -666,10 +808,9 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
 
   // A new revision can only start from the plan in force (the server checks the same), by someone who may edit this department's plans
   const canRevisePlan = Boolean(
-    isApiMode &&
     activePlan &&
     activePlan.status === 'APPROVED' &&
-    Number(activePlan.is_current) === 1 &&
+    Number(activePlan.is_current ?? 1) === 1 &&
     activePlan.effective_status !== 'SUPERSEDED' &&
     isUserEligibleEditor
   );
@@ -722,178 +863,195 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
 
   return (
     <div className="space-y-3" data-testid="annual-plan-matrix">
-      <AnnualPlanWorkspaceHeader
-        statusTab={statusTab}
-        setStatusTab={setStatusTab}
-        filterYear={filterYear}
-        setFilterYear={setFilterYear}
-        availableYears={availableYears}
-        filterDept={filterDept}
-        setFilterDept={setFilterDept}
-        activeDepartments={activeDepartments}
-        plans={plans}
-        selectedPlanId={selectedPlanId}
-        onSelectPlan={handleSelectPlan}
-        activePlan={activePlan}
-        planItems={planItems}
-        activeAssets={activeAssets}
-        canCreatePlan={!currentUser?.vccReadOnly}
-        canEditPlan={canEditPlan}
-        thresholds={thresholds}
-        onSubmitPlan={handleSubmitPlan}
-        onOpenRevision={canRevisePlan ? openRevision : undefined}
-        onOpenSettings={openSettings}
-        onOpenCreatePlan={openCreatePlan}
-        onOpenEditPlan={openEditPlan}
-        onOpenHistory={() => setHistoryOpen(true)}
-        onOpenJustificationModal={() => setJustificationModalOpen(true)}
-        onOpenSmartImport={() => setSmartImportOpen(true)}
-        onOpenOfficialPdf={handleOpenOfficialPdf}
-      />
-
-      {workflowBannerError && (
-        <div role="alert" className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-center gap-2 shadow-2xs">
-          <AlertTriangle size={15} className="text-rose-600 shrink-0" />
-          <span>{workflowBannerError}</span>
-        </div>
-      )}
-
-      {draftLogicalGroupItems.length > 0 && (
-        <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex flex-wrap items-center justify-between gap-2 shadow-2xs">
-          <div className="flex items-center gap-2">
-            <AlertTriangle size={15} className="text-amber-600 shrink-0" />
-            <span>
-              พบรายการกลุ่มเดิม ({draftLogicalGroupItems.map((g) => g.asset_code).join(', ')}) ค้างอยู่ในแผนฉบับร่าง — กรุณาแปลงเป็นเครื่องมือรายตัวและกำหนดเดือนก่อนส่งทบทวนแผน
-            </span>
-          </div>
-          <button
-            type="button"
-            onClick={() => openGroupConversion(draftLogicalGroupItems[0])}
-            className="px-3 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-semibold transition-colors cursor-pointer shadow-2xs text-xs"
-          >
-            แปลงเป็นเครื่องมือรายตัว
-          </button>
-        </div>
-      )}
-
-      {loading ? (
-        <div className="bg-white rounded-2xl border border-slate-200/80 p-12 text-center text-sm text-slate-500 shadow-2xs">
-          กำลังโหลดตารางแผนการทวนสอบเครื่องมือประจำปี...
-        </div>
-      ) : !activePlan ? (
-        <div className="bg-white rounded-2xl border border-slate-200/80 p-12 text-center space-y-3 shadow-2xs">
-          <div className="text-base font-bold text-slate-700">
-            {filterYear
-              ? `ไม่พบแผนการทวนสอบประจำปี ${filterYear} ในสถานะ “${getPlanStatusLabel(statusTab)}”`
-              : `ไม่พบแผนการทวนสอบประจำปีในสถานะ “${getPlanStatusLabel(statusTab)}”`}
-          </div>
-          <p className="text-xs text-slate-500">
-            {filterYear
-              ? `ยังไม่มีแผนสำหรับปี ${filterYear} (พ.ศ. ${Number(filterYear) + 543}) คุณสามารถสร้างแผนใหม่ได้ทันที`
-              : 'เลือกสถานะอื่นจากตัวกรองด้านบน หรือสร้างแผนประจำปีใหม่'}
-          </p>
-          <div className="flex items-center justify-center gap-2">
-            <button
-              type="button"
-              onClick={() => openCreatePlan(filterYear)}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold cursor-pointer"
-            >
-              <Plus size={13} />
-              <span>สร้างแผนประจำปีใหม่</span>
-            </button>
-            {(filterYear || filterDept) && (
-              <button
-                type="button"
-                onClick={() => {
-                  setFilterYear('');
-                  setFilterDept('');
-                }}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold cursor-pointer"
-              >
-                <span>ล้างตัวกรอง</span>
-              </button>
-            )}
-          </div>
-        </div>
+      {viewState === 'HUB' ? (
+        <AnnualPlansHub
+          plans={plans}
+          activeAssets={activeAssets}
+          activeDepartments={activeDepartments}
+          filterYear={filterYear}
+          setFilterYear={setFilterYear}
+          filterDept={filterDept}
+          setFilterDept={setFilterDept}
+          onOpenPlan={handleOpenPlanFromHub}
+          onOpenCreatePlan={() => openCreatePlan(filterYear)}
+          onExportSummary={handleExportSummary}
+          onPrintPlan={handlePrintPlan}
+          onExportPlanExcel={handleExportPlanExcel}
+          onOpenHistory={(plan) => { handleSelectPlan(plan.id); setHistoryOpen(true); }}
+          canCreatePlan={!currentUser?.vccReadOnly}
+        />
       ) : (
-        <div className="space-y-3">
-          {/* Plan Overview KPI Cards */}
-          <AnnualPlanOverviewCards
-            planItems={planItems}
+        <>
+          <AnnualPlanWorkspaceHeader
+            statusTab={statusTab}
+            setStatusTab={setStatusTab}
+            filterYear={filterYear}
+            setFilterYear={setFilterYear}
+            availableYears={availableYears}
+            filterDept={filterDept}
+            setFilterDept={setFilterDept}
+            activeDepartments={activeDepartments}
+            plans={plans}
+            planRevisions={planRevisions}
+            selectedPlanId={selectedPlanId}
+            onSelectPlan={handleSelectPlan}
             activePlan={activePlan}
+            planItems={planItems}
             activeAssets={activeAssets}
+            canCreatePlan={!currentUser?.vccReadOnly}
             canEditPlan={canEditPlan}
+            thresholds={thresholds}
+            onSubmitPlan={handleSubmitPlan}
+            onOpenRevision={canRevisePlan ? openRevision : undefined}
+            canManageSettings={canManageSettings}
+            onOpenSettings={canManageSettings ? openSettings : undefined}
+            onOpenCreatePlan={openCreatePlan}
+            onOpenEditPlan={openEditPlan}
+            onOpenHistory={() => setHistoryOpen(true)}
             onOpenJustificationModal={() => setJustificationModalOpen(true)}
             onOpenSmartImport={() => setSmartImportOpen(true)}
+            onOpenOfficialPdf={handleOpenOfficialPdf}
+            onBackToHub={handleBackToHub}
+            onPrintPlan={() => handlePrintPlan(activePlan)}
           />
 
-          {/* Segmented View Switcher */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-0.5">
-            <AnnualPlanViewSwitcher
-              viewMode={viewMode}
-              onViewModeChange={setViewMode}
-            />
-          </div>
-
-          {/* View 1: Equipment List View (Default) */}
-          {viewMode === 'LIST' && (
-            <AnnualPlanEquipmentListView
-              planItems={planItems}
-              activePlan={activePlan}
-              workOrders={planWorkOrders}
-              canEditPlan={canEditPlan}
-              filterYear={filterYear}
-              setFilterYear={setFilterYear}
-              availableYears={availableYears}
-              filterDept={filterDept}
-              setFilterDept={setFilterDept}
-              activeDepartments={activeDepartments}
-              onOpenAddItem={openAddItem}
-              onDeleteItem={handleDeleteItem}
-              onOpenGroupWorkOrderCheck={openGroupWorkOrderCheck}
-              onOpenSmartImport={() => setSmartImportOpen(true)}
-              onQuickAddMonth={handleQuickAddMonth}
-              onQuickRemoveMonth={handleQuickRemoveMonth}
-              onCreateWorkOrder={handleCreateWorkOrder}
-              onOpenJustificationModal={() => setJustificationModalOpen(true)}
-            />
+          {workflowBannerError && (
+            <div role="alert" className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-center gap-2 shadow-2xs">
+              <AlertTriangle size={15} className="text-rose-600 shrink-0" />
+              <span>{workflowBannerError}</span>
+            </div>
           )}
 
-          {/* View 2: Quarterly Grouped View */}
-          {viewMode === 'QUARTERLY' && (
-            <AnnualPlanQuarterlyView
-              planItems={planItems}
-              activePlan={activePlan}
-              workOrders={planWorkOrders}
-              canEditPlan={canEditPlan}
-              onCreateWorkOrder={handleCreateWorkOrder}
-              onOpenJustificationModal={() => setJustificationModalOpen(true)}
-            />
+          {draftLogicalGroupItems.length > 0 && (
+            <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex flex-wrap items-center justify-between gap-2 shadow-2xs">
+              <div className="flex items-center gap-2">
+                <AlertTriangle size={15} className="text-amber-600 shrink-0" />
+                <span>
+                  พบรายการกลุ่มเดิม ({draftLogicalGroupItems.map((g) => g.asset_code).join(', ')}) ค้างอยู่ในแผนฉบับร่าง — กรุณาแปลงเป็นเครื่องมือรายตัวและกำหนดเดือนก่อนส่งทบทวนแผน
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => openGroupConversion(draftLogicalGroupItems[0])}
+                className="px-3 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-semibold transition-colors cursor-pointer shadow-2xs text-xs"
+              >
+                แปลงเป็นเครื่องมือรายตัว
+              </button>
+            </div>
           )}
 
-          {/* View 3: 12-Month Matrix View */}
-          {viewMode === 'MATRIX' && (
-            <AnnualPlanMatrixTable
-              planItems={planItems}
-              activePlan={activePlan}
-              workOrders={planWorkOrders}
-              canEditPlan={canEditPlan}
-              filterYear={filterYear}
-              setFilterYear={setFilterYear}
-              availableYears={availableYears}
-              filterDept={filterDept}
-              setFilterDept={setFilterDept}
-              activeDepartments={activeDepartments}
-              onOpenAddItem={openAddItem}
-              onDeleteItem={handleDeleteItem}
-              onOpenGroupWorkOrderCheck={openGroupWorkOrderCheck}
-              onOpenSmartImport={() => setSmartImportOpen(true)}
-              onQuickAddMonth={handleQuickAddMonth}
-              onQuickRemoveMonth={handleQuickRemoveMonth}
-              onCreateWorkOrder={handleCreateWorkOrder}
-            />
+          {loading ? (
+            <div className="bg-white rounded-2xl border border-slate-200/80 p-12 text-center text-sm text-slate-500 shadow-2xs">
+              กำลังโหลดตารางแผนการทวนสอบเครื่องมือประจำปี...
+            </div>
+          ) : !activePlan ? (
+            <div className="bg-white rounded-2xl border border-slate-200/80 p-12 text-center space-y-3 shadow-2xs">
+              <div className="text-base font-bold text-slate-700">
+                {filterYear
+                  ? `ไม่พบแผนการทวนสอบประจำปี ${filterYear} ในสถานะ “${getPlanStatusLabel(statusTab)}”`
+                  : `ไม่พบแผนการทวนสอบประจำปีในสถานะ “${getPlanStatusLabel(statusTab)}”`}
+              </div>
+              <p className="text-xs text-slate-500">
+                {filterYear
+                  ? `ยังไม่มีแผนสำหรับปี ${filterYear} (พ.ศ. ${Number(filterYear) + 543}) คุณสามารถสร้างแผนใหม่ได้ทันที`
+                  : 'เลือกสถานะอื่นจากตัวกรองด้านบน หรือสร้างแผนประจำปีใหม่'}
+              </p>
+              <div className="flex items-center justify-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => openCreatePlan(filterYear)}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold cursor-pointer"
+                >
+                  <Plus size={13} />
+                  <span>สร้างแผนประจำปีใหม่</span>
+                </button>
+                {(filterYear || filterDept) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFilterYear('');
+                      setFilterDept('');
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold cursor-pointer"
+                  >
+                    <span>ล้างตัวกรอง</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {/* Plan Overview KPI Cards */}
+              <AnnualPlanOverviewCards
+                planItems={planItems}
+                activePlan={activePlan}
+                activeAssets={activeAssets}
+                canEditPlan={canEditPlan}
+                onOpenJustificationModal={() => setJustificationModalOpen(true)}
+                onOpenSmartImport={() => setSmartImportOpen(true)}
+              />
+
+              {/* Segmented View Switcher */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-0.5">
+                <AnnualPlanViewSwitcher
+                  viewMode={viewMode}
+                  onViewModeChange={setViewMode}
+                />
+              </div>
+
+              {/* View 1: 12-Month Matrix View (Primary / Default) */}
+              {(viewMode === 'MATRIX' || viewMode === 'LIST') && (
+                <AnnualPlanMatrixTable
+                  planItems={planItems}
+                  activePlan={activePlan}
+                  workOrders={planWorkOrders}
+                  canEditPlan={canEditPlan}
+                  filterYear={filterYear}
+                  setFilterYear={setFilterYear}
+                  availableYears={availableYears}
+                  filterDept={filterDept}
+                  setFilterDept={setFilterDept}
+                  activeDepartments={activeDepartments}
+                  onOpenAddItem={openAddItem}
+                  onDeleteItem={handleDeleteItem}
+                  onOpenGroupWorkOrderCheck={openGroupWorkOrderCheck}
+                  onOpenSmartImport={() => setSmartImportOpen(true)}
+                  onQuickAddMonth={handleQuickAddMonth}
+                  onQuickRemoveMonth={handleQuickRemoveMonth}
+                  onCreateWorkOrder={handleCreateWorkOrder}
+                  onOpenJustificationModal={() => setJustificationModalOpen(true)}
+                />
+              )}
+
+              {/* View 2: Quarterly Grouped View */}
+              {viewMode === 'QUARTERLY' && (
+                <AnnualPlanQuarterlyView
+                  planItems={planItems}
+                  activePlan={activePlan}
+                  workOrders={planWorkOrders}
+                  canEditPlan={canEditPlan}
+                  onCreateWorkOrder={handleCreateWorkOrder}
+                  onOpenJustificationModal={() => setJustificationModalOpen(true)}
+                />
+              )}
+
+              {/* Audit Trail Timeline Section (Bottom of Workspace) */}
+              <AnnualPlanAuditTrailTimeline
+                history={planDetail?.history || []}
+                plan={activePlan}
+              />
+            </div>
           )}
-        </div>
+        </>
+      )}
+
+      {printPlan && (
+        <AnnualPlanPrintView
+          plan={printPlan}
+          items={printPlanItems}
+          onClose={() => setPrintPlan(null)}
+          onExportExcel={() => handleExportPlanExcel(printPlan)}
+        />
       )}
 
       <PlanFormModal
@@ -966,6 +1124,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
         setDraftSettings={setDraftSettings}
         saving={savingSettings}
         onSave={handleSaveSettings}
+        currentUser={currentUser}
       />
 
       <SmartAssetImportModal

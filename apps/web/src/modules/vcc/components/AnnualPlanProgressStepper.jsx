@@ -5,16 +5,14 @@ import {
   ShieldCheck,
   Edit3,
   AlertTriangle,
-  Check
+  Check,
+  ArrowRight
 } from 'lucide-react';
 import { formatVccDateTime } from '../utils/vccDateUtils';
 
 /**
- * Enterprise Workflow Progress Stepper for Annual Plan (FM-QC-46)
- * Clean Minimal Luxury Design:
- * - 4 Stages: 1. ร่างแผน (Draft) -> 2. รอทบทวน (Review) -> 3. รออนุมัติ (Approval) -> 4. อนุมัติแล้ว (Approved)
- * - Visual States: Completed, Current, Upcoming, Returned
- * - Non-fictitious: displays only real actors and timestamps from activePlan
+ * Compact Single-Row Inline Approval Stepper (Row 2 of Workspace Header)
+ * แสดงสายอนุมัติแนวนอนบรรทัดเดียว: ผู้จัดทำ -> ผู้ทบทวน -> ผู้อนุมัติ -> มีผลบังคับใช้
  */
 export const AnnualPlanProgressStepper = ({
   activePlan,
@@ -23,11 +21,14 @@ export const AnnualPlanProgressStepper = ({
   if (!activePlan) return null;
 
   const status = activePlan.status || 'DRAFT';
-  const isRejected = status === 'REJECTED';
+  const isRejected = status === 'REJECTED' || status === 'RETURNED';
   const isDraft = status === 'DRAFT';
   const isPendingReview = status === 'PENDING_REVIEW';
   const isPendingApproval = status === 'PENDING_APPROVAL';
   const isApproved = status === 'APPROVED';
+  const isSuperseded =
+    String(activePlan.effective_status || '').toUpperCase() === 'SUPERSEDED' ||
+    (isApproved && Number(activePlan.is_current ?? 1) === 0);
 
   // Step 1: Draft
   const step1State = isRejected
@@ -55,47 +56,55 @@ export const AnnualPlanProgressStepper = ({
   // Step 4: Approved & Effective
   const step4State = isApproved ? 'COMPLETED' : 'UPCOMING';
 
+  const preparerActor = activePlan.prepared_by_name || activePlan.prepared_by;
+  const reviewerActor = isRejected
+    ? (activePlan.rejected_by_name || activePlan.rejected_by || activePlan.reviewed_by_name || activePlan.assigned_reviewer_name)
+    : (activePlan.reviewed_by_name || activePlan.reviewed_by || activePlan.assigned_reviewer_name);
+  const approverActor = activePlan.approved_by_name || activePlan.approved_by || activePlan.assigned_approver_name;
+
   const steps = [
     {
       id: 'step-draft',
       stepNum: 1,
-      title: isRejected ? 'ส่งกลับแก้ไข (ร่างแผน)' : 'ร่างแผนประจำปี',
-      role: isRejected ? 'ต้องส่งทบทวนใหม่' : 'จัดทำแผน',
+      stageTitle: 'ร่างแผนประจำปี',
+      prefix: isRejected ? 'ส่งกลับแก้ไข' : 'ผู้จัดทำ',
+      actorName: preparerActor || 'กำลังจัดทำร่างแผน',
       state: step1State,
-      actor: activePlan.prepared_by_name || activePlan.prepared_by,
       timestamp: activePlan.prepared_at,
       icon: isRejected ? AlertTriangle : isDraft ? Edit3 : Check
     },
     {
       id: 'step-review',
       stepNum: 2,
-      title: isRejected ? 'ส่งกลับแก้ไข' : 'ทบทวนแผน',
-      role: isRejected ? 'ส่งกลับแก้ไข' : `ทบทวน (L${thresholds.required_reviewer_level || 4}+)`,
+      stageTitle: 'ทบทวนแผน',
+      prefix: isRejected ? 'ผู้ส่งกลับ' : 'ผู้ทบทวน',
+      actorName: reviewerActor || `รอระบุ (L${thresholds.required_reviewer_level || 4}+)`,
       state: step2State,
-      actor: isRejected
-        ? (activePlan.rejected_by_name || activePlan.rejected_by)
-        : (activePlan.reviewed_by_name || activePlan.reviewed_by || activePlan.assigned_reviewer_name),
       timestamp: isRejected ? activePlan.rejected_at : activePlan.reviewed_at,
       icon: isRejected ? AlertTriangle : isPendingReview ? Clock : Check
     },
     {
       id: 'step-approval',
       stepNum: 3,
-      title: 'อนุมัติแผน',
-      role: `อนุมัติ (L${thresholds.required_approver_level || 5}+)`,
+      stageTitle: 'อนุมัติแผน',
+      prefix: 'ผู้อนุมัติ',
+      actorName: approverActor || `รอระบุ (L${thresholds.required_approver_level || 5}+)`,
       state: step3State,
-      actor: activePlan.approved_by_name || activePlan.approved_by || activePlan.assigned_approver_name,
       timestamp: activePlan.approved_at,
       icon: isPendingApproval ? ShieldCheck : Check
     },
     {
       id: 'step-approved',
       stepNum: 4,
-      title: 'มีผลบังคับใช้',
-      role: 'พร้อมออกใบสั่งงาน',
+      stageTitle: 'มีผลบังคับใช้',
+      prefix: 'สถานะผลบังคับใช้',
+      actorName: isApproved
+        ? isSuperseded
+          ? 'ถูกแทนที่ด้วยฉบับใหม่ (SUPERSEDED)'
+          : 'มีผลบังคับใช้แล้ว (Effective)'
+        : 'มีผลบังคับใช้',
       state: step4State,
-      actor: null,
-      timestamp: null,
+      timestamp: activePlan.effective_date || activePlan.approved_at,
       icon: isApproved ? CheckCircle2 : Check
     }
   ];
@@ -105,124 +114,36 @@ export const AnnualPlanProgressStepper = ({
       data-testid="annual-plan-progress-stepper"
       role="region"
       aria-label="ขั้นตอนการอนุมัติแผนประจำปี"
-      className="bg-slate-50/70 border border-slate-200/70 rounded-xl p-3 sm:p-3.5 space-y-2"
+      className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200/80 bg-slate-50/80 px-3 py-1.5"
     >
-      {/* Desktop & Tablet: Horizontal Flow */}
-      <div className="hidden sm:flex items-center justify-between relative">
-        {/* Background Connecting Track */}
-        <div
-          className="absolute top-4 left-6 right-6 h-0.5 bg-slate-200/90 -z-0"
-          aria-hidden="true"
-        />
-
-        {steps.map((step) => {
+      <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+        {steps.map((step, idx) => {
           const isStepCurrent = step.state === 'CURRENT' || step.state === 'RETURNED_EDIT';
           const isStepCompleted = step.state === 'COMPLETED';
           const isStepReturned = step.state === 'RETURNED' || step.state === 'RETURNED_EDIT';
-
           const StepIcon = step.icon;
+          const dateShort =
+            step.timestamp && formatVccDateTime(step.timestamp) !== '-'
+              ? formatVccDateTime(step.timestamp).split(' ')[0]
+              : null;
 
           return (
-            <div
-              key={step.id}
-              className="flex-1 flex flex-col items-center text-center relative z-10 px-1 group"
-              aria-current={isStepCurrent ? 'step' : undefined}
-            >
-              {/* Node Circle */}
+            <React.Fragment key={step.id}>
               <div
-                className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
-                  isStepReturned
-                    ? 'bg-rose-50 text-rose-700 border-2 border-rose-500 ring-4 ring-rose-100 shadow-2xs'
-                    : isStepCurrent
-                    ? 'bg-indigo-600 text-white ring-4 ring-indigo-100 shadow-2xs font-bold'
-                    : isStepCompleted
-                    ? 'bg-emerald-600 text-white shadow-2xs'
-                    : 'bg-white text-slate-400 border border-slate-300'
-                }`}
-              >
-                {isStepCompleted ? (
-                  <Check size={14} strokeWidth={2.5} />
-                ) : (
-                  <StepIcon size={13} strokeWidth={2.2} />
-                )}
-              </div>
-
-              {/* Title & Role */}
-              <div className="mt-1.5 space-y-0.5">
-                <div
-                  className={`text-xs tracking-tight ${
-                    isStepReturned
-                      ? 'font-bold text-rose-800'
-                      : isStepCurrent
-                      ? 'font-bold text-indigo-900'
-                      : isStepCompleted
-                      ? 'font-semibold text-slate-800'
-                      : 'font-medium text-slate-500'
-                  }`}
-                >
-                  {step.title}
-                </div>
-
-                <div className="text-[11px] text-slate-500 leading-tight">
-                  {step.role}
-                </div>
-
-                {/* Subtext: Actor / Timestamp if exists */}
-                {step.actor && (
-                  <div
-                    className={`text-[10px] font-sans truncate max-w-[130px] mx-auto ${
-                      isStepReturned
-                        ? 'text-rose-600 font-medium'
-                        : isStepCurrent
-                        ? 'text-indigo-600 font-medium'
-                        : 'text-slate-500'
-                    }`}
-                    title={step.actor}
-                  >
-                    {isStepCurrent && !isStepReturned && !step.timestamp ? (
-                      <span>{step.actor}</span>
-                    ) : (
-                      <span>
-                        {step.actor}
-                        {step.timestamp && formatVccDateTime(step.timestamp) !== '-' ? (
-                          <span className="text-slate-400 ml-1">· {formatVccDateTime(step.timestamp).split(' ')[0]}</span>
-                        ) : null}
-                      </span>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Mobile: Compact Horizontal Stepper Pills & Current Step Card */}
-      <div className="sm:hidden space-y-2">
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar text-xs">
-          {steps.map((step) => {
-            const isStepCurrent = step.state === 'CURRENT' || step.state === 'RETURNED_EDIT';
-            const isStepCompleted = step.state === 'COMPLETED';
-            const isStepReturned = step.state === 'RETURNED' || step.state === 'RETURNED_EDIT';
-
-            const StepIcon = step.icon;
-
-            return (
-              <div
-                key={step.id}
                 aria-current={isStepCurrent ? 'step' : undefined}
-                className={`shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs transition-all ${
+                className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[11px] transition-all ${
                   isStepReturned
-                    ? 'bg-rose-50 border-rose-200 text-rose-800 font-bold'
+                    ? 'border-rose-300 bg-rose-50 text-rose-900 font-semibold'
                     : isStepCurrent
-                    ? 'bg-white border-indigo-300 text-indigo-900 font-bold shadow-2xs ring-2 ring-indigo-500/10'
+                    ? 'border-indigo-300 bg-white text-indigo-950 font-semibold shadow-2xs ring-1 ring-indigo-500/15'
                     : isStepCompleted
-                    ? 'bg-emerald-50/70 border-emerald-200 text-emerald-800 font-medium'
-                    : 'bg-white/80 border-slate-200 text-slate-500 font-normal'
+                    ? 'border-emerald-200/90 bg-emerald-50/70 text-emerald-900 font-medium'
+                    : 'border-slate-200/80 bg-white/70 text-slate-500'
                 }`}
               >
+                <span className="sr-only">{step.stageTitle}</span>
                 <span
-                  className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 text-[10px] ${
+                  className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[9px] font-bold ${
                     isStepReturned
                       ? 'bg-rose-600 text-white'
                       : isStepCurrent
@@ -232,41 +153,45 @@ export const AnnualPlanProgressStepper = ({
                       : 'bg-slate-200 text-slate-600'
                   }`}
                 >
-                  {isStepCompleted ? <Check size={10} strokeWidth={3} /> : <StepIcon size={10} />}
-                </span>
-                <span className="whitespace-nowrap">{step.title}</span>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Mobile: Current Step Context Badge */}
-        {(() => {
-          const activeStep = steps.find((s) => s.state === 'CURRENT' || s.state === 'RETURNED_EDIT') || steps[steps.length - 1];
-          if (!activeStep) return null;
-          return (
-            <div className="p-2.5 bg-white rounded-lg border border-slate-200/80 text-xs flex items-center justify-between gap-2 shadow-2xs">
-              <div className="flex items-center gap-2">
-                <span className="w-5 h-5 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-700 font-bold font-mono text-[11px] flex items-center justify-center shrink-0">
-                  {activeStep.stepNum}
-                </span>
-                <div>
-                  <div className="font-bold text-slate-800 leading-tight">
-                    {activeStep.title} <span className="font-normal text-slate-500 text-[11px]">({activeStep.role})</span>
-                  </div>
-                  {activeStep.actor && (
-                    <div className="text-[11px] text-slate-600 mt-0.5">
-                      ผู้รับผิดชอบ: {activeStep.actor}
-                    </div>
+                  {isStepCompleted ? (
+                    <Check size={10} strokeWidth={3} />
+                  ) : (
+                    <StepIcon size={10} strokeWidth={2.4} />
                   )}
-                </div>
+                </span>
+
+                <span className="opacity-75 font-semibold">{step.prefix}:</span>
+                <span className="max-w-[180px] truncate" title={`${step.prefix}: ${step.actorName}`}>
+                  {step.actorName}
+                </span>
+
+                {dateShort && (
+                  <span className="rounded bg-black/5 px-1 py-0.2 font-mono text-[10px] text-slate-600">
+                    {dateShort}
+                  </span>
+                )}
               </div>
-            </div>
+
+              {idx < steps.length - 1 && (
+                <ArrowRight className="h-3 w-3 shrink-0 text-slate-300" aria-hidden="true" />
+              )}
+            </React.Fragment>
           );
-        })()}
+        })}
       </div>
+
+      {activePlan.revision_reason && (
+        <div
+          className="inline-flex items-center gap-1.5 rounded-md border border-indigo-200 bg-indigo-50/90 px-2.5 py-0.5 text-[11px] text-indigo-900"
+          title={activePlan.revision_reason}
+        >
+          <span className="font-bold">เหตุผลขอแก้ไข Rev.{activePlan.revision || '01'}:</span>
+          <span className="max-w-[260px] truncate font-medium">{activePlan.revision_reason}</span>
+        </div>
+      )}
     </div>
   );
 };
 
 export default AnnualPlanProgressStepper;
+

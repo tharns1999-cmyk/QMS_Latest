@@ -60,11 +60,11 @@ describe('VCC FM-QC-46 Registry-Driven Annual Planning Board', () => {
   it('2. แสดง Summary Metrics ครบถ้วน (ขอบเขต, มีแผนแล้ว, ยังไม่มีแผน, รอบรวม)', async () => {
     await openPlanPage();
 
-    // Summary cards exist in workspace header
+    // Summary KPI cards exist in AnnualPlanOverviewCards
     expect(screen.getAllByText(/เครื่องมือในขอบเขต/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/มีแผนแล้ว/i).length).toBeGreaterThan(0);
-    expect(screen.getByText(/ยังไม่มีแผน/i)).toBeInTheDocument();
-    expect(screen.getByText(/รอบทวนสอบรวม/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/มีแผน(ทวนสอบ)?แล้ว/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/ยังไม่มีแผน|ยังไม่ได้วางแผน/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/รอบ(ทวนสอบ|วางแผน)รวม/i).length).toBeGreaterThan(0);
   });
 
   it('3. การแสดงผลแบบ Flat Table และการกรองตาม Category (Flat Instrument Planning & Category Filter) ใน AnnualPlanMatrixTable', () => {

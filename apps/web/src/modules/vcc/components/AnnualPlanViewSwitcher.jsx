@@ -1,6 +1,5 @@
 import React from 'react';
 import {
-  List,
   CalendarRange,
   Table
 } from 'lucide-react';
@@ -8,34 +7,29 @@ import {
 /**
  * Segmented View Switcher for Annual Plan (FM-QC-46)
  * Modes:
- * - LIST: รายการเครื่องมือ (Default - readable paper-to-digital list)
+ * - MATRIX: ตารางแผน 12 เดือน (Primary / Recommended view - full 12-month calendar grid)
  * - QUARTERLY: มุมมองรายไตรมาส (Quarterly grouped view)
- * - MATRIX: ตารางแผน 12 เดือน (Full 12-month calendar grid)
  */
 export const AnnualPlanViewSwitcher = ({
-  viewMode = 'LIST',
+  viewMode = 'MATRIX',
   onViewModeChange
 }) => {
   const views = [
     {
-      id: 'LIST',
-      label: 'รายการเครื่องมือ',
+      id: 'MATRIX',
+      label: 'ตารางแผน 12 เดือน',
       badge: 'แนะนำ',
-      icon: List
+      icon: Table
     },
     {
       id: 'QUARTERLY',
       label: 'มุมมองรายไตรมาส',
       badge: null,
       icon: CalendarRange
-    },
-    {
-      id: 'MATRIX',
-      label: 'ตารางแผน 12 เดือน',
-      badge: null,
-      icon: Table
     }
   ];
+
+  const currentMode = String(viewMode || 'MATRIX').toUpperCase();
 
   return (
     <div
@@ -45,7 +39,7 @@ export const AnnualPlanViewSwitcher = ({
       className="inline-flex items-center gap-1 p-1 bg-slate-100/90 border border-slate-200/80 rounded-xl text-xs font-semibold shadow-2xs"
     >
       {views.map((v) => {
-        const isSelected = viewMode === v.id;
+        const isSelected = currentMode === v.id;
         const Icon = v.icon;
 
         return (

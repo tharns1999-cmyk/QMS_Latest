@@ -44,17 +44,30 @@ export const AnnualPlanApprovalChain = ({ activePlan, thresholds = {} }) => {
   if (!activePlan) return null;
 
   const dept = activePlan.department;
-  const isDeptProfiled = dept === 'QC' || dept === 'LB';
-  const preparerLabel = isDeptProfiled
-    ? `ผู้จัดทำ (L4+ · แผนก ${dept})`
+  let profile = null;
+  try {
+    if (activePlan.profile_snapshot) {
+      profile = typeof activePlan.profile_snapshot === 'string'
+        ? JSON.parse(activePlan.profile_snapshot)
+        : activePlan.profile_snapshot;
+    }
+  } catch {}
+
+  const minPrep = profile?.min_preparer_level || (dept === 'QC' || dept === 'LB' ? 4 : (thresholds.min_requester_level || 1));
+  const preparerLabel = minPrep >= 4
+    ? `ผู้จัดทำ (L${minPrep}+ · แผนก ${dept})`
     : `ผู้จัดทำ (L${thresholds.min_requester_level || 1}+)`;
-  const reviewerLabel = dept === 'QC'
-    ? 'ผู้ทบทวน (PD L5)'
-    : dept === 'LB'
-      ? 'ผู้ทบทวน (LB L5)'
-      : `ผู้ทบทวน (L${thresholds.required_reviewer_level || 4}+)`;
-  const approverLabel = isDeptProfiled
-    ? 'ผู้อนุมัติ (MGT L6+)'
+
+  const revDept = profile?.reviewer_dept || (dept === 'QC' ? 'PD' : dept === 'LB' ? 'LB' : null);
+  const revLvl = profile?.required_reviewer_level || (dept === 'QC' || dept === 'LB' ? 5 : (thresholds.required_reviewer_level || 4));
+  const reviewerLabel = revDept
+    ? `ผู้ทบทวน (${revDept} L${revLvl})`
+    : `ผู้ทบทวน (L${thresholds.required_reviewer_level || 4}+)`;
+
+  const appDept = profile?.approver_dept || (dept === 'QC' || dept === 'LB' ? 'MGT' : null);
+  const appLvl = profile?.required_approver_level || (dept === 'QC' || dept === 'LB' ? 6 : (thresholds.required_approver_level || 5));
+  const approverLabel = appDept
+    ? `ผู้อนุมัติ (${appDept} L${appLvl}+)`
     : `ผู้อนุมัติ (L${thresholds.required_approver_level || 5}+)`;
 
   return (

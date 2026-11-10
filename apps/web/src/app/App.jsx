@@ -187,6 +187,18 @@ function App() {
             }
           />
           <Route
+            path="vcc/annual-plans"
+            element={
+              <ProtectedRoute
+                requireVcc
+                redirectPath="/portal"
+                deniedToastMessage="เฉพาะผู้ใช้งานแผนก DCC, QC, QA, MGT และ LB เท่านั้นที่สามารถเข้าใช้งาน VCC ได้"
+              >
+                {withSuspense(VccAssetRegisterPage)}
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="vcc/work-orders"
             element={
               <ProtectedRoute

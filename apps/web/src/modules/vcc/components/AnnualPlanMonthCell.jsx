@@ -52,12 +52,27 @@ export const AnnualPlanMonthCell = ({
 
   const isPlanned = (item.planned_months || []).includes(month);
 
-  // 1. Work Order assigned to this planned cycle (source cycle P{month})
+  // 1. Work Order assigned to this planned cycle (source cycle P{month}) across revisions of the same plan year
   const cycleWo = workOrders.find((w) => {
     if (w.status === 'CANCELLED') return false;
-    const matchesItem = w.plan_item_id === item.id || (w.plan_id === plan?.id && w.asset_id === item.asset_id);
+    const matchesAssetAndYear =
+      w.asset_id &&
+      item.asset_id &&
+      w.asset_id === item.asset_id &&
+      (!w.plan_year || !plan?.plan_year || Number(w.plan_year) === Number(plan.plan_year));
+    const matchesItem =
+      w.plan_item_id === item.id ||
+      (w.plan_id === plan?.id && w.asset_id === item.asset_id) ||
+      matchesAssetAndYear;
     return matchesItem && Number(w.planned_month) === month;
   });
+
+  const isLockedByExecution = Boolean(
+    cycleWo &&
+      (cycleWo.status === 'CLOSED' ||
+        cycleWo.status === 'IN_PROGRESS' ||
+        cycleWo.status === 'PENDING_REVIEW')
+  );
 
   const cycleActualDate = cycleWo?.performed_at || null;
   const cycleActualMonth = cycleActualDate ? Number(cycleActualDate.slice(5, 7)) : null;
@@ -66,7 +81,15 @@ export const AnnualPlanMonthCell = ({
   // 2. Work Orders whose ACTUAL execution occurred IN this calendar month, but originated from another plan cycle (or ad-hoc)
   const externalActualWos = workOrders.filter((w) => {
     if (w.status === 'CANCELLED') return false;
-    const matchesItem = w.plan_item_id === item.id || (w.plan_id === plan?.id && w.asset_id === item.asset_id);
+    const matchesAssetAndYear =
+      w.asset_id &&
+      item.asset_id &&
+      w.asset_id === item.asset_id &&
+      (!w.plan_year || !plan?.plan_year || Number(w.plan_year) === Number(plan.plan_year));
+    const matchesItem =
+      w.plan_item_id === item.id ||
+      (w.plan_id === plan?.id && w.asset_id === item.asset_id) ||
+      matchesAssetAndYear;
     if (!matchesItem || !w.performed_at) return false;
     const perfMonth = Number(w.performed_at.slice(5, 7));
     return perfMonth === month && Number(w.planned_month) !== month;
@@ -466,7 +489,17 @@ export const AnnualPlanMonthCell = ({
             {/* Quick Remove (Draft/Rejected only) */}
             {isPlanned && canEditPlan && (
               <>
-                {confirmDelete ? (
+                {isLockedByExecution ? (
+                  <div
+                    data-testid={`locked-cycle-month-${month}`}
+                    className="p-2.5 rounded-xl bg-slate-100 border border-slate-300 text-slate-700 text-xs font-semibold flex items-start gap-2"
+                  >
+                    <ShieldAlert size={14} className="text-slate-600 shrink-0 mt-0.5" />
+                    <span>
+                      ล็อกการแก้ไข: รอบเดือนนี้มีใบสั่งงานดำเนินการแล้วหรือกำลังดำเนินการ ({cycleWo?.wo_code || cycleWo?.status}) ห้ามถอดออกจากแผน
+                    </span>
+                  </div>
+                ) : confirmDelete ? (
                   <div className="p-2.5 rounded-lg bg-rose-50 border border-rose-200 space-y-2">
                     <div className="text-xs text-rose-800 font-semibold">
                       ยืนยันยกเลิกรอบเดือน {month} ออกจากแผน?

@@ -114,7 +114,7 @@ describe('VCC FM-QC-46 — สถาปัตยกรรมข้อมูล�
   it('6. สรุปสถานะบอกขั้นตอนถัดไป และรายละเอียดผู้ทบทวน/ผู้อนุมัติขยายดูได้', async () => {
     await openPlanPage();
 
-    expect(screen.getByText(/เพิ่มรายการเครื่องมือให้ครบ แล้วส่งทบทวนแผน/)).toBeInTheDocument();
+    expect(screen.getByTestId('annual-plan-progress-stepper')).toBeInTheDocument();
     expect(screen.queryByText(/ผู้ทบทวน \(L4\+\)/)).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: /ผู้เกี่ยวข้อง/ }));

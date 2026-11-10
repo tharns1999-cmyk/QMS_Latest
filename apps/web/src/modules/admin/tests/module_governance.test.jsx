@@ -52,10 +52,11 @@ describe('Module Governance interface', () => {
     expect(within(reviewers).getByText('ผู้ทบทวนที่ผ่านเกณฑ์ · L5')).toBeInTheDocument();
     expect(within(reviewers).queryByText(/ระดับไม่ถึง|แผนกไม่ตรง|ผู้อนุมัติที่ผ่านเกณฑ์/)).not.toBeInTheDocument();
   });
-  it('reports incomplete mappings and does not create or select fictitious forms', async()=>{
+  it('operates as a native digital record and does not require legacy DCC paper forms', async()=>{
     config.forms=[];show();await screen.findByRole('button',{name:'ตั้งค่า QC'});fireEvent.click(screen.getByRole('button',{name:'ตั้งค่า QC'}));
-    expect(screen.getByText(/ยังไม่มีแบบฟอร์ม DCC ที่มีผลบังคับใช้ให้เลือก/)).toBeVisible();
-    expect(screen.getByRole('button',{name:'ตรวจสอบและบันทึกค่าของแผนก'})).toBeDisabled();
+    expect(screen.getByText('แบบฟอร์มและผู้รับผิดชอบ · QC')).toBeVisible();
+    expect(screen.getByText(/บังคับใช้กฎ Segregation of Duties/)).toBeVisible();
+    expect(screen.getByRole('button',{name:'ตรวจสอบและบันทึกค่าของแผนก'})).toBeEnabled();
     expect(apiPut).not.toHaveBeenCalled();
   });
   it('shows impact before mutation and requires a nonempty reason in confirmation', async()=>{
@@ -83,6 +84,36 @@ describe('Module Governance interface', () => {
   it('shows a useful empty critical-alert view during maintenance', async()=>{
     config.module.status='MAINTENANCE';show();await screen.findByRole('button',{name:'ตั้งค่า QC'});fireEvent.click(screen.getByRole('tab',{name:'การแจ้งเตือนค้าง (0)'}));
     expect(screen.getByText('ไม่มีการแจ้งเตือนในสถานะนี้')).toBeVisible();expect(screen.getByText(/ไม่มีการเลื่อนวันครบกำหนดหรือยืนยันรับทราบแทน/)).toBeVisible();
+  });
+  it('supports split-pane master-detail module switching and search filtering', async () => {
+    show();
+    await screen.findByRole('button', { name: 'ตั้งค่า QC' });
+
+    // 1. Verify module rail lists DCC, CAPA, and Training
+    expect(screen.getByText('ระบบควบคุมเอกสาร · DCC')).toBeVisible();
+    expect(screen.getByText('ระบบจัดการข้อบกพร่อง · CAPA')).toBeVisible();
+    expect(screen.getByText('ระบบฝึกอบรมและทักษะ · Training')).toBeVisible();
+
+    // 2. Click DCC -> detail pane shows DCC baseline overview
+    fireEvent.click(screen.getByText('ระบบควบคุมเอกสาร · DCC'));
+    expect(screen.getByText('ระบบควบคุมเอกสาร (DCC)')).toBeVisible();
+    expect(screen.getByText(/แกนกลางการควบคุมสารสนเทศเอกสารและระเบียบปฏิบัติงานขององค์กร/)).toBeVisible();
+    expect(screen.getByRole('link', { name: /เปิดดูทะเบียนเอกสารควบคุม/ })).toBeVisible();
+
+    // 3. Click CAPA -> detail pane shows Coming Soon view
+    fireEvent.click(screen.getByText('ระบบจัดการข้อบกพร่อง · CAPA'));
+    expect(screen.getByText('ระบบจัดการข้อบกพร่องและการปฏิบัติการแก้ไข (CAPA)')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'สลับกลับไปจัดการโมดูลศูนย์ทวนสอบ (VCC)' })).toBeVisible();
+
+    // 4. Click back button to VCC
+    fireEvent.click(screen.getByRole('button', { name: 'สลับกลับไปจัดการโมดูลศูนย์ทวนสอบ (VCC)' }));
+    expect(screen.getByRole('button', { name: 'ตั้งค่า QC' })).toBeVisible();
+
+    // 5. Test search filter in module rail
+    const searchInput = screen.getByPlaceholderText('ค้นหาโมดูล...');
+    fireEvent.change(searchInput, { target: { value: 'CAPA' } });
+    expect(screen.getByText('ระบบจัดการข้อบกพร่อง · CAPA')).toBeVisible();
+    expect(screen.queryByText('ระบบฝึกอบรมและทักษะ · Training')).not.toBeInTheDocument();
   });
 });
 
