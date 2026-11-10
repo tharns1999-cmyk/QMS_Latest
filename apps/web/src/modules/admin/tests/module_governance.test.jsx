@@ -52,10 +52,11 @@ describe('Module Governance interface', () => {
     expect(within(reviewers).getByText('ผู้ทบทวนที่ผ่านเกณฑ์ · L5')).toBeInTheDocument();
     expect(within(reviewers).queryByText(/ระดับไม่ถึง|แผนกไม่ตรง|ผู้อนุมัติที่ผ่านเกณฑ์/)).not.toBeInTheDocument();
   });
-  it('reports incomplete mappings and does not create or select fictitious forms', async()=>{
+  it('operates as a native digital record and does not require legacy DCC paper forms', async()=>{
     config.forms=[];show();await screen.findByRole('button',{name:'ตั้งค่า QC'});fireEvent.click(screen.getByRole('button',{name:'ตั้งค่า QC'}));
-    expect(screen.getByText(/ยังไม่มีแบบฟอร์ม DCC ที่มีผลบังคับใช้ให้เลือก/)).toBeVisible();
-    expect(screen.getByRole('button',{name:'ตรวจสอบและบันทึกค่าของแผนก'})).toBeDisabled();
+    expect(screen.getByText('แบบฟอร์มและผู้รับผิดชอบ · QC')).toBeVisible();
+    expect(screen.getByText(/บังคับใช้กฎ Segregation of Duties/)).toBeVisible();
+    expect(screen.getByRole('button',{name:'ตรวจสอบและบันทึกค่าของแผนก'})).toBeEnabled();
     expect(apiPut).not.toHaveBeenCalled();
   });
   it('shows impact before mutation and requires a nonempty reason in confirmation', async()=>{

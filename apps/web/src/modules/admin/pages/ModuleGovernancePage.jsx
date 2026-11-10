@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, RefreshCw, ShieldCheck, Wrench, LockKeyhole, CheckCircle2, Save, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, RefreshCw, ShieldCheck, Wrench, LockKeyhole, CheckCircle2, Save, AlertTriangle, Settings, FileText } from 'lucide-react';
 import { apiGet, apiPut, apiPost, apiDelete, isApiMode } from '../../../api/client';
 import { useModuleAccess } from '../../../shared/components/ModuleAccessProvider';
 import useStore from '../../../store/useStore';
@@ -356,22 +356,6 @@ export default function ModuleGovernancePage() {
     }
   };
 
-  const handleSaveAllChanges = () => {
-    if (isApiMode) {
-      if (selectedStatus !== data.module.status || message !== data.module.maintenance_message) {
-        review(`เปลี่ยน VCC เป็น${statuses[selectedStatus]}`, '/api/module-governance/vcc/status', {
-          status: selectedStatus,
-          maintenance_message: message
-        });
-      } else {
-        setSuccessNotice('ข้อมูลการตั้งค่าทั้งหมดเป็นปัจจุบันแล้ว');
-      }
-      return;
-    }
-
-    handleSaveModuleStatusDemo();
-  };
-
   return (
     <div className="mx-auto w-full max-w-6xl space-y-6 pb-8 text-slate-900">
       <header className="flex flex-wrap items-start justify-between gap-4">
@@ -423,10 +407,10 @@ export default function ModuleGovernancePage() {
 
       {data && (
         <>
-          {/* SECTION 1: MODULE STATUS CONTROL */}
-          <section aria-label="สถานะระบบย่อย" className="divide-y divide-slate-200 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xs">
-            {/* DCC CARD */}
-            <div className="flex flex-wrap items-center justify-between gap-4 px-5 py-4 sm:px-6 bg-slate-50/50">
+          {/* SECTION 1: MODULE STATUS CONTROL (Compact Card) */}
+          <section aria-label="สถานะระบบย่อย" className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xs">
+            {/* Header: DCC Status Bar (Read-only System Baseline) */}
+            <div className="flex flex-wrap items-center justify-between gap-4 px-5 py-4 sm:px-6 bg-slate-50/50 border-b border-slate-100">
               <div className="flex items-center gap-3">
                 <LockKeyhole size={20} className="text-slate-500" />
                 <div>
@@ -439,26 +423,32 @@ export default function ModuleGovernancePage() {
               </span>
             </div>
 
-            {/* VCC CARD */}
-            <div className="space-y-5 p-5 sm:p-6">
+            {/* VCC Status Body */}
+            <div className="p-5 sm:p-6 space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <h2 className="flex items-center gap-3 font-semibold text-slate-900">
-                  <Wrench size={20} className="text-indigo-600" />
-                  ศูนย์ทวนสอบและสอบเทียบ · VCC
-                </h2>
-                <span className={`rounded-lg px-3 py-1 text-sm font-medium ${statusStyle[data.module.status] || 'bg-slate-100 text-slate-800'}`}>
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 rounded-xl bg-indigo-50 text-indigo-600 border border-indigo-100">
+                    <Wrench size={18} />
+                  </div>
+                  <div>
+                    <h2 className="text-base font-bold text-slate-900">ศูนย์ทวนสอบและสอบเทียบ · VCC</h2>
+                    <p className="text-xs text-slate-500">จัดการสถานะการทำงานและประกาศข้อความปรับปรุงระบบสำหรับผู้ใช้งานทั่วไป</p>
+                  </div>
+                </div>
+                <span className={`rounded-full px-3 py-1 text-xs font-semibold border ${statusStyle[data.module.status] || 'bg-slate-100 text-slate-800'}`}>
                   {statuses[data.module.status]}
                 </span>
               </div>
 
-              <div className="grid items-end gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_auto]">
-                <label className="text-sm font-medium text-slate-700">
-                  เปลี่ยนสถานะ
+              {/* Status Selector + Maintenance Message + Single Save Button */}
+              <div className="grid items-end gap-3.5 sm:grid-cols-[minmax(0,220px)_1fr_auto]">
+                <label className="text-xs font-semibold text-slate-700">
+                  <span>เปลี่ยนสถานะ</span>
                   <select
                     disabled={loading || busy}
                     value={selectedStatus}
                     onChange={(e) => setSelectedStatus(e.target.value)}
-                    className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="mt-1.5 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 shadow-2xs"
                   >
                     {Object.entries(statuses).map(([key, label]) => (
                       <option key={key} value={key}>
@@ -468,50 +458,63 @@ export default function ModuleGovernancePage() {
                   </select>
                 </label>
 
-                <label className="text-sm font-medium text-slate-700">
-                  ข้อความแจ้งผู้ใช้งาน
+                {/* Maintenance Message Input - visible or hidden depending on status */}
+                <label
+                  className={`text-xs font-semibold text-slate-700 ${
+                    selectedStatus === 'MAINTENANCE' ? 'block animate-in fade-in' : 'hidden'
+                  }`}
+                >
+                  <span>ข้อความแจ้งผู้ใช้งาน</span>
                   <input
                     disabled={loading || busy}
                     value={message}
                     maxLength={1000}
                     onChange={(e) => setMessage(e.target.value)}
-                    placeholder="ระบุเมื่อปรับปรุงระบบ"
-                    className="mt-2 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    placeholder="ระบุข้อความประกาศแจ้งเตือนเมื่อเลือกปรับปรุงระบบ..."
+                    className="mt-1.5 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-2xs"
                   />
                 </label>
 
-                {isApiMode ? (
-                  <button
-                    disabled={
-                      loading ||
-                      busy ||
-                      (selectedStatus === data.module.status && message === data.module.maintenance_message) ||
-                      (selectedStatus === 'MAINTENANCE' && !message.trim())
-                    }
-                    onClick={() =>
-                      review(`เปลี่ยน VCC เป็น${statuses[selectedStatus]}`, '/api/module-governance/vcc/status', {
-                        status: selectedStatus,
-                        maintenance_message: message
-                      })
-                    }
-                    className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50 shadow-2xs cursor-pointer"
-                  >
-                    ตรวจผลกระทบ
-                  </button>
-                ) : (
-                  <button
-                    onClick={handleSaveModuleStatusDemo}
-                    disabled={loading || busy || (selectedStatus === 'MAINTENANCE' && !message.trim())}
-                    className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50 shadow-2xs cursor-pointer"
-                  >
-                    บันทึกการตั้งค่า (Save Changes)
-                  </button>
+                {/* Helper placeholder if not maintenance */}
+                {selectedStatus !== 'MAINTENANCE' && (
+                  <div className="text-xs text-slate-500 self-center hidden sm:block">
+                    อ่านอย่างเดียว: ดูข้อมูลได้แต่บันทึกไม่ได้ · ปรับปรุงระบบ: พักการเข้าใช้งาน · ปิดใช้งาน: ระงับการเข้า VCC
+                  </div>
                 )}
-              </div>
 
-              <p className="text-sm leading-6 text-slate-600">
-                อ่านอย่างเดียว: ดูข้อมูลได้แต่บันทึกไม่ได้ · ปรับปรุงระบบ: พักการเข้าใช้งานและการอนุมัติ การติดตามกำหนดและเก็บการแจ้งเตือนยังทำงานต่อ · ปิดใช้งาน: ระงับการเข้า VCC โดยเก็บข้อมูลเดิม
-              </p>
+                {/* Single Button */}
+                <div className="shrink-0">
+                  {isApiMode ? (
+                    <button
+                      disabled={
+                        loading ||
+                        busy ||
+                        (selectedStatus === data.module.status && message === data.module.maintenance_message) ||
+                        (selectedStatus === 'MAINTENANCE' && !message.trim())
+                      }
+                      onClick={() =>
+                        review(`เปลี่ยน VCC เป็น${statuses[selectedStatus]}`, '/api/module-governance/vcc/status', {
+                          status: selectedStatus,
+                          maintenance_message: message
+                        })
+                      }
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50 shadow-2xs transition-colors cursor-pointer"
+                    >
+                      <Save size={16} />
+                      <span>ตรวจผลกระทบ</span>
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleSaveModuleStatusDemo}
+                      disabled={loading || busy || (selectedStatus === 'MAINTENANCE' && !message.trim())}
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50 shadow-2xs transition-colors cursor-pointer"
+                    >
+                      <Save size={16} />
+                      <span>บันทึกการตั้งค่า (Save Changes)</span>
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
           </section>
 
@@ -540,111 +543,125 @@ export default function ModuleGovernancePage() {
           {/* SECTION 2: DEPARTMENT ACCESS MATRIX (Native Digital-First) */}
           {tab === 'departments' && (
             <section aria-label="แผนกและแบบฟอร์ม" className="space-y-4">
+              {/* Header Bar */}
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <h2 className="text-lg font-semibold text-slate-900">การเปิดรับงานของแผนก</h2>
-                  <p className="mt-1 text-sm text-slate-600">
-                    เปิดสิทธิ์การใช้งานรายแผนกเพื่อจัดทำและลงนามแผนประจำปีดิจิทัลได้ทันที (พร้อมใช้งานอัตโนมัติตาม ISO 9001:2015 Clause 7.5)
+                  <h2 className="text-lg font-bold text-slate-900">การเปิดรับงานของแผนก</h2>
+                  <p className="mt-0.5 text-xs text-slate-500">
+                    เปิดสิทธิ์การใช้งานรายแผนกเพื่อจัดทำและลงนามแผนประจำปีดิจิทัลได้ทันที (ISO 9001:2015 Clause 7.5)
                   </p>
                 </div>
-                <div className="flex flex-wrap items-center gap-3">
-                  <label className="text-sm text-slate-700 flex items-center gap-1.5">
+                <div className="flex items-center gap-2">
+                  <label className="text-xs font-semibold text-slate-600 flex items-center gap-2">
                     <span>แสดงแผนก</span>
                     <select
                       value={departmentFilter}
                       onChange={(e) => setDepartmentFilter(e.target.value)}
-                      className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      className="rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-2xs cursor-pointer"
                     >
                       <option value="enabled">เปิดรับงานใหม่</option>
                       <option value="disabled">ปิดรับงานใหม่</option>
                       <option value="all">ทุกแผนก</option>
                     </select>
                   </label>
-                  <button
-                    onClick={handleSaveAllChanges}
-                    className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 shadow-2xs cursor-pointer"
-                  >
-                    <Save size={16} />
-                    บันทึกการตั้งค่า (Save Changes)
-                  </button>
                 </div>
               </div>
 
-              {/* CLEAN MODERN ENTERPRISE LIST */}
-              <ul className="divide-y divide-slate-200 rounded-2xl border border-slate-200 bg-white shadow-2xs overflow-hidden">
-                {data.departments
-                  .filter((d) => (departmentFilter === 'all' ? true : Boolean(d.enabled) === (departmentFilter === 'enabled')))
-                  .map((d) => {
-                    const prof = data.profiles[d.code];
-                    const hasCustomSignatories = Boolean(prof?.assigned_reviewer_id && prof?.assigned_approver_id);
+              {/* CLEAN MODERN ENTERPRISE TABLE */}
+              <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xs">
+                {/* Table Header Row */}
+                <div className="hidden md:grid grid-cols-12 gap-4 px-6 py-3 bg-slate-50/75 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                  <div className="col-span-4">แผนก (Department)</div>
+                  <div className="col-span-2 text-center">สิทธิ์ใช้งาน VCC</div>
+                  <div className="col-span-3">รหัสเอกสารดิจิทัล</div>
+                  <div className="col-span-2">สายการอนุมัติ</div>
+                  <div className="col-span-1 text-right">การจัดการ</div>
+                </div>
 
-                    return (
-                      <li
-                        key={d.code}
-                        className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between sm:px-6 hover:bg-slate-50/50 transition-colors"
-                      >
-                        <div className="min-w-0 space-y-1.5">
-                          <div className="flex flex-wrap items-center gap-2.5">
-                            <h3 className="font-semibold text-slate-900">
-                              {d.code} · {d.name_th}
-                            </h3>
-                            <span className="inline-flex items-center gap-1 rounded-md bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700 border border-indigo-200 font-mono">
-                              มาตรฐานดิจิทัล: VCC-AP-{d.code}
+                {/* Table Rows (ul > li for accessibility and test resilience) */}
+                <ul className="divide-y divide-slate-100">
+                  {data.departments
+                    .filter((d) => (departmentFilter === 'all' ? true : Boolean(d.enabled) === (departmentFilter === 'enabled')))
+                    .map((d) => {
+                      const prof = data.profiles[d.code];
+                      const hasCustomSignatories = Boolean(prof?.assigned_reviewer_id && prof?.assigned_approver_id);
+
+                      return (
+                        <li
+                          key={d.code}
+                          className="flex flex-col md:grid md:grid-cols-12 gap-3 md:gap-4 px-6 py-4 items-start md:items-center hover:bg-slate-50/60 transition-colors"
+                        >
+                          {/* Col 1: แผนก */}
+                          <div className="col-span-4 flex items-center gap-2.5 min-w-0">
+                            <span className="inline-flex items-center justify-center px-2 py-0.5 rounded-md bg-slate-100 text-slate-800 text-xs font-bold font-mono border border-slate-200 shrink-0">
+                              {d.code}
                             </span>
-                            {d.enabled ? (
-                              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-800 border border-emerald-200">
-                                <CheckCircle2 size={12} className="text-emerald-600" />
-                                พร้อมใช้งาน
+                            <span className="text-sm font-semibold text-slate-900 truncate">
+                              {d.code} · {d.name_th}
+                            </span>
+                          </div>
+
+                          {/* Col 2: สวิตช์ Toggle Switch (iOS / Tailwind) */}
+                          <div className="col-span-2 flex items-center justify-start md:justify-center gap-2.5">
+                            <button
+                              type="button"
+                              aria-label={d.enabled ? 'ปิดรับงานใหม่' : 'เปิดรับงานใหม่'}
+                              disabled={busy}
+                              onClick={() => handleToggleDepartment(d)}
+                              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 disabled:opacity-50 ${
+                                d.enabled ? 'bg-emerald-600' : 'bg-slate-300'
+                              }`}
+                            >
+                              <span
+                                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
+                                  d.enabled ? 'translate-x-5' : 'translate-x-0'
+                                }`}
+                              />
+                            </button>
+                            <span className={`text-xs font-semibold ${d.enabled ? 'text-emerald-700' : 'text-slate-500'}`}>
+                              {d.enabled ? 'เปิดใช้งาน' : 'ปิดใช้งาน'}
+                            </span>
+                          </div>
+
+                          {/* Col 3: รหัสเอกสารดิจิทัล */}
+                          <div className="col-span-3 flex items-center">
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-indigo-50 text-indigo-700 border border-indigo-200">
+                              <FileText size={13} className="text-indigo-500" />
+                              VCC-AP-{d.code}-2026
+                            </span>
+                          </div>
+
+                          {/* Col 4: สายการอนุมัติ */}
+                          <div className="col-span-2 text-xs text-slate-600 truncate">
+                            {hasCustomSignatories ? (
+                              <span className="inline-flex items-center gap-1 font-medium text-indigo-700">
+                                <CheckCircle2 size={13} className="text-indigo-500 shrink-0" />
+                                ระบุผู้ลงนามเฉพาะ
                               </span>
                             ) : (
-                              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600 border border-slate-200">
-                                ปิดใช้งาน
-                              </span>
+                              <span>ทบทวน: L{prof?.required_reviewer_level || 4}+ | อนุมัติ: L{prof?.required_approver_level || 5}+</span>
                             )}
                           </div>
-                          <div className="text-xs text-slate-600 space-y-0.5">
-                            <div>
-                              สายการอนุมัติ:{' '}
-                              {hasCustomSignatories ? (
-                                <span className="text-indigo-700 font-medium">ระบุผู้ลงนามเฉพาะบุคคล</span>
-                              ) : (
-                                <span>ผู้ทบทวน L4+ / ผู้อนุมัติ L5+ (มาตรฐาน)</span>
-                              )}
-                            </div>
-                            <div className="text-slate-500 text-[11px]">
-                              ผู้ทบทวน: แผนก {prof?.reviewer_dept || d.code} | ผู้อนุมัติ: แผนก {prof?.approver_dept || 'QA'}
-                            </div>
+
+                          {/* Col 5: ปุ่มแก้ไขสายอนุมัติ */}
+                          <div className="col-span-1 flex justify-end">
+                            <button
+                              type="button"
+                              aria-label={`ตั้งค่า ${d.code}`}
+                              onClick={() => setEditingDepartment(d.code)}
+                              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-indigo-600 hover:border-indigo-300 shadow-2xs transition-colors cursor-pointer"
+                            >
+                              <Settings size={14} className="text-slate-500" />
+                              <span className="hidden xl:inline">แก้ไขสายอนุมัติ</span>
+                            </button>
                           </div>
-                        </div>
+                        </li>
+                      );
+                    })}
+                </ul>
+              </div>
 
-                        <div className="flex shrink-0 flex-wrap items-center gap-2">
-                          <button
-                            type="button"
-                            aria-label={`ตั้งค่า ${d.code}`}
-                            onClick={() => setEditingDepartment(d.code)}
-                            className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 shadow-2xs transition-colors cursor-pointer"
-                          >
-                            ตั้งค่า {d.code}
-                          </button>
-                          <button
-                            type="button"
-                            disabled={busy}
-                            aria-label={d.enabled ? 'ปิดรับงานใหม่' : 'เปิดรับงานใหม่'}
-                            onClick={() => handleToggleDepartment(d)}
-                            className={`rounded-xl border px-3 py-2 text-sm font-medium shadow-2xs transition-colors disabled:opacity-50 cursor-pointer ${
-                              d.enabled
-                                ? 'border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100'
-                                : 'border-indigo-300 bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
-                            }`}
-                          >
-                            {d.enabled ? 'ปิดรับงานใหม่' : 'เปิดรับงานใหม่'}
-                          </button>
-                        </div>
-                      </li>
-                    );
-                  })}
-              </ul>
-
+              {/* SLIDE-OVER DRAWER FOR APPROVAL CHAIN EDITING */}
               {editingDepartment && (
                 <ModuleProfileEditor
                   key={editingDepartment}
