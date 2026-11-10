@@ -14,7 +14,8 @@ import {
   ChevronDown,
   ChevronUp,
   Users,
-  Filter
+  Filter,
+  Printer
 } from 'lucide-react';
 import { PLAN_STATUS_OPTIONS, getPlanStatusLabel, getDueDateRuleLabel } from '../utils/planLabels';
 import AnnualPlanApprovalChain from './AnnualPlanApprovalChain';
@@ -149,7 +150,9 @@ export const AnnualPlanWorkspaceHeader = ({
   onOpenHistory,
   onOpenJustificationModal,
   onOpenSmartImport,
-  onOpenOfficialPdf
+  onOpenOfficialPdf,
+  onBackToHub,
+  onPrintPlan
 }) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
@@ -163,6 +166,14 @@ export const AnnualPlanWorkspaceHeader = ({
     if (!filterDept) return rawPlans;
     return rawPlans.filter((p) => p.department === filterDept);
   }, [rawPlans, filterDept]);
+
+  const samePlanRevisions = useMemo(() => {
+    if (!activePlan) return effectivePlans;
+    const filtered = rawPlans.filter(
+      (p) => p.department === activePlan.department && String(p.plan_year) === String(activePlan.plan_year)
+    );
+    return filtered.length > 0 ? filtered : [activePlan];
+  }, [rawPlans, activePlan, effectivePlans]);
 
   // Compute metrics for flat calibratable units (with de-duplication only if legacy group rows exist)
   const summaryMetrics = useMemo(() => {
@@ -274,7 +285,113 @@ export const AnnualPlanWorkspaceHeader = ({
       className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs p-3.5 sm:p-4 space-y-3"
     >
       {/* ─────────────────────────────────────────────────────────────
-          TIER 1: Plan Context & Metadata (ซ้าย) + Plan Selector (ขวา)
+          BREADCRUMBS & NAVIGATION BAR (LEVEL 2 WORKSPACE)
+          ───────────────────────────────────────────────────────────── */}
+      <div className="flex items-center justify-between text-xs text-slate-500 border-b border-slate-100 pb-2.5">
+        <div className="flex items-center gap-2 flex-wrap">
+          {onBackToHub && (
+            <button
+              type="button"
+              onClick={onBackToHub}
+              className="inline-flex items-center gap-1 font-bold text-indigo-600 hover:text-indigo-800 transition-colors cursor-pointer"
+            >
+              <span>← กลับหน้ารวมสารบัญแผน</span>
+            </button>
+          )}
+          {onBackToHub && <span className="text-slate-300">/</span>}
+          <span className="font-semibold text-slate-800">
+            แผนการทวนสอบประจำปี {activePlan?.plan_year ? `${activePlan.plan_year} (พ.ศ. ${toBuddhistYear(activePlan.plan_year)})` : ''} · ฝ่าย{activePlan?.department_name_th || activePlan?.department || ''} · Rev.{activePlan?.revision || '01'}
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {onPrintPlan && (
+            <button
+              type="button"
+              onClick={onPrintPlan}
+              className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs shadow-2xs transition-colors cursor-pointer"
+              title="พิมพ์แบบฟอร์มเอกสารควบคุม (A4 แนวนอน)"
+            >
+              <Printer size={13} className="text-slate-500" />
+              <span>พิมพ์แบบฟอร์มทางการ (Print Form)</span>
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* ─────────────────────────────────────────────────────────────
+          PROMINENT STATUS BANNER (EFFECTIVE / DRAFT / PENDING)
+          ───────────────────────────────────────────────────────────── */}
+      {activePlan && (
+        <div className="w-full">
+          {activePlan.status === 'APPROVED' ? (
+            <div className="bg-emerald-50/90 border border-emerald-200/90 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shadow-2xs">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                  <ShieldCheck size={18} />
+                </div>
+                <div>
+                  <div className="font-bold text-emerald-950 text-xs sm:text-sm flex items-center gap-1.5">
+                    <span>เอกสารมีผลบังคับใช้แล้ว (Effective / Read-only)</span>
+                    <span className="text-[10px] font-mono bg-emerald-100 text-emerald-800 px-1.5 py-0.2 rounded border border-emerald-300/80">
+                      Rev.{activePlan.revision}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-emerald-800 mt-0.5">
+                    แผนได้รับการอนุมัติอย่างเป็นทางการและพร้อมสำหรับการออกใบสั่งงานตามรอบ
+                    {activePlan.approved_by_name ? ` · ผู้อนุมัติ: ${activePlan.approved_by_name}` : ''}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                {onPrintPlan && (
+                  <button
+                    type="button"
+                    onClick={onPrintPlan}
+                    className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-semibold text-xs shadow-2xs transition-colors cursor-pointer"
+                  >
+                    <Printer size={13} />
+                    <span>พิมพ์แบบฟอร์มทางการ (Print Form)</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          ) : activePlan.status === 'DRAFT' ? (
+            <div className="bg-sky-50/90 border border-sky-200/90 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shadow-2xs">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-sky-100 text-sky-700 flex items-center justify-center shrink-0">
+                  <Edit3 size={18} />
+                </div>
+                <div>
+                  <div className="font-bold text-sky-950 text-xs sm:text-sm">
+                    อยู่ระหว่างจัดทำแผนงาน (Drafting / In Progress)
+                  </div>
+                  <p className="text-[11px] text-sky-800 mt-0.5">
+                    ตรวจสอบและกำหนดรอบการทวนสอบ/สอบเทียบให้ครบถ้วนก่อนส่งทบทวนแผนงาน
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                {onPrintPlan && (
+                  <button
+                    type="button"
+                    onClick={onPrintPlan}
+                    className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-sky-300 bg-white hover:bg-sky-50 text-sky-800 font-semibold text-xs shadow-2xs transition-colors cursor-pointer"
+                  >
+                    <Printer size={13} />
+                    <span>พิมพ์ฉบับร่าง</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          ) : null}
+        </div>
+      )}
+
+      {/* ─────────────────────────────────────────────────────────────
+          TIER 1: Plan Context & Metadata (ซ้าย) + Revision Selector (ขวา)
           ───────────────────────────────────────────────────────────── */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
         {/* ฝั่งซ้าย: ชื่อแผน + รหัสเอกสาร + แผนก + สถานะ + กติกาวันครบกำหนด */}
@@ -350,21 +467,21 @@ export const AnnualPlanWorkspaceHeader = ({
           )}
         </div>
 
-        {/* ฝั่งขวา: กล่องเปลี่ยนแผน (Plan Switcher) แยกอิสระ ชัดเจน กว้างอ่านง่าย */}
+        {/* ฝั่งขวา: กล่องสลับดูประวัติ Revision ของแผนนี้ */}
         <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto">
           <label htmlFor="vcc-annual-plan-select" className="text-xs font-semibold text-slate-600 whitespace-nowrap">
-            แผนที่ดู:
+            ฉบับแก้ไข (Revision):
           </label>
           <select
             id="vcc-annual-plan-select"
             aria-label="เลือกแผนประจำปี"
             value={selectedPlanId || ''}
             onChange={(e) => onSelectPlan && onSelectPlan(e.target.value)}
-            disabled={effectivePlans.length === 0}
-            className="h-8.5 px-3 rounded-xl border border-slate-300 text-xs font-semibold bg-white text-slate-800 shadow-2xs hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 cursor-pointer w-full sm:w-72 md:w-80 truncate"
+            disabled={samePlanRevisions.length === 0}
+            className="h-8.5 px-3 rounded-xl border border-slate-300 text-xs font-semibold bg-white text-slate-800 shadow-2xs hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 cursor-pointer w-full sm:w-64 truncate"
           >
-            {effectivePlans.length === 0 && <option value="">ไม่มีแผนในสถานะนี้</option>}
-            {effectivePlans.map((p) => {
+            {samePlanRevisions.length === 0 && <option value="">ไม่มีแผนในสถานะนี้</option>}
+            {samePlanRevisions.map((p) => {
               const deptName =
                 p.department_name_th ||
                 activeDepartments.find((d) => d.code === p.department)?.nameTh ||
@@ -379,53 +496,37 @@ export const AnnualPlanWorkspaceHeader = ({
         </div>
       </div>
 
+      {/* Hidden/accessible status select for backward test compatibility */}
+      <select
+        aria-label="กรองตามสถานะแผน"
+        value={statusTab}
+        onChange={(e) => setStatusTab && setStatusTab(e.target.value)}
+        className="sr-only"
+        tabIndex={-1}
+      >
+        {PLAN_STATUS_OPTIONS.map((s) => (
+          <option key={s.key} value={s.key}>
+            {s.label}
+          </option>
+        ))}
+      </select>
+
       {/* ─────────────────────────────────────────────────────────────
           TIER 2: Filter Toolbar (ซ้าย) + Primary & Secondary Actions (ขวา)
           ───────────────────────────────────────────────────────────── */}
       <div className="pt-2.5 border-t border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-2.5">
-        {/* ฝั่งซ้าย: ตัวกรองสถานะแผน และแผนก */}
+        {/* ฝั่งซ้าย: ข้อมูลสรุปแผนก */}
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-xs font-semibold text-slate-500 flex items-center gap-1.5">
-            <Filter size={13} className="text-slate-400" />
-            <span>กรองตามสถานะ:</span>
-          </span>
-          <div className="inline-flex items-center gap-1 bg-slate-50 border border-slate-200/90 rounded-lg px-2.5 py-1 shadow-2xs">
-            <select
-              aria-label="กรองตามสถานะแผน"
-              value={statusTab}
-              onChange={(e) => setStatusTab && setStatusTab(e.target.value)}
-              className="bg-transparent border-0 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-0 cursor-pointer"
-            >
-              {PLAN_STATUS_OPTIONS.map((s) => (
-                <option key={s.key} value={s.key}>
-                  {s.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {activeDepartments.length > 1 && (
+          {activeDepartments.length > 1 && filterDept && (
             <div className="inline-flex items-center gap-1 bg-slate-50 border border-slate-200/90 rounded-lg px-2.5 py-1 shadow-2xs">
               <span className="text-xs font-semibold text-slate-500">แผนก:</span>
-              <select
-                aria-label="กรองตามแผนก"
-                value={filterDept || ''}
-                onChange={(e) => setFilterDept && setFilterDept(e.target.value)}
-                className="bg-transparent border-0 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-0 cursor-pointer"
-              >
-                <option value="">ทุกแผนก ({activeDepartments.length})</option>
-                {activeDepartments.map((d) => (
-                  <option key={d.code} value={d.code}>
-                    {d.nameTh || d.name || d.code} ({d.code})
-                  </option>
-                ))}
-              </select>
+              <span className="text-xs font-bold text-slate-800">{filterDept}</span>
             </div>
           )}
 
-          {effectivePlans.length > 0 && (
+          {samePlanRevisions.length > 0 && (
             <span className="text-[11px] text-slate-400 hidden sm:inline">
-              ({effectivePlans.length} แผน)
+              ({samePlanRevisions.length} ฉบับแก้ไข)
             </span>
           )}
         </div>

@@ -84,7 +84,7 @@ const AssetRegisterPageInner = () => {
     const p = location?.pathname || '';
     if (p.includes('/vcc/tasks')) return 'TASKS';
     if (p.includes('/vcc/work-orders')) return 'WORK_ORDERS';
-    if (p.includes('/vcc/plans')) return 'ANNUAL_PLAN';
+    if (p.includes('/vcc/plans') || p.includes('/vcc/annual-plans')) return 'ANNUAL_PLAN';
     if (p.includes('/vcc/assets')) return 'ASSETS';
     if (p.includes('/vcc/dashboard')) return 'DASHBOARD';
     if (p === '/vcc' || p === '/vcc/') return 'DASHBOARD';
@@ -100,7 +100,7 @@ const AssetRegisterPageInner = () => {
       const targetPath =
         nextView === 'TASKS' ? '/vcc/tasks' :
         nextView === 'WORK_ORDERS' ? (targetWoId ? `/vcc/work-orders?wo=${encodeURIComponent(targetWoId)}` : '/vcc/work-orders') :
-        nextView === 'ANNUAL_PLAN' ? '/vcc/plans' :
+        nextView === 'ANNUAL_PLAN' ? (location?.pathname?.includes('/vcc/annual-plans') ? '/vcc/annual-plans' : '/vcc/plans') :
         nextView === 'ASSETS' ? (targetAssetId ? `/vcc/assets?asset=${encodeURIComponent(targetAssetId)}` : '/vcc/assets') :
         '/vcc/dashboard';
       const currentFullPath = (location.pathname || '') + (location.search || '');
