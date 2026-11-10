@@ -34,11 +34,21 @@ describe('Plan revision button', () => {
     expect(screen.queryByRole('button', { name: /สร้างฉบับแก้ไข/ })).not.toBeInTheDocument();
   });
 
-  it('"สร้างแผนใหม่" opens the form without passing the click event as a year (that made the title "NaN")', () => {
-    const onOpenCreatePlan = vi.fn();
-    renderHeader('APPROVED', { onOpenCreatePlan });
-    fireEvent.click(screen.getByRole('button', { name: /สร้างแผนใหม่/ }));
-    expect(onOpenCreatePlan).toHaveBeenCalledWith();
+  it(' hides revision button when plan is SUPERSEDED (not current)', () => {
+    const onOpenRevision = vi.fn();
+    render(
+      <AnnualPlanWorkspaceHeader
+        statusTab="APPROVED"
+        setStatusTab={() => {}}
+        activePlan={{ ...plan('APPROVED'), is_current: 0, effective_status: 'SUPERSEDED' }}
+        plans={[{ ...plan('APPROVED'), is_current: 0, effective_status: 'SUPERSEDED' }]}
+        selectedPlanId="p1"
+        planItems={[]}
+        onOpenRevision={onOpenRevision}
+      />
+    );
+    expect(screen.queryByRole('button', { name: /สร้างฉบับแก้ไข/ })).not.toBeInTheDocument();
+    expect(screen.getAllByText(/SUPERSEDED/).length).toBeGreaterThan(0);
   });
 });
 

@@ -349,7 +349,7 @@ describe('VCC Phase 3.1: Plan Revision Foundation & Diff Engine Tests', () => {
     const rev00Wos = await call('GET', `/api/vcc/work-orders?plan_id=${rev00Id}`, 'REV-QC-STAFF');
     const asset2Wo = rev00Wos.body.workOrders.find((w) => w.asset_id === asset2Id);
     expect(asset2Wo).toBeDefined();
-    expect(asset2Wo.status).toBe('SCHEDULED');
+    expect(asset2Wo.status).toBe('OPEN');
   });
 
   it('6 & 7. Diff Engine: Modifying cycle date/month reflects as Modified while identical cycles reflect as Unchanged', async () => {
@@ -1279,9 +1279,9 @@ describe('VCC Phase 3.1: Plan Revision Foundation & Diff Engine Tests', () => {
     expect(verifyWoM3.certificate_no).toBe('CERT-M3-CLOSED');
     expect(verifyWoM3.cycle_id).toBe(woM3.cycle_id);
 
-    // 2. Month 9 work order remains SCHEDULED, active, and retains its exact cycle_id
+    // 2. Month 9 work order remains OPEN, active, and retains its exact cycle_id
     const verifyWoM9 = await env.DB.prepare('SELECT * FROM vcc_work_orders WHERE id = ?').bind(woM9.id).first();
-    expect(verifyWoM9.status).toBe('SCHEDULED');
+    expect(verifyWoM9.status).toBe('OPEN');
     expect(verifyWoM9.cycle_id).toBe(woM9.cycle_id);
     expect(verifyWoM9.plan_id).toBe(rev01Id);
 
@@ -1944,5 +1944,119 @@ describe('VCC Phase 3.1: Plan Revision Foundation & Diff Engine Tests', () => {
     expect(clearConflictRes.status).toBe(400);
     expect(clearConflictRes.body.error).toContain('ไม่อนุญาตให้ปลดหรือลบรอบการสอบเทียบที่มีใบสั่งงานปิดสมบูรณ์แล้ว');
     expect(clearConflictRes.body.error).toContain('WO-2036-CLOSED-01');
+  });
+
+  it('39. Full 5-Case Work Order Reconciliation Engine (Cases A, B, C Reactivation, D Soft Cancel & Lock, E Metadata Sync)', async () => {
+    const { planId: rev00Id, asset1Id, asset2Id } = await setupApprovedRev00Plan(2026);
+    // Rev.00 has:
+    // - Asset 1: months [3, 9], provider 'ห้องปฏิบัติการภายนอก'
+    // - Asset 2: month [6], provider 'ทวนสอบภายใน'
+    const { results: rev00Wos } = await env.DB.prepare('SELECT * FROM vcc_work_orders WHERE plan_id = ?').bind(rev00Id).all();
+    expect(rev00Wos.length).toBe(3);
+
+    const woAsset1M3 = rev00Wos.find((w) => w.asset_id === asset1Id && w.planned_month === 3);
+    const woAsset1M9 = rev00Wos.find((w) => w.asset_id === asset1Id && w.planned_month === 9);
+    const woAsset2M6 = rev00Wos.find((w) => w.asset_id === asset2Id && w.planned_month === 6);
+
+    // Close Asset 1 Month 3 work order
+    await call('POST', `/api/vcc/work-orders/${woAsset1M3.id}/submit-result`, 'REV-QC-STAFF', {
+      performed_at: '2026-03-10',
+      result_status: 'PASS',
+      certificate_no: 'CERT-A1-M3',
+      acceptance_criteria: '±0.05'
+    });
+    await call('POST', `/api/vcc/work-orders/${woAsset1M3.id}/approve`, 'REV-QC-SUP', { comment: 'อนุมัติปิดใบงาน' });
+
+    // Create Rev.01 draft
+    const rev01Res = await call('POST', `/api/vcc/plans/${rev00Id}/revisions`, 'REV-QC-STAFF', {
+      revision_reason: 'ทดสอบครบทั้ง 5 Cases ของระบบกระทบยอดใบสั่งงาน'
+    });
+    expect(rev01Res.status).toBe(201);
+    const rev01Id = rev01Res.body.plan.id;
+
+    // Guard Test: Attempting to unschedule CLOSED Month 3 via standard UI payload is blocked with 409
+    const blockedUnschedule = await call('POST', `/api/vcc/plans/${rev01Id}/items`, 'REV-QC-STAFF', {
+      asset_id: asset1Id,
+      provider_name: 'ห้องปฏิบัติการภายนอก',
+      frequency_label: '1 ครั้ง/ปี',
+      planned_months: [9],
+      responsible_dept: 'QC'
+    });
+    expect(blockedUnschedule.status).toBe(409);
+    expect(blockedUnschedule.body.error).toContain('CLOSED');
+
+    // In Rev.01:
+    // - Asset 1: keep Month 3 (Case A - CLOSED), remove Month 9 (Case D - Soft Cancel), add Month 11 (Case B - New OPEN WO)
+    // - Asset 2: keep Month 6, change provider_name to 'สถาบันมาตรวิทยาแห่งชาติ (NIMT)' (Case E - Metadata Sync)
+    await call('POST', `/api/vcc/plans/${rev01Id}/items`, 'REV-QC-STAFF', {
+      asset_id: asset1Id,
+      provider_name: 'ห้องปฏิบัติการภายนอก',
+      frequency_label: '2 ครั้ง/ปี',
+      planned_months: [3, 11],
+      initial_cycle_ids: [woAsset1M3.cycle_id, null],
+      responsible_dept: 'QC'
+    });
+    await call('POST', `/api/vcc/plans/${rev01Id}/items`, 'REV-QC-STAFF', {
+      asset_id: asset2Id,
+      provider_name: 'สถาบันมาตรวิทยาแห่งชาติ (NIMT)',
+      frequency_label: 'รายปี',
+      planned_months: [6],
+      responsible_dept: 'QC'
+    });
+
+    await call('POST', `/api/vcc/plans/${rev01Id}/submit`, 'REV-QC-STAFF');
+    await call('POST', `/api/vcc/plans/${rev01Id}/review`, 'REV-QC-SUP', { comment: 'ทบทวน Rev.01' });
+    const appRev01 = await call('POST', `/api/vcc/plans/${rev01Id}/approve`, 'REV-QA-MGR', { comment: 'อนุมัติ Rev.01' });
+    expect(appRev01.status).toBe(200);
+
+    // Verify Case A: Asset 1 Month 3 stays CLOSED
+    const checkM3 = await env.DB.prepare('SELECT * FROM vcc_work_orders WHERE id = ?').bind(woAsset1M3.id).first();
+    expect(checkM3.status).toBe('CLOSED');
+
+    // Verify Case B: Asset 1 Month 11 created with status OPEN
+    const checkM11 = await env.DB.prepare('SELECT * FROM vcc_work_orders WHERE asset_id = ? AND planned_month = 11').bind(asset1Id).first();
+    expect(checkM11).toBeTruthy();
+    expect(checkM11.status).toBe('OPEN');
+
+    // Verify Case D: Asset 1 Month 9 soft-cancelled with PLAN_REVISION and Thai reason (not hard deleted)
+    const checkM9Cancelled = await env.DB.prepare('SELECT * FROM vcc_work_orders WHERE id = ?').bind(woAsset1M9.id).first();
+    expect(checkM9Cancelled.status).toBe('CANCELLED');
+    expect(checkM9Cancelled.cancellation_category).toBe('PLAN_REVISION');
+    expect(checkM9Cancelled.cancellation_reason).toContain('ยกเลิกอัตโนมัติจากการอนุมัติแผนฉบับแก้ไข Rev.01');
+
+    // Verify Case E: Asset 2 Month 6 metadata synced (provider_name, plan_id, plan_revision)
+    const checkAsset2M6 = await env.DB.prepare('SELECT * FROM vcc_work_orders WHERE id = ?').bind(woAsset2M6.id).first();
+    expect(checkAsset2M6.status).toBe('OPEN');
+    expect(checkAsset2M6.provider_name).toBe('สถาบันมาตรวิทยาแห่งชาติ (NIMT)');
+    expect(checkAsset2M6.plan_id).toBe(rev01Id);
+    expect(checkAsset2M6.plan_revision).toBe('01');
+
+    // Now test Case C (Reactivation): Create Rev.02 and re-add Month 9 for Asset 1!
+    const rev02Res = await call('POST', `/api/vcc/plans/${rev01Id}/revisions`, 'REV-QC-STAFF', {
+      revision_reason: 'นำรอบเดือน 9 กลับมาใช้งานอีกครั้ง (Case C Reactivation)'
+    });
+    expect(rev02Res.status).toBe(201);
+    const rev02Id = rev02Res.body.plan.id;
+
+    await call('POST', `/api/vcc/plans/${rev02Id}/items`, 'REV-QC-STAFF', {
+      asset_id: asset1Id,
+      provider_name: 'ห้องปฏิบัติการภายนอก',
+      frequency_label: '3 ครั้ง/ปี',
+      planned_months: [3, 9, 11],
+      responsible_dept: 'QC'
+    });
+
+    await call('POST', `/api/vcc/plans/${rev02Id}/submit`, 'REV-QC-STAFF');
+    await call('POST', `/api/vcc/plans/${rev02Id}/review`, 'REV-QC-SUP', { comment: 'ทบทวน Rev.02' });
+    const appRev02 = await call('POST', `/api/vcc/plans/${rev02Id}/approve`, 'REV-QA-MGR', { comment: 'อนุมัติ Rev.02' });
+    expect(appRev02.status).toBe(200);
+
+    // Verify Case C: Original Month 9 work order is REACTIVATED back to OPEN with cleared cancellation fields!
+    const checkM9Reactivated = await env.DB.prepare('SELECT * FROM vcc_work_orders WHERE id = ?').bind(woAsset1M9.id).first();
+    expect(checkM9Reactivated.status).toBe('OPEN');
+    expect(checkM9Reactivated.cancellation_category).toBeNull();
+    expect(checkM9Reactivated.cancellation_reason).toBeNull();
+    expect(checkM9Reactivated.plan_id).toBe(rev02Id);
+    expect(checkM9Reactivated.plan_revision).toBe('02');
   });
 });

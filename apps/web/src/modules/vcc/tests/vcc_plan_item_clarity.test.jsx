@@ -2,7 +2,7 @@ import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import AnnualPlanMatrixTable from '../components/AnnualPlanMatrixTable';
-import AnnualPlanWorkspaceHeader from '../components/AnnualPlanWorkspaceHeader';
+import AnnualPlanOverviewCards from '../components/AnnualPlanOverviewCards';
 import { isSavedPlanItem } from '../utils/planLabels';
 
 const plan = { id: 'P1', plan_year: 2027, department: 'QC', document_code: 'FM-QC-46', revision: '01', title: 'แผน 2027', status: 'DRAFT', due_date_rule: 'END_OF_MONTH' };
@@ -46,9 +46,9 @@ describe('plan items: saved vs register-only rows', () => {
     expect(screen.queryByRole('button', { name: /นำออกจากแผน/ })).toBeNull();
   });
 
-  it('the header splits "no plan" into waiting for a reason and not planned with a reason', () => {
+  it('the overview cards split "no plan" into waiting for a reason and not planned with a reason', () => {
     render(
-      <AnnualPlanWorkspaceHeader statusTab="DRAFT" setStatusTab={() => {}} activePlan={plan} plans={[plan]} selectedPlanId="P1" planItems={[saved, virtual, withReason]} canEditPlan />
+      <AnnualPlanOverviewCards activePlan={plan} planItems={[saved, virtual, withReason]} canEditPlan />
     );
     expect(screen.getByText(/รอระบุเหตุผล 1/)).toBeInTheDocument();
     expect(screen.getByText(/ไม่วางแผนพร้อมเหตุผล 1/)).toBeInTheDocument();

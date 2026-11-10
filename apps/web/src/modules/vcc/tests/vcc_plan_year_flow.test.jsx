@@ -35,7 +35,7 @@ describe('VCC FM-QC-46 — ประสบการณ์การเลือ�
     });
   });
 
-  it('1. แยกการเลือกแผนที่มีอยู่ออกจากปุ่มสร้างแผนใหม่อย่างชัดเจน และมองเห็นปุ่มสร้างแผนใหม่ได้ทันที', async () => {
+  it('1. แยกการเลือกแผนที่มีอยู่ออกจากปุ่มสร้างแผนใหม่อย่างชัดเจน และเข้าถึงการสร้างแผนใหม่ผ่านเมนูเพิ่มเติมหรือหน้า Hub', async () => {
     await openPlanPage();
 
     // ตัวเลือกแผนหลักแสดงแผนที่มีอยู่ในระบบ
@@ -43,9 +43,8 @@ describe('VCC FM-QC-46 — ประสบการณ์การเลือ�
     expect(planSelect).toBeInTheDocument();
     expect(planSelect.value).toBeTruthy();
 
-    // ปุ่มสร้างแผนใหม่แสดงเด่นชัดข้างตัวเลือกแผนโดยไม่ต้องกดเปิดเมนู ...
-    const createBtn = screen.getByRole('button', { name: 'สร้างแผนใหม่' });
-    expect(createBtn).toBeInTheDocument();
+    // หน้า Workspace ไม่มีปุ่ม "+ สร้างแผนใหม่" ลอยซ้ำซ้อนบน Header (สร้างที่หน้า Hub หรือเมนูเพิ่มเติม)
+    expect(screen.queryByRole('button', { name: 'สร้างแผนใหม่' })).not.toBeInTheDocument();
 
     // เมนูรอง ... ยังมีทางเลือก "สร้างแผนประจำปีใหม่" คงเดิม
     fireEvent.click(screen.getByRole('button', { name: 'เมนูเพิ่มเติมของแผน' }));
@@ -55,8 +54,9 @@ describe('VCC FM-QC-46 — ประสบการณ์การเลือ�
   it('2. สามารถสร้างแผนสำหรับปีอนาคต (เช่น 2028/2029) ได้ โดยแสดงปี พ.ศ. ตรงกันและคำนวณวันครบกำหนดถูกต้อง', async () => {
     await openPlanPage();
 
-    // เปิด Modal สร้างแผนใหม่
-    fireEvent.click(screen.getByRole('button', { name: 'สร้างแผนใหม่' }));
+    // เปิด Modal สร้างแผนใหม่ผ่านเมนูเพิ่มเติมของแผน
+    fireEvent.click(screen.getByRole('button', { name: 'เมนูเพิ่มเติมของแผน' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'สร้างแผนประจำปีใหม่' }));
     expect(await screen.findByText('สร้างแผนการทวนสอบเครื่องมือประจำปีใหม่')).toBeInTheDocument();
 
     // กรอกปี 2028 (ปีอธิกสุรทิน)

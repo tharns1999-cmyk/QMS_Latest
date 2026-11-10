@@ -240,14 +240,14 @@ export const buildWorkOrderReconciliationStatements = async (db, planId, actorId
     existingAssetSeqCycleMap.set(`${c.asset_id}:${c.cycle_seq}`, c);
   }
 
-  // Query permanently cancelled work orders
+  // Query permanently cancelled work orders (strictly retired assets)
   const { results: permanentlyCancelledWos } = await db
     .prepare(`
       SELECT cycle_id, cancellation_category
       FROM vcc_work_orders
       WHERE status = 'CANCELLED'
         AND cycle_id IS NOT NULL
-        AND cancellation_category IN ('ASSET_RETIRED', 'PLAN_REVISION')
+        AND cancellation_category = 'ASSET_RETIRED'
     `)
     .all();
   const permanentlyCancelledCycleIds = new Set(
@@ -348,21 +348,51 @@ export const buildWorkOrderReconciliationStatements = async (db, planId, actorId
         month,
         cycleKey,
         dueDate,
-        isCancelled: permanentlyCancelledCycleIds.has(stableCycleId) || existingCrossRevCycle?.cycle_status === 'CANCELLED' || existingPlanCycle?.cycle_status === 'CANCELLED'
+        isCancelled: permanentlyCancelledCycleIds.has(stableCycleId)
       });
     }
   }
 
-  // Find all active work orders for this plan year (using subquery to avoid >98 parameter limit)
+  // Find all active work orders for this plan year and department (including items removed in newer revisions)
   const { results: existingWos } = await db
     .prepare(`
-      SELECT id, wo_code, cycle_id, cycle_key, plan_id, plan_item_id, asset_id, planned_month, due_date,
-             original_due_date, scheduled_date, baseline_planned_date, required_due_date, reschedule_reason, status, result_status
+      SELECT id, wo_code, cycle_id, cycle_key, plan_id, plan_item_id, asset_id, planned_month, plan_year, plan_revision, due_date,
+             original_due_date, scheduled_date, baseline_planned_date, required_due_date, reschedule_reason, status, result_status, provider_name
       FROM vcc_work_orders
       WHERE status != 'CANCELLED'
-        AND (plan_id = ? OR ((plan_year = ? OR substr(due_date, 1, 4) = ?) AND asset_id IN (SELECT asset_id FROM vcc_annual_plan_items WHERE plan_id = ?)))
+        AND (
+          plan_id = ?
+          OR plan_id IN (SELECT id FROM vcc_annual_plans WHERE plan_year = ? AND department = ?)
+          OR (
+            (plan_year = ? OR substr(due_date, 1, 4) = ?)
+            AND asset_id IN (
+              SELECT i.asset_id
+              FROM vcc_annual_plan_items i
+              JOIN vcc_annual_plans p ON p.id = i.plan_id
+              WHERE p.plan_year = ? AND p.department = ?
+            )
+          )
+        )
     `)
-    .bind(planId, planYear, String(planYear), planId)
+    .bind(planId, planYear, planDept, planYear, String(planYear), planYear, planDept)
+    .all();
+
+  // Also query work orders previously soft-cancelled by PLAN_REVISION for Case C reactivation
+  const { results: cancelledRevisionWos } = await db
+    .prepare(`
+      SELECT id, wo_code, cycle_id, cycle_key, plan_id, plan_item_id, asset_id, planned_month, plan_year, plan_revision, due_date,
+             original_due_date, scheduled_date, baseline_planned_date, required_due_date, reschedule_reason, status, result_status, provider_name
+      FROM vcc_work_orders
+      WHERE status = 'CANCELLED'
+        AND cancellation_category = 'PLAN_REVISION'
+        AND (
+          plan_id IN (SELECT id FROM vcc_annual_plans WHERE plan_year = ? AND department = ?)
+          OR plan_year = ?
+          OR substr(due_date, 1, 4) = ?
+        )
+      ORDER BY updated_at DESC, created_at DESC
+    `)
+    .bind(planYear, planDept, planYear, String(planYear))
     .all();
 
   const byCycleId = new Map();
@@ -370,44 +400,6 @@ export const buildWorkOrderReconciliationStatements = async (db, planId, actorId
   for (const wo of (existingWos || [])) {
     if (wo.cycle_id) byCycleId.set(wo.cycle_id, wo);
     if (wo.cycle_key) byCycleKey.set(wo.cycle_key, wo);
-  }
-
-  // Controlled cancellation for cycles removed in this revision
-  for (const c of (existingCycles || [])) {
-    const cycleIdentity = c.initial_cycle_id || c.id;
-    if (!activeCycleIdsInNewRevision.has(cycleIdentity)) {
-      const existingWo = byCycleId.get(cycleIdentity) || byCycleId.get(c.id);
-      // Historical Evidence Protection: NEVER cancel or modify CLOSED work orders
-      if (existingWo && existingWo.status === 'CLOSED') {
-        continue;
-      }
-      if (c.cycle_status !== 'CANCELLED' && c.cycle_status !== 'CLOSED') {
-        cycleBatchInserts.push(
-          db.prepare(`
-            UPDATE vcc_plan_cycles
-            SET cycle_status = 'CANCELLED',
-                updated_at = ${NOW},
-                updated_by = ?
-            WHERE id = ?
-          `).bind(actorId, c.id)
-        );
-      }
-      if (existingWo && existingWo.status !== 'CLOSED' && existingWo.status !== 'CANCELLED') {
-        cycleBatchInserts.push(
-          db.prepare(`
-            UPDATE vcc_work_orders
-            SET status = 'CANCELLED',
-                cancellation_category = 'PLAN_REVISION',
-                cancellation_reason = 'Cancelled by Plan Revision',
-                cancelled_by = ?,
-                cancelled_at = ${NOW},
-                updated_at = ${NOW},
-                updated_by = ?
-            WHERE id = ? AND status != 'CLOSED' AND status != 'CANCELLED'
-          `).bind(actorId, actorId, existingWo.id)
-        );
-      }
-    }
   }
 
   const { results: yearWos } = await db
@@ -436,7 +428,7 @@ export const buildWorkOrderReconciliationStatements = async (db, planId, actorId
   const boundWoIds = new Set();
 
   for (const cycle of targetCycles) {
-    const { cycleId, item, month, cycleKey, dueDate, isCancelled } = cycle;
+    const { cycleId, cycleRowId, item, month, cycleKey, dueDate, isCancelled } = cycle;
 
     if (isCancelled) {
       skipped.push({
@@ -448,37 +440,44 @@ export const buildWorkOrderReconciliationStatements = async (db, planId, actorId
       continue;
     }
 
-    // Direct match: Match strictly by immutable cycle_id
+    // 1. Direct match by immutable cycle_id
     let candidateWos = [];
     const directWo = byCycleId.get(cycleId);
 
     if (directWo && !boundWoIds.has(directWo.id)) {
       candidateWos = [directWo];
     } else {
-      // Find candidate work orders matching this item, asset and month/year
-      // ONLY allow unassigned work orders (w.cycle_id IS NULL) to prevent identity hijacking
+      // 2. Match unassigned work orders OR existing work orders for the exact same asset + month + year whose old cycle_id is not claimed by another cycle in this revision
       candidateWos = (existingWos || []).filter((w) => {
         if (boundWoIds.has(w.id)) return false;
         if (w.cycle_id) {
-          return w.cycle_id === cycleId;
+          if (w.cycle_id === cycleId) return true;
+          if (!activeCycleIdsInNewRevision.has(w.cycle_id) && w.asset_id === item.asset_id && Number(w.planned_month) === Number(month)) {
+            const woYear = w.plan_year || (w.due_date ? parseInt(w.due_date.slice(0, 4), 10) : null);
+            return Number(woYear) === Number(planYear);
+          }
+          return false;
         }
-        if (w.plan_item_id && w.plan_item_id === item.id && w.planned_month === month) return true;
+        if (w.plan_item_id && w.plan_item_id === item.id && Number(w.planned_month) === Number(month)) return true;
         if (w.asset_id === item.asset_id) {
           const woMonth = w.planned_month || (w.due_date ? parseInt(w.due_date.slice(5, 7), 10) : null);
           const woYear = w.plan_year || (w.due_date ? parseInt(w.due_date.slice(0, 4), 10) : null);
-          return woMonth === month && woYear === planYear;
+          return Number(woMonth) === Number(month) && Number(woYear) === Number(planYear);
         }
         return false;
       });
     }
 
     if (candidateWos.length === 1) {
+      // Case A & Case E: Existing active work order matched
       const matchedWo = candidateWos[0];
       boundWoIds.add(matchedWo.id);
-      matched.push({ wo_id: matchedWo.id, wo_code: matchedWo.wo_code, cycle_id: cycleId, cycle_key: cycleKey });
+      const effectiveCycleId = matchedWo.cycle_id || cycleId;
+      activeCycleIdsInNewRevision.add(effectiveCycleId);
+      matched.push({ wo_id: matchedWo.id, wo_code: matchedWo.wo_code, cycle_id: effectiveCycleId, cycle_key: cycleKey });
 
       if (matchedWo.status === 'CLOSED') {
-        // Evidence Protection: NEVER overwrite closure evidence on CLOSED work orders
+        // Case A (CLOSED): Evidence Protection — NEVER overwrite closure evidence on CLOSED work orders
         if (!matchedWo.cycle_id || !matchedWo.plan_item_id || matchedWo.plan_id !== planId) {
           batchStatements.push(
             db.prepare(`
@@ -489,26 +488,46 @@ export const buildWorkOrderReconciliationStatements = async (db, planId, actorId
                   plan_item_id = COALESCE(plan_item_id, ?),
                   plan_year = COALESCE(plan_year, ?)
               WHERE id = ?
-            `).bind(cycleId, cycleKey, planId, item.id, planYear, matchedWo.id)
+            `).bind(effectiveCycleId, cycleKey, planId, item.id, planYear, matchedWo.id)
           );
-          reconciled.push({ wo_id: matchedWo.id, wo_code: matchedWo.wo_code, cycle_id: cycleId });
+          reconciled.push({ wo_id: matchedWo.id, wo_code: matchedWo.wo_code, cycle_id: effectiveCycleId });
         } else {
-          skipped.push({ wo_id: matchedWo.id, wo_code: matchedWo.wo_code, cycle_id: cycleId });
+          skipped.push({ wo_id: matchedWo.id, wo_code: matchedWo.wo_code, cycle_id: effectiveCycleId });
+        }
+      } else if (matchedWo.status === 'IN_PROGRESS' || matchedWo.status === 'PENDING_REVIEW') {
+        // Case A (IN_PROGRESS / PENDING_REVIEW): Keep active execution state intact, only link plan metadata if needed
+        if (matchedWo.plan_id !== planId || matchedWo.plan_item_id !== item.id || matchedWo.plan_revision !== planRevision) {
+          batchStatements.push(
+            db.prepare(`
+              UPDATE vcc_work_orders
+              SET cycle_id = COALESCE(cycle_id, ?),
+                  cycle_key = COALESCE(cycle_key, ?),
+                  plan_id = ?,
+                  plan_item_id = ?,
+                  plan_year = ?,
+                  plan_revision = ?
+              WHERE id = ?
+            `).bind(effectiveCycleId, cycleKey, planId, item.id, planYear, planRevision, matchedWo.id)
+          );
+          reconciled.push({ wo_id: matchedWo.id, wo_code: matchedWo.wo_code, cycle_id: effectiveCycleId });
+        } else {
+          skipped.push({ wo_id: matchedWo.id, wo_code: matchedWo.wo_code, cycle_id: effectiveCycleId });
         }
       } else {
-        // Active work order: update plan references
-        // Date Integrity (P0.D):
-        // If work order was already rescheduled by user with reason, preserve scheduled_date and due_date
+        // Case A & Case E (OPEN / SCHEDULED): Sync metadata (due_date, provider_name, plan_id, plan_item_id, plan_revision)
         const isUserRescheduled = Boolean(matchedWo.reschedule_reason);
         const finalScheduledDate = isUserRescheduled ? (matchedWo.scheduled_date || matchedWo.due_date) : dueDate;
         const finalDueDate = isUserRescheduled ? (matchedWo.due_date || matchedWo.scheduled_date) : dueDate;
+        const targetProvider = item.provider_name || matchedWo.provider_name || 'ทวนสอบภายใน';
 
         const needsUpdate = (
-          matchedWo.cycle_id !== cycleId ||
+          matchedWo.cycle_id !== effectiveCycleId ||
           matchedWo.plan_id !== planId ||
-          !matchedWo.plan_item_id ||
-          matchedWo.planned_month !== month ||
-          matchedWo.due_date !== finalDueDate
+          matchedWo.plan_item_id !== item.id ||
+          matchedWo.plan_revision !== planRevision ||
+          Number(matchedWo.planned_month) !== Number(month) ||
+          matchedWo.due_date !== finalDueDate ||
+          matchedWo.provider_name !== targetProvider
         );
 
         if (needsUpdate) {
@@ -522,21 +541,23 @@ export const buildWorkOrderReconciliationStatements = async (db, planId, actorId
                   plan_year = ?,
                   plan_revision = ?,
                   planned_month = ?,
+                  provider_name = ?,
                   due_date = ?,
                   baseline_planned_date = COALESCE(baseline_planned_date, original_due_date, ?),
                   scheduled_date = ?,
-                  required_due_date = COALESCE(required_due_date, ?),
+                  required_due_date = ?,
                   updated_at = ${NOW},
                   updated_by = ?
               WHERE id = ?
             `).bind(
-              cycleId,
+              effectiveCycleId,
               cycleKey,
               planId,
               item.id,
               planYear,
               planRevision,
               month,
+              targetProvider,
               finalDueDate,
               dueDate,
               finalScheduledDate,
@@ -545,9 +566,9 @@ export const buildWorkOrderReconciliationStatements = async (db, planId, actorId
               matchedWo.id
             )
           );
-          reconciled.push({ wo_id: matchedWo.id, wo_code: matchedWo.wo_code, cycle_id: cycleId });
+          reconciled.push({ wo_id: matchedWo.id, wo_code: matchedWo.wo_code, cycle_id: effectiveCycleId });
         } else {
-          skipped.push({ wo_id: matchedWo.id, wo_code: matchedWo.wo_code, cycle_id: cycleId });
+          skipped.push({ wo_id: matchedWo.id, wo_code: matchedWo.wo_code, cycle_id: effectiveCycleId });
         }
       }
     } else if (candidateWos.length > 1) {
@@ -560,7 +581,6 @@ export const buildWorkOrderReconciliationStatements = async (db, planId, actorId
         reason: 'พบใบสั่งงานเดิมที่อาจตรงกับรอบนี้มากกว่า 1 รายการ ต้องให้ผู้ดูแลระบบตรวจสอบยืนยันก่อนจับคู่'
       });
     } else if (item.asset_status === 'RETIRED') {
-      // Same rule as opening a work order by hand: a retired instrument gets no new work order (the cycle and its history stay)
       skipped.push({
         cycle_id: cycleId,
         asset_id: item.asset_id,
@@ -568,54 +588,185 @@ export const buildWorkOrderReconciliationStatements = async (db, planId, actorId
         reason: 'เครื่องมือถูกปลดออกจากทะเบียนแล้ว (RETIRED) จึงไม่ออกใบสั่งงานใหม่'
       });
     } else {
-      // Unmatched by cycle_id -> Generate new work order
-      unmatched.push({ cycle_id: cycleId, asset_id: item.asset_id, planned_month: month });
-      maxSeq += 1;
-      const woCode = `WO-${planYear}-${String(maxSeq).padStart(3, '0')}`;
-      const woId = crypto.randomUUID();
-      boundWoIds.add(woId);
+      // Check Case C: Previously CANCELLED by PLAN_REVISION in this plan_year for this asset + month
+      const reactivatedWo = (cancelledRevisionWos || []).find((w) => {
+        if (boundWoIds.has(w.id)) return false;
+        if (w.cycle_id === cycleId || w.cycle_key === cycleKey) return true;
+        return w.asset_id === item.asset_id && Number(w.planned_month) === Number(month);
+      });
 
+      if (reactivatedWo) {
+        // Case C: Reactivate existing CANCELLED work order back to 'OPEN' without hitting unique constraints
+        boundWoIds.add(reactivatedWo.id);
+        const reactivatedCycleId = reactivatedWo.cycle_id || cycleId;
+        activeCycleIdsInNewRevision.add(reactivatedCycleId);
+        const targetProvider = item.provider_name || reactivatedWo.provider_name || 'ทวนสอบภายใน';
+
+        batchStatements.push(
+          db.prepare(`
+            UPDATE vcc_plan_cycles
+            SET initial_cycle_id = ?,
+                cycle_status = 'SCHEDULED',
+                updated_at = ${NOW},
+                updated_by = ?
+            WHERE id = ?
+          `).bind(reactivatedCycleId, actorId, cycleRowId),
+          db.prepare(`
+            UPDATE vcc_work_orders
+            SET status = 'OPEN',
+                cancellation_category = NULL,
+                cancellation_reason = NULL,
+                cancelled_by = NULL,
+                cancelled_at = NULL,
+                cycle_id = ?,
+                cycle_key = ?,
+                plan_id = ?,
+                plan_item_id = ?,
+                plan_year = ?,
+                plan_revision = ?,
+                planned_month = ?,
+                provider_name = ?,
+                due_date = ?,
+                scheduled_date = ?,
+                required_due_date = ?,
+                updated_at = ${NOW},
+                updated_by = ?
+            WHERE id = ?
+          `).bind(
+            reactivatedCycleId,
+            cycleKey,
+            planId,
+            item.id,
+            planYear,
+            planRevision,
+            month,
+            targetProvider,
+            dueDate,
+            dueDate,
+            dueDate,
+            actorId,
+            reactivatedWo.id
+          )
+        );
+
+        matched.push({ wo_id: reactivatedWo.id, wo_code: reactivatedWo.wo_code, cycle_id: reactivatedCycleId, cycle_key: cycleKey, reactivated: true });
+        reconciled.push({ wo_id: reactivatedWo.id, wo_code: reactivatedWo.wo_code, cycle_id: reactivatedCycleId, reactivated: true });
+      } else {
+        // Case B: Unmatched by cycle_id -> Generate new work order with status 'OPEN'
+        unmatched.push({ cycle_id: cycleId, asset_id: item.asset_id, planned_month: month });
+        maxSeq += 1;
+        const woCode = `WO-${planYear}-${String(maxSeq).padStart(3, '0')}`;
+        const woId = crypto.randomUUID();
+        boundWoIds.add(woId);
+
+        batchStatements.push(
+          db.prepare(`
+            INSERT INTO vcc_work_orders (
+              id, wo_code, cycle_id, cycle_key, plan_year, plan_revision, plan_id, plan_item_id,
+              planned_month, asset_id, provider_name, baseline_planned_date, scheduled_date,
+              due_date, original_due_date, required_due_date, is_carryover, status, result_status,
+              created_by, updated_by
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'OPEN', 'PENDING', ?, ?)
+          `).bind(
+            woId,
+            woCode,
+            cycleId,
+            cycleKey,
+            planYear,
+            planRevision,
+            planId,
+            item.id,
+            month,
+            item.asset_id,
+            item.provider_name || 'ทวนสอบภายใน',
+            dueDate,
+            dueDate,
+            dueDate,
+            dueDate,
+            dueDate,
+            actorId,
+            actorId
+          )
+        );
+
+        generated.push({
+          id: woId,
+          wo_code: woCode,
+          cycle_id: cycleId,
+          cycle_key: cycleKey,
+          asset_id: item.asset_id,
+          asset_code: item.asset_code,
+          planned_month: month,
+          due_date: dueDate,
+          status: 'OPEN'
+        });
+      }
+    }
+  }
+
+  // Case D: Controlled soft-cancellation for cycles/instruments removed in this revision
+  const autoCancelReason = `ยกเลิกอัตโนมัติจากการอนุมัติแผนฉบับแก้ไข Rev.${planRevision}`;
+  const cancelledWoIds = new Set();
+
+  for (const c of (existingCycles || [])) {
+    const cycleIdentity = c.initial_cycle_id || c.id;
+    if (!activeCycleIdsInNewRevision.has(cycleIdentity)) {
+      const existingWo = byCycleId.get(cycleIdentity) || byCycleId.get(c.id);
+      if (existingWo && (existingWo.status === 'CLOSED' || existingWo.status === 'IN_PROGRESS' || existingWo.status === 'PENDING_REVIEW' || boundWoIds.has(existingWo.id))) {
+        continue;
+      }
+      if (c.cycle_status !== 'CANCELLED' && c.cycle_status !== 'CLOSED') {
+        batchStatements.push(
+          db.prepare(`
+            UPDATE vcc_plan_cycles
+            SET cycle_status = 'CANCELLED',
+                updated_at = ${NOW},
+                updated_by = ?
+            WHERE id = ?
+          `).bind(actorId, c.id)
+        );
+      }
+      if (existingWo && (existingWo.status === 'OPEN' || existingWo.status === 'SCHEDULED') && !cancelledWoIds.has(existingWo.id)) {
+        cancelledWoIds.add(existingWo.id);
+        batchStatements.push(
+          db.prepare(`
+            UPDATE vcc_work_orders
+            SET status = 'CANCELLED',
+                cancellation_category = 'PLAN_REVISION',
+                cancellation_reason = ?,
+                cancelled_by = ?,
+                cancelled_at = ${NOW},
+                updated_at = ${NOW},
+                updated_by = ?
+            WHERE id = ? AND status IN ('OPEN', 'SCHEDULED')
+          `).bind(autoCancelReason, actorId, actorId, existingWo.id)
+        );
+      }
+    }
+  }
+
+  // Also soft-cancel any remaining plan-originated work orders in existingWos that were not matched to any cycle in the new revision
+  for (const wo of (existingWos || [])) {
+    if (boundWoIds.has(wo.id) || cancelledWoIds.has(wo.id)) continue;
+    if (!wo.plan_id && !wo.cycle_id) continue; // Do not auto-cancel purely manual ad-hoc work orders
+    if (wo.status === 'CLOSED' || wo.status === 'IN_PROGRESS' || wo.status === 'PENDING_REVIEW') {
+      continue;
+    }
+    if (wo.status === 'OPEN' || wo.status === 'SCHEDULED') {
+      cancelledWoIds.add(wo.id);
       batchStatements.push(
         db.prepare(`
-          INSERT INTO vcc_work_orders (
-            id, wo_code, cycle_id, cycle_key, plan_year, plan_revision, plan_id, plan_item_id,
-            planned_month, asset_id, provider_name, baseline_planned_date, scheduled_date,
-            due_date, original_due_date, required_due_date, is_carryover, status, result_status,
-            created_by, updated_by
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'SCHEDULED', 'PENDING', ?, ?)
-        `).bind(
-          woId,
-          woCode,
-          cycleId,
-          cycleKey,
-          planYear,
-          planRevision,
-          planId,
-          item.id,
-          month,
-          item.asset_id,
-          item.provider_name || 'ทวนสอบภายใน',
-          dueDate,
-          dueDate,
-          dueDate,
-          dueDate,
-          dueDate,
-          actorId,
-          actorId
-        )
+          UPDATE vcc_work_orders
+          SET status = 'CANCELLED',
+              cancellation_category = 'PLAN_REVISION',
+              cancellation_reason = ?,
+              cancelled_by = ?,
+              cancelled_at = ${NOW},
+              updated_at = ${NOW},
+              updated_by = ?
+          WHERE id = ? AND status IN ('OPEN', 'SCHEDULED')
+        `).bind(autoCancelReason, actorId, actorId, wo.id)
       );
-
-      generated.push({
-        id: woId,
-        wo_code: woCode,
-        cycle_id: cycleId,
-        cycle_key: cycleKey,
-        asset_id: item.asset_id,
-        asset_code: item.asset_code,
-        planned_month: month,
-        due_date: dueDate,
-        status: 'SCHEDULED'
-      });
     }
   }
 

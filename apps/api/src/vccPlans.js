@@ -1587,6 +1587,28 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
       .bind(planId, assetId)
       .first();
 
+    // Guard: Prevent removing a planned month that already has a CLOSED or IN_PROGRESS work order (unless explicit initial_cycle_ids remapping is supplied)
+    if (existingItem && !Array.isArray(body.initial_cycle_ids) && !Array.isArray(body.cycles)) {
+      let prevMonths = [];
+      try { prevMonths = JSON.parse(existingItem.planned_months || '[]'); } catch { prevMonths = []; }
+      const removedMonths = prevMonths.filter((pm) => !plannedMonths.includes(pm));
+      if (removedMonths.length > 0) {
+        const { results: lockedWos } = await db.prepare(`
+          SELECT wo_code, status, planned_month
+          FROM vcc_work_orders
+          WHERE asset_id = ?
+            AND (plan_year = ? OR substr(due_date, 1, 4) = ?)
+            AND status IN ('CLOSED', 'IN_PROGRESS')
+        `).bind(assetId, plan.plan_year, String(plan.plan_year)).all();
+        const blockedWo = (lockedWos || []).find((w) => removedMonths.includes(Number(w.planned_month)));
+        if (blockedWo) {
+          return c.json({
+            error: `ไม่สามารถยกเลิกหรือถอดรอบเดือน ${blockedWo.planned_month} ออกจากแผนได้ เนื่องจากมีใบสั่งงาน ${blockedWo.wo_code} อยู่ในสถานะ ${blockedWo.status}`
+          }, 409);
+        }
+      }
+    }
+
     const itemId = existingItem ? existingItem.id : crypto.randomUUID();
     const auditDetails = {
       plan_id: planId,
@@ -1616,15 +1638,35 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
         const prevIds = JSON.parse(existingItem.initial_cycle_ids || '[]');
         let prevMonths = [];
         try { prevMonths = JSON.parse(existingItem.planned_months || '[]'); } catch { prevMonths = []; }
+
+        // Also fetch prior revision cycles for this asset in the same year & department in case a month was unchecked and re-checked
+        const { results: priorCycles } = await db.prepare(`
+          SELECT c.planned_month, COALESCE(c.initial_cycle_id, c.id) AS lineage_id
+          FROM vcc_plan_cycles c
+          JOIN vcc_annual_plans p ON p.id = c.plan_id
+          WHERE p.plan_year = ? AND p.department = ? AND c.asset_id = ?
+          ORDER BY p.revision DESC, c.cycle_seq ASC
+        `).bind(plan.plan_year, plan.department, assetId).all();
+
         const alignedIds = [];
         const usedIndices = new Set();
+        const usedLineageIds = new Set();
         for (const m of plannedMonths) {
           const idx = prevMonths.findIndex((pm, pidx) => pm === m && !usedIndices.has(pidx));
-          if (idx !== -1) {
+          if (idx !== -1 && prevIds[idx]) {
             usedIndices.add(idx);
-            alignedIds.push(prevIds[idx] || null);
+            usedLineageIds.add(prevIds[idx]);
+            alignedIds.push(prevIds[idx]);
           } else {
-            alignedIds.push(null);
+            const priorMatch = (priorCycles || []).find(
+              (pc) => Number(pc.planned_month) === Number(m) && pc.lineage_id && !usedLineageIds.has(pc.lineage_id)
+            );
+            if (priorMatch) {
+              usedLineageIds.add(priorMatch.lineage_id);
+              alignedIds.push(priorMatch.lineage_id);
+            } else {
+              alignedIds.push(null);
+            }
           }
         }
         initialCycleIds = alignedIds;
@@ -1725,6 +1767,22 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
           ? 'รายการนี้ยังไม่ได้บันทึกเข้าแผน (เครื่องมืออยู่ในทะเบียนอยู่แล้ว) จึงไม่มีรายการให้นำออก'
           : 'ไม่พบรายการเครื่องมือในแผนนี้'
       }, 404);
+    }
+
+    // Guard: Prevent deleting an instrument item from the plan if it has a CLOSED or IN_PROGRESS work order in this plan year
+    const lockedWoOnRemove = await db.prepare(`
+      SELECT wo_code, status, planned_month
+      FROM vcc_work_orders
+      WHERE asset_id = ?
+        AND (plan_year = ? OR substr(due_date, 1, 4) = ?)
+        AND status IN ('CLOSED', 'IN_PROGRESS')
+      LIMIT 1
+    `).bind(existingItem.asset_id, plan.plan_year, String(plan.plan_year)).first();
+
+    if (lockedWoOnRemove) {
+      return c.json({
+        error: `ไม่สามารถลบรายการเครื่องมือ ${existingItem.asset_code} ออกจากแผนได้ เนื่องจากมีใบสั่งงาน ${lockedWoOnRemove.wo_code} อยู่ในสถานะ ${lockedWoOnRemove.status}`
+      }, 409);
     }
 
     await db.batch([

@@ -67,7 +67,7 @@ describe('VCC Phase 1 Step 4: QC/LAB Department Forms & Workflow UI', () => {
     // Verify form issue date
     expect(screen.getByText(/ประกาศใช้: 2026-06-09/i)).toBeInTheDocument();
     // Verify reviewer in metadata
-    expect(screen.getAllByText(/ผู้ทบทวน: PD Reviewer \(L5\)/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/PD Reviewer \(L5\)/i).length).toBeGreaterThan(0);
   });
 
   it('2. displays FM-LB-11 Rev.02 document profile and approval chain for LAB plan', () => {
@@ -124,7 +124,10 @@ describe('VCC Phase 1 Step 4: QC/LAB Department Forms & Workflow UI', () => {
       />
     );
 
-    const pdfBtn = screen.getByRole('button', { name: /เปิดดูเอกสาร PDF ทางการ/i });
+    const menuBtn = screen.getByRole('button', { name: 'เมนูเพิ่มเติมของแผน' });
+    fireEvent.click(menuBtn);
+
+    const pdfBtn = screen.getByRole('menuitem', { name: /เปิดดูเอกสาร PDF ทางการ/i });
     expect(pdfBtn).toBeInTheDocument();
     fireEvent.click(pdfBtn);
     expect(handleOpenPdf).toHaveBeenCalledTimes(1);

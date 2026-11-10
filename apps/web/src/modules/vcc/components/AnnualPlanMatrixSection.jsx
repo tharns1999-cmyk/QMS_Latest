@@ -152,6 +152,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
   }, [queryTab, queryId]);
 
   const [plans, setPlans] = useState([]);
+  const [planRevisions, setPlanRevisions] = useState([]);
   const [selectedPlanId, setSelectedPlanId] = useState('');
   const [viewMode, setViewMode] = useState('MATRIX');
   const [planDetail, setPlanDetail] = useState(null);
@@ -222,19 +223,24 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
   const [submittingPlan, setSubmittingPlan] = useState(false);
   const [planSubmitError, setPlanSubmitError] = useState('');
 
-  const loadPlanWorkOrders = useCallback(async (planId) => {
+  const loadPlanWorkOrders = useCallback(async (planId, parentPlanId = '') => {
     if (!planId) {
       setPlanWorkOrders([]);
       return;
     }
     try {
+      const targetPlanIds = Array.from(new Set([planId, parentPlanId].filter(Boolean)));
       const statuses = ['OPEN', 'PENDING_REVIEW', 'REJECTED', 'CLOSED', 'CANCELLED'];
-      const results = await Promise.all(
-        statuses.map((st) => fetchVccWorkOrders({ plan_id: planId, status: st }).catch(() => []))
-      );
-      const holdRes = await fetchVccWorkOrders({ plan_id: planId, nc_status: 'OPEN' }).catch(() => []);
+      const queries = [];
+      for (const pid of targetPlanIds) {
+        for (const st of statuses) {
+          queries.push(fetchVccWorkOrders({ plan_id: pid, status: st }).catch(() => []));
+        }
+        queries.push(fetchVccWorkOrders({ plan_id: pid, nc_status: 'OPEN' }).catch(() => []));
+      }
+      const results = await Promise.all(queries);
       const map = new Map();
-      [...results.flat(), ...holdRes].forEach((w) => {
+      results.flat().forEach((w) => {
         if (w && w.id) map.set(w.id, w);
       });
       setPlanWorkOrders(Array.from(map.values()));
@@ -248,29 +254,37 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
     try {
       const effectiveDept = (!canReadAll && userDept) ? userDept : filterDept;
       const targetStatus = viewState === 'HUB' ? 'ALL' : statusTab;
-      const [settingsRes, planList, assetsList] = await Promise.all([
+      const [settingsRes, planList, allStatusPlans, assetsList] = await Promise.all([
         fetchVccPlanSettings(),
         fetchVccPlans({ status: targetStatus, year: filterYear, department: effectiveDept }),
+        viewState === 'HUB'
+          ? Promise.resolve([])
+          : fetchVccPlans({ status: 'ALL', year: filterYear, department: effectiveDept }).catch(() => []),
         fetchVccAssets({ status: 'ACTIVE', calibratable_only: true, department: effectiveDept })
       ]);
       setProviders(settingsRes.providers || []);
       setPlanSettings(settingsRes.planSettings || {});
       setThresholds(settingsRes.thresholds || { min_requester_level: 1, required_reviewer_level: 4, required_approver_level: 5 });
+
+      const mergedPlansMap = new Map();
+      [...planList, ...allStatusPlans].forEach((p) => {
+        if (p && p.id) mergedPlansMap.set(p.id, p);
+      });
+      const mergedPlans = Array.from(mergedPlansMap.values());
       setPlans(planList);
+      setPlanRevisions(mergedPlans.length > 0 ? mergedPlans : planList);
       setActiveAssets(assetsList);
 
       const targetId =
-        preferredPlanId && planList.some((p) => p.id === preferredPlanId)
+        preferredPlanId && (planList.some((p) => p.id === preferredPlanId) || mergedPlans.some((p) => p.id === preferredPlanId))
           ? preferredPlanId
           : (viewState === 'HUB' && !queryId ? '' : (planList[0]?.id || ''));
       setSelectedPlanId(targetId);
 
       if (targetId) {
-        const [detail] = await Promise.all([
-          fetchVccPlanDetail(targetId),
-          loadPlanWorkOrders(targetId)
-        ]);
+        const detail = await fetchVccPlanDetail(targetId);
         setPlanDetail(detail);
+        await loadPlanWorkOrders(targetId, detail?.plan?.parent_plan_id || '');
       } else {
         setPlanDetail(null);
         setPlanWorkOrders([]);
@@ -290,11 +304,12 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
     setSelectedPlanId(planId);
     setWorkflowBannerError('');
     try {
-      const [detail] = await Promise.all([
-        fetchVccPlanDetail(planId),
-        loadPlanWorkOrders(planId)
-      ]);
+      const detail = await fetchVccPlanDetail(planId);
       setPlanDetail(detail);
+      if (detail?.plan?.status && detail.plan.status !== statusTab) {
+        setStatusTab(detail.plan.status);
+      }
+      await loadPlanWorkOrders(planId, detail?.plan?.parent_plan_id || '');
     } catch (err) {
       toast.error(err.message || 'ไม่สามารถโหลดรายละเอียดแผนได้');
     }
@@ -516,6 +531,18 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
 
   const handleQuickRemoveMonth = async (item, month) => {
     if (!planDetail?.plan) return;
+    const lockedWo = planWorkOrders.find(
+      (w) =>
+        w.status !== 'CANCELLED' &&
+        (w.status === 'CLOSED' || w.status === 'IN_PROGRESS' || w.status === 'PENDING_REVIEW') &&
+        Number(w.planned_month) === Number(month) &&
+        (w.plan_item_id === item.id || w.asset_id === item.asset_id)
+    );
+    if (lockedWo) {
+      const msg = `ไม่สามารถยกเลิกรอบเดือน ${month} ได้ เนื่องจากมีใบสั่งงานดำเนินการแล้วหรือกำลังดำเนินการ (${lockedWo.wo_code || lockedWo.status})`;
+      toast.error(msg);
+      throw new Error(msg);
+    }
     const currentMonths = item.planned_months || [];
     if (!currentMonths.includes(month)) return;
     const updatedMonths = currentMonths.filter((m) => m !== month);
@@ -781,10 +808,9 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
 
   // A new revision can only start from the plan in force (the server checks the same), by someone who may edit this department's plans
   const canRevisePlan = Boolean(
-    isApiMode &&
     activePlan &&
     activePlan.status === 'APPROVED' &&
-    Number(activePlan.is_current) === 1 &&
+    Number(activePlan.is_current ?? 1) === 1 &&
     activePlan.effective_status !== 'SUPERSEDED' &&
     isUserEligibleEditor
   );
@@ -866,6 +892,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
             setFilterDept={setFilterDept}
             activeDepartments={activeDepartments}
             plans={plans}
+            planRevisions={planRevisions}
             selectedPlanId={selectedPlanId}
             onSelectPlan={handleSelectPlan}
             activePlan={activePlan}

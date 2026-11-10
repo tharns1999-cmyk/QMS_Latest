@@ -278,7 +278,7 @@ describe('VCC Phase 2.5: Stable Planned Cycle Identity, Reconciliation & E2E Ver
 
     for (const wo of approvedWos.body.workOrders) {
       expect(wo.wo_code).toMatch(/^WO-2026-\d{3}$/);
-      expect(wo.status).toBe('SCHEDULED');
+      expect(wo.status).toBe('OPEN');
       expect(wo.result_status).toBe('PENDING');
       expect(wo.cycle_id).toBeTruthy();
       expect(wo.cycle_key).toBeTruthy();

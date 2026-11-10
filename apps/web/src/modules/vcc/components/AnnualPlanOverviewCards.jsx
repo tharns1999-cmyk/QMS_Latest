@@ -186,6 +186,11 @@ export const AnnualPlanOverviewCards = ({
               </span>
               <span className="text-xs text-slate-400 font-medium">เครื่อง</span>
             </div>
+            {unplannedCount > 0 && (
+              <div className="text-[10px] text-slate-500 mt-0.5 truncate">
+                รอระบุเหตุผล {unplannedWithoutReasonCount} · ไม่วางแผนพร้อมเหตุผล {Math.max(0, unplannedCount - unplannedWithoutReasonCount)}
+              </div>
+            )}
           </div>
           <div
             className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
