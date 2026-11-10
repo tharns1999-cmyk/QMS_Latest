@@ -905,8 +905,7 @@ app.post('/api/acknowledgements/:id/acknowledge', requireAuth, async (c) => {
 });
 
 // Periodic review: a member of the owner department confirms the document is still right (NO_CHANGE) or asks to revise or
-// withdraw it. NO_CHANGE moves the next review date only once someone with approver rights signs it, and the reviewer
-// signs it too when they hold those rights already.
+// withdraw it. NO_CHANGE moves the next review date only once a second person with approver rights signs it.
 const REVIEW_OUTCOMES = ['NO_CHANGE', 'REVISION_REQUIRED', 'OBSOLETE'];
 const OPEN_DAR_STATUSES = `('PENDING_REVIEW', 'PENDING_APPROVAL', 'PENDING_DCC')`;
 const isCrossOrg = (user) => user.isQmr || user.approval_level >= 6 || user.depts.some((d) => ['MGT', 'EXEC', 'QMR'].includes(d));
@@ -946,18 +945,15 @@ app.post('/api/documents/:id/periodic-review', requireAuth, async (c) => {
   const rights = (u, requesterId = null) => checkDecisionRights(u, { stage: 'APPROVE', department: doc.department, requesterId, reviewerId: null }, thresholds);
   let status = 'AWAITING_ACTION';
   let approverId = null;
-  let fastTrack = 0;
+  const fastTrack = 0; // column kept for old records; no review is self-signed any more
   if (body.outcome === 'NO_CHANGE') {
-    if (!rights(user)) {
-      [status, approverId, fastTrack] = ['COMPLETED', user.id, 1];
-    } else {
-      // The signer: a qualified member of the owner department first, then QMR and other cross-department signers.
-      const { results: people } = await db.prepare("SELECT * FROM users WHERE status = 'ACTIVE' AND id != ? ORDER BY approval_level, name").bind(user.id).all();
-      const eligible = people.map(toPublicUser).filter((u) => !rights(u, user.id));
-      const approver = eligible.find((u) => u.depts.includes(doc.department) || u.department === doc.department) ?? eligible[0];
-      if (!approver) return c.json({ error: 'ไม่พบผู้อนุมัติที่มีสิทธิ์ในระบบ กรุณาติดต่อผู้ดูแลระบบ' }, 400);
-      [status, approverId] = ['PENDING_APPROVAL', approver.id];
-    }
+    // Always a second person, even when the reviewer holds approver rights (segregation of duties, decided 2026-11-10).
+    // The signer: a qualified member of the owner department first, then QMR and other cross-department signers.
+    const { results: people } = await db.prepare("SELECT * FROM users WHERE status = 'ACTIVE' AND id != ? ORDER BY approval_level, name").bind(user.id).all();
+    const eligible = people.map(toPublicUser).filter((u) => !rights(u, user.id));
+    const approver = eligible.find((u) => u.depts.includes(doc.department) || u.department === doc.department) ?? eligible[0];
+    if (!approver) return c.json({ error: 'ไม่พบผู้อนุมัติที่มีสิทธิ์ในระบบ กรุณาติดต่อผู้ดูแลระบบ' }, 400);
+    [status, approverId] = ['PENDING_APPROVAL', approver.id];
   }
 
   try {
