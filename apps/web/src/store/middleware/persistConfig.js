@@ -241,6 +241,27 @@ export const runSinglePassStorageSelfHealing = () => {
       }
     }
 
+    // 9. Self-healing migration for Master Users & Departments: merge newly added seed users and departments
+    if (Array.isArray(state.masterUsers)) {
+      const existingUserIds = new Set(state.masterUsers.map(u => u.id));
+      const missingUsers = MASTER_DATA_USER.filter(u => !existingUserIds.has(u.id));
+      if (missingUsers.length > 0) {
+        state.masterUsers = [...state.masterUsers, ...missingUsers];
+        hasChanged = true;
+      }
+    }
+    if (Array.isArray(state.masterDepartments)) {
+      const existingDeptIds = new Set(state.masterDepartments.map(d => d.id || d.code));
+      const missingDepts = MASTER_DEPARTMENTS.filter(d => !existingDeptIds.has(d.id || d.code));
+      if (missingDepts.length > 0) {
+        state.masterDepartments = [...state.masterDepartments, ...missingDepts];
+        if (Array.isArray(state.departments)) {
+          state.departments = [...state.departments, ...missingDepts];
+        }
+        hasChanged = true;
+      }
+    }
+
     // SINGLE-PASS WRITE: Only write back to localStorage if changes occurred
     if (hasChanged) {
       localStorage.setItem(storageKey, JSON.stringify(persisted));
@@ -476,6 +497,38 @@ export const persistConfig = {
         }
         return u;
       });
+
+      // Ensure newly added seed users are present in rehydrated state
+      const existingUserIds = new Set(persistedState.masterUsers.map(u => u.id));
+      const missingUsers = MASTER_DATA_USER.filter(u => !existingUserIds.has(u.id));
+      if (missingUsers.length > 0) {
+        persistedState.masterUsers = [...persistedState.masterUsers, ...missingUsers];
+      }
+      const userRoleObj = (u) => ({
+        id: u.id,
+        empId: u.empId || u.id,
+        name: u.name,
+        depts: u.affiliated_departments || u.depts,
+        affiliated_departments: u.affiliated_departments || u.depts,
+        department: u.primary_department || u.department,
+        primary_department: u.primary_department || u.department,
+        level: u.approval_level || u.level,
+        approval_level: u.approval_level || u.level
+      });
+      persistedState.requestUsers = persistedState.masterUsers.map(userRoleObj);
+      persistedState.reviewUsers = [...persistedState.requestUsers];
+      persistedState.approveUsers = [...persistedState.requestUsers];
+    }
+
+    if (persistedState.masterDepartments && Array.isArray(persistedState.masterDepartments)) {
+      const existingDeptIds = new Set(persistedState.masterDepartments.map(d => d.id || d.code));
+      const missingDepts = MASTER_DEPARTMENTS.filter(d => !existingDeptIds.has(d.id || d.code));
+      if (missingDepts.length > 0) {
+        persistedState.masterDepartments = [...persistedState.masterDepartments, ...missingDepts];
+        if (Array.isArray(persistedState.departments)) {
+          persistedState.departments = [...persistedState.departments, ...missingDepts];
+        }
+      }
     }
 
     return persistedState;

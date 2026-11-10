@@ -569,7 +569,14 @@ export const createAuthAndOrgSlice = (set, get) => ({
         }
       }
 
-      let baseUsers = get().masterUsers || [];
+      // Baseline initial seed users must include MASTER_DATA_USER combined with current store masterUsers
+      const seedMap = new Map();
+      MASTER_DATA_USER.forEach(u => seedMap.set(u.id, u));
+      (get().masterUsers || []).forEach(u => {
+        const id = u.id || u.userId;
+        if (id) seedMap.set(id, { ...(seedMap.get(id) || {}), ...u });
+      });
+      let baseUsers = Array.from(seedMap.values());
 
       if (savedUsers && Array.isArray(savedUsers) && savedUsers.length > 0) {
         // Saved data from IndexedDB takes precedence to prevent seed overwrite
@@ -581,7 +588,7 @@ export const createAuthAndOrgSlice = (set, get) => ({
 
         // Start with saved users, and append any unedited initial seed users if not already present
         const mergedUsers = [...savedUsers];
-        (baseUsers || []).forEach(seedUser => {
+        baseUsers.forEach(seedUser => {
           const key = seedUser.id || seedUser.userId;
           if (key && !savedMap.has(key)) {
             mergedUsers.push(seedUser);
@@ -645,10 +652,10 @@ export const createAuthAndOrgSlice = (set, get) => ({
         isHydrated: true
       });
 
-      // Seed protection: If no savedUsers existed yet in IndexedDB, persist baseline
-      if (!savedUsers || !Array.isArray(savedUsers) || savedUsers.length === 0) {
+      // Seed protection: If no savedUsers existed yet in IndexedDB, or if new seed users were added, persist baseline
+      if (!savedUsers || !Array.isArray(savedUsers) || savedUsers.length !== hydratedUsers.length) {
         const cleanUsers = hydratedUsers.map(u => ({ ...u, signatureImage: null }));
-        await saveFile('master_users_persistent_data', cleanUsers);
+        await saveFile('master_users_persistent_data', cleanUsers).catch(() => {});
       }
 
       console.log('✅ Master data & signatures hydrated successfully from IndexedDB');
