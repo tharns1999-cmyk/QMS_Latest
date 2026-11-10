@@ -596,7 +596,7 @@ export const buildWorkOrderReconciliationStatements = async (db, planId, actorId
       });
 
       if (reactivatedWo) {
-        // Case C: Reactivate existing CANCELLED work order back to 'OPEN' without hitting unique constraints
+        // Case C: Reactivate existing CANCELLED work order back to 'SCHEDULED' without hitting unique constraints
         boundWoIds.add(reactivatedWo.id);
         const reactivatedCycleId = reactivatedWo.cycle_id || cycleId;
         activeCycleIdsInNewRevision.add(reactivatedCycleId);
@@ -613,7 +613,7 @@ export const buildWorkOrderReconciliationStatements = async (db, planId, actorId
           `).bind(reactivatedCycleId, actorId, cycleRowId),
           db.prepare(`
             UPDATE vcc_work_orders
-            SET status = 'OPEN',
+            SET status = 'SCHEDULED',
                 cancellation_category = NULL,
                 cancellation_reason = NULL,
                 cancelled_by = NULL,
@@ -652,7 +652,8 @@ export const buildWorkOrderReconciliationStatements = async (db, planId, actorId
         matched.push({ wo_id: reactivatedWo.id, wo_code: reactivatedWo.wo_code, cycle_id: reactivatedCycleId, cycle_key: cycleKey, reactivated: true });
         reconciled.push({ wo_id: reactivatedWo.id, wo_code: reactivatedWo.wo_code, cycle_id: reactivatedCycleId, reactivated: true });
       } else {
-        // Case B: Unmatched by cycle_id -> Generate new work order with status 'OPEN'
+        // Case B: Unmatched by cycle_id -> Generate new work order. Plan-generated work orders are SCHEDULED, never OPEN:
+        // manual activation (201 once, then 409), the 30-day task horizon and the notification sweep all key on it.
         unmatched.push({ cycle_id: cycleId, asset_id: item.asset_id, planned_month: month });
         maxSeq += 1;
         const woCode = `WO-${planYear}-${String(maxSeq).padStart(3, '0')}`;
@@ -666,7 +667,7 @@ export const buildWorkOrderReconciliationStatements = async (db, planId, actorId
               planned_month, asset_id, provider_name, baseline_planned_date, scheduled_date,
               due_date, original_due_date, required_due_date, is_carryover, status, result_status,
               created_by, updated_by
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'OPEN', 'PENDING', ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'SCHEDULED', 'PENDING', ?, ?)
           `).bind(
             woId,
             woCode,
@@ -698,7 +699,7 @@ export const buildWorkOrderReconciliationStatements = async (db, planId, actorId
           asset_code: item.asset_code,
           planned_month: month,
           due_date: dueDate,
-          status: 'OPEN'
+          status: 'SCHEDULED'
         });
       }
     }

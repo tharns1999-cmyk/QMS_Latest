@@ -1381,7 +1381,9 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
 
     const planSettings = await loadPlanSettings(db);
     const defaultDocCode = `VCC-AP-${department}-${planYear}`;
-    const documentCode = clean(body.document_code, 50)?.toUpperCase() || deptProfile?.document_code || defaultDocCode;
+    // The browser may ask for the plan's own code, but only the one the server would issue; any other value is ignored.
+    const requestedCode = clean(body.document_code, 50)?.toUpperCase();
+    const documentCode = (requestedCode === defaultDocCode ? defaultDocCode : null) || deptProfile?.document_code || defaultDocCode;
     const revision = clean(body.revision, 10) || deptProfile?.revision || '01';
     const formIssueDate = controlledForm?.effective_date || null;
     const defaultTitle = deptProfile?.title_th ? `${deptProfile.title_th} ${planYear}` : `แผนการทวนสอบเครื่องมือประจำปี ${planYear}`;

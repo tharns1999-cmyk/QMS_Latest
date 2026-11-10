@@ -349,7 +349,7 @@ describe('VCC Phase 3.1: Plan Revision Foundation & Diff Engine Tests', () => {
     const rev00Wos = await call('GET', `/api/vcc/work-orders?plan_id=${rev00Id}`, 'REV-QC-STAFF');
     const asset2Wo = rev00Wos.body.workOrders.find((w) => w.asset_id === asset2Id);
     expect(asset2Wo).toBeDefined();
-    expect(asset2Wo.status).toBe('OPEN');
+    expect(asset2Wo.status).toBe('SCHEDULED');
   });
 
   it('6 & 7. Diff Engine: Modifying cycle date/month reflects as Modified while identical cycles reflect as Unchanged', async () => {
@@ -1279,9 +1279,9 @@ describe('VCC Phase 3.1: Plan Revision Foundation & Diff Engine Tests', () => {
     expect(verifyWoM3.certificate_no).toBe('CERT-M3-CLOSED');
     expect(verifyWoM3.cycle_id).toBe(woM3.cycle_id);
 
-    // 2. Month 9 work order remains OPEN, active, and retains its exact cycle_id
+    // 2. Month 9 work order remains SCHEDULED, active, and retains its exact cycle_id
     const verifyWoM9 = await env.DB.prepare('SELECT * FROM vcc_work_orders WHERE id = ?').bind(woM9.id).first();
-    expect(verifyWoM9.status).toBe('OPEN');
+    expect(verifyWoM9.status).toBe('SCHEDULED');
     expect(verifyWoM9.cycle_id).toBe(woM9.cycle_id);
     expect(verifyWoM9.plan_id).toBe(rev01Id);
 
@@ -1986,7 +1986,7 @@ describe('VCC Phase 3.1: Plan Revision Foundation & Diff Engine Tests', () => {
     expect(blockedUnschedule.body.error).toContain('CLOSED');
 
     // In Rev.01:
-    // - Asset 1: keep Month 3 (Case A - CLOSED), remove Month 9 (Case D - Soft Cancel), add Month 11 (Case B - New OPEN WO)
+    // - Asset 1: keep Month 3 (Case A - CLOSED), remove Month 9 (Case D - Soft Cancel), add Month 11 (Case B - New SCHEDULED WO)
     // - Asset 2: keep Month 6, change provider_name to 'สถาบันมาตรวิทยาแห่งชาติ (NIMT)' (Case E - Metadata Sync)
     await call('POST', `/api/vcc/plans/${rev01Id}/items`, 'REV-QC-STAFF', {
       asset_id: asset1Id,
@@ -2013,10 +2013,10 @@ describe('VCC Phase 3.1: Plan Revision Foundation & Diff Engine Tests', () => {
     const checkM3 = await env.DB.prepare('SELECT * FROM vcc_work_orders WHERE id = ?').bind(woAsset1M3.id).first();
     expect(checkM3.status).toBe('CLOSED');
 
-    // Verify Case B: Asset 1 Month 11 created with status OPEN
+    // Verify Case B: Asset 1 Month 11 created with status SCHEDULED
     const checkM11 = await env.DB.prepare('SELECT * FROM vcc_work_orders WHERE asset_id = ? AND planned_month = 11').bind(asset1Id).first();
     expect(checkM11).toBeTruthy();
-    expect(checkM11.status).toBe('OPEN');
+    expect(checkM11.status).toBe('SCHEDULED');
 
     // Verify Case D: Asset 1 Month 9 soft-cancelled with PLAN_REVISION and Thai reason (not hard deleted)
     const checkM9Cancelled = await env.DB.prepare('SELECT * FROM vcc_work_orders WHERE id = ?').bind(woAsset1M9.id).first();
@@ -2026,7 +2026,7 @@ describe('VCC Phase 3.1: Plan Revision Foundation & Diff Engine Tests', () => {
 
     // Verify Case E: Asset 2 Month 6 metadata synced (provider_name, plan_id, plan_revision)
     const checkAsset2M6 = await env.DB.prepare('SELECT * FROM vcc_work_orders WHERE id = ?').bind(woAsset2M6.id).first();
-    expect(checkAsset2M6.status).toBe('OPEN');
+    expect(checkAsset2M6.status).toBe('SCHEDULED');
     expect(checkAsset2M6.provider_name).toBe('สถาบันมาตรวิทยาแห่งชาติ (NIMT)');
     expect(checkAsset2M6.plan_id).toBe(rev01Id);
     expect(checkAsset2M6.plan_revision).toBe('01');
@@ -2051,9 +2051,9 @@ describe('VCC Phase 3.1: Plan Revision Foundation & Diff Engine Tests', () => {
     const appRev02 = await call('POST', `/api/vcc/plans/${rev02Id}/approve`, 'REV-QA-MGR', { comment: 'อนุมัติ Rev.02' });
     expect(appRev02.status).toBe(200);
 
-    // Verify Case C: Original Month 9 work order is REACTIVATED back to OPEN with cleared cancellation fields!
+    // Verify Case C: Original Month 9 work order is REACTIVATED back to SCHEDULED with cleared cancellation fields!
     const checkM9Reactivated = await env.DB.prepare('SELECT * FROM vcc_work_orders WHERE id = ?').bind(woAsset1M9.id).first();
-    expect(checkM9Reactivated.status).toBe('OPEN');
+    expect(checkM9Reactivated.status).toBe('SCHEDULED');
     expect(checkM9Reactivated.cancellation_category).toBeNull();
     expect(checkM9Reactivated.cancellation_reason).toBeNull();
     expect(checkM9Reactivated.plan_id).toBe(rev02Id);

@@ -168,9 +168,9 @@ describe('VCC Phase 1-2: Automatic Work Order Generation, Lifecycle & Idempotenc
       expect(ck).toMatch(/^2026:AUTOQC:AST-AUTO-\d{2}:\d{1,2}$/);
     }
 
-    // Every generated work order has OPEN status and proper due date
+    // Every generated work order has SCHEDULED status and proper due date
     for (const wo of approvedWos.body.workOrders) {
-      expect(wo.status).toBe('OPEN');
+      expect(wo.status).toBe('SCHEDULED');
       expect(wo.plan_year).toBe(2026);
       expect(wo.plan_revision).toBe('00');
       expect(wo.baseline_planned_date).toBe(wo.due_date);
