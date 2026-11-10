@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, RefreshCw, ShieldCheck, Wrench, LockKeyhole, CheckCircle2, Save, FileCheck, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, RefreshCw, ShieldCheck, Wrench, LockKeyhole, CheckCircle2, Save, AlertTriangle } from 'lucide-react';
 import { apiGet, apiPut, apiPost, apiDelete, isApiMode } from '../../../api/client';
 import { useModuleAccess } from '../../../shared/components/ModuleAccessProvider';
 import useStore from '../../../store/useStore';
@@ -25,8 +25,8 @@ const statusStyle = {
 
 const actionLabels = {
   MODULE_STATUS_CHANGED: 'เปลี่ยนสถานะ VCC',
-  MODULE_DEPARTMENT_CHANGED: 'เปลี่ยนการเปิดรับงานของแผนก',
-  VCC_DOCUMENT_PROFILE_UPDATED: 'เปลี่ยนแบบฟอร์มและผู้รับผิดชอบ',
+  MODULE_DEPARTMENT_CHANGED: 'เปลี่ยนสิทธิ์การเข้าใช้งานของแผนก',
+  VCC_DOCUMENT_PROFILE_UPDATED: 'ปรับแต่งสายการอนุมัติ',
   MODULE_PERMISSION_GRANTED: 'มอบหมายสิทธิ์',
   MODULE_PERMISSION_REVOKED: 'ถอนสิทธิ์'
 };
@@ -78,7 +78,6 @@ export default function ModuleGovernancePage() {
       const storeDocs = state.documents || [];
       const storeUsers = state.users || [];
 
-      // Module status from localStorage or default
       let savedStatus = 'ACTIVE';
       let savedMessage = '';
       try {
@@ -86,7 +85,6 @@ export default function ModuleGovernancePage() {
         savedMessage = localStorage.getItem('qms_vcc_maintenance_message') || '';
       } catch {}
 
-      // Enabled departments from localStorage or default
       let enabledDeptCodes = ['DC', 'QC', 'QA', 'MGT', 'LB'];
       try {
         const rawEnabled = localStorage.getItem('qms_vcc_enabled_departments');
@@ -96,27 +94,26 @@ export default function ModuleGovernancePage() {
         }
       } catch {}
 
-      // Profiles from localStorage or default
       let profiles = {
         QC: {
-          document_code: 'FM-QC-46',
-          revision: '03',
+          document_code: 'VCC-AP-QC-2026',
+          revision: '01',
           reviewer_dept: 'QC',
           approver_dept: 'QA',
           min_preparer_level: 4,
-          required_reviewer_level: 5,
-          required_approver_level: 6,
+          required_reviewer_level: 4,
+          required_approver_level: 5,
           assigned_reviewer_id: 'U003',
           assigned_approver_id: 'U004'
         },
         LB: {
-          document_code: 'FM-LB-11',
+          document_code: 'VCC-AP-LB-2026',
           revision: '01',
           reviewer_dept: 'LB',
           approver_dept: 'QA',
           min_preparer_level: 4,
-          required_reviewer_level: 5,
-          required_approver_level: 6
+          required_reviewer_level: 4,
+          required_approver_level: 5
         }
       };
       try {
@@ -127,7 +124,6 @@ export default function ModuleGovernancePage() {
         }
       } catch {}
 
-      // Map departments from master data
       const depts = storeDepts.map((d) => {
         const code = String(d.code || d.id).toUpperCase();
         return {
@@ -138,27 +134,21 @@ export default function ModuleGovernancePage() {
         };
       });
 
-      // Ensure standard departments exist in list
       const existingCodes = depts.map((d) => d.code);
       if (!existingCodes.includes('QC')) depts.unshift({ code: 'QC', name_th: 'ควบคุมคุณภาพ', status: 'ACTIVE', enabled: enabledDeptCodes.includes('QC') ? 1 : 0 });
       if (!existingCodes.includes('LB')) depts.push({ code: 'LB', name_th: 'ห้องปฏิบัติการจุลชีววิทยา', status: 'ACTIVE', enabled: enabledDeptCodes.includes('LB') ? 1 : 0 });
       if (!existingCodes.includes('QA')) depts.push({ code: 'QA', name_th: 'ประกันคุณภาพ', status: 'ACTIVE', enabled: enabledDeptCodes.includes('QA') ? 1 : 0 });
       if (!existingCodes.includes('MGT')) depts.push({ code: 'MGT', name_th: 'ฝ่ายบริหาร', status: 'ACTIVE', enabled: enabledDeptCodes.includes('MGT') ? 1 : 0 });
 
-      // Calculate readiness per department
+      // Native Digital Records: every enabled department is 100% READY
       const readiness = {};
       depts.forEach((d) => {
-        const p = profiles[d.code];
-        const issues = [];
-        if (!p || !p.document_code) issues.push('ยังไม่ผูกแบบฟอร์ม DCC ควบคุม');
-        if (!p || !p.reviewer_dept || !p.approver_dept) issues.push('ยังไม่กำหนดสายการอนุมัติ');
         readiness[d.code] = {
-          status: issues.length === 0 ? 'READY' : 'CONFIGURATION_INCOMPLETE',
-          issues
+          status: 'READY',
+          issues: []
         };
       });
 
-      // Map forms from documents
       const forms = storeDocs
         .filter((doc) => doc.document_type === 'FM' || doc.type === 'FM' || doc.doc_code?.startsWith('FM-') || doc.docNumber?.startsWith('FM-'))
         .map((doc) => ({
@@ -171,11 +161,7 @@ export default function ModuleGovernancePage() {
       if (!forms.some((f) => f.doc_code === 'FM-QC-46')) {
         forms.unshift({ id: 'FM-QC-46', doc_code: 'FM-QC-46', revision: '03', name: 'แผนการสอบเทียบและทวนสอบเครื่องมือวัดประจำปี (QC)' });
       }
-      if (!forms.some((f) => f.doc_code === 'FM-LB-11')) {
-        forms.unshift({ id: 'FM-LB-11', doc_code: 'FM-LB-11', revision: '01', name: 'แผนการสอบเทียบและทวนสอบเครื่องมือวิทยาศาสตร์ (LB)' });
-      }
 
-      // Map users
       const users = storeUsers.map((u) => ({
         id: u.id || u.empId,
         name: u.fullName || u.name,
@@ -183,7 +169,6 @@ export default function ModuleGovernancePage() {
         approval_level: Number(u.approval_level ?? u.approvalLevel ?? u.level ?? 1)
       }));
 
-      // History
       let savedHistory = [];
       try {
         const rawH = localStorage.getItem('qms_vcc_history');
@@ -204,8 +189,8 @@ export default function ModuleGovernancePage() {
         forms,
         policy: {
           min_requester_level: 4,
-          required_reviewer_level: 5,
-          required_approver_level: 6
+          required_reviewer_level: 4,
+          required_approver_level: 5
         },
         history: savedHistory,
         alerts: [],
@@ -216,7 +201,6 @@ export default function ModuleGovernancePage() {
       setSelectedStatus(savedStatus);
       setMessage(savedMessage);
 
-      // Sync Zustand store
       useStore.setState?.({
         vccModuleStatus: savedStatus,
         vccMaintenanceMessage: savedMessage,
@@ -263,11 +247,10 @@ export default function ModuleGovernancePage() {
     }
   };
 
-  // Demo Mode action handlers
   const handleToggleDepartment = (dept) => {
     if (isApiMode) {
       review(
-        `${dept.enabled ? 'ปิด' : 'เปิด'}รับงานใหม่ของ ${dept.code}`,
+        `${dept.enabled ? 'ปิดการใช้งาน' : 'เปิดการใช้งาน'}ของ ${dept.code}`,
         `/api/module-governance/vcc/departments/${encodeURIComponent(dept.code)}`,
         { enabled: !dept.enabled },
         dept.code
@@ -287,7 +270,7 @@ export default function ModuleGovernancePage() {
         action: 'MODULE_DEPARTMENT_CHANGED',
         details: JSON.stringify({
           department: dept.code,
-          reason: `${dept.enabled ? 'ปิด' : 'เปิด'}รับงานใหม่ของ ${dept.code} (โหมดสาธิต)`
+          reason: `${dept.enabled ? 'ปิดใช้งาน' : 'เปิดใช้งาน'}แผนก ${dept.code} (บันทึกดิจิทัล)`
         }),
         created_at: new Date().toISOString(),
         actor_name: 'ผู้ดูแลระบบ (Demo)'
@@ -323,7 +306,7 @@ export default function ModuleGovernancePage() {
         details: JSON.stringify({
           before: { status: data.module.status },
           after: { status: selectedStatus },
-          reason: message || 'เปลี่ยนสถานะโมดูล VCC (โหมดสาธิต)'
+          reason: message || 'เปลี่ยนสถานะโมดูล VCC'
         }),
         created_at: new Date().toISOString(),
         actor_name: 'ผู้ดูแลระบบ (Demo)'
@@ -348,14 +331,12 @@ export default function ModuleGovernancePage() {
       const nextProfiles = { ...data.profiles, [department]: profile };
       localStorage.setItem('qms_vcc_document_profiles', JSON.stringify(nextProfiles));
 
-      const nextReadiness = { ...data.readiness, [department]: { status: 'READY', issues: [] } };
-
       const newHistoryItem = {
         id: Date.now(),
         action: 'VCC_DOCUMENT_PROFILE_UPDATED',
         details: JSON.stringify({
           department,
-          reason: `บันทึกแบบฟอร์ม ${profile.document_code} ฉบับ ${profile.revision} และสายอนุมัติ (โหมดสาธิต)`
+          reason: `ปรับแต่งสายการอนุมัติของแผนก ${department}`
         }),
         created_at: new Date().toISOString(),
         actor_name: 'ผู้ดูแลระบบ (Demo)'
@@ -366,11 +347,10 @@ export default function ModuleGovernancePage() {
       setData((prev) => ({
         ...prev,
         profiles: nextProfiles,
-        readiness: nextReadiness,
         history: updatedHistory
       }));
       setEditingDepartment('');
-      setSuccessNotice(`บันทึกการตั้งค่าแบบฟอร์มและสายอนุมัติของแผนก ${department} เรียบร้อยแล้ว`);
+      setSuccessNotice(`บันทึกสายการอนุมัติของแผนก ${department} เรียบร้อยแล้ว`);
     } catch (err) {
       setError(err.message);
     }
@@ -389,7 +369,6 @@ export default function ModuleGovernancePage() {
       return;
     }
 
-    // Demo save all
     handleSaveModuleStatusDemo();
   };
 
@@ -403,14 +382,14 @@ export default function ModuleGovernancePage() {
           </Link>
           <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">จัดการระบบย่อย</h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-            ควบคุมสถานะ VCC แผนกที่เปิดรับงาน และผู้รับผิดชอบ พร้อมตรวจผลกระทบและประวัติทุกครั้ง
+            ระบบบริหารจัดการสิทธิ์โมดูลและสายการอนุมัติดิจิทัล (ISO 9001:2015 Clause 7.5 Digital Records)
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <button
             disabled={loading || busy}
             onClick={load}
-            className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm hover:bg-slate-50 disabled:opacity-50 shadow-sm"
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm hover:bg-slate-50 disabled:opacity-50 shadow-2xs"
           >
             <RefreshCw size={16} />
             โหลดข้อมูลล่าสุด
@@ -419,11 +398,11 @@ export default function ModuleGovernancePage() {
       </header>
 
       {!isApiMode && (
-        <div role="status" className="flex items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50/80 p-4 text-sm text-amber-900 shadow-sm">
+        <div role="status" className="flex items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50/80 p-4 text-sm text-amber-900 shadow-2xs">
           <div className="flex items-center gap-2.5">
             <AlertTriangle size={18} className="shrink-0 text-amber-700" />
             <p>
-              <strong>โหมดสาธิต</strong> — กำลังทำงานในโหมดจัดเก็บข้อมูลในเครื่อง (Local Storage) การตั้งค่าทั้งหมดจะถูกบันทึกและมีผลทันทีบนหน้าจอจำลอง
+              <strong>โหมดสาธิต</strong> — กำลังทำงานในโหมดจัดเก็บข้อมูลในเครื่อง (Local Storage) ข้อมูลสิทธิ์และสายอนุมัติจะถูกบันทึกและมีผลทันทีบนหน้าจอจำลอง
             </p>
           </div>
           <span className="shrink-0 rounded-lg bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800 border border-amber-300">
@@ -434,7 +413,7 @@ export default function ModuleGovernancePage() {
 
       {error && <p role="alert" className="rounded-xl bg-red-50 p-4 text-sm text-red-800 border border-red-200">{error}</p>}
       {successNotice && (
-        <div className="flex items-center gap-2 rounded-xl bg-emerald-50 p-4 text-sm text-emerald-800 border border-emerald-200 shadow-sm">
+        <div className="flex items-center gap-2 rounded-xl bg-emerald-50 p-4 text-sm text-emerald-800 border border-emerald-200 shadow-2xs">
           <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
           <span>{successNotice}</span>
         </div>
@@ -445,7 +424,7 @@ export default function ModuleGovernancePage() {
       {data && (
         <>
           {/* SECTION 1: MODULE STATUS CONTROL */}
-          <section aria-label="สถานะระบบย่อย" className="divide-y divide-slate-200 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <section aria-label="สถานะระบบย่อย" className="divide-y divide-slate-200 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xs">
             {/* DCC CARD */}
             <div className="flex flex-wrap items-center justify-between gap-4 px-5 py-4 sm:px-6 bg-slate-50/50">
               <div className="flex items-center gap-3">
@@ -515,7 +494,7 @@ export default function ModuleGovernancePage() {
                         maintenance_message: message
                       })
                     }
-                    className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50 shadow-sm"
+                    className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50 shadow-2xs cursor-pointer"
                   >
                     ตรวจผลกระทบ
                   </button>
@@ -523,7 +502,7 @@ export default function ModuleGovernancePage() {
                   <button
                     onClick={handleSaveModuleStatusDemo}
                     disabled={loading || busy || (selectedStatus === 'MAINTENANCE' && !message.trim())}
-                    className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50 shadow-sm"
+                    className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50 shadow-2xs cursor-pointer"
                   >
                     บันทึกการตั้งค่า (Save Changes)
                   </button>
@@ -539,7 +518,7 @@ export default function ModuleGovernancePage() {
           {/* TAB LIST */}
           <div role="tablist" aria-label="การจัดการ VCC" className="flex gap-1 overflow-x-auto border-b border-slate-200">
             {[
-              ['departments', 'แผนกและแบบฟอร์ม'],
+              ['departments', 'สิทธิ์ระดับแผนกและสายอนุมัติ'],
               ['alerts', `การแจ้งเตือนค้าง (${data.alerts.length})`],
               ['history', 'ประวัติการตั้งค่า'],
               ...(data.platformAdmin ? [['permissions', 'ผู้ดูแลที่ได้รับมอบหมาย']] : [])
@@ -558,23 +537,23 @@ export default function ModuleGovernancePage() {
             ))}
           </div>
 
-          {/* SECTION 2: DEPARTMENT ACCESS MATRIX */}
+          {/* SECTION 2: DEPARTMENT ACCESS MATRIX (Native Digital-First) */}
           {tab === 'departments' && (
-            <section aria-label="แผนกและแบบฟอร์ม" className="space-y-5">
+            <section aria-label="แผนกและแบบฟอร์ม" className="space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <h2 className="text-lg font-semibold text-slate-900">การเปิดรับงานของแผนก</h2>
                   <p className="mt-1 text-sm text-slate-600">
-                    ดึงรายชื่อแผนกทั้งหมดจาก Master Data Store พร้อมสวิตช์เปิด/ปิดสิทธิ์ และตรวจสอบแบบฟอร์ม DCC ควบคุม
+                    เปิดสิทธิ์การใช้งานรายแผนกเพื่อจัดทำและลงนามแผนประจำปีดิจิทัลได้ทันที (พร้อมใช้งานอัตโนมัติตาม ISO 9001:2015 Clause 7.5)
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-3">
-                  <label className="text-sm text-slate-700">
-                    แสดงแผนก
+                  <label className="text-sm text-slate-700 flex items-center gap-1.5">
+                    <span>แสดงแผนก</span>
                     <select
                       value={departmentFilter}
                       onChange={(e) => setDepartmentFilter(e.target.value)}
-                      className="ml-2 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     >
                       <option value="enabled">เปิดรับงานใหม่</option>
                       <option value="disabled">ปิดรับงานใหม่</option>
@@ -583,7 +562,7 @@ export default function ModuleGovernancePage() {
                   </label>
                   <button
                     onClick={handleSaveAllChanges}
-                    className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 shadow-sm"
+                    className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 shadow-2xs cursor-pointer"
                   >
                     <Save size={16} />
                     บันทึกการตั้งค่า (Save Changes)
@@ -591,51 +570,68 @@ export default function ModuleGovernancePage() {
                 </div>
               </div>
 
-              <ul className="divide-y divide-slate-200 rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+              {/* CLEAN MODERN ENTERPRISE LIST */}
+              <ul className="divide-y divide-slate-200 rounded-2xl border border-slate-200 bg-white shadow-2xs overflow-hidden">
                 {data.departments
                   .filter((d) => (departmentFilter === 'all' ? true : Boolean(d.enabled) === (departmentFilter === 'enabled')))
                   .map((d) => {
                     const prof = data.profiles[d.code];
-                    const read = data.readiness[d.code] || { status: 'CONFIGURATION_INCOMPLETE', issues: ['ยังไม่ตั้งค่า'] };
-                    const hasDccForm = Boolean(prof?.document_code);
+                    const hasCustomSignatories = Boolean(prof?.assigned_reviewer_id && prof?.assigned_approver_id);
 
                     return (
-                      <li key={d.code} className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between sm:px-6 hover:bg-slate-50/50 transition-colors">
+                      <li
+                        key={d.code}
+                        className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between sm:px-6 hover:bg-slate-50/50 transition-colors"
+                      >
                         <div className="min-w-0 space-y-1.5">
                           <div className="flex flex-wrap items-center gap-2.5">
                             <h3 className="font-semibold text-slate-900">
                               {d.code} · {d.name_th}
                             </h3>
-                            {hasDccForm ? (
-                              <span className="inline-flex items-center gap-1 rounded-md bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700 border border-indigo-200">
-                                <FileCheck size={12} />
-                                ผูกแบบฟอร์มแล้ว: {prof.document_code} (ฉบับ {prof.revision})
+                            <span className="inline-flex items-center gap-1 rounded-md bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700 border border-indigo-200 font-mono">
+                              มาตรฐานดิจิทัล: VCC-AP-{d.code}
+                            </span>
+                            {d.enabled ? (
+                              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-800 border border-emerald-200">
+                                <CheckCircle2 size={12} className="text-emerald-600" />
+                                พร้อมใช้งาน
                               </span>
                             ) : (
-                              <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 border border-slate-200">
-                                ยังไม่ผูกแบบฟอร์ม DCC ควบคุม
+                              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600 border border-slate-200">
+                                ปิดใช้งาน
                               </span>
                             )}
                           </div>
-                          <p className={`text-sm ${read.status === 'READY' ? 'text-emerald-800' : 'text-amber-900'}`}>
-                            {read.status === 'READY' ? 'พร้อมใช้งาน' : 'Configuration Incomplete · ตั้งค่ายังไม่ครบ'}
-                          </p>
-                          <p className="break-words text-xs leading-5 text-slate-600">
-                            {read.issues.join(' · ') || `${prof?.document_code} · ฉบับ ${prof?.revision}`}
-                          </p>
+                          <div className="text-xs text-slate-600 space-y-0.5">
+                            <div>
+                              สายการอนุมัติ:{' '}
+                              {hasCustomSignatories ? (
+                                <span className="text-indigo-700 font-medium">ระบุผู้ลงนามเฉพาะบุคคล</span>
+                              ) : (
+                                <span>ผู้ทบทวน L4+ / ผู้อนุมัติ L5+ (มาตรฐาน)</span>
+                              )}
+                            </div>
+                            <div className="text-slate-500 text-[11px]">
+                              ผู้ทบทวน: แผนก {prof?.reviewer_dept || d.code} | ผู้อนุมัติ: แผนก {prof?.approver_dept || 'QA'}
+                            </div>
+                          </div>
                         </div>
 
                         <div className="flex shrink-0 flex-wrap items-center gap-2">
                           <button
+                            type="button"
+                            aria-label={`ตั้งค่า ${d.code}`}
                             onClick={() => setEditingDepartment(d.code)}
-                            className="rounded-xl border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50 shadow-sm"
+                            className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 shadow-2xs transition-colors cursor-pointer"
                           >
                             ตั้งค่า {d.code}
                           </button>
                           <button
-                            disabled={busy || (!d.enabled && (d.status !== 'ACTIVE' || read.status !== 'READY'))}
+                            type="button"
+                            disabled={busy}
+                            aria-label={d.enabled ? 'ปิดรับงานใหม่' : 'เปิดรับงานใหม่'}
                             onClick={() => handleToggleDepartment(d)}
-                            className={`rounded-xl border px-3 py-2 text-sm font-medium shadow-sm transition-colors disabled:opacity-50 ${
+                            className={`rounded-xl border px-3 py-2 text-sm font-medium shadow-2xs transition-colors disabled:opacity-50 cursor-pointer ${
                               d.enabled
                                 ? 'border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100'
                                 : 'border-indigo-300 bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
@@ -658,7 +654,7 @@ export default function ModuleGovernancePage() {
                   onReview={(profile) => {
                     if (isApiMode) {
                       review(
-                        `บันทึกแบบฟอร์มและผู้รับผิดชอบของ ${editingDepartment}`,
+                        `บันทึกสายการอนุมัติของ ${editingDepartment}`,
                         `/api/module-governance/vcc/profiles/${encodeURIComponent(editingDepartment)}`,
                         profile,
                         editingDepartment
@@ -692,7 +688,7 @@ export default function ModuleGovernancePage() {
                   <option value="ACKNOWLEDGED">รับทราบแล้ว</option>
                 </select>
               </label>
-              <ul className="divide-y divide-slate-200 rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+              <ul className="divide-y divide-slate-200 rounded-2xl border border-slate-200 bg-white shadow-2xs overflow-hidden">
                 {data.alerts
                   .filter((a) => a.status === alertFilter)
                   .map((a) => (
@@ -714,7 +710,7 @@ export default function ModuleGovernancePage() {
           {tab === 'history' && (
             <section>
               <h2 className="mb-4 text-lg font-semibold text-slate-900">ประวัติการตั้งค่า</h2>
-              <ul className="divide-y divide-slate-200 rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+              <ul className="divide-y divide-slate-200 rounded-2xl border border-slate-200 bg-white shadow-2xs overflow-hidden">
                 {data.history.map((row) => {
                   const details = typeof row.details === 'string' ? JSON.parse(row.details || '{}') : row.details || {};
                   return (

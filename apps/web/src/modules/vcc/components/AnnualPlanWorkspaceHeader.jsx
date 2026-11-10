@@ -657,17 +657,6 @@ export const AnnualPlanWorkspaceHeader = ({
                     <span>ประวัติการอนุมัติ</span>
                   </button>
                 )}
-                {activePlan && activePlan.status === 'APPROVED' && onOpenOfficialPdf && (
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className={menuItemClass}
-                    onClick={runMenu(onOpenOfficialPdf)}
-                  >
-                    <BookOpen size={14} className="text-emerald-600" />
-                    <span>เปิดดูเอกสาร PDF ทางการ</span>
-                  </button>
-                )}
                 {onOpenSettings && (
                   <button
                     type="button"
@@ -677,6 +666,17 @@ export const AnnualPlanWorkspaceHeader = ({
                   >
                     <SlidersHorizontal size={14} className="text-slate-500" />
                     <span>ตั้งค่าแผนและเกณฑ์อนุมัติ</span>
+                  </button>
+                )}
+                {activePlan && activePlan.status === 'APPROVED' && onOpenOfficialPdf && (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className={menuItemClass}
+                    onClick={runMenu(onOpenOfficialPdf)}
+                  >
+                    <BookOpen size={14} className="text-emerald-600" />
+                    <span>เปิดดูเอกสาร PDF ทางการ</span>
                   </button>
                 )}
                 <button

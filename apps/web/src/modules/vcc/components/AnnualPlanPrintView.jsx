@@ -29,7 +29,7 @@ export const AnnualPlanPrintView = ({
   const buddhistYear = toBuddhistYear(planYear);
   const deptCode = plan.department || 'GEN';
   const deptName = plan.department_name_th || plan.department || deptCode;
-  const docCode = plan.document_code || `FM-${deptCode}-42`;
+  const docCode = plan.document_code || `VCC-AP-${deptCode}-${planYear}`;
   const rev = plan.revision || '01';
   const effectiveDate = plan.effective_date || plan.form_issue_date || '-';
 

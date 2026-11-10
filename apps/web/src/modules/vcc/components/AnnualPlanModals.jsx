@@ -208,11 +208,6 @@ export const PlanFormModal = ({
                     ไม่สามารถโหลดแผนกจาก Master Data ได้ กรุณาตรวจสอบข้อมูลแผนกก่อนบันทึก
                   </p>
                 )}
-                {form.department && docProfiles && !docProfiles[form.department]?.document_code && (
-                  <p className="mt-1 text-[11px] text-amber-700 font-medium">
-                    แผนก {form.department} ยังไม่ได้ผูกแบบฟอร์ม DCC ระบบจะใช้แบบฟอร์มมาตรฐาน
-                  </p>
-                )}
               </div>
             </div>
           </div>
@@ -231,7 +226,7 @@ export const PlanFormModal = ({
                 </label>
                 <input
                   type="text"
-                  placeholder={form.department ? `เช่น VCC-PLAN-${form.department}` : 'เช่น VCC-PLAN-...'}
+                  placeholder={form.department ? `เช่น VCC-AP-${form.department}-${form.plan_year || '2026'}` : 'เช่น VCC-AP-QC-2026'}
                   value={form.document_code}
                   onChange={(e) => setForm({ ...form, document_code: e.target.value })}
                   className="w-full h-9.5 px-3 rounded-lg border border-slate-300 text-xs font-mono font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600"

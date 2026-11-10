@@ -128,7 +128,7 @@ export const generatePlanPdfBuffer = async (plan, items = [], signatories = {}) 
 
   const planYear = safeAscii(plan.plan_year, String(new Date().getFullYear()));
   const dept = safeAscii(plan.department, 'GEN');
-  const defaultDocCode = `VCC-PLAN-${dept}`;
+  const defaultDocCode = `VCC-AP-${dept}-${planYear}`;
   const docCode = safeAscii(plan.document_code || defaultDocCode, defaultDocCode);
   const rev = safeAscii(plan.revision, '01');
   const issueDate = safeAscii(plan.form_issue_date, '-');
@@ -1378,13 +1378,12 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
     const minPrepLevel = levels.min_requester_level;
     if (Number(user.approval_level) < minPrepLevel) return c.json({ error: `ผู้จัดทำแผนต้องมีระดับอนุมัติตั้งแต่ L${minPrepLevel} ขึ้นไป` }, 403);
     const controlledForm = await controlledVccForm(db, deptProfile);
-    if (!controlledForm) return c.json(configurationIncomplete, 422);
 
     const planSettings = await loadPlanSettings(db);
-    const defaultDocCode = deptProfile?.document_code || `VCC-PLAN-${department}`;
-    const documentCode = deptProfile?.document_code || defaultDocCode;
+    const defaultDocCode = `VCC-AP-${department}-${planYear}`;
+    const documentCode = clean(body.document_code, 50)?.toUpperCase() || deptProfile?.document_code || defaultDocCode;
     const revision = clean(body.revision, 10) || deptProfile?.revision || '01';
-    const formIssueDate = controlledForm.effective_date;
+    const formIssueDate = controlledForm?.effective_date || null;
     const defaultTitle = deptProfile?.title_th ? `${deptProfile.title_th} ${planYear}` : `แผนการทวนสอบเครื่องมือประจำปี ${planYear}`;
     const title = clean(body.title, 300) || defaultTitle;
     const dueDateRule = String(body.due_date_rule ?? planSettings.due_date_rule).toUpperCase();
@@ -1404,10 +1403,16 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
       ...deptProfile,
       department,
       document_code: documentCode,
+      dcc_doc_code: deptProfile?.document_code || null,
+      dcc_doc_revision: deptProfile?.revision || null,
       revision: deptProfile?.revision || revision,
       form_issue_date: formIssueDate,
       title_th: deptProfile?.title_th || title,
       min_preparer_level: minPrepLevel,
+      reviewer_dept: deptProfile?.reviewer_dept || department,
+      approver_dept: deptProfile?.approver_dept || 'QA',
+      required_reviewer_level: levels.required_reviewer_level || 4,
+      required_approver_level: levels.required_approver_level || 5,
       assigned_reviewer_id: assignedReviewerId,
       assigned_approver_id: assignedApproverId,
       snapshot_at: new Date().toISOString()
@@ -2046,8 +2051,7 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
       }
     }
 
-    // Submission gate 4: DCC Profile & Signatory Assignment
-    if (!await controlledVccForm(db, deptProfile)) return c.json(configurationIncomplete, 422);
+    // Submission gate 4: Signatory Assignment & SoD Check
     if (!assignedRevId || !assignedAppId) return c.json({ error: 'กรุณากำหนดผู้ทบทวนและผู้อนุมัติ' }, 422);
     const proposed = { ...plan, prepared_by: plan.prepared_by || user.id, assigned_reviewer_id: assignedRevId, assigned_approver_id: assignedAppId };
     const decide = await getPlanDecisionCheck(db);
