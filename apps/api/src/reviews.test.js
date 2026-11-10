@@ -30,7 +30,7 @@ describe('periodic review', () => {
     proxy = await getPlatformProxy({ persist: { path: '.wrangler/test/v3' } });
     env = { ...proxy.env, JWT_SECRET: 'test-secret' };
     const hash = await hashPassword('rev-pass');
-    const users = [['V-REQ', 'RVW', 2], ['V-STAFF', 'RVW', 3], ['V-HOD', 'RVW', 4], ['V-APP', 'RVW', 6], ['V-OTHER', 'OTH', 5]];
+    const users = [['V-REQ', 'RVW', 2], ['V-STAFF', 'RVW', 3], ['V-HOD', 'RVW', 4], ['V-APP', 'RVW', 6], ['V-APP2', 'RVW', 6], ['V-OTHER', 'OTH', 5]];
     await env.DB.batch(users.map(([id, dept, level]) => env.DB.prepare(`INSERT INTO users (id, name, email, password_hash, role, approval_level, primary_department, departments)
       VALUES (?, ?, ?, ?, 'USER', ?, ?, ?)`).bind(id, id, `${id}@test.local`, hash, level, dept, JSON.stringify([dept]))));
     for (const [id] of users) {
@@ -76,12 +76,14 @@ describe('periodic review', () => {
     expect((await post(`/api/periodic-reviews/${id}/decision`, 'V-APP', { decision: 'APPROVE' })).status).toBe(409); // already decided
   });
 
-  it('is signed on the spot when the reviewer already holds approver rights', async () => {
+  it('needs a second signer even when the reviewer already holds approver rights', async () => {
     const d = await newDoc('SD');
     const { body } = await review(d.id, 'V-APP');
-    expect(body.review).toMatchObject({ status: 'COMPLETED', fast_track: 1, approver_id: 'V-APP' });
-    expect((await doc(d.doc_code)).next_review_date).toBe(body.review.new_next_review_date);
-    expect(body.review.new_next_review_date).not.toBe(d.next_review_date);
+    expect(body.review).toMatchObject({ status: 'PENDING_APPROVAL', fast_track: 0, approver_id: 'V-APP2' });
+    expect((await doc(d.doc_code)).next_review_date).toBe(d.next_review_date);
+    expect((await post(`/api/periodic-reviews/${body.review.id}/decision`, 'V-APP', { decision: 'APPROVE' })).status).toBe(403); // own review
+    expect((await post(`/api/periodic-reviews/${body.review.id}/decision`, 'V-APP2', { decision: 'APPROVE' })).body.review.status).toBe('COMPLETED');
+    expect((await doc(d.doc_code)).next_review_date).not.toBe(d.next_review_date);
   });
 
   it('a rejected review can be submitted again; a late review counts one cycle from today', async () => {
