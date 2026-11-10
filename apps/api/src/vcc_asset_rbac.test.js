@@ -191,6 +191,21 @@ describe('VCC asset register — department-based management (RBAC)', () => {
     expect(retired.details.impact.open_work_orders).toBe(1);
   });
 
+  it('retire then reactivate does not clear a hold: an asset with an open NC comes back ON_HOLD', async () => {
+    const id = (await call('POST', '/api/vcc/assets', 'AR-QC4', newAsset('QC', 'HOLD1'))).body.asset.id;
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO vcc_work_orders (id, wo_code, asset_id, provider_name, due_date, original_due_date, status, nc_status)
+         VALUES (?, ?, ?, 'ผู้ให้บริการ', '2099-01-31', '2099-01-31', 'IN_PROGRESS', 'OPEN')`
+      ).bind(`rb-wo-${RUN}-H`, `RB-${RUN}-WOH`, id),
+      env.DB.prepare("UPDATE vcc_assets SET status = 'ON_HOLD' WHERE id = ?").bind(id)
+    ]);
+    expect((await call('POST', `/api/vcc/assets/${id}/retire`, 'AR-QC4', { reason: 'x' })).status).toBe(200);
+    const back = await call('POST', `/api/vcc/assets/${id}/reactivate`, 'AR-QC4', { reason: 'y' });
+    expect(back.status).toBe(200);
+    expect(back.body.asset.status).toBe('ON_HOLD');
+  });
+
   it('concurrent creates with the same code: exactly one wins', async () => {
     const body = newAsset('QC', 'DUP');
     const results = await Promise.all([1, 2, 3].map(() => call('POST', '/api/vcc/assets', 'AR-QC4', body)));

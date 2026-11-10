@@ -1813,6 +1813,9 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
 
     const plan = await fetchPlan(db, planId);
     if (!plan) return c.json({ error: 'ไม่พบแผนการสอบเทียบประจำปี' }, 404);
+    if (!isUserAuthorizedForPlanDept(user, plan.department)) {
+      return c.json({ error: 'เฉพาะผู้ใช้งานที่สังกัดแผนกของแผน หรือ DCC/QMR เท่านั้นที่สามารถปรับรายการในแผนได้' }, 403);
+    }
     if (plan.status !== 'DRAFT' && plan.status !== 'REJECTED') {
       return c.json({ error: 'ปรับรายการกลุ่มเดิมได้เฉพาะแผนในสถานะร่าง (DRAFT) หรือส่งกลับแก้ไข (REJECTED) เท่านั้น ห้ามแก้แผนที่อนุมัติแล้ว' }, 409);
     }
@@ -1971,6 +1974,10 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
     const planId = c.req.param('id');
     const itemId = c.req.param('itemId');
     const body = await c.req.json().catch(() => ({}));
+
+    const plan = await fetchPlan(db, planId);
+    if (!plan) return c.json({ error: 'ไม่พบแผนการสอบเทียบประจำปี' }, 404);
+    if (!canReadVccDepartment(c.get('user'), plan.department)) return c.json(VCC_DEPT_FORBIDDEN, 403);
 
     const items = await fetchPlanItems(db, planId);
     const item = items.find((i) => i.id === itemId);

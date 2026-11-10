@@ -435,19 +435,23 @@ export const registerVccRoutes = (app, { requireAuth, audit }) => {
     if (!canManageVccAsset(user, before.department)) return c.json(VCC_ASSET_MANAGE_FORBIDDEN, 403);
     if (before.status !== 'RETIRED') return c.json({ error: 'เครื่องมือนี้ไม่ได้อยู่ในสถานะปลดออก' }, 409);
 
+    // Retired while on hold comes back on hold: only release-hold (NC assessment by an approver) clears an open NC.
+    const held = await db.prepare("SELECT 1 FROM vcc_work_orders WHERE asset_id = ? AND nc_status = 'OPEN'").bind(id).first();
+    const status = held ? 'ON_HOLD' : 'ACTIVE';
+
     await db.batch([
       db.prepare(
         `UPDATE vcc_assets
-         SET status = 'ACTIVE', retired_reason = NULL, retired_at = NULL, retired_by = NULL, updated_at = ${NOW}, updated_by = ?
+         SET status = ?, retired_reason = NULL, retired_at = NULL, retired_by = NULL, updated_at = ${NOW}, updated_by = ?
          WHERE id = ?`
-      ).bind(user.id, id),
+      ).bind(status, user.id, id),
       audit(db, user.id, 'VCC_ASSET_REACTIVATED', {
         asset_id: id,
         asset_code: before.asset_code,
         name: before.name,
         reason,
         before: { status: before.status, retired_reason: before.retired_reason },
-        after: { status: 'ACTIVE' }
+        after: { status }
       })
     ]);
 

@@ -2082,6 +2082,7 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
             hold_started_at = NULL,
             updated_at = ${NOW}
         WHERE id = ?
+          AND status != 'RETIRED'
           AND NOT EXISTS (
             SELECT 1 FROM vcc_work_orders
             WHERE asset_id = ? AND id != ? AND nc_status = 'OPEN'

@@ -545,5 +545,9 @@ describe('VCC Multi-Department Access & Approval Workflow (RBAC & SoD)', () => {
       performed_at: '2026-05-10', result_status: 'PASS', certificate_no: 'CERT-MGT-001', acceptance_criteria: '± 0.5 °C'
     });
     expect(mgtWrite.status).toBe(403);
+    // Plan-item routes refuse another department before looking at the item
+    expect((await call('POST', `/api/vcc/plans/${qcPlan.id}/items/none/convert-group`, 'LB-STAFF', { confirm_remove_empty: true })).status).toBe(403);
+    expect((await call('POST', `/api/vcc/plans/${qcPlan.id}/items/none/validate-work-order`, 'LB-STAFF', {})).status).toBe(403);
+    expect((await call('POST', `/api/vcc/plans/${qcPlan.id}/items/none/validate-work-order`, 'QC-STAFF', {})).status).toBe(404);
   });
 });
