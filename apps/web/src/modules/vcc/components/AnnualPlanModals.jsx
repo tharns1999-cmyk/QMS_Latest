@@ -6,6 +6,7 @@ import { computeDueDates, computeDueDateForMonth, fetchVccDocumentProfiles } fro
 import { formatVccDateTime, formatVccDueDatesList } from '../utils/vccDateUtils';
 import { useVccModalAccessibility } from '../hooks/useVccModalAccessibility';
 import { VccDiscardConfirmDialog } from './VccDiscardConfirmDialog';
+import { AnnualPlanAuditTrailTimeline } from './AnnualPlanAuditTrailTimeline';
 
 const PLAN_AUDIT_LABELS = {
   VCC_PLAN_CREATED: { label: 'สร้างแผนประจำปีใหม่', badge: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
@@ -1212,7 +1213,7 @@ export const GroupWorkOrderModal = ({
 
 export { PlanSettingsModal } from './PlanSettingsModal';
 
-export const PlanHistoryModal = ({ open, onClose, history = [] }) => {
+export const PlanHistoryModal = ({ open, onClose, history = [], plan = null }) => {
   const {
     dialogRef,
     requestClose,
@@ -1235,10 +1236,12 @@ export const PlanHistoryModal = ({ open, onClose, history = [] }) => {
         aria-modal="true"
         aria-labelledby="plan-history-title"
         tabIndex="-1"
-        className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-xl w-full overflow-hidden outline-none"
+        className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-2xl w-full overflow-hidden outline-none"
       >
-        <div className="px-6 py-4.5 border-b border-slate-200 flex items-center justify-between">
-          <h2 id="plan-history-title" className="text-xl font-bold text-slate-900 tracking-tight">ประวัติการอนุมัติและแก้ไขแผน (Audit Log)</h2>
+        <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+          <h2 id="plan-history-title" className="text-lg font-bold text-slate-900 tracking-tight">
+            ประวัติการอนุมัติและแก้ไขแผน (Audit Log)
+          </h2>
           <button
             type="button"
             onClick={requestClose}
@@ -1248,24 +1251,14 @@ export const PlanHistoryModal = ({ open, onClose, history = [] }) => {
             <X size={20} />
           </button>
         </div>
-        <div className="p-6 max-h-[75vh] overflow-y-auto space-y-3.5">
-          {history.length === 0 ? (
-            <div className="text-sm text-slate-500 text-center py-8 font-medium">ยังไม่มีประวัติการดำเนินการ</div>
-          ) : (
-            history.map((h) => {
-              const meta = PLAN_AUDIT_LABELS[h.action] || { label: h.action, badge: 'bg-slate-100 text-slate-700 border-slate-200' };
-              return (
-                <div key={h.id} className="p-4 rounded-xl border border-slate-200 text-sm space-y-2">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className={`px-2.5 py-0.5 rounded-md border text-xs font-bold ${meta.badge}`}>{meta.label}</span>
-                    <span className="text-xs text-slate-500 font-sans">{formatVccDateTime(h.at)} • {h.actor_name || h.actor_id}</span>
-                  </div>
-                  {h.details?.reason && <div className="text-rose-700 font-semibold text-sm">เหตุผล: {h.details.reason}</div>}
-                  {h.details?.comment && <div className="text-slate-700 font-medium text-sm">ความเห็น: {h.details.comment}</div>}
-                </div>
-              );
-            })
-          )}
+        <div className="p-4 sm:p-5 max-h-[75vh] overflow-y-auto">
+          <AnnualPlanAuditTrailTimeline
+            history={history}
+            plan={plan}
+            collapsible={false}
+            showDrawerButton={false}
+            maxHeightClass="max-h-[60vh]"
+          />
         </div>
       </div>
     </div>

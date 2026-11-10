@@ -44,6 +44,7 @@ import AnnualPlanMatrixTable from './AnnualPlanMatrixTable';
 import AnnualPlanQuarterlyView from './AnnualPlanQuarterlyView';
 import AnnualPlanViewSwitcher from './AnnualPlanViewSwitcher';
 import AnnualPlanOverviewCards from './AnnualPlanOverviewCards';
+import { AnnualPlanAuditTrailTimeline } from './AnnualPlanAuditTrailTimeline';
 import SmartAssetImportModal from './SmartAssetImportModal';
 import useStore from '../../../store/useStore';
 
@@ -1006,6 +1007,12 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
                   onOpenJustificationModal={() => setJustificationModalOpen(true)}
                 />
               )}
+
+              {/* Audit Trail Timeline Section (Bottom of Workspace) */}
+              <AnnualPlanAuditTrailTimeline
+                history={planDetail?.history || []}
+                plan={activePlan}
+              />
             </div>
           )}
         </>
