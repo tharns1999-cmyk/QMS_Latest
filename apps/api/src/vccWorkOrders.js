@@ -2281,12 +2281,17 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
       return c.json({ error: 'ไฟล์ต้องเป็น PDF' }, 400);
     }
 
-    const rawFileName = c.req.query('filename') || c.req.header('x-filename') || 'certificate.pdf';
-    const fileName = decodeURIComponent(rawFileName).trim().replace(/[/\\?%*:|"<>]/g, '_') || 'certificate.pdf';
-    const certificateNo = c.req.query('certificate_no') ? decodeURIComponent(c.req.query('certificate_no')).trim() : (existing.certificate_no || null);
-    const issueDate = c.req.query('issue_date') ? decodeURIComponent(c.req.query('issue_date')).trim() : null;
-    const validUntil = c.req.query('valid_until') ? decodeURIComponent(c.req.query('valid_until')).trim() : null;
-    const changeReason = c.req.query('change_reason') ? decodeURIComponent(c.req.query('change_reason')).trim() : null;
+    // c.req.query() is already URL-decoded: decoding again corrupts a name with '%' or throws. Only the header is still encoded.
+    const q = (name, max) => c.req.query(name)?.trim().slice(0, max) || null;
+    let rawFileName = c.req.query('filename');
+    if (!rawFileName) {
+      try { rawFileName = decodeURIComponent(c.req.header('x-filename') || ''); } catch { rawFileName = ''; }
+    }
+    const fileName = rawFileName.trim().replace(/[/\\?%*:|"<>]/g, '_').slice(0, 200) || 'certificate.pdf';
+    const certificateNo = q('certificate_no', 100) || existing.certificate_no || null;
+    const issueDate = q('issue_date', 10);
+    const validUntil = q('valid_until', 10);
+    const changeReason = q('change_reason', 1000);
 
     if (issueDate) {
       if (!DATE_RE.test(issueDate)) return c.json({ error: 'วันที่ออกใบรับรองไม่ถูกต้องตามรูปแบบ (YYYY-MM-DD)' }, 400);

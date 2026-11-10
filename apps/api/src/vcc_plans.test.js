@@ -276,9 +276,12 @@ describe('VCC Phase 2: Calibration Schedule Rules, Annual Plan Matrix & Plan App
 
     // 7. Changing plan due_date_rule to START_OF_MONTH recalculates item due_dates
     const switchRule = await call('PUT', `/api/vcc/plans/${planId}`, 'VP-DCC', {
-      due_date_rule: 'START_OF_MONTH'
+      due_date_rule: 'START_OF_MONTH',
+      document_code: 'FORGED-CODE'
     });
     expect(switchRule.status).toBe(200);
+    // The server-issued code survives a draft edit.
+    expect((await env.DB.prepare('SELECT document_code FROM vcc_annual_plans WHERE id = ?').bind(planId).first()).document_code).not.toBe('FORGED-CODE');
     const updatedV1 = switchRule.body.items.find((i) => i.asset_code === 'V001');
     expect(updatedV1.due_dates).toEqual(['2026-02-01']);
 

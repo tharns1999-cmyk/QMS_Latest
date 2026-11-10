@@ -377,6 +377,13 @@ describe('VCC Phase 3.2: Calibration Execution, Digital Certificates & Controlle
     expect(dlV1.headers.get('content-disposition')).toContain('attachment');
     const dlV1Bytes = new Uint8Array(await dlV1.arrayBuffer());
     expect(new TextDecoder().decode(dlV1Bytes)).toContain('Certificate Version 1');
+
+    // A '%' in the name used to be URL-decoded twice and crash the upload; long text is capped.
+    const up3 = await uploadCert(woId, 'M1-PERF', certV2Bytes,
+      `?filename=${encodeURIComponent('cert 100%.pdf')}&certificate_no=${'9'.repeat(300)}&change_reason=${encodeURIComponent('ทดสอบ 100%')}`);
+    expect(up3.status).toBe(200);
+    expect(up3.body.workOrder.certificate_file_name).toBe('cert 100_.pdf');
+    expect(up3.body.workOrder.certificate_no).toHaveLength(100);
   });
 
   it('enforces controlled amendment with snapshot history, RBAC, and Segregation of Duties on CLOSED work orders', async () => {

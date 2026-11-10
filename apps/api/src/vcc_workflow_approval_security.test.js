@@ -416,6 +416,10 @@ describe('VCC Phase 1 Step 3: Backend Workflow & Approval Security', () => {
     expect(pdfRes.headers.get('content-type')).toBe('application/pdf');
     const pdfBytes = await pdfRes.arrayBuffer();
     expect(pdfBytes.byteLength).toBeGreaterThan(0);
+    // Controlled record: never cached, and each view is in the audit trail.
+    expect(pdfRes.headers.get('cache-control')).toBe('private, no-store');
+    const viewed = await env.DB.prepare("SELECT actor_id FROM audit_log WHERE action = 'VCC_PLAN_PDF_VIEWED' AND json_extract(details, '$.plan_id') = ?").bind(planId).first();
+    expect(viewed?.actor_id).toBe('QC-PREP-L4');
   });
 
   // 8. Concurrent Approval / Double-Submit Prevention & Orphan Tombstone
