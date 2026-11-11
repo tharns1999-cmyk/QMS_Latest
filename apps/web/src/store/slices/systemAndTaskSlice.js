@@ -1,5 +1,5 @@
 import { INITIAL_NOTIFICATIONS } from '../fixtures/seedData';
-import { isActionableTask } from '../../modules/dcc/utils/taskFilter';
+import { isActionableTask, isAssignedToSomeoneElse } from '../../modules/dcc/utils/taskFilter';
 import { calculateTaskDueDate } from '../../modules/dcc/utils/slaCalculator';
 import { calculateCopyAllocations, cleanLocationName } from '../../modules/dcc/services/MasterDataService';
 import { resolveDccAdminUserId } from '../../modules/dcc/store/externalDocSlice';
@@ -134,6 +134,45 @@ export const getUserTaskBadgeCount = (tasks = [], user = null, documents = [], r
   if (!user) return 0;
   const actionable = getUserActionableTasks(tasks, user, documents, referenceDate);
   return actionable.filter(t => t.actionRequired !== false && !t.is_completed && t.status !== 'COMPLETED').length;
+};
+
+export const isVccPlanTask = (t) => {
+  if (!t) return false;
+  const normType = String(t.type || t.taskType || '').toUpperCase();
+  return (
+    t.referenceType === 'VCC_PLAN' ||
+    normType.startsWith('VCC_PLAN_') ||
+    Boolean(t.planId) ||
+    String(t.id).startsWith('api-vcc-') ||
+    String(t.id).startsWith('vcc-')
+  );
+};
+
+export const getDccTaskCount = (tasks = [], user = null, documents = [], referenceDate = null) => {
+  if (!user) return 0;
+  const refDate = referenceDate ? new Date(referenceDate) : new Date();
+  return (tasks || []).filter(t => 
+    !isVccPlanTask(t) && 
+    isActionableTask(t, user, documents, refDate) && 
+    !isAssignedToSomeoneElse(t, user) &&
+    t.actionRequired !== false && 
+    !t.is_completed && 
+    t.status !== 'COMPLETED'
+  ).length;
+};
+
+export const getVccTaskCount = (tasks = [], vccWorkTasks = [], user = null, documents = [], referenceDate = null) => {
+  if (!user) return 0;
+  const refDate = referenceDate ? new Date(referenceDate) : new Date();
+  const planTasks = (tasks || []).filter(t => 
+    isVccPlanTask(t) && 
+    isActionableTask(t, user, documents, refDate) && 
+    !isAssignedToSomeoneElse(t, user) &&
+    t.actionRequired !== false && 
+    !t.is_completed && 
+    t.status !== 'COMPLETED'
+  ).length;
+  return planTasks + (vccWorkTasks || []).length;
 };
 
 /**
@@ -464,6 +503,20 @@ export const createSystemAndTaskSlice = (set, get) => ({
     const effectiveToday = s.getEffectiveToday ? s.getEffectiveToday() : (s.simulatedSystemDate ? new Date(s.simulatedSystemDate) : new Date());
     const allDocs = [...(s.documents || []), ...(s.externalDocuments || [])];
     return getUserTaskBadgeCount(s.tasks, user || s.currentUser, allDocs, effectiveToday);
+  },
+
+  getDccTaskBadgeCount: (user) => {
+    const s = get();
+    const effectiveToday = s.getEffectiveToday ? s.getEffectiveToday() : (s.simulatedSystemDate ? new Date(s.simulatedSystemDate) : new Date());
+    const allDocs = [...(s.documents || []), ...(s.externalDocuments || [])];
+    return getDccTaskCount(s.tasks, user || s.currentUser, allDocs, effectiveToday);
+  },
+
+  getVccTaskBadgeCount: (user) => {
+    const s = get();
+    const effectiveToday = s.getEffectiveToday ? s.getEffectiveToday() : (s.simulatedSystemDate ? new Date(s.simulatedSystemDate) : new Date());
+    const allDocs = [...(s.documents || []), ...(s.externalDocuments || [])];
+    return getVccTaskCount(s.tasks, s.vccWorkTasks, user || s.currentUser, allDocs, effectiveToday);
   },
 
   // Centralized SLA Check & Auto-Transition Engine

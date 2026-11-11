@@ -1,18 +1,35 @@
 import { useModuleAccess } from '../../../shared/components/ModuleAccessProvider';
 import { isApiMode } from '../../../api/client';
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import useStore from '../../../store/useStore';
+import useStore, { getDccTaskCount, getVccTaskCount } from '../../../store/useStore';
 import { moduleRegistry, MODULE_STATUS, isUserAuthorizedForModule } from '../moduleRegistry';
 import { usePortalTranslation } from '../locales/portalTranslations';
 import { ArrowRight, Lock, Sparkles } from 'lucide-react';
 
 const PortalLandingPage = () => {
   const navigate = useNavigate();
-  const { currentUser } = useStore();
+  const { 
+    currentUser, 
+    tasks, 
+    vccWorkTasks, 
+    documents, 
+    externalDocuments, 
+    simulatedSystemDate 
+  } = useStore();
   const { t } = usePortalTranslation();
   const moduleAccess = useModuleAccess();
   const vcc = moduleAccess.modules?.find((m) => m.moduleId === 'vcc');
+
+  const allDocs = useMemo(() => [...(documents || []), ...(externalDocuments || [])], [documents, externalDocuments]);
+
+  const dccTaskCount = useMemo(() => {
+    return getDccTaskCount(tasks, currentUser, allDocs, simulatedSystemDate);
+  }, [tasks, currentUser, allDocs, simulatedSystemDate]);
+
+  const vccTaskCount = useMemo(() => {
+    return getVccTaskCount(tasks, vccWorkTasks, currentUser, allDocs, simulatedSystemDate);
+  }, [tasks, vccWorkTasks, currentUser, allDocs, simulatedSystemDate]);
 
   const visibleModules = moduleRegistry
     .filter((module) => isUserAuthorizedForModule(module, currentUser, module.moduleId === 'vcc' ? vcc : null))
@@ -58,6 +75,16 @@ const PortalLandingPage = () => {
           const isActive = module.status === MODULE_STATUS.ACTIVE || module.status === 'READ_ONLY';
           const hasAccess = hasModuleAccess(module);
           
+          let pendingCount = 0;
+          let taskRoute = null;
+          if (module.moduleId === 'dcc') {
+            pendingCount = dccTaskCount;
+            taskRoute = '/dcc/tasks';
+          } else if (module.moduleId === 'vcc') {
+            pendingCount = vccTaskCount;
+            taskRoute = '/vcc/tasks';
+          }
+          
           return (
             <div 
               key={module.moduleId}
@@ -83,22 +110,43 @@ const PortalLandingPage = () => {
                   <Icon size={22} strokeWidth={1.75} />
                 </div>
                 
-                {isActive ? (
-                  hasAccess ? (
-                    <span className="badge-active">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                      {t('hub', 'open')}
-                    </span>
+                <div className="flex items-center gap-2 flex-wrap justify-end">
+                  {isActive && hasAccess && pendingCount > 0 && (
+                    <button
+                      type="button"
+                      data-testid={`module-task-badge-${module.moduleId}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (taskRoute) {
+                          navigate(taskRoute);
+                        }
+                      }}
+                      className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200 animate-pulse-subtle hover:bg-rose-100 transition-colors cursor-pointer"
+                      title={`${pendingCount > 99 ? '99+' : pendingCount} งานรอคุณ`}
+                      aria-label={`${pendingCount > 99 ? '99+' : pendingCount} งานรอคุณ`}
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+                      {pendingCount > 99 ? '99+' : pendingCount} งานรอคุณ
+                    </button>
+                  )}
+
+                  {isActive ? (
+                    hasAccess ? (
+                      <span className="badge-active">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                        {t('hub', 'open')}
+                      </span>
+                    ) : (
+                      <span className="badge-rejected">
+                        <Lock size={11} /> Locked
+                      </span>
+                    )
                   ) : (
-                    <span className="badge-rejected">
-                      <Lock size={11} /> Locked
+                    <span className="badge-draft">
+                      {t('hub', 'comingSoon')}
                     </span>
-                  )
-                ) : (
-                  <span className="badge-draft">
-                    {t('hub', 'comingSoon')}
-                  </span>
-                )}
+                  )}
+                </div>
               </div>
               
               <h3 className={`text-base font-bold mb-1.5 tracking-tight ${isActive && hasAccess ? 'text-[#1E1E1E] group-hover:text-[#0D99FF]' : 'text-slate-700'}`}>

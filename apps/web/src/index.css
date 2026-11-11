@@ -61,6 +61,20 @@ body,
   }
 }
 
+@keyframes pulseSubtle {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.85;
+    transform: scale(0.99);
+  }
+}
+
+.animate-pulse-subtle {
+  animation: pulseSubtle 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
 .animate-in {
   animation-duration: 150ms;
   animation-fill-mode: both;
