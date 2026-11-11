@@ -102,15 +102,14 @@ const PortalLandingPage = () => {
             >
               {module.moduleId === 'vcc' && isApiMode && module.status !== 'ACTIVE' && <p className="mb-3 text-sm font-semibold text-slate-700">{{ READ_ONLY: 'อ่านอย่างเดียว', MAINTENANCE: 'ปรับปรุงระบบ', DISABLED: 'ปิดใช้งาน' }[module.status]}{vcc?.maintenance_message ? ` · ${vcc.maintenance_message}` : ''}</p>}
               <div className="flex items-start justify-between mb-4">
-                <div className={`p-3 rounded-xl transition-colors ${
-                  isActive && hasAccess 
-                    ? 'bg-[#E5F4FF] text-[#0D99FF] group-hover:bg-[#0D99FF] group-hover:text-white' 
-                    : 'bg-[#F5F5F5] text-slate-400'
-                }`}>
-                  <Icon size={22} strokeWidth={1.75} />
-                </div>
-                
-                <div className="flex items-center gap-2 flex-wrap justify-end">
+                <div className="relative">
+                  <div className={`p-3 rounded-xl transition-colors ${
+                    isActive && hasAccess 
+                      ? 'bg-[#E5F4FF] text-[#0D99FF] group-hover:bg-[#0D99FF] group-hover:text-white' 
+                      : 'bg-[#F5F5F5] text-slate-400'
+                  }`}>
+                    <Icon size={22} strokeWidth={1.75} />
+                  </div>
                   {isActive && hasAccess && pendingCount > 0 && (
                     <button
                       type="button"
@@ -121,15 +120,16 @@ const PortalLandingPage = () => {
                           navigate(taskRoute);
                         }
                       }}
-                      className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200 animate-pulse-subtle hover:bg-rose-100 transition-colors cursor-pointer"
+                      className="absolute -top-1.5 -right-1.5 flex items-center justify-center px-1.5 h-5 min-w-[20px] rounded-full bg-rose-600 text-white font-bold text-[11px] ring-2 ring-white shadow-sm transition-transform hover:scale-110 cursor-pointer animate-pulse-subtle"
                       title={`${pendingCount > 99 ? '99+' : pendingCount} งานรอคุณ`}
                       aria-label={`${pendingCount > 99 ? '99+' : pendingCount} งานรอคุณ`}
                     >
-                      <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
-                      {pendingCount > 99 ? '99+' : pendingCount} งานรอคุณ
+                      {pendingCount > 99 ? '99+' : pendingCount}
                     </button>
                   )}
-
+                </div>
+                
+                <div className="flex items-center gap-2 flex-wrap justify-end">
                   {isActive ? (
                     hasAccess ? (
                       <span className="badge-active">
