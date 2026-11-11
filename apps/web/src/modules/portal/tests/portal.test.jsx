@@ -69,7 +69,9 @@ describe('Portal Architecture & Landing Page', () => {
 
     const dccBadge = screen.getByTestId('module-task-badge-dcc');
     expect(dccBadge).toBeInTheDocument();
-    expect(dccBadge).toHaveTextContent('2 งานรอคุณ');
+    expect(dccBadge).toHaveTextContent('2');
+    expect(dccBadge).toHaveAttribute('aria-label', '2 งานรอคุณ');
+    expect(dccBadge).toHaveClass('absolute', '-top-1.5', '-right-1.5', 'bg-rose-600');
 
     // Clicking the badge must deep-link to /dcc/tasks (not /dcc)
     fireEvent.click(dccBadge);
@@ -108,7 +110,9 @@ describe('Portal Architecture & Landing Page', () => {
 
     const vccBadge = screen.getByTestId('module-task-badge-vcc');
     expect(vccBadge).toBeInTheDocument();
-    expect(vccBadge).toHaveTextContent('3 งานรอคุณ');
+    expect(vccBadge).toHaveTextContent('3');
+    expect(vccBadge).toHaveAttribute('aria-label', '3 งานรอคุณ');
+    expect(vccBadge).toHaveClass('absolute', '-top-1.5', '-right-1.5', 'bg-rose-600');
 
     // Clicking the badge must deep-link to /vcc/tasks (not /vcc)
     fireEvent.click(vccBadge);
@@ -168,7 +172,8 @@ describe('Portal Architecture & Landing Page', () => {
 
     const dccBadge = screen.getByTestId('module-task-badge-dcc');
     expect(dccBadge).toBeInTheDocument();
-    expect(dccBadge).toHaveTextContent('99+ งานรอคุณ');
+    expect(dccBadge).toHaveTextContent('99+');
+    expect(dccBadge).toHaveAttribute('aria-label', '99+ งานรอคุณ');
   });
 
   it('dynamically refreshes badge count when currentUser is switched', () => {
@@ -215,6 +220,7 @@ describe('Portal Architecture & Landing Page', () => {
     // Now badge appears with 1
     const badge = screen.getByTestId('module-task-badge-dcc');
     expect(badge).toBeInTheDocument();
-    expect(badge).toHaveTextContent('1 งานรอคุณ');
+    expect(badge).toHaveTextContent('1');
+    expect(badge).toHaveAttribute('aria-label', '1 งานรอคุณ');
   });
 });
