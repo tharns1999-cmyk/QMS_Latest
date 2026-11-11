@@ -590,6 +590,8 @@ const DocumentDetailModal = ({
 
   let navigate;
   try {
+    // Not a conditional call: the hook is reached on every render in the same order; outside a Router it only throws (caught below).
+    // oxlint-disable-next-line react-hooks/rules-of-hooks
     navigate = useNavigate();
   } catch {
     navigate = (path) => {
