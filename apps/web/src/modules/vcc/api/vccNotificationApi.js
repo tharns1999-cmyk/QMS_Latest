@@ -211,7 +211,12 @@ const runLocalSweep = (nowDate = null) => {
   return summary;
 };
 
-const bellLink = (n) => (n.work_order_id ? `/vcc/work-orders?wo=${encodeURIComponent(n.work_order_id)}` : '/vcc/assets');
+const bellLink = (n) => {
+  if (n.reference_type === 'VCC_PLAN' || (n.notification_type && n.notification_type.startsWith('VCC_PLAN_'))) {
+    return '/vcc/plans';
+  }
+  return n.work_order_id ? `/vcc/work-orders?wo=${encodeURIComponent(n.work_order_id)}` : '/vcc/assets';
+};
 
 /**
  * Loads what is waiting for the current user into the store, where the shared bell reads it next to the DCC

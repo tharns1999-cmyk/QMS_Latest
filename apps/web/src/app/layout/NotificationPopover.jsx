@@ -51,8 +51,17 @@ const NotificationPopover = ({
   const vccNotifications = store?.vccNotifications || EMPTY_NOTIFICATIONS;
   const userNotis = React.useMemo(() => {
     if (propNotifications !== undefined) return propNotifications;
-    return [...(rawNotifications || []).filter(n => isNotificationVisibleToUser(n, currentUser)), ...vccNotifications]
-      .sort((a, b) => new Date(b.timestamp || b.created_at || b.createdAt || 0) - new Date(a.timestamp || a.created_at || a.createdAt || 0));
+    const combined = [...(rawNotifications || []).filter(n => isNotificationVisibleToUser(n, currentUser)), ...vccNotifications];
+    const seen = new Set();
+    const deduped = [];
+    for (const item of combined) {
+      const key = item.id || `${item.title}-${item.timestamp || item.created_at}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        deduped.push(item);
+      }
+    }
+    return deduped.sort((a, b) => new Date(b.timestamp || b.created_at || b.createdAt || 0) - new Date(a.timestamp || a.created_at || a.createdAt || 0));
   }, [rawNotifications, currentUser, propNotifications, vccNotifications]);
 
   const unreadCount = propUnreadCount !== undefined 
@@ -99,15 +108,15 @@ const NotificationPopover = ({
       propOnNotificationClick(item);
       return;
     }
+    if (markNotificationAsRead && item.id) {
+      markNotificationAsRead(item.id, currentUser?.id);
+    }
     if (item.module === 'VCC') {
       setIsOpen(false);
       // News is done once opened; an alert stays until it is acknowledged on its own page or the cause is fixed.
       if (item.isEvent) acknowledgeVccNotification(item.vccId).catch(() => {}).then(syncVccNotifications);
-      navigate(item.link);
+      navigate(item.link || '/vcc/plans');
       return;
-    }
-    if (markNotificationAsRead && item.id) {
-      markNotificationAsRead(item.id, currentUser?.id);
     }
     setIsOpen(false);
     const target = resolveNotificationNavigation(item, store);

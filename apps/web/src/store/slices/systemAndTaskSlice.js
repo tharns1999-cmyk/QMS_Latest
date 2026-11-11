@@ -34,8 +34,11 @@ export const isNotificationVisibleToUser = (notification, user) => {
     return true;
   }
 
+  const userLevel = Number(user.approval_level ?? user.approvalLevel ?? 0);
+  const isGlobalAuth = Boolean(user.isDcc || user.isQmr || userLevel >= 6);
+
   // 2. Direct user targeting
-  const targetId = notification.userId || notification.user_id;
+  const targetId = notification.userId || notification.user_id || notification.targetUserId || notification.target_user_id;
   const userEmpId = user.empId || user.id;
   if (targetId && (targetId === user.id || targetId === userEmpId)) {
     return true;
@@ -48,26 +51,40 @@ export const isNotificationVisibleToUser = (notification, user) => {
     }
   }
 
-  // 4. Department-level targeting
-  const targetDept = notification.targetDepartment || notification.recipientDept || (notification.userId ? null : notification.department);
-  if (targetDept) {
-    const userDepts = [
-      user.department,
-      user.dept,
-      user.primary_department,
-      ...(Array.isArray(user.departments) ? user.departments : []),
-      ...(Array.isArray(user.affiliated_departments) ? user.affiliated_departments : []),
-      ...(Array.isArray(user.depts) ? user.depts : []),
-      ...(Array.isArray(user.secondaryDepartments) ? user.secondaryDepartments : [])
-    ].filter(Boolean);
+  // If strictly targeted to a user and did not match, and has no department or role fallback
+  if (targetId && !notification.targetDepartment && !notification.targetRole && !notification.minApprovalLevel) {
+    return false;
+  }
 
+  // 4. Role and Approval Level targeting (e.g. VCC Plan APPROVER or REVIEWER)
+  if (notification.targetRole === 'APPROVER' || (notification.minApprovalLevel && Number(notification.minApprovalLevel) >= 6)) {
+    return isGlobalAuth;
+  }
+
+  const userDepts = getUserDepartments(user);
+  const targetDept = notification.targetDepartment || notification.recipientDept || (notification.userId ? null : notification.department);
+
+  if (notification.targetRole === 'REVIEWER' || (notification.minApprovalLevel && Number(notification.minApprovalLevel) === 5)) {
+    if (isGlobalAuth) return true;
+    if (targetDept) {
+      const deptMatch = userDepts.some(d => String(d).trim().toLowerCase() === String(targetDept).trim().toLowerCase());
+      return deptMatch && userLevel >= 5;
+    }
+    return userLevel >= 5;
+  }
+
+  // 5. Department-level targeting
+  if (targetDept) {
     if (userDepts.some(d => String(d).trim().toLowerCase() === String(targetDept).trim().toLowerCase())) {
+      return true;
+    }
+    if (isGlobalAuth) {
       return true;
     }
   }
 
-  // 5. If no target specified at all -> broadcast
-  if (!targetId && (!Array.isArray(notification.targetUserIds) || notification.targetUserIds.length === 0) && !targetDept) {
+  // 6. Broadcast if no target
+  if (!targetId && (!Array.isArray(notification.targetUserIds) || notification.targetUserIds.length === 0) && !targetDept && !notification.targetRole) {
     return true;
   }
 
@@ -303,6 +320,7 @@ export const createSystemAndTaskSlice = (set, get) => ({
       title.includes('DAR') || notifObj.docCode?.includes('DAR') ? 'DAR' :
       (title.includes('เอกสารภายนอก') || notifObj.link?.includes('external') || notifObj.docCode?.startsWith('ED')) ? 'EXTERNAL_DOC' :
       (title.includes('สำเนา') || title.includes('ทดแทน') || title.includes('เรียกคืน')) ? 'CONTROLLED_COPY' :
+      (title.includes('แผนการทวนสอบ') || notifObj.link?.includes('/vcc/plans') || notifObj.type?.startsWith('VCC_PLAN_')) ? 'VCC_PLAN' :
       'SYSTEM'
     );
 
@@ -316,11 +334,17 @@ export const createSystemAndTaskSlice = (set, get) => ({
     );
 
     const newEntry = {
+      ...notifObj,
       id: notifObj.id || `notif-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
       userId: notifObj.userId || notifObj.user_id || null,
       user_id: notifObj.userId || notifObj.user_id || null,
+      targetUserId: notifObj.targetUserId || notifObj.target_user_id || notifObj.userId || notifObj.user_id || null,
       targetUserIds: Array.isArray(notifObj.targetUserIds) ? notifObj.targetUserIds : (notifObj.userId ? [notifObj.userId] : []),
       targetDepartment: notifObj.targetDepartment || notifObj.department || null,
+      targetRole: notifObj.targetRole || null,
+      minApprovalLevel: notifObj.minApprovalLevel || null,
+      module: notifObj.module || (cat === 'VCC_PLAN' ? 'VCC' : null),
+      severity: notifObj.severity || 'INFO',
       isGlobal: Boolean(notifObj.isGlobal || notifObj.global),
       title,
       message,
@@ -329,7 +353,7 @@ export const createSystemAndTaskSlice = (set, get) => ({
       category: cat,
       docCode: notifObj.docCode || notifObj.doc_code || null,
       refId: notifObj.refId || notifObj.referenceId || null,
-      link: notifObj.link || '/dcc/tasks',
+      link: notifObj.link || (cat === 'VCC_PLAN' ? '/vcc/plans' : '/dcc/tasks'),
       isRead: false,
       read: false,
       readBy: [],
