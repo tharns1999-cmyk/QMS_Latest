@@ -211,6 +211,20 @@ describe('VCC Phase 2: Calibration Schedule Rules, Annual Plan Matrix & Plan App
     expect(itemV2.status).toBe(201);
     expect(itemV2.body.item.due_dates).toEqual(['2026-09-30']);
 
+    // 4b. Custom Due Date: accepts custom date within the planned month and persists it
+    const customItem = await call('POST', `/api/vcc/plans/${planId}/items`, 'VP-DCC', {
+      asset_id: v002.id,
+      provider_name: 'ห้องปฏิบัติการภายนอก',
+      frequency_label: 'รายปี',
+      planned_months: [9],
+      due_dates: ['2026-09-15'],
+      responsible_dept: 'VPQC',
+      responsible_label: 'QC Sup.',
+      remarks: 'V002 ทวนสอบกลางเดือน 9'
+    });
+    expect(customItem.status).toBe(200);
+    expect(customItem.body.item.due_dates).toEqual(['2026-09-15']);
+
     // 5. Legacy Draft Group Migration & Submission Gate:
     // Seed a legacy group item in this DRAFT plan; submit MUST block until converted!
     await env.DB.prepare(

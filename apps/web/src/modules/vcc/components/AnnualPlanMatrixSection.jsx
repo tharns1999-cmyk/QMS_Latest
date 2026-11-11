@@ -15,6 +15,7 @@ import {
   createVccPlan,
   createVccPlanRevision,
   updateVccPlan,
+  deleteVccPlan,
   saveVccPlanItem,
   deleteVccPlanItem,
   convertVccPlanGroupItem,
@@ -48,9 +49,10 @@ import { AnnualPlanAuditTrailTimeline } from './AnnualPlanAuditTrailTimeline';
 import SmartAssetImportModal from './SmartAssetImportModal';
 import useStore from '../../../store/useStore';
 
-const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
+const AnnualPlanMatrixSection = ({ activeDepartments = [], currentUser: propUser }) => {
   const { currentUser: sessionUser, masterUsers, tasks } = useStore();
-  const currentUser = useVccPolicyUser(sessionUser);
+  const rawUser = propUser || sessionUser;
+  const currentUser = useVccPolicyUser(rawUser);
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const queryTab = searchParams.get('tab');
@@ -127,15 +129,25 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
     return 'DRAFT';
   }, [queryTab, tasks, currentUser]);
 
+  const userDepts = useMemo(() => getUserDeptCodes(currentUser), [currentUser]);
+
   const [statusTab, setStatusTab] = useState(queryTab || initialTab);
   const [filterYear, setFilterYear] = useState('');
-  const [filterDept, setFilterDept] = useState(() => (!canReadAll && userDept ? userDept : ''));
+  const [filterDept, setFilterDept] = useState(() => {
+    if (canReadAll) return '';
+    const depts = userDepts;
+    return depts.length > 1 ? 'MY_DEPTS' : (depts[0] || userDept || '');
+  });
 
   useEffect(() => {
-    if (!canReadAll && userDept) {
-      setFilterDept(userDept);
+    if (!canReadAll) {
+      if (userDepts.length > 1) {
+        setFilterDept((prev) => (prev && (prev === 'MY_DEPTS' || userDepts.includes(prev)) ? prev : 'MY_DEPTS'));
+      } else if (userDepts.length === 1) {
+        setFilterDept(userDepts[0]);
+      }
     }
-  }, [canReadAll, userDept]);
+  }, [canReadAll, userDepts]);
 
   useEffect(() => {
     if (queryTab) {
@@ -252,7 +264,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
   const loadPlansAndMeta = useCallback(async (preferredPlanId = '') => {
     setLoading(true);
     try {
-      const effectiveDept = (!canReadAll && userDept) ? userDept : filterDept;
+      const effectiveDept = filterDept === 'MY_DEPTS' ? '' : filterDept;
       const targetStatus = viewState === 'HUB' ? 'ALL' : statusTab;
       const [settingsRes, planList, allStatusPlans, assetsList] = await Promise.all([
         fetchVccPlanSettings(),
@@ -394,7 +406,10 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
     // Only a real year counts: a click event or a filter label must not turn into NaN
     const fixedYear = Number.isInteger(Number(overrideYear)) && Number(overrideYear) > 0 ? Number(overrideYear) : null;
     const targetYear = fixedYear || (Number(filterYear) > 0 ? Number(filterYear) : currentYear);
-    const targetDept = (!canReadAll && userDept) || filterDept || userDept || activeDepartments[0]?.code || '';
+    const depts = userDepts;
+    const primaryDept = String(currentUser?.department || currentUser?.primary_department || depts[0] || '').toUpperCase();
+    const candidateDept = filterDept && filterDept !== 'MY_DEPTS' ? filterDept : primaryDept;
+    const targetDept = (canReadAll || depts.includes(candidateDept)) ? candidateDept : (primaryDept || createDepartments[0]?.code || '');
     const defaultDocCode = resolvePlanCode({ dept: targetDept, year: targetYear });
     setEditingPlan(null);
     setPlanFormError('');
@@ -530,11 +545,25 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
       }
     }
 
+    let oldDueDates = [];
+    try {
+      oldDueDates = Array.isArray(item.due_dates) ? item.due_dates : JSON.parse(item.due_dates || '[]');
+    } catch {
+      oldDueDates = [];
+    }
+    const updatedDueDates = updatedMonths.map((m) => {
+      if (m === month && options.due_date) return options.due_date;
+      const prevIdx = currentMonths.indexOf(m);
+      if (prevIdx !== -1 && oldDueDates[prevIdx]) return oldDueDates[prevIdx];
+      return computeDueDateForMonth(planDetail.plan.plan_year, m, planDetail.plan.due_date_rule || 'END_OF_MONTH');
+    });
+
     await saveVccPlanItem(planDetail.plan.id, {
       asset_id: item.asset_id,
       provider_name: resolvedProvider,
       frequency_label: item.frequency_label || 'รายปี',
       planned_months: updatedMonths,
+      due_dates: updatedDueDates,
       responsible_dept: item.responsible_dept || planDetail.plan.department,
       responsible_label: item.responsible_label || '',
       remarks: item.remarks || ''
@@ -581,16 +610,74 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
     const currentMonths = item.planned_months || [];
     if (!currentMonths.includes(month)) return;
     const updatedMonths = currentMonths.filter((m) => m !== month);
+    let oldDueDates = [];
+    try {
+      oldDueDates = Array.isArray(item.due_dates) ? item.due_dates : JSON.parse(item.due_dates || '[]');
+    } catch {
+      oldDueDates = [];
+    }
+    const updatedDueDates = updatedMonths.map((m) => {
+      const prevIdx = currentMonths.indexOf(m);
+      return (prevIdx !== -1 && oldDueDates[prevIdx])
+        ? oldDueDates[prevIdx]
+        : computeDueDateForMonth(planDetail.plan.plan_year, m, planDetail.plan.due_date_rule || 'END_OF_MONTH');
+    });
+
     await saveVccPlanItem(planDetail.plan.id, {
       asset_id: item.asset_id,
       provider_name: item.provider_name || 'ทวนสอบภายใน',
       frequency_label: item.frequency_label || 'รายปี',
       planned_months: updatedMonths,
+      due_dates: updatedDueDates,
       responsible_dept: item.responsible_dept || planDetail.plan.department,
       responsible_label: item.responsible_label || '',
       remarks: item.remarks || (updatedMonths.length === 0 ? 'ยังไม่ถึงกำหนดตามรอบความถี่' : '')
     });
     toast.success(`ยกเลิกรอบเดือน ${month} สำหรับ ${item.asset_code} แล้ว`);
+    const refreshed = await fetchVccPlanDetail(planDetail.plan.id);
+    setPlanDetail(refreshed);
+  };
+
+  const handleUpdateMonthDueDate = async (item, month, newDueDate) => {
+    if (!planDetail?.plan) return;
+    const currentMonths = item.planned_months || [];
+    const monthIdx = currentMonths.indexOf(month);
+    if (monthIdx === -1) return;
+
+    let currentDueDates = [];
+    try {
+      currentDueDates = Array.isArray(item.due_dates)
+        ? [...item.due_dates]
+        : JSON.parse(item.due_dates || '[]');
+    } catch {
+      currentDueDates = [];
+    }
+
+    const alignedDueDates = currentMonths.map((m, idx) => {
+      if (m === month) return newDueDate;
+      if (currentDueDates[idx]) return currentDueDates[idx];
+      return computeDueDateForMonth(
+        planDetail.plan.plan_year,
+        m,
+        planDetail.plan.due_date_rule || 'END_OF_MONTH'
+      );
+    });
+
+    await saveVccPlanItem(planDetail.plan.id, {
+      asset_id: item.asset_id,
+      provider_name: item.provider_name || 'ทวนสอบภายใน',
+      frequency_label: item.frequency_label || 'รายปี',
+      planned_months: currentMonths,
+      due_dates: alignedDueDates,
+      responsible_dept: item.responsible_dept || planDetail.plan.department,
+      responsible_label: item.responsible_label || '',
+      remarks: item.remarks || '',
+      mpe: item.mpe,
+      acceptance_criteria: item.acceptance_criteria,
+      calibration_points: item.calibration_points
+    });
+
+    toast.success(`กำหนดวันครบกำหนดรอบเดือน ${month} สำหรับ ${item.asset_code} แล้ว`);
     const refreshed = await fetchVccPlanDetail(planDetail.plan.id);
     setPlanDetail(refreshed);
   };
@@ -601,11 +688,23 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
       openGroupWorkOrderCheck(item);
       return;
     }
-    const dueDate = computeDueDateForMonth(
-      planDetail.plan.plan_year,
-      month,
-      planDetail.plan.due_date_rule || 'END_OF_MONTH'
-    );
+    let resolvedDueDate = null;
+    const monthIdx = (item.planned_months || []).indexOf(month);
+    let itemDueDates = [];
+    try {
+      itemDueDates = Array.isArray(item.due_dates) ? item.due_dates : JSON.parse(item.due_dates || '[]');
+    } catch {
+      itemDueDates = [];
+    }
+    if (monthIdx !== -1 && itemDueDates[monthIdx]) {
+      resolvedDueDate = itemDueDates[monthIdx];
+    } else {
+      resolvedDueDate = computeDueDateForMonth(
+        planDetail.plan.plan_year,
+        month,
+        planDetail.plan.due_date_rule || 'END_OF_MONTH'
+      );
+    }
     await createVccWorkOrder({
       mode: 'FROM_PLAN',
       plan_id: planDetail.plan.id,
@@ -613,7 +712,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
       planned_month: month,
       asset_id: item.asset_id,
       provider_name: item.provider_name,
-      due_date: dueDate
+      due_date: resolvedDueDate
     });
     toast.success(`เปิดใบสั่งงานเดือน ${month} สำหรับ ${item.asset_code} แล้ว`);
     const refreshed = await fetchVccPlanDetail(planDetail.plan.id);
@@ -896,6 +995,17 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
     }
   };
 
+  const handleDeletePlan = async (planId, reason) => {
+    try {
+      await deleteVccPlan(planId, reason);
+      toast.success('ลบแผนงานฉบับร่างเรียบร้อยแล้ว');
+      await loadPlansAndMeta();
+    } catch (err) {
+      toast.error(err.message || 'เกิดข้อผิดพลาดในการลบแผนงาน');
+      throw err;
+    }
+  };
+
   return (
     <div className="space-y-3" data-testid="annual-plan-matrix">
       {viewState === 'HUB' ? (
@@ -913,7 +1023,9 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
           onPrintPlan={handlePrintPlan}
           onExportPlanExcel={handleExportPlanExcel}
           onOpenHistory={(plan) => { handleSelectPlan(plan.id); setHistoryOpen(true); }}
+          onDeletePlan={handleDeletePlan}
           canCreatePlan={!currentUser?.vccReadOnly}
+          currentUser={currentUser}
         />
       ) : (
         <>
@@ -1054,6 +1166,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
                   onQuickAddMonth={handleQuickAddMonth}
                   onQuickRemoveMonth={handleQuickRemoveMonth}
                   onToggleProvider={handleToggleProvider}
+                  onUpdateDueDate={handleUpdateMonthDueDate}
                   onCreateWorkOrder={handleCreateWorkOrder}
                   onOpenJustificationModal={() => setJustificationModalOpen(true)}
                 />

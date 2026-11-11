@@ -10,6 +10,10 @@ import {
   ListFilter,
   Settings,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
   X
 } from 'lucide-react';
 import AnnualPlanMonthCell from './AnnualPlanMonthCell';
@@ -87,6 +91,7 @@ export const AnnualPlanMatrixTable = ({
   onQuickAddMonth,
   onQuickRemoveMonth,
   onToggleProvider,
+  onUpdateDueDate,
   onCreateWorkOrder
 }) => {
   const [tableSearch, setTableSearch] = useState('');
@@ -96,6 +101,8 @@ export const AnnualPlanMatrixTable = ({
   const [confirmDeleteItem, setConfirmDeleteItem] = useState(null);
   const [filterOpen, setFilterOpen] = useState(false);
   const [addMenuOpen, setAddMenuOpen] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
 
   const filterRef = useDismiss(filterOpen, () => setFilterOpen(false));
   const addMenuRef = useDismiss(addMenuOpen, () => setAddMenuOpen(false));
@@ -153,6 +160,30 @@ export const AnnualPlanMatrixTable = ({
     });
   }, [planItems, tableSearch, activeCategory]);
 
+  // Auto-reset to page 1 whenever search query or category filter changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [tableSearch, activeCategory]);
+
+  const totalItems = flatInstrumentRows.length;
+  const isAll = pageSize >= 9999;
+  const totalPages = isAll ? 1 : Math.max(1, Math.ceil(totalItems / pageSize));
+  const safeCurrentPage = Math.min(Math.max(1, currentPage), totalPages);
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
+
+  const startIndex = totalItems === 0 ? 0 : (safeCurrentPage - 1) * (isAll ? totalItems : pageSize);
+  const endIndex = isAll ? totalItems : Math.min(startIndex + pageSize, totalItems);
+
+  const paginatedItems = useMemo(() => {
+    if (isAll || totalItems === 0) return flatInstrumentRows;
+    return flatInstrumentRows.slice(startIndex, endIndex);
+  }, [flatInstrumentRows, isAll, totalItems, startIndex, endIndex]);
+
   const handleCellAddMonth = async (item, month, options = {}) => {
     const key = `${item.id}-${month}`;
     setSavingCellKey(key);
@@ -171,6 +202,18 @@ export const AnnualPlanMatrixTable = ({
     try {
       if (onQuickRemoveMonth) {
         await onQuickRemoveMonth(item, month);
+      }
+    } finally {
+      setSavingCellKey('');
+    }
+  };
+
+  const handleCellUpdateDueDate = async (item, month, newDueDate) => {
+    const key = `${item.id}-${month}`;
+    setSavingCellKey(key);
+    try {
+      if (onUpdateDueDate) {
+        await onUpdateDueDate(item, month, newDueDate);
       }
     } finally {
       setSavingCellKey('');
@@ -436,7 +479,7 @@ export const AnnualPlanMatrixTable = ({
                   </td>
                 </tr>
               ) : (
-                flatInstrumentRows.map((item) => {
+                paginatedItems.map((item) => {
                   const isGroup = Number(item.is_group) === 1;
                   const isCompositeSet = item.is_composite_set || item.group_nature === 'COMPOSITE_SET';
                   const isLogicalGroup = isGroup && !isCompositeSet;
@@ -541,6 +584,7 @@ export const AnnualPlanMatrixTable = ({
                           onQuickAddMonth={handleCellAddMonth}
                           onQuickRemoveMonth={handleCellRemoveMonth}
                           onToggleProvider={onToggleProvider}
+                          onUpdateDueDate={handleCellUpdateDueDate}
                           onCreateWorkOrder={handleCellCreateWo}
                           onOpenGroupCheck={onOpenGroupWorkOrderCheck}
                           onOpenFullEdit={onOpenAddItem}
@@ -599,39 +643,121 @@ export const AnnualPlanMatrixTable = ({
         <VccScrollIndicator canScrollLeft={canScrollLeft} canScrollRight={canScrollRight} />
       </div>
 
-      {/* Discrete Table Footer with Clean Legend */}
-      <div className="bg-slate-50/90 border-t border-slate-200/80 px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-600">
-        <div>
-          {tableSearch.trim() || activeCategory ? (
-            <>
-              พบ <strong className="text-slate-900">{flatInstrumentRows.length}</strong> จาก {planItems.length} รายการ
-              {activeCategory && <span className="ml-1.5 text-slate-500">(ประเภท: “{activeCategory}”)</span>}
-            </>
+      {/* Table Pagination Dock */}
+      <div
+        data-testid="annual-plan-matrix-pagination"
+        className="bg-slate-50/90 border-t border-slate-200/80 px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-600"
+      >
+        {/* Left: Record Range Text */}
+        <div className="font-medium text-slate-600">
+          {totalItems === 0 ? (
+            <span>แสดง 0 จากทั้งหมด 0 เครื่องมือ</span>
           ) : (
             <span>
-              รวมทั้งหมด <strong className="text-slate-900">{planItems.length}</strong> รายการเครื่องมือวัด
+              แสดง <strong className="text-slate-900 font-bold">{startIndex + 1}-{endIndex}</strong> จากทั้งหมด{' '}
+              <strong className="text-slate-900 font-bold">{totalItems}</strong> เครื่องมือ
+              {(tableSearch.trim() || activeCategory) && (
+                <span className="text-slate-500 ml-1.5">(กรองจากทั้งหมด {planItems.length} รายการ{activeCategory ? ` · ประเภท: “${activeCategory}”` : ''})</span>
+              )}
             </span>
           )}
         </div>
 
-        <div className="flex flex-wrap items-center gap-3.5 text-xs">
-          <span className="inline-flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-indigo-500 inline-block" />
-            <span className="text-slate-700 font-medium">ภายใน: ทวนสอบภายในตามแผน</span>
-          </span>
-          <span className="inline-flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-sky-500 inline-block" />
-            <span className="text-slate-700 font-medium">ภายนอก: สอบเทียบภายนอกตามแผน</span>
-          </span>
-          <span className="inline-flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-emerald-600 inline-block" />
-            <span className="text-slate-700 font-medium">✓: ตรวจรับเสร็จสิ้นแล้ว</span>
-          </span>
-          <span className="inline-flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-rose-600 inline-block" />
-            <span className="text-slate-700 font-medium">NC: พบข้อบกพร่อง / ระงับใช้</span>
-          </span>
+        {/* Right: Page Size Selector & Navigation Dock */}
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="inline-flex items-center gap-1.5 text-xs text-slate-600">
+            <span>แถวต่อหน้า:</span>
+            <select
+              aria-label="จำนวนแถวต่อหน้า"
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value));
+                setCurrentPage(1);
+              }}
+              className="h-8 px-2.5 rounded-lg border border-slate-300 text-xs font-semibold text-slate-700 bg-white hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 cursor-pointer shadow-2xs"
+            >
+              <option value={10}>10</option>
+              <option value={25}>25</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+              <option value={9999}>ทั้งหมด</option>
+            </select>
+          </label>
+
+          <div className="inline-flex items-center gap-1" role="navigation" aria-label="การแบ่งหน้าตารางวางแผน">
+            <button
+              type="button"
+              title="หน้าแรก"
+              aria-label="หน้าแรก"
+              disabled={safeCurrentPage <= 1}
+              onClick={() => setCurrentPage(1)}
+              className="inline-flex items-center gap-1 h-8 px-2 sm:px-2.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white transition-colors cursor-pointer shadow-2xs"
+            >
+              <ChevronsLeft size={14} />
+              <span className="hidden sm:inline">หน้าแรก</span>
+            </button>
+
+            <button
+              type="button"
+              title="ก่อนหน้า"
+              aria-label="ก่อนหน้า"
+              disabled={safeCurrentPage <= 1}
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              className="inline-flex items-center gap-1 h-8 px-2 sm:px-2.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white transition-colors cursor-pointer shadow-2xs"
+            >
+              <ChevronLeft size={14} />
+              <span className="hidden sm:inline">ก่อนหน้า</span>
+            </button>
+
+            <span className="px-2 text-xs font-medium text-slate-600 whitespace-nowrap">
+              หน้า <strong className="text-slate-900 font-bold">{totalItems === 0 ? 0 : safeCurrentPage}</strong> จาก <strong className="text-slate-900 font-bold">{totalPages}</strong>
+            </span>
+
+            <button
+              type="button"
+              title="ถัดไป"
+              aria-label="ถัดไป"
+              disabled={safeCurrentPage >= totalPages}
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              className="inline-flex items-center gap-1 h-8 px-2 sm:px-2.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white transition-colors cursor-pointer shadow-2xs"
+            >
+              <span className="hidden sm:inline">ถัดไป</span>
+              <ChevronRight size={14} />
+            </button>
+
+            <button
+              type="button"
+              title="หน้าสุดท้าย"
+              aria-label="หน้าสุดท้าย"
+              disabled={safeCurrentPage >= totalPages}
+              onClick={() => setCurrentPage(totalPages)}
+              className="inline-flex items-center gap-1 h-8 px-2 sm:px-2.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white transition-colors cursor-pointer shadow-2xs"
+            >
+              <span className="hidden sm:inline">หน้าสุดท้าย</span>
+              <ChevronsRight size={14} />
+            </button>
+          </div>
         </div>
+      </div>
+
+      {/* Discrete Clean Legend Footer */}
+      <div className="bg-slate-50/50 border-t border-slate-200/60 px-4 py-2 flex flex-wrap items-center justify-end gap-3.5 text-[11px] text-slate-500">
+        <span className="inline-flex items-center gap-1.5">
+          <span className="w-2 h-2 rounded-full bg-indigo-500 inline-block" />
+          <span className="text-slate-700 font-medium">ภายใน: ทวนสอบภายในตามแผน</span>
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="w-2 h-2 rounded-full bg-sky-500 inline-block" />
+          <span className="text-slate-700 font-medium">ภายนอก: สอบเทียบภายนอกตามแผน</span>
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="w-2 h-2 rounded-full bg-emerald-600 inline-block" />
+          <span className="text-slate-700 font-medium">✓: ตรวจรับเสร็จสิ้นแล้ว</span>
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="w-2 h-2 rounded-full bg-rose-600 inline-block" />
+          <span className="text-slate-700 font-medium">NC: พบข้อบกพร่อง / ระงับใช้</span>
+        </span>
       </div>
 
       {/* Confirmation Modal for Removing an Instrument from the Plan */}

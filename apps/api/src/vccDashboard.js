@@ -1,5 +1,5 @@
 import { requireVccAccess, requireDccOnly, canReadAllVccDepartments, canReadVccDepartment, vccDeptScopeSql } from './vccAuth.js';
-import { isUserAuthorizedForPlanDept, getUserDepartments } from './vccPlans.js';
+import { isUserAuthorizedForPlanDept, getUserDepartments, computeDueDateForMonth } from './vccPlans.js';
 import { getThresholds } from './approval.js';
 import { readWorkOrderSettings } from './vccWorkOrders.js';
 
@@ -537,10 +537,162 @@ export const registerVccDashboardRoutes = (app, { requireAuth, audit }) => {
 
     // Monthly Plan vs Act for selected year (only CURRENT APPROVED plans count toward official Plan)
     const { results: rawApprovedPlans } = await db
-      .prepare("SELECT id, plan_year, department, revision, status FROM vcc_annual_plans WHERE plan_year = ? AND status = 'APPROVED' AND (effective_status = 'CURRENT' OR (effective_status IS NULL AND is_current = 1))")
+      .prepare("SELECT id, plan_year, department, revision, status, title, due_date_rule FROM vcc_annual_plans WHERE plan_year = ? AND status = 'APPROVED' AND (effective_status = 'CURRENT' OR (effective_status IS NULL AND is_current = 1))")
       .bind(year)
       .all();
     const approvedPlans = rawApprovedPlans.filter((p) => isDeptAllowed(p.department));
+
+    // Due Plan Cycles Alert (Plan Due This Month - Option ก)
+    // Counts cycles for the current reference month/year where work_order_id IS NULL OR wo_status = 'SCHEDULED'
+    const refMonth = parseInt(refDate.slice(5, 7), 10);
+    const refYear = parseInt(refDate.slice(0, 4), 10);
+    const targetCycleYear = refDateQuery ? refYear : (year || refYear);
+    const targetCycleMonth = refMonth;
+
+    const { results: rawDueCycles } = await db.prepare(`
+      SELECT c.id AS cycle_id,
+             c.plan_id,
+             c.plan_item_id,
+             c.asset_id,
+             c.cycle_seq,
+             c.planned_month,
+             c.baseline_planned_date,
+             c.cycle_status,
+             c.initial_cycle_id,
+             p.plan_year,
+             p.department AS plan_department,
+             p.title AS plan_title,
+             p.revision AS plan_revision,
+             p.due_date_rule,
+             pi.provider_name AS plan_provider_name,
+             pi.frequency_label,
+             a.is_group,
+             a.group_nature,
+             a.asset_code,
+             a.name AS asset_name,
+             a.department AS asset_department,
+             a.status AS asset_status,
+             w.id AS work_order_id,
+             w.wo_code,
+             w.status AS wo_status
+      FROM vcc_plan_cycles c
+      JOIN vcc_annual_plans p ON p.id = c.plan_id
+      JOIN vcc_annual_plan_items pi ON pi.id = c.plan_item_id
+      JOIN vcc_assets a ON a.id = c.asset_id
+      LEFT JOIN vcc_work_orders w ON (
+        (w.cycle_id IS NOT NULL AND (w.cycle_id = c.initial_cycle_id OR w.cycle_id = c.id))
+        OR (w.plan_item_id = c.plan_item_id AND w.planned_month = c.planned_month AND w.asset_id = c.asset_id)
+      ) AND w.status != 'CANCELLED'
+      WHERE p.status = 'APPROVED'
+        AND (p.effective_status = 'CURRENT' OR (p.effective_status IS NULL AND p.is_current = 1) OR p.effective_status IS NULL)
+        AND p.plan_year = ?
+        AND c.planned_month = ?
+        AND (c.cycle_status != 'CANCELLED' OR c.cycle_status IS NULL)
+        AND a.status != 'RETIRED'
+      ORDER BY a.asset_code ASC, c.cycle_seq ASC
+    `).bind(targetCycleYear, targetCycleMonth).all();
+
+    const dueCyclesList = [...(rawDueCycles || [])];
+    const planItemMonthSet = new Set(dueCyclesList.map((r) => `${r.plan_item_id}:${r.planned_month}`));
+
+    // Fallback: Check items in approved plans where vcc_plan_cycles row was not explicitly generated
+    for (const plan of approvedPlans) {
+      if (Number(plan.plan_year) !== Number(targetCycleYear)) continue;
+      const { results: fallbackItems } = await db.prepare(`
+        SELECT i.*, a.asset_code, a.name AS asset_name, a.department AS asset_department, a.status AS asset_status, a.is_group, a.group_nature
+        FROM vcc_annual_plan_items i
+        JOIN vcc_assets a ON a.id = i.asset_id
+        WHERE i.plan_id = ? AND a.status != 'RETIRED'
+      `).bind(plan.id).all();
+
+      for (const item of (fallbackItems || [])) {
+        let months = [];
+        try {
+          months = Array.isArray(item.planned_months) ? item.planned_months : JSON.parse(item.planned_months || '[]');
+        } catch {
+          months = [];
+        }
+        if (months.includes(targetCycleMonth) && !planItemMonthSet.has(`${item.id}:${targetCycleMonth}`)) {
+          planItemMonthSet.add(`${item.id}:${targetCycleMonth}`);
+          const dueDate = computeDueDateForMonth(targetCycleYear, targetCycleMonth, plan.due_date_rule || 'END_OF_MONTH');
+          const matchingWo = woRows.find(
+            (w) => w.plan_item_id === item.id && Number(w.planned_month) === Number(targetCycleMonth) && w.status !== 'CANCELLED'
+          );
+          dueCyclesList.push({
+            cycle_id: `derived-${item.id}-${targetCycleMonth}`,
+            plan_id: plan.id,
+            plan_item_id: item.id,
+            asset_id: item.asset_id,
+            cycle_seq: 1,
+            planned_month: targetCycleMonth,
+            baseline_planned_date: dueDate,
+            cycle_status: 'SCHEDULED',
+            initial_cycle_id: null,
+            plan_year: plan.plan_year,
+            plan_department: plan.department,
+            plan_title: plan.title,
+            plan_revision: plan.revision,
+            due_date_rule: plan.due_date_rule,
+            plan_provider_name: item.provider_name,
+            frequency_label: item.frequency_label,
+            is_group: item.is_group,
+            group_nature: item.group_nature,
+            asset_code: item.asset_code,
+            asset_name: item.asset_name,
+            asset_department: item.asset_department,
+            asset_status: item.asset_status,
+            work_order_id: matchingWo?.id || null,
+            wo_code: matchingWo?.wo_code || null,
+            wo_status: matchingWo?.status || null
+          });
+        }
+      }
+    }
+
+    const filteredDueCycles = dueCyclesList.filter((c) => {
+      if (!isDeptAllowed(c.asset_department || c.plan_department)) return false;
+      if (c.work_order_id && c.wo_status !== 'SCHEDULED') return false;
+      return true;
+    });
+
+    const monthNamesTh = [
+      '', 'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
+      'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'
+    ];
+
+    for (const cycle of filteredDueCycles) {
+      const monthTh = monthNamesTh[cycle.planned_month] || `เดือน ${cycle.planned_month}`;
+      const hasScheduledWo = Boolean(cycle.work_order_id && cycle.wo_status === 'SCHEDULED');
+      pushAlert({
+        dedupe_key: `${cycle.cycle_id}:PLAN_DUE`,
+        alert_type: 'PLAN_DUE',
+        severity: 'MEDIUM',
+        plan_id: cycle.plan_id,
+        plan_item_id: cycle.plan_item_id,
+        plan_title: cycle.plan_title,
+        plan_year: cycle.plan_year,
+        plan_revision: cycle.plan_revision,
+        planned_month: cycle.planned_month,
+        cycle_id: cycle.cycle_id,
+        initial_cycle_id: cycle.initial_cycle_id,
+        wo_id: cycle.work_order_id || null,
+        wo_code: cycle.wo_code || null,
+        wo_status: cycle.wo_status || null,
+        asset_id: cycle.asset_id,
+        asset_code: cycle.asset_code,
+        asset_name: cycle.asset_name,
+        department: cycle.asset_department || cycle.plan_department,
+        due_date: cycle.baseline_planned_date,
+        work_type: cycle.frequency_label || cycle.plan_provider_name || 'ตามแผนประจำปี',
+        provider_name: cycle.plan_provider_name || 'ทวนสอบภายใน',
+        is_group: cycle.is_group,
+        group_nature: cycle.group_nature,
+        message: `ถึงรอบตามแผนประจำเดือน ${monthTh} (${cycle.frequency_label || 'ตามแผนประจำปี'})`,
+        recommended_action: hasScheduledWo
+          ? 'กดเปิดใบสั่งงาน (Activate) เพื่อเริ่มดำเนินการในรอบเดือนนี้'
+          : 'กดเปิดใบสั่งงานใหม่ตามแผนประจำปี'
+      });
+    }
 
     const monthlyComparison = Array.from({ length: 12 }, (_, idx) => ({
       month: idx + 1,

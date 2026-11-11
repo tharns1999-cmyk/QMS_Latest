@@ -302,6 +302,68 @@ export const fetchVccDashboard = async ({ year = 2026, reference_date } = {}) =>
     }
   }
 
+  // Due Plan Cycles Alert (Plan Due This Month) in Demo Mode
+  const refMonth = parseInt(refDate.slice(5, 7), 10);
+  const refYear = parseInt(refDate.slice(0, 4), 10);
+  const targetCycleYear = Number(year || refYear);
+  const targetCycleMonth = refMonth;
+
+  const monthNamesTh = [
+    '', 'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
+    'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'
+  ];
+
+  for (const item of allPlanItems) {
+    if (!approvedPlanIds.has(item.plan_id)) continue;
+    const plan = approvedPlans.find((p) => p.id === item.plan_id);
+    if (!plan || Number(plan.plan_year) !== targetCycleYear) continue;
+    const asset = assetMap.get(item.asset_id) || {};
+    if (asset.status === 'RETIRED') continue;
+    if (!isDeptAllowed(asset.department || plan.department)) continue;
+
+    const plannedMonths = Array.isArray(item.planned_months) ? item.planned_months : [];
+    if (!plannedMonths.includes(targetCycleMonth)) continue;
+
+    const matchingWo = allWos.find(
+      (w) => (w.plan_item_id === item.id || (w.asset_id === item.asset_id && Number(w.planned_month) === targetCycleMonth)) &&
+             w.status !== 'CANCELLED'
+    );
+    if (matchingWo && matchingWo.status !== 'SCHEDULED') continue;
+
+    const monthTh = monthNamesTh[targetCycleMonth] || `เดือน ${targetCycleMonth}`;
+    const dueDate = `${targetCycleYear}-${String(targetCycleMonth).padStart(2, '0')}-28`;
+    const hasScheduledWo = Boolean(matchingWo && matchingWo.status === 'SCHEDULED');
+
+    pushAlert({
+      dedupe_key: `${item.id}:${targetCycleMonth}:PLAN_DUE`,
+      alert_type: 'PLAN_DUE',
+      severity: 'MEDIUM',
+      plan_id: plan.id,
+      plan_item_id: item.id,
+      plan_title: plan.title || '',
+      plan_year: plan.plan_year,
+      plan_revision: plan.revision || '00',
+      planned_month: targetCycleMonth,
+      cycle_id: `cycle-${item.id}-${targetCycleMonth}`,
+      wo_id: matchingWo?.id || null,
+      wo_code: matchingWo?.wo_code || null,
+      wo_status: matchingWo?.status || null,
+      asset_id: item.asset_id,
+      asset_code: asset.asset_code || '-',
+      asset_name: asset.name || '-',
+      department: asset.department || plan.department || 'QC',
+      due_date: dueDate,
+      work_type: item.frequency_label || item.provider_name || 'ตามแผนประจำปี',
+      provider_name: item.provider_name || 'ทวนสอบภายใน',
+      is_group: asset.is_group,
+      group_nature: asset.group_nature,
+      message: `ถึงรอบตามแผนประจำเดือน ${monthTh} (${item.frequency_label || 'ตามแผนประจำปี'})`,
+      recommended_action: hasScheduledWo
+        ? 'กดเปิดใบสั่งงาน (Activate) เพื่อเริ่มดำเนินการในรอบเดือนนี้'
+        : 'กดเปิดใบสั่งงานใหม่ตามแผนประจำปี'
+    });
+  }
+
   for (const wo of allWos) {
     const woYear = Number(String(wo.due_date || '').slice(0, 4));
     const m = wo.planned_month || Number(String(wo.due_date || '').slice(5, 7));

@@ -26,6 +26,13 @@ import VccOnHoldTrackerTab from './VccOnHoldTrackerTab';
 import VccComplianceReportTab from './VccComplianceReportTab';
 import VccNotificationAuditTab from './VccNotificationAuditTab';
 import MobileCollapsible from './MobileCollapsible';
+import { CreateWorkOrderModal } from './WorkOrderModals';
+import { createVccWorkOrder } from '../api/vccWorkOrderApi';
+import { fetchVccPlans, fetchVccPlanDetail, fetchVccPlanSettings } from '../api/vccPlanApi';
+import { fetchVccAssets } from '../api/vccApi';
+import toast from 'react-hot-toast';
+import useStore from '../../../store/useStore';
+import useVccPolicyUser from '../hooks/useVccPolicyUser';
 
 const MAIN_TABS = [
   { id: 'OVERVIEW', label: 'ภาพรวม', icon: LayoutDashboard },
@@ -36,6 +43,7 @@ const MAIN_TABS = [
 
 const ALERT_TABS = [
   { key: 'OVERDUE', label: 'เลยกำหนด', alertBadgeClass: 'bg-amber-100 text-amber-900' },
+  { key: 'PLAN_DUE', label: 'รอบตามแผนประจำเดือนนี้', alertBadgeClass: 'bg-emerald-100 text-emerald-900' },
   { key: 'ON_HOLD', label: 'ระงับใช้', alertBadgeClass: 'bg-rose-100 text-rose-900' },
   { key: 'DUE_SOON', label: 'ใกล้ครบกำหนด', alertBadgeClass: 'bg-blue-100 text-blue-900' },
   { key: 'PENDING_REVIEW', label: 'รอตรวจรับ', alertBadgeClass: 'bg-indigo-100 text-indigo-900' }
@@ -78,6 +86,29 @@ export default function VccDashboardSection({ onNavigateToWorkOrders, onNavigate
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
   const [exportMsg, setExportMsg] = useState('');
+
+  // User & 1-Click Work Order Creation State
+  const sessionUser = useStore((s) => s.currentUser);
+  const currentUser = useVccPolicyUser(sessionUser);
+
+  const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [createForm, setCreateForm] = useState({
+    mode: 'PLAN',
+    plan_id: '',
+    plan_item_id: '',
+    planned_month: 1,
+    child_asset_id: '',
+    asset_id: '',
+    provider_name: '',
+    due_date: ''
+  });
+  const [createError, setCreateError] = useState('');
+  const [savingCreate, setSavingCreate] = useState(false);
+
+  const [approvedPlans, setApprovedPlans] = useState([]);
+  const [selectedPlanItems, setSelectedPlanItems] = useState([]);
+  const [individualAssets, setIndividualAssets] = useState([]);
+  const [providers, setProviders] = useState([]);
 
   const availableYears = useMemo(() => {
     const list = [currentYear - 2, currentYear - 1, currentYear, currentYear + 1, currentYear + 2];
@@ -192,6 +223,7 @@ export default function VccDashboardSection({ onNavigateToWorkOrders, onNavigate
   const countByAlertTab = useCallback(
     (tabKey) =>
       allAlerts.filter((a) => {
+        if (tabKey === 'PLAN_DUE') return a.alert_type === 'PLAN_DUE';
         if (tabKey === 'DUE_SOON') return a.alert_type === 'DUE_SOON' || a.alert_type === 'DUE_TODAY' || a.alert_type === 'CERT_EXPIRING';
         if (tabKey === 'OVERDUE') return a.alert_type === 'OVERDUE' || a.alert_type === 'CERT_EXPIRED';
         return a.alert_type === tabKey;
@@ -204,11 +236,70 @@ export default function VccDashboardSection({ onNavigateToWorkOrders, onNavigate
 
   const filteredAlerts = useMemo(() => {
     return allAlerts.filter((a) => {
+      if (alertTab === 'PLAN_DUE') return a.alert_type === 'PLAN_DUE';
       if (alertTab === 'DUE_SOON') return a.alert_type === 'DUE_SOON' || a.alert_type === 'DUE_TODAY' || a.alert_type === 'CERT_EXPIRING';
       if (alertTab === 'OVERDUE') return a.alert_type === 'OVERDUE' || a.alert_type === 'CERT_EXPIRED';
       return a.alert_type === alertTab;
     });
   }, [allAlerts, alertTab]);
+
+  const handleOpenCreateWorkOrderFromAlert = async (alert) => {
+    setCreateError('');
+    const initialForm = {
+      mode: 'PLAN',
+      plan_id: alert.plan_id || '',
+      plan_item_id: alert.plan_item_id || '',
+      planned_month: Number(alert.planned_month) || 1,
+      child_asset_id: '',
+      asset_id: alert.asset_id || '',
+      provider_name: alert.provider_name || '',
+      due_date: alert.due_date || ''
+    };
+    setCreateForm(initialForm);
+    setCreateModalOpen(true);
+
+    try {
+      const [plans, assets, settingsRes] = await Promise.all([
+        approvedPlans.length ? Promise.resolve(approvedPlans) : fetchVccPlans({ status: 'APPROVED' }),
+        individualAssets.length ? Promise.resolve(individualAssets) : fetchVccAssets({ status: 'ACTIVE', calibratable_only: true }),
+        providers.length ? Promise.resolve({ providers }) : fetchVccPlanSettings()
+      ]);
+      if (!approvedPlans.length) setApprovedPlans(plans || []);
+      if (!individualAssets.length) setIndividualAssets(assets || []);
+      if (!providers.length) setProviders(settingsRes?.providers || []);
+
+      if (alert.plan_id) {
+        const planDetail = await fetchVccPlanDetail(alert.plan_id);
+        setSelectedPlanItems(planDetail?.items || []);
+      }
+    } catch (err) {
+      console.error('Failed to preload work order creation modal dependencies:', err);
+    }
+  };
+
+  useEffect(() => {
+    if (createModalOpen && createForm.mode === 'PLAN' && createForm.plan_id) {
+      fetchVccPlanDetail(createForm.plan_id)
+        .then((d) => setSelectedPlanItems(d?.items || []))
+        .catch(() => setSelectedPlanItems([]));
+    }
+  }, [createModalOpen, createForm.mode, createForm.plan_id]);
+
+  const handleCreateSubmit = async (e) => {
+    e?.preventDefault?.();
+    setCreateError('');
+    setSavingCreate(true);
+    try {
+      await createVccWorkOrder(createForm);
+      toast.success('เปิดใบสั่งงานตามแผนประจำปีเรียบร้อยแล้ว');
+      setCreateModalOpen(false);
+      await loadData();
+    } catch (err) {
+      setCreateError(err?.message || 'เปิดใบสั่งงานไม่สำเร็จ');
+    } finally {
+      setSavingCreate(false);
+    }
+  };
 
   return (
     <div className="space-y-6 text-slate-800 w-full min-w-0" data-testid="vcc-dashboard-section">
@@ -413,7 +504,7 @@ export default function VccDashboardSection({ onNavigateToWorkOrders, onNavigate
                     <span>{t.label}</span>
                     <span
                       className={`text-xs font-mono font-medium px-1.5 py-0.2 rounded ${
-                        count > 0 && (t.key === 'OVERDUE' || t.key === 'ON_HOLD')
+                        count > 0 && (t.key === 'OVERDUE' || t.key === 'ON_HOLD' || t.key === 'PLAN_DUE')
                           ? t.alertBadgeClass
                           : 'bg-slate-100 text-slate-600'
                       }`}
@@ -441,12 +532,23 @@ export default function VccDashboardSection({ onNavigateToWorkOrders, onNavigate
                     className="py-3 px-2 rounded-xl hover:bg-slate-50/80 transition-colors flex flex-col md:flex-row md:items-center md:justify-between gap-3 text-sm"
                   >
                     <div className="flex items-center gap-2.5 flex-wrap">
-                      <span className="font-mono font-bold text-slate-900">{alert.wo_code}</span>
+                      {alert.wo_code ? (
+                        <span className="font-mono font-bold text-slate-900">{alert.wo_code}</span>
+                      ) : (
+                        <span className="text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/60 px-2 py-0.5 rounded">
+                          รอบเดือน {alert.planned_month}
+                        </span>
+                      )}
                       <span className="font-mono text-xs font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200/60">
                         {alert.asset_code}
                       </span>
                       <span className="text-slate-800 font-medium text-xs sm:text-sm">{alert.asset_name}</span>
                       <DepartmentBadge department={alert.department} />
+                      {alert.work_type && (
+                        <span className="text-xs text-slate-500 bg-slate-50 px-2 py-0.5 rounded border border-slate-200/40">
+                          {alert.work_type}
+                        </span>
+                      )}
                     </div>
                     <div className="flex items-center gap-4 justify-between md:justify-end">
                       <div className="text-right">
@@ -457,7 +559,16 @@ export default function VccDashboardSection({ onNavigateToWorkOrders, onNavigate
                           </span>
                         )}
                       </div>
-                      {alert.wo_id || alert.work_order_id ? (
+                      {alert.alert_type === 'PLAN_DUE' ? (
+                        <button
+                          type="button"
+                          onClick={() => handleOpenCreateWorkOrderFromAlert(alert)}
+                          data-testid={`open-wo-btn-${alert.cycle_id || alert.asset_code}`}
+                          className="text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 px-3 py-1.5 rounded-lg whitespace-nowrap inline-flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+                        >
+                          <span>+ เปิดใบสั่งงาน</span>
+                        </button>
+                      ) : alert.wo_id || alert.work_order_id ? (
                         onNavigateToWorkOrders && (
                           <button
                             type="button"
@@ -528,6 +639,22 @@ export default function VccDashboardSection({ onNavigateToWorkOrders, onNavigate
             gracePeriodDays={gracePeriodDays}
             setGracePeriodDays={setGracePeriodDays}
             saving={savingSettings}
+          />
+
+          {/* 6. 1-Click Create Work Order Modal */}
+          <CreateWorkOrderModal
+            open={createModalOpen}
+            onClose={() => setCreateModalOpen(false)}
+            form={createForm}
+            setForm={setCreateForm}
+            error={createError}
+            saving={savingCreate}
+            onSubmit={handleCreateSubmit}
+            approvedPlans={approvedPlans}
+            planItems={selectedPlanItems}
+            individualAssets={individualAssets}
+            providers={providers}
+            currentUser={currentUser}
           />
         </>
       )}

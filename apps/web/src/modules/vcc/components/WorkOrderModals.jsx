@@ -4,6 +4,8 @@ import { formatVccDueDate, formatVccDate } from '../utils/vccDateUtils';
 import { useVccModalAccessibility } from '../hooks/useVccModalAccessibility';
 import { useVccMobileViewport } from '../hooks/useVccMobileViewport';
 import { VccDiscardConfirmDialog } from './VccDiscardConfirmDialog';
+import { getUserDeptCodes, canReadAllVccDepartments } from '../utils/departmentScope';
+import useStore from '../../../store/useStore';
 
 const serializeCreateForm = (f) => JSON.stringify({
   mode: f?.mode || 'ADHOC',
@@ -27,9 +29,33 @@ export const CreateWorkOrderModal = ({
   approvedPlans,
   planItems,
   individualAssets,
-  providers
+  providers,
+  currentUser: propCurrentUser
 }) => {
   const titleId = useId();
+  const storeUser = useStore((s) => s.currentUser);
+  const currentUser = propCurrentUser || storeUser;
+  const userDepts = useMemo(() => getUserDeptCodes(currentUser), [currentUser]);
+  const canReadAll = useMemo(() => canReadAllVccDepartments(currentUser), [currentUser]);
+  const showDeptPrefix = Boolean(canReadAll || userDepts.length > 1);
+
+  const filteredIndividualAssets = useMemo(() => {
+    return (individualAssets || []).filter((a) => {
+      if (a.status && a.status !== 'ACTIVE') return false;
+      if (canReadAll) return true;
+      const dept = String(a.department || '').trim().toUpperCase();
+      return userDepts.includes(dept);
+    });
+  }, [individualAssets, canReadAll, userDepts]);
+
+  const filteredApprovedPlans = useMemo(() => {
+    return (approvedPlans || []).filter((p) => {
+      if (canReadAll) return true;
+      const dept = String(p.department || '').trim().toUpperCase();
+      return userDepts.includes(dept);
+    });
+  }, [approvedPlans, canReadAll, userDepts]);
+
   const isCurrentlyOpen = Boolean(open);
   const [prevOpen, setPrevOpen] = useState(isCurrentlyOpen);
   const [initialSnapshot, setInitialSnapshot] = useState(() => (isCurrentlyOpen && form ? serializeCreateForm(form) : null));
@@ -78,7 +104,7 @@ export const CreateWorkOrderModal = ({
   const isGroupPlanItem =
     Number(selectedPlanItem?.is_group) === 1 && selectedPlanItem?.group_nature !== 'COMPOSITE_SET';
   const groupChildren = isGroupPlanItem
-    ? individualAssets.filter((a) => a.parent_id === selectedPlanItem.asset_id)
+    ? filteredIndividualAssets.filter((a) => a.parent_id === selectedPlanItem.asset_id)
     : [];
 
   return (
@@ -135,7 +161,7 @@ export const CreateWorkOrderModal = ({
                 type="radio"
                 name="wo_mode"
                 checked={form.mode === 'ADHOC'}
-                onChange={() => setForm({ ...form, mode: 'ADHOC', plan_id: '', plan_item_id: '' })}
+                onChange={() => setForm({ ...form, mode: 'ADHOC', plan_id: '', plan_item_id: '', asset_id: '' })}
               />
               <span>ใบสั่งงานนอกแผน (Ad-hoc)</span>
             </label>
@@ -145,7 +171,7 @@ export const CreateWorkOrderModal = ({
                 type="radio"
                 name="wo_mode"
                 checked={form.mode === 'PLAN'}
-                onChange={() => setForm({ ...form, mode: 'PLAN', plan_id: approvedPlans[0]?.id || '' })}
+                onChange={() => setForm({ ...form, mode: 'PLAN', plan_id: filteredApprovedPlans[0]?.id || '', plan_item_id: '', asset_id: '' })}
               />
               <span>สร้างจากแผนประจำปีที่อนุมัติแล้ว</span>
             </label>
@@ -158,11 +184,11 @@ export const CreateWorkOrderModal = ({
                 <select
                   required
                   value={form.plan_id}
-                  onChange={(e) => setForm({ ...form, plan_id: e.target.value, plan_item_id: '' })}
+                  onChange={(e) => setForm({ ...form, plan_id: e.target.value, plan_item_id: '', asset_id: '' })}
                   className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium bg-white"
                 >
                   <option value="">-- เลือกแผนประจำปีที่อนุมัติแล้ว --</option>
-                  {approvedPlans.map((p) => (
+                  {filteredApprovedPlans.map((p) => (
                     <option key={p.id} value={p.id}>
                       ปี {p.plan_year} • {p.department} ({p.title})
                     </option>
@@ -225,9 +251,14 @@ export const CreateWorkOrderModal = ({
                         className="w-full h-10 px-3.5 rounded-xl border border-indigo-300 text-sm font-medium bg-white"
                       >
                         <option value="">-- เลือกเครื่องมือลูก --</option>
-                        {groupChildren.map((ch) => (
-                          <option key={ch.id} value={ch.id}>{ch.asset_code} — {ch.name}</option>
-                        ))}
+                        {groupChildren.map((ch) => {
+                          const prefix = showDeptPrefix && ch.department ? `[${ch.department}] ` : '';
+                          return (
+                            <option key={ch.id} value={ch.id}>
+                              {prefix}{ch.asset_code} — {ch.name}
+                            </option>
+                          );
+                        })}
                       </select>
                     </div>
                   )}
@@ -248,11 +279,15 @@ export const CreateWorkOrderModal = ({
                   className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium bg-white"
                 >
                   <option value="">-- เลือกเครื่องมือหรือชุดเครื่องมือที่ใช้งานปกติ --</option>
-                  {individualAssets.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.asset_code} — {a.name} {a.group_nature === 'COMPOSITE_SET' ? '(ชุดเครื่องมือ)' : ''}
-                    </option>
-                  ))}
+                  {filteredIndividualAssets.map((a) => {
+                    const prefix = showDeptPrefix && a.department ? `[${a.department}] ` : '';
+                    const isSet = a.group_nature === 'COMPOSITE_SET' ? ' (ชุดเครื่องมือ)' : '';
+                    return (
+                      <option key={a.id} value={a.id}>
+                        {prefix}{a.asset_code} — {a.name}{isSet}
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
 

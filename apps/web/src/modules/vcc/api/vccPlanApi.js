@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiPut, isApiMode } from '../../../api/client';
+import { apiGet, apiPost, apiPut, apiDelete, isApiMode } from '../../../api/client';
 import useStore from '../../../store/useStore';
 import { isSameDepartment } from '../../dcc/utils/taskFilter';
 import {
@@ -278,7 +278,7 @@ export const getLocalPlans = () => {
   return plans;
 };
 
-const setLocalPlans = (list) => writeJson(STORAGE_PLANS_KEY, list);
+export const setLocalPlans = (list) => writeJson(STORAGE_PLANS_KEY, list);
 
 export const getLocalPlanItems = () => {
   const items = readJson(STORAGE_PLAN_ITEMS_KEY, () => [...INITIAL_LOCAL_PLAN_ITEMS]);
@@ -348,6 +348,7 @@ export const getUserDepartments = (user) => {
   parseList(user.depts);
   parseList(user.secondaryDepartments);
   parseList(user.affiliated_departments);
+  parseList(user.extra_departments);
   return Array.from(depts);
 };
 
@@ -826,7 +827,7 @@ export const fetchVccPlans = async ({ status = 'DRAFT', year = '', department = 
     const params = new URLSearchParams();
     params.set('status', status);
     if (year !== '' && year !== undefined && year !== null) params.set('year', String(year));
-    if (department) params.set('department', department);
+    if (department && department !== 'MY_DEPTS') params.set('department', department);
     const { plans } = await apiGet(`/api/vcc/plans?${params.toString()}`);
     return plans;
   }
@@ -834,6 +835,9 @@ export const fetchVccPlans = async ({ status = 'DRAFT', year = '', department = 
   const allPlans = getLocalPlans();
   const allItems = getLocalPlanItems();
   const deptMap = getDepartmentMap();
+  const myDepts = getUserDepartments(user);
+  const userLevel = Number(user?.approval_level ?? user?.approvalLevel ?? 1);
+  const canReadAll = Boolean(user?.isDcc || user?.isQmr || userLevel >= 6 || myDepts.includes('MGT'));
   const uDept = String(user?.department || user?.dept || '').toUpperCase();
   const deptRank = (d) => {
     const norm = String(d || '').toUpperCase();
@@ -846,7 +850,12 @@ export const fetchVccPlans = async ({ status = 'DRAFT', year = '', department = 
     .filter((p) => isUserAuthorizedForPlanDept(user, p.department))
     .filter((p) => (status === 'ALL' || !status ? true : p.status === status))
     .filter((p) => (year === '' || year === undefined || year === null ? true : Number(p.plan_year) === Number(year)))
-    .filter((p) => (!department ? true : p.department === department))
+    .filter((p) => {
+      if (!department || department === 'MY_DEPTS') {
+        return canReadAll ? true : myDepts.includes(String(p.department).toUpperCase());
+      }
+      return p.department === department;
+    })
     .map((p) => enrichLocalPlan(p, allItems, deptMap))
     .sort(
       (a, b) =>
@@ -1046,6 +1055,53 @@ export const updateVccPlan = async (id, payload) => {
   });
 
   return fetchVccPlanDetail(id);
+};
+
+export const deleteVccPlan = async (id, reason = '') => {
+  if (isApiMode) {
+    return apiDelete(`/api/vcc/plans/${encodeURIComponent(id)}`, { reason });
+  }
+  const user = assertLocalVccAccess();
+  const allPlans = getLocalPlans();
+  const existing = allPlans.find((p) => p.id === id);
+  if (!existing) throw new Error('ไม่พบแผนการสอบเทียบประจำปี');
+  if (existing.status !== 'DRAFT' && existing.status !== 'REJECTED' && existing.status !== 'RETURNED') {
+    throw new Error('ไม่อนุญาตให้ลบแผนงานที่อยู่ระหว่างการอนุมัติหรือมีผลบังคับใช้แล้ว');
+  }
+
+  const isDccUser = Boolean(user.isDcc || user.is_dcc);
+  const userDepts = [user.department, ...(user.extra_departments || [])].map((d) => String(d).toUpperCase());
+  const isOwningDept = userDepts.includes(String(existing.department || '').toUpperCase());
+  const level = Number(user.approval_level ?? user.approvalLevel ?? 0);
+  if (!isDccUser && (!isOwningDept || level < 4)) {
+    throw new Error('เฉพาะผู้รับผิดชอบของแผนกนั้น (ระดับ L4 ขึ้นไป) หรือ DCC เท่านั้นที่สามารถลบแผนงานได้');
+  }
+
+  const trimmedReason = String(reason || '').trim();
+  if (!trimmedReason) throw new Error('กรุณาระบุเหตุผลการลบแผนงาน');
+
+  const nextPlans = allPlans.filter((p) => p.id !== id);
+  if (existing.parent_plan_id) {
+    const parentIdx = nextPlans.findIndex((p) => p.id === existing.parent_plan_id);
+    if (parentIdx !== -1 && nextPlans[parentIdx].status === 'APPROVED') {
+      nextPlans[parentIdx] = { ...nextPlans[parentIdx], is_current: 1, effective_status: 'CURRENT' };
+    }
+  }
+  setLocalPlans(nextPlans);
+
+  const nextItems = getLocalPlanItems().filter((it) => it.plan_id !== id);
+  setLocalPlanItems(nextItems);
+
+  appendLocalAudit('VCC_PLAN_DELETED', {
+    plan_id: id,
+    plan_year: existing.plan_year,
+    department: existing.department,
+    document_code: existing.document_code,
+    revision: existing.revision,
+    reason: trimmedReason
+  });
+
+  return { success: true, message: 'ลบแผนงานฉบับร่างเรียบร้อยแล้ว', deleted_id: id };
 };
 
 export const saveVccPlanItem = async (planId, payload) => {

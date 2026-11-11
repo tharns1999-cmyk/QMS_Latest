@@ -246,6 +246,10 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
   }, [filterDept]);
 
   useEffect(() => {
+    setCreateForm((prev) => (prev?.asset_id ? { ...prev, asset_id: '' } : prev));
+  }, [filterDept]);
+
+  useEffect(() => {
     loadData();
   }, [loadData]);
 
@@ -875,6 +879,7 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
         planItems={selectedPlanItems}
         individualAssets={individualAssets}
         providers={providers}
+        currentUser={currentUser}
       />
 
       <RecordResultModal
