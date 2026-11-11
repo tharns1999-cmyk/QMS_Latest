@@ -71,6 +71,39 @@ export const loadNotificationSettings = async (db) => {
   }
 };
 
+// One-off notice about a work order step (result accepted, sent back, reschedule decided). Returns a statement for the
+// caller's batch, so the notice exists only when the transition commits. reference_type VCC_WO_EVENT keeps the sweep,
+// which owns VCC_WORK_ORDER / VCC_ASSET alerts, from resolving or escalating it.
+export const woEventNotice = (db, wo, { type, severity = 'INFO', title, message, targetUserId = null }) => {
+  const id = `NTF-${crypto.randomUUID()}`;
+  return db.prepare(`
+    INSERT INTO vcc_notifications (
+      id, dedup_key, notification_type, reference_type, reference_id, asset_id, work_order_id,
+      department, target_role, target_user_id, severity, title, message, due_date, status
+    ) VALUES (?, ?, ?, 'VCC_WO_EVENT', ?, ?, ?, ?, 'PERFORMER', ?, ?, ?, ?, ?, 'PENDING')
+  `).bind(id, `EVT:${wo.id}:${type}:${id}`, type, wo.id, wo.asset_id, wo.id, wo.department, targetUserId, severity, title, message, wo.due_date || null);
+};
+
+// A failed result raises the hold alert at once instead of at the nightly sweep. Same dedup key as the sweep, which
+// then only refreshes the day count.
+export const ncHoldNoticeStatements = (db, wo) => {
+  const dedupKey = `NC:${wo.asset_id}:NC_ON_HOLD_ACTION`;
+  return [
+    db.prepare("UPDATE vcc_notifications SET dedup_key = dedup_key || '#' || id WHERE dedup_key = ? AND status = 'RESOLVED'").bind(dedupKey),
+    db.prepare(`
+      INSERT INTO vcc_notifications (
+        id, dedup_key, notification_type, reference_type, reference_id, asset_id, work_order_id,
+        department, target_role, escalation_level, severity, title, message, days_offset, status
+      ) VALUES (?, ?, 'NC_ON_HOLD_ACTION', 'VCC_ASSET', ?, ?, ?, ?, 'PERFORMER', 1, 'CRITICAL', ?, ?, 0, 'PENDING')
+      ON CONFLICT(dedup_key) DO NOTHING
+    `).bind(
+      `NTF-${crypto.randomUUID()}`, dedupKey, wo.asset_id, wo.asset_id, wo.id, wo.department,
+      `[เครื่องมือถูกระงับใช้/NC] เครื่องมือ ${wo.asset_code} ติดสถานะ ON_HOLD (0 วัน)`,
+      `เครื่องมือ ${wo.asset_code} (${wo.asset_name}) ถูกระงับการใช้งานเนื่องจากผลสอบเทียบไม่ผ่านเกณฑ์ (ใบสั่งงาน ${wo.wo_code}) อยู่ระหว่างรอการประเมินผลกระทบต่อผลิตภัณฑ์`
+    )
+  ];
+};
+
 /**
  * Core Automated Notification & Escalation Sweep Engine
  * Evaluates Work Orders, Certificate Expiration, and ON_HOLD/NC.
@@ -95,7 +128,7 @@ export const runVccNotificationSweep = async (db, options = {}) => {
     SELECT wo.*, a.asset_code, a.name AS asset_name, a.department AS asset_dept, a.location AS asset_location
     FROM vcc_work_orders wo
     JOIN vcc_assets a ON a.id = wo.asset_id
-    WHERE wo.status IN ('SCHEDULED', 'IN_PROGRESS', 'PENDING_REVIEW', 'DRAFT')
+    WHERE wo.status IN ('SCHEDULED', 'OPEN', 'IN_PROGRESS', 'PENDING_REVIEW', 'REJECTED')
   `).all();
 
   for (const wo of (activeWos || [])) {
@@ -488,6 +521,13 @@ export const runVccNotificationSweep = async (db, options = {}) => {
   `).run();
   summary.resolved += (closedRes.meta?.changes || 0);
 
+  // Event notices nobody opened stop counting after 30 days (history kept).
+  await db.prepare(`
+    UPDATE vcc_notifications
+    SET status = 'RESOLVED', resolved_at = ${NOW}, resolved_reason = 'EXPIRED', updated_at = ${NOW}
+    WHERE reference_type = 'VCC_WO_EVENT' AND status = 'PENDING' AND created_at < strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-30 days')
+  `).run();
+
   return summary;
 };
 
@@ -501,7 +541,7 @@ export const fetchNotificationTasks = async (db, user) => {
     FROM vcc_notifications n
     JOIN vcc_assets a ON a.id = n.asset_id
     LEFT JOIN vcc_work_orders wo ON wo.id = n.work_order_id
-    WHERE n.status IN ('PENDING', 'ACKNOWLEDGED')
+    WHERE n.status IN ('PENDING', 'ACKNOWLEDGED') AND n.reference_type != 'VCC_WO_EVENT'
     ORDER BY n.escalation_level DESC, n.created_at DESC
   `).all();
 
@@ -555,6 +595,22 @@ export const fetchNotificationTasks = async (db, user) => {
  * Register VCC Notification routes
  */
 export const registerVccNotificationRoutes = (app, { requireAuth, audit }) => {
+  // The bell: what is waiting for this user now. Alerts stay until acknowledged or resolved; a notice addressed to one
+  // person is shown to that person only.
+  app.get('/api/vcc/notifications/inbox', requireAuth, requireVccAccess, async (c) => {
+    const user = c.get('user');
+    const { results } = await c.env.DB.prepare(`
+      SELECT n.id, n.notification_type, n.reference_type, n.asset_id, n.work_order_id, n.department, n.escalation_level,
+             n.severity, n.title, n.message, n.due_date, n.created_at, a.asset_code, wo.wo_code
+      FROM vcc_notifications n
+      JOIN vcc_assets a ON a.id = n.asset_id
+      LEFT JOIN vcc_work_orders wo ON wo.id = n.work_order_id
+      WHERE n.status = 'PENDING' AND (n.target_user_id IS NULL OR n.target_user_id = ?)
+      ORDER BY n.created_at DESC LIMIT 200
+    `).bind(user.id).all();
+    return c.json({ notifications: (results || []).filter((n) => canActOnNotification(user, n)) });
+  });
+
   // 1. GET /api/vcc/notifications — query notification audit logs with multi-dept RBAC
   app.get('/api/vcc/notifications', requireAuth, requireVccAccess, async (c) => {
     const db = c.env.DB;

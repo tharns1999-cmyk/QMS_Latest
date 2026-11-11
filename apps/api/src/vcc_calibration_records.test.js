@@ -224,6 +224,11 @@ describe('VCC Phase 3.2: Calibration Execution, Digital Certificates & Controlle
     const heldAsset = await env.DB.prepare('SELECT status FROM vcc_assets WHERE id = ?').bind(assetId).first();
     expect(heldAsset.status).toBe('ON_HOLD');
 
+    // The bell: the hold alert is there at once (not at the nightly sweep), and only for people of that department.
+    const bell = async (who) => ((await call('GET', '/api/vcc/notifications/inbox', who)).body.notifications || []).filter((n) => n.asset_id === assetId);
+    expect((await bell('M1-REV4')).map((n) => n.notification_type)).toEqual(['NC_ON_HOLD_ACTION']);
+    expect(await bell('M1-NONDCC')).toEqual([]);
+
     // 4. Release Hold authorization checks
     // Non-L5 (L4) cannot release hold
     const unauthorizedRelease = await call('POST', `/api/vcc/work-orders/${woId}/release-hold`, 'M1-REV4', {
@@ -246,6 +251,12 @@ describe('VCC Phase 3.2: Calibration Execution, Digital Certificates & Controlle
     });
     expect(unreviewedRelease.status).toBe(409);
     expect((await call('POST', `/api/vcc/work-orders/${woId}/approve`, 'M1-REV4', { comment: 'รับทราบผลไม่ผ่าน' })).status).toBe(200);
+    // The performer is told the result was accepted; the reviewer who did it is not.
+    expect((await bell('M1-PERF')).map((n) => n.notification_type)).toContain('EVT_WO_VERIFIED');
+    expect((await bell('M1-REV4')).map((n) => n.notification_type)).not.toContain('EVT_WO_VERIFIED');
+    // News is not a task: it stays out of the task inbox.
+    const eventRow = await env.DB.prepare("SELECT reference_type, target_user_id, severity FROM vcc_notifications WHERE work_order_id = ? AND notification_type = 'EVT_WO_VERIFIED'").bind(woId).first();
+    expect(eventRow).toEqual({ reference_type: 'VCC_WO_EVENT', target_user_id: 'M1-PERF', severity: 'SUCCESS' });
 
     // L5 authorized release with mandatory impact assessment
     const validRelease = await call('POST', `/api/vcc/work-orders/${woId}/release-hold`, 'M1-APP5', {

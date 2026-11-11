@@ -8,6 +8,7 @@ import relativeTime from 'dayjs/plugin/relativeTime';
 import useStore, { isNotificationVisibleToUser, isNotificationReadByUser } from '../../store/useStore';
 import { NotificationCenterModal } from '../../modules/dcc/components/modals/NotificationCenterModal';
 import { resolveNotificationNavigation } from '../../modules/dcc/utils/notificationRouter';
+import { syncVccNotifications, acknowledgeVccNotification } from '../../modules/vcc/api/vccNotificationApi';
 
 dayjs.extend(relativeTime);
 
@@ -18,6 +19,8 @@ dayjs.extend(relativeTime);
  * Rendered via createPortal to eliminate overflow clipping traps.
  */
 const EMPTY_NOTIFICATIONS = [];
+// VCC rows carry a severity; the stripe tells a failed/overdue alert from news at a glance.
+const VCC_SEVERITY_STRIPE = { CRITICAL: 'border-l-4 border-rose-500', WARNING: 'border-l-4 border-amber-500', SUCCESS: 'border-l-4 border-emerald-500', INFO: 'border-l-4 border-blue-500' };
 
 const NotificationPopover = ({
   notifications: propNotifications,
@@ -44,12 +47,13 @@ const NotificationPopover = ({
   const markAllNotificationsAsRead = store?.markAllNotificationsAsRead || store?.markAllAsRead;
 
   // Filter for current user and sort newest first
+  // VCC keeps its own records (acknowledgement, escalation); the bell only lists what is still waiting for this user.
+  const vccNotifications = store?.vccNotifications || EMPTY_NOTIFICATIONS;
   const userNotis = React.useMemo(() => {
     if (propNotifications !== undefined) return propNotifications;
-    return (rawNotifications || [])
-      .filter(n => isNotificationVisibleToUser(n, currentUser))
+    return [...(rawNotifications || []).filter(n => isNotificationVisibleToUser(n, currentUser)), ...vccNotifications]
       .sort((a, b) => new Date(b.timestamp || b.created_at || b.createdAt || 0) - new Date(a.timestamp || a.created_at || a.createdAt || 0));
-  }, [rawNotifications, currentUser, propNotifications]);
+  }, [rawNotifications, currentUser, propNotifications, vccNotifications]);
 
   const unreadCount = propUnreadCount !== undefined 
     ? propUnreadCount 
@@ -93,6 +97,13 @@ const NotificationPopover = ({
   const handleNotificationClick = (item) => {
     if (propOnNotificationClick) {
       propOnNotificationClick(item);
+      return;
+    }
+    if (item.module === 'VCC') {
+      setIsOpen(false);
+      // News is done once opened; an alert stays until it is acknowledged on its own page or the cause is fixed.
+      if (item.isEvent) acknowledgeVccNotification(item.vccId).catch(() => {}).then(syncVccNotifications);
+      navigate(item.link);
       return;
     }
     if (markNotificationAsRead && item.id) {
@@ -287,7 +298,7 @@ const NotificationPopover = ({
                           onClick={() => handleNotificationClick(item)}
                           className={`p-3.5 px-4 flex items-start gap-3 hover:bg-slate-50 cursor-pointer transition-colors ${
                             isUnread ? 'bg-blue-50/40' : 'bg-white'
-                          }`}
+                          } ${item.module === 'VCC' ? (VCC_SEVERITY_STRIPE[item.severity] || VCC_SEVERITY_STRIPE.INFO) : ''}`}
                         >
                           {/* Unread Indicator Dot */}
                           <div className="pt-1.5 shrink-0">

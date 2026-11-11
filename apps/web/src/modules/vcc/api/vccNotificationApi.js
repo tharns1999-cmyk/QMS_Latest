@@ -133,21 +133,109 @@ export const triggerVccNotificationSweep = async (nowDate = null) => {
   }
 
   assertLocalVccAccess();
-  // Generate local mock notifications if none exist
-  const assets = getLocalAssets();
-  const wos = getLocalWos();
-  const existing = getLocalNotifications();
+  return { success: true, summary: runLocalSweep(nowDate) };
+};
 
-  // Basic mock sweep logic for local fallback
-  return {
-    success: true,
-    summary: {
-      created: existing.length,
-      updated: 0,
-      escalated: 0,
-      resolved: 0
+const ACTIVE_WO_STATUSES = ['SCHEDULED', 'OPEN', 'IN_PROGRESS', 'PENDING_REVIEW', 'REJECTED'];
+const dayDiff = (a, b) => Math.round((Date.parse(`${a}T00:00:00Z`) - Date.parse(`${b}T00:00:00Z`)) / 86400000);
+
+// shortcut: demo-mode copy of the server sweep with fixed tiers (overdue 7/14 days, due soon 30/7 days, on hold);
+// the API sweep in vccNotifications.js is the real rule and reads its day counts from settings.
+const runLocalSweep = (nowDate = null) => {
+  const ref = useStore.getState().getEffectiveToday?.() || new Date();
+  const today = nowDate ? String(nowDate).slice(0, 10) : new Date(ref.getTime() - ref.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  const wanted = new Map();
+  const want = (key, fields) => wanted.set(key, { dedup_key: key, target_role: 'PERFORMER', escalation_level: 1, ...fields });
+
+  // Stored work orders hold only the asset id; code, name and department come from the asset register.
+  const assets = getLocalAssets();
+  const assetById = new Map(assets.map((x) => [x.id, x]));
+  for (const row of getLocalWos()) {
+    const asset = assetById.get(row.asset_id) || {};
+    const wo = { ...row, asset_code: row.asset_code || asset.asset_code, asset_name: row.asset_name || asset.name, department: row.department || asset.department };
+    if (!ACTIVE_WO_STATUSES.includes(wo.status)) continue;
+    const due = String(wo.required_due_date || wo.original_due_date || wo.due_date || '').slice(0, 10);
+    if (!due) continue;
+    const diff = dayDiff(due, today);
+    if (diff > 30) continue;
+    const base = {
+      reference_type: 'VCC_WORK_ORDER', reference_id: wo.id, work_order_id: wo.id, wo_code: wo.wo_code, asset_id: wo.asset_id,
+      asset_code: wo.asset_code, asset_name: wo.asset_name, department: wo.department, due_date: due, days_offset: Math.abs(diff)
+    };
+    if (diff < 0) {
+      const tier = -diff >= 14 ? 3 : (-diff >= 7 ? 2 : 1);
+      const type = ['OVERDUE_L1', 'OVERDUE_L2_ESCALATED', 'OVERDUE_L3_CRITICAL'][tier - 1];
+      want(`WO:${wo.id}:${type}`, {
+        ...base, notification_type: type, escalation_level: tier, severity: tier === 1 ? 'WARNING' : 'CRITICAL',
+        title: `[เลยกำหนด L${tier}] เครื่องมือ ${wo.asset_code} เกินกำหนด ${-diff} วัน`,
+        message: `ใบสั่งงาน ${wo.wo_code} ของเครื่องมือ ${wo.asset_code} (${wo.asset_name}) เกินกำหนดทวนสอบแล้ว ${-diff} วัน (ครบกำหนด ${due})`
+      });
+    } else {
+      const type = diff <= 7 ? 'DUE_SOON_7' : 'DUE_SOON_30';
+      want(`WO:${wo.id}:${type}`, {
+        ...base, notification_type: type, severity: diff <= 7 ? 'WARNING' : 'INFO',
+        title: `[ใกล้ครบกำหนด] เครื่องมือ ${wo.asset_code} อีก ${diff} วัน`,
+        message: `ใบสั่งงาน ${wo.wo_code} ของเครื่องมือ ${wo.asset_code} (${wo.asset_name}) จะครบกำหนดวันที่ ${due}`
+      });
     }
-  };
+  }
+  for (const asset of assets) {
+    if (asset.status !== 'ON_HOLD') continue;
+    want(`NC:${asset.id}:NC_ON_HOLD_ACTION`, {
+      notification_type: 'NC_ON_HOLD_ACTION', reference_type: 'VCC_ASSET', reference_id: asset.id, asset_id: asset.id,
+      asset_code: asset.asset_code, asset_name: asset.name, department: asset.department, severity: 'CRITICAL', days_offset: 0,
+      title: `[เครื่องมือถูกระงับใช้/NC] เครื่องมือ ${asset.asset_code} ติดสถานะ ON_HOLD`,
+      message: `เครื่องมือ ${asset.asset_code} (${asset.name}) ถูกระงับการใช้งาน อยู่ระหว่างรอการประเมินผลกระทบต่อผลิตภัณฑ์`
+    });
+  }
+
+  const summary = { created: 0, updated: 0, escalated: 0, resolved: 0 };
+  const now = new Date().toISOString();
+  const list = getLocalNotifications().map((n) => {
+    if (n.status === 'RESOLVED') return n;
+    const next = wanted.get(n.dedup_key);
+    if (next) {
+      wanted.delete(n.dedup_key);
+      summary.updated++;
+      return { ...n, ...next, updated_at: now };
+    }
+    summary.resolved++;
+    return { ...n, status: 'RESOLVED', resolved_at: now, resolved_reason: 'CONDITION_CLEARED', updated_at: now };
+  });
+  for (const n of wanted.values()) {
+    list.unshift({ id: `NTF-${n.dedup_key}-${Date.now().toString(36)}`, status: 'PENDING', created_at: now, updated_at: now, ...n });
+    summary.created++;
+    if (n.escalation_level > 1) summary.escalated++;
+  }
+  setLocalNotifications(list);
+  return summary;
+};
+
+const bellLink = (n) => (n.work_order_id ? `/vcc/work-orders?wo=${encodeURIComponent(n.work_order_id)}` : '/vcc/assets');
+
+/**
+ * Loads what is waiting for the current user into the store, where the shared bell reads it next to the DCC
+ * notifications. A user without VCC access simply gets an empty list.
+ */
+export const syncVccNotifications = async () => {
+  let rows = [];
+  try {
+    if (isApiMode) {
+      rows = (await apiGet('/api/vcc/notifications/inbox')).notifications || [];
+    } else {
+      assertLocalVccAccess();
+      runLocalSweep();
+      rows = (await fetchVccNotifications({ status: 'PENDING', limit: 200 })).notifications;
+    }
+  } catch {
+    rows = [];
+  }
+  useStore.setState({
+    vccNotifications: rows.map((n) => ({
+      id: `vcc-${n.id}`, vccId: n.id, module: 'VCC', isEvent: n.reference_type === 'VCC_WO_EVENT', severity: n.severity,
+      title: n.title, message: n.message, created_at: n.created_at, link: bellLink(n)
+    }))
+  });
 };
 
 /**
