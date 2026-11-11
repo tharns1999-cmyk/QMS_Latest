@@ -32,58 +32,88 @@ describe('shared UI helper for who may manage assets', () => {
   });
 });
 
-describe('VCC asset register: department-based management panel', () => {
+describe('VCC asset register: department-based management panel & Strict Department Scoping', () => {
   beforeEach(async () => {
     resetVccLocalStore();
     useStore.setState({ departments: DEPTS, masterDepartments: DEPTS, currentUser: dcc });
     await createVccAsset({ asset_code: 'LB-T1', name: 'เครื่องมือ LB', asset_type: 'เครื่องชั่ง', department: 'LB' });
   });
 
-  it('QC L4 sees the management panel with the add button, no types button, and only QC rows are manageable', async () => {
+  it('QC L4 sees strictly QC rows only (no LB rows or "แผนกอื่น • ดูอย่างเดียว"), locked department badge, and manageable controls', async () => {
     useStore.setState({ currentUser: qc4 });
     open();
-    await waitFor(() => expect(screen.getByText('LB-T1')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('ST002')).toBeInTheDocument());
+    expect(screen.queryByText('LB-T1')).toBeNull();
+    expect(screen.queryByText('แผนกอื่น • ดูอย่างเดียว')).toBeNull();
+    expect(screen.queryByRole('combobox', { name: 'กรองตามแผนก' })).toBeNull();
+    expect(screen.getByTestId('locked-department-badge')).toHaveTextContent(/แผนก:\s*QC\s*—\s*ควบคุมคุณภาพ/);
+
     expect(screen.getByRole('button', { name: /เพิ่มเครื่องมือ/ })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /ตั้งค่าประเภทเครื่องมือ/ })).toBeNull();
     expect(screen.getByTestId('asset-manage-summary')).toHaveTextContent(/แผนก QC/);
-
-    const lbRow = screen.getByText('LB-T1').closest('tr');
-    expect(within(lbRow).queryByRole('button', { name: /^แก้ไข$/ })).toBeNull();
-    expect(within(lbRow).queryByRole('button', { name: /ปลดออกจากทะเบียน/ })).toBeNull();
-    expect(within(lbRow).getByTestId('asset-ownership')).toHaveTextContent('แผนกอื่น • ดูอย่างเดียว');
-    expect(within(lbRow).getByTestId('asset-responsible')).toHaveTextContent(/หัวหน้าแผนก LB/);
-    // History stays available to everyone who can read.
-    expect(within(lbRow).getByRole('button', { name: /ประวัติ/ })).toBeInTheDocument();
 
     const qcRow = screen.getAllByTestId('asset-ownership').find((el) => /แผนกของฉัน • จัดการได้/.test(el.textContent)).closest('tr');
     expect(within(qcRow).getByRole('button', { name: /^แก้ไข$/ })).toBeInTheDocument();
     expect(within(qcRow).getByRole('button', { name: /ปลดออกจากทะเบียน/ })).toBeInTheDocument();
   });
 
-  it('QC L2 sees an explanation of who is responsible instead of buttons they cannot use', async () => {
+  it('LB L4 user sees strictly LB rows only (never sees QC or WH assets) and sees Clean Empty State when LB has no instruments', async () => {
+    resetVccLocalStore();
+    useStore.setState({ departments: DEPTS, masterDepartments: DEPTS, currentUser: lb4 });
+    open();
+
+    // When LB has 0 instruments in the register, shows Clean Empty State with CTA button
+    await waitFor(() => expect(screen.getByTestId('clean-department-empty-state')).toBeInTheDocument());
+    expect(screen.getByText(/ยังไม่มีเครื่องมือวัดในทะเบียนของฝ่าย ห้องปฏิบัติการ \(LB\)/)).toBeInTheDocument();
+    expect(screen.queryByText('ST002')).toBeNull();
+    expect(screen.queryByText('TM-07')).toBeNull();
+    expect(screen.queryByText('แผนกอื่น • ดูอย่างเดียว')).toBeNull();
+    expect(screen.queryByRole('combobox', { name: 'กรองตามแผนก' })).toBeNull();
+    expect(screen.getByTestId('locked-department-badge')).toHaveTextContent(/แผนก:\s*LB\s*—\s*ห้องปฏิบัติการ/);
+
+    const firstRegisterBtn = screen.getByRole('button', { name: /\+ ลงทะเบียนเครื่องมือชิ้นแรก/ });
+    expect(firstRegisterBtn).toBeInTheDocument();
+    fireEvent.click(firstRegisterBtn);
+    const deptSelect = screen.getByText(/แผนกเจ้าของ/).closest('div').querySelector('select');
+    expect(deptSelect.value).toBe('LB');
+  });
+
+  it('QC L2 sees an explanation of who is responsible instead of buttons they cannot use, scoped strictly to QC', async () => {
     useStore.setState({ currentUser: qc2 });
     open();
-    await waitFor(() => expect(screen.getByText('LB-T1')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('ST002')).toBeInTheDocument());
+    expect(screen.queryByText('LB-T1')).toBeNull();
     expect(screen.queryByRole('button', { name: /เพิ่มเครื่องมือ/ })).toBeNull();
     expect(screen.queryByRole('button', { name: /^แก้ไข$/ })).toBeNull();
     expect(screen.getByRole('note')).toHaveTextContent(/หัวหน้าแผนก \(ระดับ L4 ขึ้นไป\)/);
     expect(screen.getAllByTestId('asset-responsible').length).toBeGreaterThan(0);
   });
 
-  it('DCC sees every row as manageable and the types button next to the add button', async () => {
+  it('DCC sees every row as manageable, has the All Departments dropdown filter, and the types button next to the add button', async () => {
     open();
     await waitFor(() => expect(screen.getByText('LB-T1')).toBeInTheDocument());
+    expect(screen.getByText('ST002')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /ตั้งค่าประเภทเครื่องมือ/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /เพิ่มเครื่องมือ/ })).toBeInTheDocument();
+
+    const deptDropdown = screen.getByRole('combobox', { name: 'กรองตามแผนก' });
+    expect(deptDropdown).toBeInTheDocument();
+    expect(within(deptDropdown).getByRole('option', { name: /ทั้งหมดทุกแผนก \(All Departments\)/ })).toBeInTheDocument();
+
     const lbRow = screen.getByText('LB-T1').closest('tr');
     expect(within(lbRow).getByRole('button', { name: /^แก้ไข$/ })).toBeInTheDocument();
     expect(screen.queryByTestId('asset-responsible')).toBeNull();
+
+    // Filter specifically to LB
+    fireEvent.change(deptDropdown, { target: { value: 'LB' } });
+    await waitFor(() => expect(screen.queryByText('ST002')).toBeNull());
+    expect(screen.getByText('LB-T1')).toBeInTheDocument();
   });
 
   it('the add dialog offers only the user\'s own department; editing locks the department for non-DCC', async () => {
     useStore.setState({ currentUser: qc4 });
     open();
-    await waitFor(() => expect(screen.getByText('LB-T1')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('ST002')).toBeInTheDocument());
     fireEvent.click(screen.getByRole('button', { name: /เพิ่มเครื่องมือ/ }));
     const deptSelect = screen.getByText(/แผนกเจ้าของ/).closest('div').querySelector('select');
     expect(Array.from(deptSelect.options).map((o) => o.value).filter(Boolean)).toEqual(['QC']);

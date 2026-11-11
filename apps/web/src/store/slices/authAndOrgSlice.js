@@ -82,7 +82,10 @@ export const createAuthAndOrgSlice = (set, get) => ({
 
   setCurrentUser: (userId) => set((state) => {
     const targetId = typeof userId === 'object' && userId !== null ? (userId.id || userId.empId) : userId;
-    const baseUser = state.masterUsers.find(u => u.id === targetId || u.empId === targetId) || (typeof userId === 'object' && userId !== null ? userId : null);
+    const baseUser =
+      state.masterUsers.find(u => u.id === targetId || u.empId === targetId) ||
+      MASTER_DATA_USER.find(u => u.id === targetId || u.empId === targetId) ||
+      (typeof userId === 'object' && userId !== null ? userId : null);
     if (!baseUser) return state;
 
     // Find departments from any of the lists

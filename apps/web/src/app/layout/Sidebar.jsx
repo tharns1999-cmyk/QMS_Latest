@@ -1,7 +1,7 @@
 import { useModuleAccess } from '../../shared/components/ModuleAccessProvider';
 import React, { useState, useEffect, useMemo } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
-import useStore, { isNotificationVisibleToUser, isNotificationReadByUser } from '../../store/useStore';
+import useStore, { isNotificationVisibleToUser, isNotificationReadByUser, MASTER_DATA_USER } from '../../store/useStore';
 import { 
   Home, 
   Inbox, 
@@ -133,6 +133,21 @@ const Sidebar = ({ isOpen = false, onClose = () => {} }) => {
     simulatedSystemDate, getEffectiveToday
   } = useStore();
   
+  const switcherUsers = useMemo(() => {
+    const map = new Map();
+    (masterUsers || []).forEach((u) => {
+      const key = u.id || u.empId;
+      if (key) map.set(key, u);
+    });
+    (MASTER_DATA_USER || []).forEach((u) => {
+      const key = u.id || u.empId;
+      if (key && !map.has(key)) {
+        map.set(key, u);
+      }
+    });
+    return Array.from(map.values());
+  }, [masterUsers]);
+
   const [isCleanSlateOpen, setIsCleanSlateOpen] = useState(false);
   const [changingPassword, setChangingPassword] = useState(false);
   
@@ -610,7 +625,7 @@ const Sidebar = ({ isOpen = false, onClose = () => {} }) => {
               }}
               title="สลับผู้ใช้งาน / บทบาทจำลอง"
             >
-              {(masterUsers || []).map(user => (
+              {switcherUsers.map(user => (
                 <option key={user.id} value={user.id}>
                   {user.name} ({user.department}) L{user.level}
                 </option>

@@ -38,7 +38,7 @@ import {
   AssetTypesModal
 } from '../components/AssetRegisterModals';
 import { AssetDetailDrawer } from '../components/AssetDetailDrawer';
-import { filterReadableDepartments, manageableVccDepartments, canManageVccAsset, getUserDeptCodes } from '../utils/departmentScope';
+import { filterReadableDepartments, manageableVccDepartments, canManageVccAsset, getUserDeptCodes, canReadAllVccDepartments } from '../utils/departmentScope';
 import AnnualPlanMatrixSection from '../components/AnnualPlanMatrixSection';
 import WorkOrderSection from '../components/WorkOrderSection';
 import VccDashboardSection from '../components/VccDashboardSection';
@@ -134,9 +134,27 @@ const AssetRegisterPageInner = () => {
   const [filterType, setFilterType] = useState('');
   // DCC manages every department; L4+ only their own VCC department(s). The server enforces the same rule; here it only decides what is shown.
   const isDccUser = Boolean(currentUser?.isDcc);
+  const canReadAllDepts = useMemo(() => canReadAllVccDepartments(currentUser), [currentUser]);
   const manageableDepts = useMemo(() => manageableVccDepartments(currentUser), [currentUser]);
   const canAddAsset = manageableDepts.some((d) => !currentUser?.vccEnabledDepartments || currentUser.vccEnabledDepartments.includes(d));
   const myDepts = useMemo(() => getUserDeptCodes(currentUser), [currentUser]);
+  const lockedDeptCode = useMemo(
+    () => (canReadAllDepts ? '' : (myDepts.length === 1 ? myDepts[0] : String(currentUser?.department || currentUser?.primary_department || myDepts[0] || '').toUpperCase())),
+    [canReadAllDepts, myDepts, currentUser]
+  );
+  const effectiveDeptFilter = useMemo(
+    () => (canReadAllDepts ? filterDept : (filterDept || lockedDeptCode)),
+    [canReadAllDepts, filterDept, lockedDeptCode]
+  );
+  const scopedDeptInfo = useMemo(() => {
+    const targetCode = effectiveDeptFilter || myDepts[0] || String(currentUser?.department || '').toUpperCase();
+    if (!targetCode) return null;
+    const found = activeDepartments.find((d) => String(d.code).toUpperCase() === targetCode);
+    return {
+      code: targetCode,
+      nameTh: found?.nameTh || targetCode
+    };
+  }, [effectiveDeptFilter, myDepts, currentUser, activeDepartments]);
   const formDepartments = useMemo(
     () => (isDccUser ? activeDepartments : activeDepartments.filter((d) => manageableDepts.includes(String(d.code).toUpperCase()))),
     [isDccUser, activeDepartments, manageableDepts]
@@ -248,28 +266,28 @@ const AssetRegisterPageInner = () => {
       const [listActive, listOnHold, listUnderRepair, listRetired, types] = await Promise.all([
         fetchVccAssets({
           status: 'ACTIVE',
-          department: filterDept,
+          department: effectiveDeptFilter,
           asset_type: filterType,
           calibratable_only: true,
           q: searchQuery
         }),
         fetchVccAssets({
           status: 'ON_HOLD',
-          department: filterDept,
+          department: effectiveDeptFilter,
           asset_type: filterType,
           calibratable_only: true,
           q: searchQuery
         }),
         fetchVccAssets({
           status: 'UNDER_REPAIR',
-          department: filterDept,
+          department: effectiveDeptFilter,
           asset_type: filterType,
           calibratable_only: true,
           q: searchQuery
         }),
         fetchVccAssets({
           status: 'RETIRED',
-          department: filterDept,
+          department: effectiveDeptFilter,
           asset_type: filterType,
           calibratable_only: true,
           q: searchQuery
@@ -303,7 +321,7 @@ const AssetRegisterPageInner = () => {
     } finally {
       setLoading(false);
     }
-  }, [filterDept, filterType, searchQuery]);
+  }, [effectiveDeptFilter, filterType, searchQuery]);
 
   const displayedAssets = useMemo(() => {
     if (activeTab === 'ACTIVE') return assetsByStatus.ACTIVE;
@@ -644,7 +662,7 @@ const AssetRegisterPageInner = () => {
                 {isDccUser
                   ? 'คุณเป็น DCC: จัดการเครื่องมือได้ทุกแผนก โอนเครื่องมือข้ามแผนกได้ และตั้งค่าประเภทเครื่องมือได้'
                   : canAddAsset
-                    ? `คุณจัดการเครื่องมือของแผนก ${manageableDepts.join(', ')} ได้ (เพิ่ม แก้ไข ปลดออก นำกลับมาใช้) เครื่องมือของแผนกอื่นดูได้อย่างเดียว`
+                    ? `คุณจัดการเครื่องมือของแผนก ${manageableDepts.join(', ')} ได้ (เพิ่ม แก้ไข ปลดออก นำกลับมาใช้)`
                     : 'คุณดูทะเบียนเครื่องมือได้อย่างเดียว'}
               </p>
               {!canAddAsset && (
@@ -806,19 +824,35 @@ const AssetRegisterPageInner = () => {
               </div>
 
               <div className="md:col-span-3">
-                <select
-                  value={filterDept}
-                  onChange={(e) => setFilterDept(e.target.value)}
-                  aria-label="กรองตามแผนก"
-                  className="w-full h-10 px-3 rounded-xl border border-slate-300 text-sm bg-white focus:outline-none focus:border-indigo-600 text-slate-700"
-                >
-                  <option value="">ทุกแผนก (Master Data)</option>
-                  {activeDepartments.map((d) => (
-                    <option key={d.code} value={d.code}>
-                      {d.code} — {d.nameTh}
-                    </option>
-                  ))}
-                </select>
+                {canReadAllDepts ? (
+                  <select
+                    value={filterDept}
+                    onChange={(e) => setFilterDept(e.target.value)}
+                    aria-label="กรองตามแผนก"
+                    className="w-full h-10 px-3 rounded-xl border border-slate-300 text-sm bg-white focus:outline-none focus:border-indigo-600 text-slate-700"
+                  >
+                    <option value="">ทั้งหมดทุกแผนก (All Departments)</option>
+                    {activeDepartments.map((d) => (
+                      <option key={d.code} value={d.code}>
+                        {d.code} — {d.nameTh}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <div
+                    data-testid="locked-department-badge"
+                    aria-disabled="true"
+                    className="w-full h-10 px-3 rounded-xl border border-slate-200 bg-slate-100 text-xs sm:text-sm font-semibold text-slate-700 flex items-center justify-between gap-2 select-none"
+                    title="แสดงเฉพาะเครื่องมือของแผนกที่สังกัด"
+                  >
+                    <span className="truncate">
+                      แผนก: {scopedDeptInfo ? `${scopedDeptInfo.code} — ${scopedDeptInfo.nameTh}` : (myDepts[0] || '-')}
+                    </span>
+                    <span className="shrink-0 px-2 py-0.5 rounded-md bg-white border border-slate-200 text-[11px] font-bold text-slate-500">
+                      แผนกของฉัน
+                    </span>
+                  </div>
+                )}
               </div>
 
               <div className="md:col-span-2">
@@ -838,12 +872,12 @@ const AssetRegisterPageInner = () => {
               </div>
 
               <div className="md:col-span-1 flex justify-end">
-                {Boolean(searchQuery || filterDept || filterType) && (
+                {Boolean(searchQuery || (canReadAllDepts && filterDept) || filterType) && (
                   <button
                     type="button"
                     onClick={() => {
                       setSearchQuery('');
-                      setFilterDept('');
+                      if (canReadAllDepts) setFilterDept('');
                       setFilterType('');
                     }}
                     className="w-full h-10 px-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 cursor-pointer whitespace-nowrap text-center"
@@ -863,14 +897,42 @@ const AssetRegisterPageInner = () => {
                 กำลังโหลดข้อมูลทะเบียนเครื่องมือ...
               </div>
             ) : displayedAssets.length === 0 ? (
-              <div className="p-12 text-center space-y-2">
-                <div className="text-slate-700 font-bold text-base">
-                  ไม่พบรายการเครื่องมือในสถานะ {activeTab === 'ALL' ? 'ทั้งหมด' : getAssetStatusLabel(activeTab)}
+              counts.ALL === 0 && !searchQuery && !filterType && scopedDeptInfo ? (
+                <div className="p-12 text-center space-y-3" data-testid="clean-department-empty-state">
+                  <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-500 flex items-center justify-center mx-auto border border-slate-200/80">
+                    <Wrench size={22} />
+                  </div>
+                  <div className="text-slate-800 font-bold text-base">
+                    ยังไม่มีเครื่องมือวัดในทะเบียนของฝ่าย {scopedDeptInfo.nameTh} ({scopedDeptInfo.code})
+                  </div>
+                  <p className="text-slate-500 text-sm max-w-md mx-auto">
+                    {canAddAsset
+                      ? 'เริ่มต้นสร้างทะเบียนเครื่องมือวัดของแผนกคุณ เพื่อใช้ในการวางแผนทวนสอบและสอบเทียบประจำปี'
+                      : 'ยังไม่มีเครื่องมือวัดที่ลงทะเบียนไว้สำหรับแผนกนี้'}
+                  </p>
+                  {canAddAsset && (
+                    <div className="pt-1">
+                      <button
+                        type="button"
+                        onClick={openCreateModal}
+                        className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 text-white text-xs sm:text-sm font-bold hover:bg-indigo-700 transition-colors shadow-xs cursor-pointer"
+                      >
+                        <Plus size={16} />
+                        <span>+ ลงทะเบียนเครื่องมือชิ้นแรก</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
-                <p className="text-slate-500 text-sm">
-                  {canAddAsset ? 'ลองปรับเงื่อนไขการค้นหา หรือกดปุ่ม “เพิ่มเครื่องมือ” ด้านบน' : 'ลองปรับเงื่อนไขการค้นหา'}
-                </p>
-              </div>
+              ) : (
+                <div className="p-12 text-center space-y-2">
+                  <div className="text-slate-700 font-bold text-base">
+                    ไม่พบรายการเครื่องมือในสถานะ {activeTab === 'ALL' ? 'ทั้งหมด' : getAssetStatusLabel(activeTab)}
+                  </div>
+                  <p className="text-slate-500 text-sm">
+                    {canAddAsset ? 'ลองปรับเงื่อนไขการค้นหา หรือกดปุ่ม “เพิ่มเครื่องมือ” ด้านบน' : 'ลองปรับเงื่อนไขการค้นหา'}
+                  </p>
+                </div>
+              )
             ) : isMobile ? (
               <div className="p-3 space-y-3" data-testid="vcc-asset-mobile-card-list">
                 {displayedAssets.map((asset) => {
@@ -935,16 +997,18 @@ const AssetRegisterPageInner = () => {
                             ที่ตั้ง: <span className="text-slate-700">{asset.location}</span>
                           </div>
                         )}
-                        <div className="mt-1.5">
-                          <span
-                            data-testid="asset-ownership"
-                            className={`inline-flex px-2 py-0.5 rounded-md border text-[11px] font-semibold ${
-                              canManage ? 'bg-indigo-50 text-indigo-800 border-indigo-200' : 'bg-slate-50 text-slate-600 border-slate-200'
-                            }`}
-                          >
-                            {canManage ? (mine ? 'แผนกของฉัน • จัดการได้' : 'จัดการได้ (DCC)') : mine ? 'แผนกของฉัน • ดูอย่างเดียว' : 'แผนกอื่น • ดูอย่างเดียว'}
-                          </span>
-                        </div>
+                        {(canManage || mine) && (
+                          <div className="mt-1.5">
+                            <span
+                              data-testid="asset-ownership"
+                              className={`inline-flex px-2 py-0.5 rounded-md border text-[11px] font-semibold ${
+                                canManage ? 'bg-indigo-50 text-indigo-800 border-indigo-200' : 'bg-slate-50 text-slate-600 border-slate-200'
+                              }`}
+                            >
+                              {canManage ? (mine ? 'แผนกของฉัน • จัดการได้' : 'จัดการได้ (DCC)') : 'แผนกของฉัน • ดูอย่างเดียว'}
+                            </span>
+                          </div>
+                        )}
                       </div>
 
                       {/* Actions with min-h-[44px] touch targets */}
@@ -1047,6 +1111,7 @@ const AssetRegisterPageInner = () => {
                             {(() => {
                               const mine = myDepts.includes(String(asset.department).toUpperCase());
                               const canManage = canManageVccAsset(currentUser, asset.department);
+                              if (!canManage && !mine) return null;
                               return (
                                 <span
                                   data-testid="asset-ownership"
@@ -1054,7 +1119,7 @@ const AssetRegisterPageInner = () => {
                                     canManage ? 'bg-indigo-50 text-indigo-800 border-indigo-200' : 'bg-slate-50 text-slate-600 border-slate-200'
                                   }`}
                                 >
-                                  {canManage ? (mine ? 'แผนกของฉัน • จัดการได้' : 'จัดการได้ (DCC)') : mine ? 'แผนกของฉัน • ดูอย่างเดียว' : 'แผนกอื่น • ดูอย่างเดียว'}
+                                  {canManage ? (mine ? 'แผนกของฉัน • จัดการได้' : 'จัดการได้ (DCC)') : 'แผนกของฉัน • ดูอย่างเดียว'}
                                 </span>
                               );
                             })()}
