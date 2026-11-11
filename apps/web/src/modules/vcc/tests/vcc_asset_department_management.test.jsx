@@ -4,7 +4,7 @@ import { render, screen, fireEvent, waitFor, within } from '@testing-library/rea
 import { MemoryRouter } from 'react-router-dom';
 import useStore from '../../../store/useStore';
 import AssetRegisterPage from '../pages/AssetRegisterPage';
-import { resetVccLocalStore, createVccAsset, updateVccAsset, retireVccAsset, reactivateVccAsset } from '../api/vccApi';
+import { resetVccLocalStore, createVccAsset, updateVccAsset, retireVccAsset, reactivateVccAsset, saveVccAssetTypes } from '../api/vccApi';
 import { canManageVccAsset, manageableVccDepartments } from '../utils/departmentScope';
 
 const DEPTS = [
@@ -76,6 +76,8 @@ describe('VCC asset register: department-based management panel & Strict Departm
     fireEvent.click(firstRegisterBtn);
     const deptSelect = screen.getByText(/แผนกเจ้าของ/).closest('div').querySelector('select');
     expect(deptSelect.value).toBe('LB');
+    expect(deptSelect).toBeDisabled();
+    expect(within(deptSelect).getByRole('option', { name: '[LB] ห้องปฏิบัติการ' })).toBeInTheDocument();
   });
 
   it('QC L2 sees an explanation of who is responsible instead of buttons they cannot use, scoped strictly to QC', async () => {
@@ -110,14 +112,23 @@ describe('VCC asset register: department-based management panel & Strict Departm
     expect(screen.getByText('LB-T1')).toBeInTheDocument();
   });
 
-  it('the add dialog offers only the user\'s own department; editing locks the department for non-DCC', async () => {
+  it('the add dialog locks the department to the user\'s own department for non-DCC; DCC can select any department and dynamic asset types from Master Data', async () => {
+    await saveVccAssetTypes(['เทอร์โมมิเตอร์', 'เครื่องชั่ง', 'ตู้อบจุลชีววิทยา (Incubator)']);
+
     useStore.setState({ currentUser: qc4 });
-    open();
+    const { unmount } = open();
     await waitFor(() => expect(screen.getByText('ST002')).toBeInTheDocument());
     fireEvent.click(screen.getByRole('button', { name: /เพิ่มเครื่องมือ/ }));
     const deptSelect = screen.getByText(/แผนกเจ้าของ/).closest('div').querySelector('select');
     expect(Array.from(deptSelect.options).map((o) => o.value).filter(Boolean)).toEqual(['QC']);
     expect(deptSelect.value).toBe('QC');
+    expect(deptSelect).toBeDisabled();
+    expect(within(deptSelect).getByRole('option', { name: '[QC] ควบคุมคุณภาพ' })).toBeInTheDocument();
+
+    // Dynamic asset types from Master Data are populated in the modal
+    const typeSelect = screen.getAllByText(/ประเภทเครื่องมือ/)[0].closest('div').querySelector('select');
+    expect(within(typeSelect).getByRole('option', { name: 'ตู้อบจุลชีววิทยา (Incubator)' })).toBeInTheDocument();
+
     fireEvent.click(screen.getByRole('button', { name: /ยกเลิก/ }));
 
     const qcRow = screen.getAllByTestId('asset-ownership').find((el) => /จัดการได้/.test(el.textContent)).closest('tr');
@@ -125,6 +136,18 @@ describe('VCC asset register: department-based management panel & Strict Departm
     const editSelect = screen.getByText(/แผนกเจ้าของ/).closest('div').querySelector('select');
     expect(editSelect).toBeDisabled();
     expect(screen.getByText(/การโอนเครื่องมือข้ามแผนกทำได้เฉพาะ DCC/)).toBeInTheDocument();
+    unmount();
+
+    // DCC Admin opens Add Instrument Modal -> Department dropdown is enabled and lists all active departments in [CODE] NameTh format
+    useStore.setState({ currentUser: dcc });
+    open();
+    await waitFor(() => expect(screen.getByText('LB-T1')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: /เพิ่มเครื่องมือ/ }));
+    const dccDeptSelect = screen.getByText(/แผนกเจ้าของ/).closest('div').querySelector('select');
+    expect(dccDeptSelect).not.toBeDisabled();
+    expect(Array.from(dccDeptSelect.options).map((o) => o.value).filter(Boolean)).toEqual(['QC', 'LB', 'DC']);
+    expect(within(dccDeptSelect).getByRole('option', { name: '[QC] ควบคุมคุณภาพ' })).toBeInTheDocument();
+    expect(within(dccDeptSelect).getByRole('option', { name: '[LB] ห้องปฏิบัติการ' })).toBeInTheDocument();
   });
 });
 

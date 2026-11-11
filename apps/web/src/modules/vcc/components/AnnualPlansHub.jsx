@@ -21,7 +21,7 @@ import {
 } from '../utils/planLabels';
 import { VCC_DEPARTMENTS } from '../utils/departmentScope';
 import DepartmentBadge from '../../../shared/components/ui/DepartmentBadge';
-import useStore from '../../../store/useStore';
+import useStore, { MASTER_DATA_DEPT } from '../../../store/useStore';
 
 export { resolvePlanCode, resolveDigitalPlanCode };
 
@@ -59,26 +59,30 @@ export const AnnualPlansHub = ({
   const [searchQuery, setSearchQuery] = useState('');
   const storeDepartments = useStore((s) => s.masterDepartments || s.departments || []);
 
-  // Derive departments dynamically from activeDepartments prop, or VCC_DEPARTMENTS + store masterDepartments
+  // Derive departments dynamically from activeDepartments prop or Central Store (masterDepartments / MASTER_DATA_DEPT)
   const departments = useMemo(() => {
     if (activeDepartments && activeDepartments.length > 0) return activeDepartments;
+    const rawList = Array.isArray(storeDepartments) && storeDepartments.length > 0 ? storeDepartments : (MASTER_DATA_DEPT || []);
     const deptLookup = new Map();
-    if (Array.isArray(storeDepartments)) {
-      storeDepartments.forEach((d) => {
-        const code = d.code || d.id;
-        if (code) {
-          deptLookup.set(code, d.nameTh || d.name_th || d.name || code);
-        }
-      });
-    }
+    rawList.forEach((d) => {
+      const code = d.code || d.id;
+      if (code && (d.status || 'ACTIVE') === 'ACTIVE') {
+        deptLookup.set(code, d.nameTh || d.name_th || d.name || code);
+      }
+    });
+    VCC_DEPARTMENTS.forEach((code) => {
+      if (!deptLookup.has(code)) {
+        deptLookup.set(code, code);
+      }
+    });
     plans.forEach((p) => {
       if (p?.department && !deptLookup.has(p.department)) {
         deptLookup.set(p.department, p.department_name_th || p.department);
       }
     });
-    return VCC_DEPARTMENTS.map((code) => ({
+    return Array.from(deptLookup.entries()).map(([code, nameTh]) => ({
       code,
-      nameTh: deptLookup.get(code) || code
+      nameTh
     }));
   }, [activeDepartments, storeDepartments, plans]);
 

@@ -348,10 +348,14 @@ const AssetRegisterPageInner = () => {
   const openCreateModal = () => {
     setEditingAsset(null);
     setFormError('');
+    const primaryDept = String(currentUser?.department || currentUser?.primary_department || myDepts[0] || '').toUpperCase();
+    const defaultDept = isDccUser
+      ? (formDepartments[0]?.code || '')
+      : (formDepartments.find((d) => String(d.code).toUpperCase() === primaryDept)?.code || formDepartments[0]?.code || '');
     setForm({
       ...EMPTY_FORM,
       asset_type: assetTypes[0] || '',
-      department: formDepartments[0]?.code || ''
+      department: defaultDept
     });
     setFormOpen(true);
   };
@@ -829,12 +833,12 @@ const AssetRegisterPageInner = () => {
                     value={filterDept}
                     onChange={(e) => setFilterDept(e.target.value)}
                     aria-label="กรองตามแผนก"
-                    className="w-full h-10 px-3 rounded-xl border border-slate-300 text-sm bg-white focus:outline-none focus:border-indigo-600 text-slate-700"
+                    className="w-full h-10 px-3 pr-8 truncate rounded-xl border border-slate-300 text-sm bg-white focus:outline-none focus:border-indigo-600 text-slate-700"
                   >
                     <option value="">ทั้งหมดทุกแผนก (All Departments)</option>
                     {activeDepartments.map((d) => (
                       <option key={d.code} value={d.code}>
-                        {d.code} — {d.nameTh}
+                        [{d.code}] {d.nameTh}
                       </option>
                     ))}
                   </select>
@@ -1227,8 +1231,10 @@ const AssetRegisterPageInner = () => {
         handleSaveAsset={handleSaveAsset}
         formTypeOptions={formTypeOptions}
         assetTypes={assetTypes}
+        loadingAssetTypes={loading && assetTypes.length === 0}
         activeDepartments={editingAsset ? formDepartments : formDepartments.filter((d) => !currentUser?.vccEnabledDepartments || currentUser.vccEnabledDepartments.includes(d.code))}
         canTransfer={isDccUser}
+        isDepartmentLocked={!isDccUser}
       />
 
       <AssetStatusModal
