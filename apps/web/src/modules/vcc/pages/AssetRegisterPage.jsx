@@ -36,6 +36,7 @@ import { AssetRegisterTitleBar } from '../components/AssetRegisterTitleBar';
 import { AssetFilterToolbar } from '../components/AssetFilterToolbar';
 import { AssetRegisterTable } from '../components/AssetRegisterTable';
 import { AssetRegisterEmptyState } from '../components/AssetRegisterEmptyState';
+import MobileCollapsible from '../components/MobileCollapsible';
 import { Info } from 'lucide-react';
 
 const EMPTY_FORM = {
@@ -628,14 +629,6 @@ const AssetRegisterPageInner = () => {
         />
       ) : (
         <>
-          <span className="sr-only" data-testid="asset-manage-summary">
-            {isDccUser
-              ? 'คุณเป็น DCC: จัดการเครื่องมือได้ทุกแผนก โอนเครื่องมือข้ามแผนกได้ และตั้งค่าประเภทเครื่องมือได้'
-              : canAddAsset
-                ? `คุณจัดการเครื่องมือของแผนก ${manageableDepts.join(', ')} ได้`
-                : 'คุณดูทะเบียนเครื่องมือได้อย่างเดียว'}
-          </span>
-
           <AssetRegisterTitleBar
             title={pageMeta.title}
             description={pageMeta.description}
@@ -646,6 +639,18 @@ const AssetRegisterPageInner = () => {
             onOpenTypes={openTypesSettings}
             onAdd={openCreateModal}
           />
+
+          <div className="px-1 -mt-1">
+            <MobileCollapsible summary="สิทธิ์ของคุณและคำอธิบาย">
+              <p className="text-xs text-slate-500 py-1" data-testid="asset-manage-summary">
+                {isDccUser
+                  ? 'คุณเป็น DCC: จัดการเครื่องมือได้ทุกแผนก โอนเครื่องมือข้ามแผนกได้ และตั้งค่าประเภทเครื่องมือได้'
+                  : canAddAsset
+                    ? `คุณจัดการเครื่องมือของแผนก ${manageableDepts.join(', ')} ได้`
+                    : 'คุณดูทะเบียนเครื่องมือได้อย่างเดียว'}
+              </p>
+            </MobileCollapsible>
+          </div>
 
           {!canAddAsset && (
             <div role="note" className="rounded-xl bg-slate-50 border border-slate-200/80 px-4 py-2.5 text-xs text-slate-600 flex items-center gap-2">
