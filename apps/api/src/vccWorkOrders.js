@@ -1237,6 +1237,9 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
         if (child.status !== 'ACTIVE' || Number(child.is_group) === 1) {
           return c.json({ error: 'เครื่องมือลูกที่เลือกต้องเป็นเครื่องมือรายตัวที่ใช้งานปกติ (ACTIVE)' }, 409);
         }
+        if (!isUserAuthorizedForPlanDept(user, child.department || plan.department)) {
+          return c.json({ error: 'ไม่มีสิทธิ์สร้างใบสั่งงานของแผนกนี้' }, 403);
+        }
         targetAssetId = child.id;
       } else {
         targetAssetId = planItem.asset_id;

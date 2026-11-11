@@ -266,4 +266,24 @@ describe('VCC work-order safety (atomic transitions, INCONCLUSIVE, cancellation,
     const amendments = await env.DB.prepare('SELECT COUNT(*) AS n FROM vcc_work_order_amendments WHERE work_order_id = ?').bind(woId).first('n');
     expect(amendments).toBe(approve.status === 200 ? 1 : 0);
   });
+
+  it('B2: strictly blocks unauthorized user from creating work orders for another department (403 Forbidden)', async () => {
+    const { assetId } = await newWorkOrder('CROSSDEPT');
+    // SF-LB4 is in LB department (approval_level 4, is_dcc 0), asset is in QC
+    const crossWo = await call('POST', '/api/vcc/work-orders', 'SF-LB4', {
+      asset_id: assetId,
+      provider_name: 'ทวนสอบภายใน',
+      due_date: '2026-12-31'
+    });
+    expect(crossWo.status).toBe(403);
+    expect(crossWo.body.error).toContain('ไม่มีสิทธิ์สร้างใบสั่งงานของแผนกนี้');
+
+    // DCC can create for QC
+    const dccWo = await call('POST', '/api/vcc/work-orders', 'SF-DCC', {
+      asset_id: assetId,
+      provider_name: 'ทวนสอบภายใน',
+      due_date: '2026-12-31'
+    });
+    expect(dccWo.status).toBe(201);
+  });
 });
