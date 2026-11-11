@@ -89,7 +89,7 @@ describe('VCC Pre-Go-Live Hardening Regression Suite', () => {
   });
 
   describe('2. Dashboard Dynamic Year Calculation', () => {
-    it('defaults to current calendar year and populates dynamic range in select', () => {
+    it('defaults to current calendar year and populates data-driven range in select', () => {
       const currentYear = new Date().getFullYear();
       render(
         <MemoryRouter>
@@ -101,11 +101,14 @@ describe('VCC Pre-Go-Live Hardening Regression Suite', () => {
       expect(yearSelect).toBeInTheDocument();
       expect(Number(yearSelect.value)).toBe(currentYear);
 
-      // Verify dynamic range contains currentYear - 1, currentYear, currentYear + 1
+      // Verify options are data-driven: contains current year and plan year (2027), descending order, no arbitrary empty years
       const options = Array.from(yearSelect.querySelectorAll('option')).map((o) => Number(o.value));
-      expect(options).toContain(currentYear - 1);
       expect(options).toContain(currentYear);
-      expect(options).toContain(currentYear + 1);
+      expect(options).toContain(2027);
+      expect(options).not.toContain(currentYear - 1);
+      for (let i = 0; i < options.length - 1; i++) {
+        expect(options[i]).toBeGreaterThanOrEqual(options[i + 1]);
+      }
     });
   });
 

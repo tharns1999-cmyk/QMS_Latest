@@ -28,8 +28,9 @@ import VccNotificationAuditTab from './VccNotificationAuditTab';
 import MobileCollapsible from './MobileCollapsible';
 import { CreateWorkOrderModal } from './WorkOrderModals';
 import { createVccWorkOrder } from '../api/vccWorkOrderApi';
-import { fetchVccPlans, fetchVccPlanDetail, fetchVccPlanSettings } from '../api/vccPlanApi';
+import { fetchVccPlans, fetchVccPlanDetail, fetchVccPlanSettings, getLocalPlans } from '../api/vccPlanApi';
 import { fetchVccAssets } from '../api/vccApi';
+import { isApiMode } from '../../../api/client';
 import toast from 'react-hot-toast';
 import useStore from '../../../store/useStore';
 import useVccPolicyUser from '../hooks/useVccPolicyUser';
@@ -110,11 +111,51 @@ export default function VccDashboardSection({ onNavigateToWorkOrders, onNavigate
   const [individualAssets, setIndividualAssets] = useState([]);
   const [providers, setProviders] = useState([]);
 
+  // Data-Driven Year Options: extract real plan years from plans, fallback to local plans in demo mode
+  const [planYears, setPlanYears] = useState(() => {
+    try {
+      if (!isApiMode) {
+        const local = getLocalPlans();
+        if (Array.isArray(local)) {
+          return local
+            .map((p) => Number(p.plan_year || p.year))
+            .filter((y) => Number.isInteger(y) && y > 2000);
+        }
+      }
+    } catch {
+      // safe fallback
+    }
+    return [];
+  });
+
+  useEffect(() => {
+    let active = true;
+    fetchVccPlans({ status: 'ALL' })
+      .then((plans) => {
+        if (!active || !Array.isArray(plans)) return;
+        const years = plans
+          .map((p) => Number(p.plan_year || p.year))
+          .filter((y) => Number.isInteger(y) && y > 2000);
+        setPlanYears(years);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const availableYears = useMemo(() => {
-    const list = [currentYear - 2, currentYear - 1, currentYear, currentYear + 1, currentYear + 2];
-    if (!list.includes(year)) list.push(year);
-    return Array.from(new Set(list)).sort((a, b) => a - b);
-  }, [currentYear, year]);
+    const yearSet = new Set(planYears);
+    yearSet.add(currentYear);
+    return Array.from(yearSet).sort((a, b) => b - a);
+  }, [planYears, currentYear]);
+
+  // Safe Select: Automatically adjust year only when currently selected year is not in availableYears
+  useEffect(() => {
+    if (availableYears.length > 0 && !availableYears.includes(year)) {
+      setYear(availableYears.includes(currentYear) ? currentYear : availableYears[0]);
+    }
+  }, [availableYears, year, currentYear]);
 
   // Settings Modal State
   const [settingsOpen, setSettingsOpen] = useState(false);

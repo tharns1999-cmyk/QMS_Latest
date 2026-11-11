@@ -39,7 +39,14 @@ jobs:
           cache: pnpm
           cache-dependency-path: apps/web/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
-      - run: pnpm exec playwright install --with-deps chromium
+      - name: Configure reliable DNS for apt
+        run: |
+          echo "nameserver 8.8.8.8" | sudo tee /etc/resolv.conf
+          echo "nameserver 1.1.1.1" | sudo tee -a /etc/resolv.conf
+          for i in 1 2 3; do sudo apt-get update && break || sleep 5; done
+      - name: Install Playwright Chromium
+        run: |
+          for i in 1 2 3; do pnpm exec playwright install --with-deps chromium && break || sleep 5; done
       - run: pnpm run test:e2e
       - uses: actions/upload-artifact@v7
         if: failure()
