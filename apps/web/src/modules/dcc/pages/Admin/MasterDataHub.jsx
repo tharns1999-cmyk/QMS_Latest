@@ -13,7 +13,6 @@ import {
   Trash2, 
   ShieldAlert, 
   ShieldCheck, 
-  Unlock, 
   RotateCcw, 
   X, 
   Layers, 
@@ -1196,8 +1195,9 @@ const MasterDataHub = () => {
               }}
               onToggleStatus={(user) => {
                 if (isApiMode) {
-                  (user.id !== currentUser?.id || user.status !== 'ACTIVE') &&
+                  if (user.id !== currentUser?.id || user.status !== 'ACTIVE') {
                     serverData.setUserStatus(user.id, user.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE');
+                  }
                 } else {
                   toggleUserStatus(user.id);
                 }

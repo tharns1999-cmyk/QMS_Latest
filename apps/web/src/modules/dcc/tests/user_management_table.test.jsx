@@ -1,10 +1,11 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import UserManagementTable, {
+import UserManagementTable from '../pages/Admin/components/UserManagementTable';
+import {
   getUserInitials,
   getAvatarRoleBadge
-} from '../pages/Admin/components/UserManagementTable';
+} from '../pages/Admin/components/userTableUtils';
 
 describe('UserManagementTable Component Tests', () => {
   const mockDepartments = [
