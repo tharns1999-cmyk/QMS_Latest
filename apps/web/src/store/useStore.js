@@ -49,7 +49,10 @@ import {
   isNotificationReadByUser,
   calculateSLAStatus,
   getUserActionableTasks,
-  getUserTaskBadgeCount
+  getUserTaskBadgeCount,
+  getDccTaskCount,
+  getVccTaskCount,
+  isVccPlanTask
 } from './slices/systemAndTaskSlice';
 
 // Persistence Middleware
@@ -149,6 +152,9 @@ export {
   calculateSLAStatus,
   getUserActionableTasks,
   getUserTaskBadgeCount,
+  getDccTaskCount,
+  getVccTaskCount,
+  isVccPlanTask,
   persistConfig,
   registerStore,
   runSinglePassStorageSelfHealing,
