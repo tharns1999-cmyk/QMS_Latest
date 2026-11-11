@@ -3,7 +3,8 @@ import { render, screen, fireEvent, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import useStore from '../../../store/useStore';
-import AnnualPlansHub, { resolveDigitalPlanCode } from '../components/AnnualPlansHub';
+import AnnualPlansHub, { resolveDigitalPlanCode, resolvePlanCode } from '../components/AnnualPlansHub';
+import { PLAN_STATUS_CONFIG, getPlanStatusBadgeLabel } from '../utils/planLabels';
 import AnnualPlanPrintView from '../components/AnnualPlanPrintView';
 import AnnualPlanMatrixSection from '../components/AnnualPlanMatrixSection';
 import AnnualPlanWorkspaceHeader from '../components/AnnualPlanWorkspaceHeader';
@@ -165,13 +166,25 @@ describe('VCC Annual Plan Hub & Spoke Architecture and ISO Print View', () => {
     });
   });
 
-  describe('0. resolveDigitalPlanCode helper', () => {
+  describe('0. resolvePlanCode & PLAN_STATUS_CONFIG (SSOT)', () => {
     it('แปลงรหัสแบบฟอร์มกระดาษ FM- เป็น VCC-AP-[DEPT]-[YEAR] เสมอ และคงค่า VCC-AP- เดิมไว้', () => {
+      const currentYear = new Date().getFullYear();
       expect(resolveDigitalPlanCode({ department: 'QC', plan_year: 2026, document_code: 'FM-QC-46' })).toBe('VCC-AP-QC-2026');
       expect(resolveDigitalPlanCode({ department: 'QA', plan_year: 2026, document_code: 'FM-QA-11' })).toBe('VCC-AP-QA-2026');
       expect(resolveDigitalPlanCode({ department: 'LB', plan_year: 2026, document_code: 'VCC-PLAN-LB' })).toBe('VCC-AP-LB-2026');
       expect(resolveDigitalPlanCode({ department: 'QC', plan_year: 2027, document_code: 'VCC-AP-QC-2027' })).toBe('VCC-AP-QC-2027');
-      expect(resolveDigitalPlanCode(null)).toBe('VCC-AP-GEN-2026');
+      expect(resolveDigitalPlanCode(null)).toBe(`VCC-AP-GEN-${currentYear}`);
+      expect(resolvePlanCode({ dept: 'LB', year: 2028 })).toBe('VCC-AP-LB-2028');
+    });
+
+    it('แมปสถานะแผนการทวนสอบผ่าน PLAN_STATUS_CONFIG จุดเดียวครบถ้วน', () => {
+      expect(PLAN_STATUS_CONFIG.APPROVED.badgeLabel).toBe('บังคับใช้ (Active)');
+      expect(PLAN_STATUS_CONFIG.PENDING_APPROVAL.badgeLabel).toBe('รออนุมัติ (L5+)');
+      expect(PLAN_STATUS_CONFIG.PENDING_REVIEW.badgeLabel).toBe('รอทบทวน (L4)');
+      expect(PLAN_STATUS_CONFIG.REJECTED.badgeLabel).toBe('ถูกส่งกลับ');
+      expect(PLAN_STATUS_CONFIG.RETURNED.badgeLabel).toBe('ถูกส่งกลับ');
+      expect(PLAN_STATUS_CONFIG.DRAFT.badgeLabel).toBe('ฉบับร่าง (Draft)');
+      expect(getPlanStatusBadgeLabel('APPROVED')).toBe('บังคับใช้ (Active)');
     });
   });
 

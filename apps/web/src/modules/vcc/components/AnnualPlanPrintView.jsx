@@ -1,7 +1,7 @@
 import React, { useRef } from 'react';
 import { Printer, Download, X, AlertCircle, ShieldCheck } from 'lucide-react';
 import { resolvePlanSignatories } from '../utils/signatoryHelper';
-import { getDueDateRuleLabel } from '../utils/planLabels';
+import { getDueDateRuleLabel, resolvePlanCode } from '../utils/planLabels';
 import { toBuddhistYear } from '../utils/vccDateUtils';
 import useStore from '../../../store/useStore';
 
@@ -29,7 +29,7 @@ export const AnnualPlanPrintView = ({
   const buddhistYear = toBuddhistYear(planYear);
   const deptCode = plan.department || 'GEN';
   const deptName = plan.department_name_th || plan.department || deptCode;
-  const docCode = plan.document_code || `VCC-AP-${deptCode}-${planYear}`;
+  const docCode = plan.document_code || resolvePlanCode({ dept: deptCode, year: planYear });
   const rev = plan.revision || '01';
   const effectiveDate = plan.effective_date || plan.form_issue_date || '-';
 

@@ -17,12 +17,24 @@ import {
   FileEdit,
   Plus
 } from 'lucide-react';
-import { PLAN_STATUS_OPTIONS, getPlanStatusLabel, getDueDateRuleLabel } from '../utils/planLabels';
+import {
+  PLAN_STATUS_OPTIONS,
+  getPlanStatusLabel,
+  getPlanStatusConfig,
+  getDueDateRuleLabel,
+  resolvePlanCode
+} from '../utils/planLabels';
 import AnnualPlanApprovalChain from './AnnualPlanApprovalChain';
 import AnnualPlanProgressStepper from './AnnualPlanProgressStepper';
-import { resolveDigitalPlanCode } from './AnnualPlansHub';
 import { formatVccDateTime, toBuddhistYear } from '../utils/vccDateUtils';
 import useStore from '../../../store/useStore';
+
+const STATUS_ICON_MAP = {
+  ShieldCheck,
+  Clock,
+  AlertTriangle,
+  Edit3
+};
 
 const useDismiss = (open, onClose) => {
   const ref = useRef(null);
@@ -48,35 +60,13 @@ const getStatusBadgeStyle = (status, isSuperseded = false) => {
   if (isSuperseded) {
     return 'text-slate-600 bg-slate-100 border-slate-300';
   }
-  switch (status) {
-    case 'APPROVED':
-      return 'text-emerald-800 bg-emerald-50 border-emerald-300/90';
-    case 'PENDING_APPROVAL':
-      return 'text-indigo-700 bg-indigo-50 border-indigo-200/80';
-    case 'PENDING_REVIEW':
-      return 'text-amber-800 bg-amber-50 border-amber-200/80';
-    case 'REJECTED':
-    case 'RETURNED':
-      return 'text-rose-700 bg-rose-50 border-rose-200/80';
-    default:
-      return 'text-slate-700 bg-slate-100 border-slate-200/80';
-  }
+  return getPlanStatusConfig(status).workspaceBadgeClass;
 };
 
 const StatusIcon = ({ status }) => {
-  switch (status) {
-    case 'APPROVED':
-      return <ShieldCheck size={12} className="text-emerald-600 shrink-0" />;
-    case 'PENDING_APPROVAL':
-      return <ShieldCheck size={12} className="text-indigo-600 shrink-0" />;
-    case 'PENDING_REVIEW':
-      return <Clock size={12} className="text-amber-600 shrink-0" />;
-    case 'REJECTED':
-    case 'RETURNED':
-      return <AlertTriangle size={12} className="text-rose-600 shrink-0" />;
-    default:
-      return <Edit3 size={12} className="text-slate-500 shrink-0" />;
-  }
+  const cfg = getPlanStatusConfig(status);
+  const IconComponent = STATUS_ICON_MAP[cfg.workspaceIconName || cfg.iconName] || Edit3;
+  return <IconComponent size={12} className={`${cfg.workspaceIconColorClass} shrink-0`} />;
 };
 
 /**
@@ -254,7 +244,7 @@ export const AnnualPlanWorkspaceHeader = ({
 
                 {/* Digital Plan Code Badge */}
                 <span className="font-mono text-xs font-bold text-indigo-800 bg-indigo-50/90 px-2 py-0.5 rounded-md border border-indigo-200/80 shadow-2xs">
-                  {resolveDigitalPlanCode(activePlan)}
+                  {resolvePlanCode(activePlan)}
                 </span>
 
                 {/* Revision Badge */}
