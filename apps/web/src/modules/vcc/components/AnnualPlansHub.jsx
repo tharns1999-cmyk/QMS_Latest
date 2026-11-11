@@ -14,16 +14,30 @@ import {
   CheckCircle2
 } from 'lucide-react';
 import { formatVccDateTime, toBuddhistYear } from '../utils/vccDateUtils';
+import {
+  resolvePlanCode,
+  resolveDigitalPlanCode,
+  getPlanStatusConfig
+} from '../utils/planLabels';
+import { VCC_DEPARTMENTS } from '../utils/departmentScope';
 import DepartmentBadge from '../../../shared/components/ui/DepartmentBadge';
+import useStore, { MASTER_DATA_DEPT } from '../../../store/useStore';
 
-export const resolveDigitalPlanCode = (plan) => {
-  if (!plan) return 'VCC-AP-GEN-2026';
-  const dept = String(plan.department || plan.department_code || 'GEN').toUpperCase().trim();
-  const year = plan.plan_year || plan.year || 2026;
-  const existingCode = String(plan.document_code || plan.form_code || '').trim();
-  if (existingCode && existingCode.startsWith('VCC-AP-')) return existingCode;
-  return `VCC-AP-${dept}-${year}`;
+export { resolvePlanCode, resolveDigitalPlanCode };
+
+const STATUS_ICON_MAP = {
+  ShieldCheck,
+  Clock,
+  AlertTriangle,
+  Edit3
 };
+
+const HUB_STATUS_FILTER_TABS = [
+  { key: 'ALL', label: 'ทั้งหมด', activeClass: 'bg-white text-slate-800 shadow-2xs' },
+  { key: 'ACTIVE', label: 'บังคับใช้ (Active)', activeClass: 'bg-white text-emerald-700 shadow-2xs font-bold' },
+  { key: 'PENDING', label: 'รออนุมัติ (Pending)', activeClass: 'bg-white text-amber-700 shadow-2xs font-bold' },
+  { key: 'DRAFT', label: 'ฉบับร่าง (Draft)', activeClass: 'bg-white text-slate-800 shadow-2xs font-bold' }
+];
 
 export const AnnualPlansHub = ({
   plans = [],
@@ -43,20 +57,36 @@ export const AnnualPlansHub = ({
 }) => {
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [searchQuery, setSearchQuery] = useState('');
+  const storeDepartments = useStore((s) => s.masterDepartments || s.departments || []);
 
-  // Fallback departments if empty
+  // Derive departments dynamically from activeDepartments prop or Central Store (masterDepartments / MASTER_DATA_DEPT)
   const departments = useMemo(() => {
     if (activeDepartments && activeDepartments.length > 0) return activeDepartments;
-    return [
-      { code: 'DC', nameTh: 'ศูนย์ควบคุมเอกสาร' },
-      { code: 'QC', nameTh: 'ควบคุมคุณภาพ' },
-      { code: 'QA', nameTh: 'ประกันคุณภาพ' },
-      { code: 'MGT', nameTh: 'ฝ่ายบริหาร' },
-      { code: 'LB', nameTh: 'ห้องปฏิบัติการ' }
-    ];
-  }, [activeDepartments]);
+    const rawList = Array.isArray(storeDepartments) && storeDepartments.length > 0 ? storeDepartments : (MASTER_DATA_DEPT || []);
+    const deptLookup = new Map();
+    rawList.forEach((d) => {
+      const code = d.code || d.id;
+      if (code && (d.status || 'ACTIVE') === 'ACTIVE') {
+        deptLookup.set(code, d.nameTh || d.name_th || d.name || code);
+      }
+    });
+    VCC_DEPARTMENTS.forEach((code) => {
+      if (!deptLookup.has(code)) {
+        deptLookup.set(code, code);
+      }
+    });
+    plans.forEach((p) => {
+      if (p?.department && !deptLookup.has(p.department)) {
+        deptLookup.set(p.department, p.department_name_th || p.department);
+      }
+    });
+    return Array.from(deptLookup.entries()).map(([code, nameTh]) => ({
+      code,
+      nameTh
+    }));
+  }, [activeDepartments, storeDepartments, plans]);
 
-  // Unique years from plans + current & next year
+  // Unique years from plans + current & adjacent years dynamically
   const availableYears = useMemo(() => {
     const currentYear = new Date().getFullYear();
     const years = new Set([currentYear, currentYear - 1, currentYear + 1]);
@@ -78,14 +108,14 @@ export const AnnualPlansHub = ({
       // Status filter
       if (statusFilter === 'ACTIVE' && plan.status !== 'APPROVED') return false;
       if (statusFilter === 'PENDING' && !['PENDING_REVIEW', 'PENDING_APPROVAL'].includes(plan.status)) return false;
-      if (statusFilter === 'DRAFT' && !['DRAFT', 'REJECTED'].includes(plan.status)) return false;
+      if (statusFilter === 'DRAFT' && !['DRAFT', 'REJECTED', 'RETURNED'].includes(plan.status)) return false;
 
       // Search query
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
         const deptMatch = String(plan.department || '').toLowerCase().includes(q) ||
                           String(plan.department_name_th || '').toLowerCase().includes(q);
-        const digitalCode = resolveDigitalPlanCode(plan).toLowerCase();
+        const digitalCode = resolvePlanCode(plan).toLowerCase();
         const rawCode = String(plan.document_code || '').toLowerCase();
         const codeMatch = digitalCode.includes(q) || rawCode.includes(q);
         const titleMatch = String(plan.title || '').toLowerCase().includes(q);
@@ -102,7 +132,7 @@ export const AnnualPlansHub = ({
     const totalPlans = plans.length;
     const activeCount = plans.filter((p) => p.status === 'APPROVED').length;
     const pendingCount = plans.filter((p) => ['PENDING_REVIEW', 'PENDING_APPROVAL'].includes(p.status)).length;
-    const draftCount = plans.filter((p) => ['DRAFT', 'REJECTED'].includes(p.status)).length;
+    const draftCount = plans.filter((p) => ['DRAFT', 'REJECTED', 'RETURNED'].includes(p.status)).length;
 
     // Coverage calculation
     const totalCalibratable = activeAssets.length;
@@ -112,39 +142,56 @@ export const AnnualPlansHub = ({
     return { totalPlans, activeCount, pendingCount, draftCount, coveragePct, totalCalibratable, plannedAssetCount };
   }, [plans, activeAssets]);
 
-  const getStatusBadge = (status) => {
-    switch (status) {
-      case 'APPROVED':
-        return (
-          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200/80 px-2.5 py-0.5 rounded-full">
-            <ShieldCheck size={12} className="text-emerald-600" /> บังคับใช้ (Active)
-          </span>
-        );
-      case 'PENDING_APPROVAL':
-        return (
-          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-800 bg-indigo-50 border border-indigo-200/80 px-2.5 py-0.5 rounded-full">
-            <Clock size={12} className="text-indigo-600" /> รออนุมัติ (L5+)
-          </span>
-        );
-      case 'PENDING_REVIEW':
-        return (
-          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-800 bg-amber-50 border border-amber-200/80 px-2.5 py-0.5 rounded-full">
-            <Clock size={12} className="text-amber-600" /> รอทบทวน (L4)
-          </span>
-        );
-      case 'REJECTED':
-        return (
-          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-rose-800 bg-rose-50 border border-rose-200/80 px-2.5 py-0.5 rounded-full">
-            <AlertTriangle size={12} className="text-rose-600" /> ถูกส่งกลับ
-          </span>
-        );
-      default:
-        return (
-          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-800 bg-blue-50 border border-blue-200/80 px-2.5 py-0.5 rounded-full">
-            <Edit3 size={12} className="text-blue-600" /> ฉบับร่าง (Draft)
-          </span>
-        );
+  const kpiCards = useMemo(() => [
+    {
+      key: 'active',
+      title: 'มีผลบังคับใช้ (Active)',
+      icon: ShieldCheck,
+      iconWrapClass: 'bg-emerald-50 text-emerald-600',
+      value: kpiStats.activeCount,
+      suffix: `/ ${kpiStats.totalPlans} แผน`,
+      subtitle: 'พร้อมออกใบสั่งงานตามรอบ',
+      subtitleClass: 'text-emerald-700'
+    },
+    {
+      key: 'pending',
+      title: 'รอการอนุมัติ (Pending)',
+      icon: Clock,
+      iconWrapClass: 'bg-amber-50 text-amber-600',
+      value: kpiStats.pendingCount,
+      suffix: 'แผน',
+      subtitle: 'อยู่ในขั้นตอนทบทวน / อนุมัติ',
+      subtitleClass: 'text-amber-700'
+    },
+    {
+      key: 'draft',
+      title: 'กำลังจัดทำ (Draft)',
+      icon: Edit3,
+      iconWrapClass: 'bg-slate-100 text-slate-600',
+      value: kpiStats.draftCount,
+      suffix: 'แผน',
+      subtitle: 'ฉบับร่าง หรือรอส่งทบทวนใหม่',
+      subtitleClass: 'text-slate-500'
+    },
+    {
+      key: 'coverage',
+      title: 'ความครอบคลุมเครื่องมือ',
+      icon: CheckCircle2,
+      iconWrapClass: 'bg-indigo-50 text-indigo-600',
+      value: `${kpiStats.coveragePct}%`,
+      suffix: `(${kpiStats.plannedAssetCount} รายการ)`,
+      progressPct: kpiStats.coveragePct
     }
+  ], [kpiStats]);
+
+  const getStatusBadge = (status) => {
+    const cfg = getPlanStatusConfig(status);
+    const IconComponent = STATUS_ICON_MAP[cfg.iconName] || Edit3;
+    return (
+      <span className={`inline-flex items-center gap-1 text-[11px] font-semibold border px-2.5 py-0.5 rounded-full ${cfg.badgeClass}`}>
+        <IconComponent size={12} className={cfg.iconColorClass} /> {cfg.badgeLabel}
+      </span>
+    );
   };
 
   return (
@@ -193,70 +240,33 @@ export const AnnualPlansHub = ({
 
       {/* 2. KPI Summary Strip */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {/* Active Plans */}
-        <div className="bg-white rounded-xl border border-slate-200/80 p-3.5 shadow-2xs">
-          <div className="flex items-center justify-between text-xs font-semibold text-slate-500">
-            <span>มีผลบังคับใช้ (Active)</span>
-            <div className="w-6 h-6 rounded-md bg-emerald-50 text-emerald-600 flex items-center justify-center">
-              <ShieldCheck size={14} />
+        {kpiCards.map((card) => {
+          const CardIcon = card.icon;
+          return (
+            <div key={card.key} className="bg-white rounded-xl border border-slate-200/80 p-3.5 shadow-2xs">
+              <div className="flex items-center justify-between text-xs font-semibold text-slate-500">
+                <span>{card.title}</span>
+                <div className={`w-6 h-6 rounded-md flex items-center justify-center ${card.iconWrapClass}`}>
+                  <CardIcon size={14} />
+                </div>
+              </div>
+              <div className="mt-2 flex items-baseline gap-1.5">
+                <span className="text-2xl font-black text-slate-900">{card.value}</span>
+                <span className="text-xs text-slate-400">{card.suffix}</span>
+              </div>
+              {typeof card.progressPct === 'number' ? (
+                <div className="mt-1.5 w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                  <div
+                    className="bg-indigo-600 h-1.5 rounded-full transition-all duration-300"
+                    style={{ width: `${card.progressPct}%` }}
+                  />
+                </div>
+              ) : (
+                <p className={`text-[11px] font-medium mt-1 ${card.subtitleClass}`}>{card.subtitle}</p>
+              )}
             </div>
-          </div>
-          <div className="mt-2 flex items-baseline gap-1.5">
-            <span className="text-2xl font-black text-slate-900">{kpiStats.activeCount}</span>
-            <span className="text-xs text-slate-400">/ {kpiStats.totalPlans} แผน</span>
-          </div>
-          <p className="text-[11px] text-emerald-700 font-medium mt-1">พร้อมออกใบสั่งงานตามรอบ</p>
-        </div>
-
-        {/* Pending Approval */}
-        <div className="bg-white rounded-xl border border-slate-200/80 p-3.5 shadow-2xs">
-          <div className="flex items-center justify-between text-xs font-semibold text-slate-500">
-            <span>รอการอนุมัติ (Pending)</span>
-            <div className="w-6 h-6 rounded-md bg-amber-50 text-amber-600 flex items-center justify-center">
-              <Clock size={14} />
-            </div>
-          </div>
-          <div className="mt-2 flex items-baseline gap-1.5">
-            <span className="text-2xl font-black text-slate-900">{kpiStats.pendingCount}</span>
-            <span className="text-xs text-slate-400">แผน</span>
-          </div>
-          <p className="text-[11px] text-amber-700 font-medium mt-1">อยู่ในขั้นตอนทบทวน / อนุมัติ</p>
-        </div>
-
-        {/* Drafting */}
-        <div className="bg-white rounded-xl border border-slate-200/80 p-3.5 shadow-2xs">
-          <div className="flex items-center justify-between text-xs font-semibold text-slate-500">
-            <span>กำลังจัดทำ (Draft)</span>
-            <div className="w-6 h-6 rounded-md bg-slate-100 text-slate-600 flex items-center justify-center">
-              <Edit3 size={14} />
-            </div>
-          </div>
-          <div className="mt-2 flex items-baseline gap-1.5">
-            <span className="text-2xl font-black text-slate-900">{kpiStats.draftCount}</span>
-            <span className="text-xs text-slate-400">แผน</span>
-          </div>
-          <p className="text-[11px] text-slate-500 font-medium mt-1">ฉบับร่าง หรือรอส่งทบทวนใหม่</p>
-        </div>
-
-        {/* Total Coverage */}
-        <div className="bg-white rounded-xl border border-slate-200/80 p-3.5 shadow-2xs">
-          <div className="flex items-center justify-between text-xs font-semibold text-slate-500">
-            <span>ความครอบคลุมเครื่องมือ</span>
-            <div className="w-6 h-6 rounded-md bg-indigo-50 text-indigo-600 flex items-center justify-center">
-              <CheckCircle2 size={14} />
-            </div>
-          </div>
-          <div className="mt-2 flex items-baseline gap-1.5">
-            <span className="text-2xl font-black text-slate-900">{kpiStats.coveragePct}%</span>
-            <span className="text-xs text-slate-400">({kpiStats.plannedAssetCount} รายการ)</span>
-          </div>
-          <div className="mt-1.5 w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
-            <div
-              className="bg-indigo-600 h-1.5 rounded-full transition-all duration-300"
-              style={{ width: `${kpiStats.coveragePct}%` }}
-            />
-          </div>
-        </div>
+          );
+        })}
       </div>
 
       {/* 3. Filter Toolbar */}
@@ -300,50 +310,20 @@ export const AnnualPlansHub = ({
 
           {/* Status Tabs */}
           <div className="inline-flex items-center p-0.5 rounded-lg bg-slate-100 border border-slate-200/70 text-xs font-semibold">
-            <button
-              type="button"
-              onClick={() => setStatusFilter('ALL')}
-              className={`px-2.5 py-1 rounded-md transition-colors cursor-pointer ${
-                statusFilter === 'ALL'
-                  ? 'bg-white text-slate-800 shadow-2xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              ทั้งหมด
-            </button>
-            <button
-              type="button"
-              onClick={() => setStatusFilter('ACTIVE')}
-              className={`px-2.5 py-1 rounded-md transition-colors cursor-pointer ${
-                statusFilter === 'ACTIVE'
-                  ? 'bg-white text-emerald-700 shadow-2xs font-bold'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              บังคับใช้ (Active)
-            </button>
-            <button
-              type="button"
-              onClick={() => setStatusFilter('PENDING')}
-              className={`px-2.5 py-1 rounded-md transition-colors cursor-pointer ${
-                statusFilter === 'PENDING'
-                  ? 'bg-white text-amber-700 shadow-2xs font-bold'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              รออนุมัติ (Pending)
-            </button>
-            <button
-              type="button"
-              onClick={() => setStatusFilter('DRAFT')}
-              className={`px-2.5 py-1 rounded-md transition-colors cursor-pointer ${
-                statusFilter === 'DRAFT'
-                  ? 'bg-white text-slate-800 shadow-2xs font-bold'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              ฉบับร่าง (Draft)
-            </button>
+            {HUB_STATUS_FILTER_TABS.map((tab) => (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setStatusFilter(tab.key)}
+                className={`px-2.5 py-1 rounded-md transition-colors cursor-pointer ${
+                  statusFilter === tab.key
+                    ? tab.activeClass
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -368,11 +348,11 @@ export const AnnualPlansHub = ({
               <tr className="bg-slate-50/80 border-b border-slate-200/80 text-slate-600 font-semibold">
                 <th className="py-2.5 px-3.5 w-16 text-center">ปี</th>
                 <th className="py-2.5 px-3.5 w-36">ฝ่าย/แผนก</th>
-                <th className="py-2.5 px-3.5 min-w-44">รหัสแผนงานดิจิทัล / ฉบับแก้ไข</th>
+                <th className="py-2.5 px-3.5 min-w-[200px]">รหัสแผนงานดิจิทัล / ฉบับแก้ไข</th>
                 <th className="py-2.5 px-3.5 w-36">สถานะ</th>
                 <th className="py-2.5 px-3.5 w-40 text-center">ความครอบคลุม</th>
                 <th className="py-2.5 px-3.5 w-40">ปรับปรุงล่าสุด</th>
-                <th className="py-2.5 px-3.5 w-44 text-right">การจัดการ</th>
+                <th className="py-2.5 px-3.5 w-auto min-w-[170px] text-right">การจัดการ</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -389,7 +369,7 @@ export const AnnualPlansHub = ({
                   const dept = plan.department || 'GEN';
                   const deptObj = departments.find((d) => d.code === dept);
                   const deptName = plan.department_name_th || deptObj?.nameTh || dept;
-                  const digitalCode = resolveDigitalPlanCode(plan);
+                  const digitalCode = resolvePlanCode(plan);
                   const plannedCount = Number(plan.planned_items_count || plan.item_count || 0);
 
                   // Calculate department coverage against activeAssets
@@ -410,32 +390,32 @@ export const AnnualPlansHub = ({
                   return (
                     <tr key={plan.id} className="hover:bg-slate-50/70 transition-colors">
                       {/* Year */}
-                      <td className="py-3 px-3.5 text-center font-bold font-mono text-slate-800">
+                      <td className="align-middle py-3.5 px-3.5 text-center font-bold font-mono text-slate-800">
                         {plan.plan_year}
                       </td>
 
                       {/* Department */}
-                      <td className="py-3 px-3.5">
+                      <td className="align-middle py-3.5 px-3.5">
                         <DepartmentBadge department={dept} label={`${deptName} (${dept})`} />
                       </td>
 
                       {/* Digital Plan Code & Revision */}
-                      <td className="py-3 px-3.5">
-                        <div className="font-mono font-semibold text-slate-900 flex items-center gap-1.5">
-                          <span>{digitalCode}</span>
-                          <span className="text-[10px] font-mono font-bold bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded border border-slate-200">
+                      <td className="align-middle py-3.5 px-3.5">
+                        <div className="inline-flex items-center gap-2">
+                          <span className="whitespace-nowrap font-mono font-bold tracking-tight text-slate-900">{digitalCode}</span>
+                          <span className="whitespace-nowrap text-[10px] font-mono font-bold bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded border border-slate-200">
                             Rev.{plan.revision || '01'}
                           </span>
                         </div>
                       </td>
 
                       {/* Status Badge */}
-                      <td className="py-3 px-3.5">
+                      <td className="align-middle py-3.5 px-3.5">
                         {getStatusBadge(plan.status)}
                       </td>
 
                       {/* Coverage with sleek Mini Progress Bar */}
-                      <td className="py-3 px-3.5">
+                      <td className="align-middle py-3.5 px-3.5">
                         <div className="flex flex-col items-center gap-1">
                           <div className="font-semibold text-slate-800 text-center">
                             <span>{plannedCount}</span>
@@ -454,7 +434,7 @@ export const AnnualPlansHub = ({
                       </td>
 
                       {/* Last Updated */}
-                      <td className="py-3 px-3.5">
+                      <td className="align-middle py-3.5 px-3.5">
                         <div className="text-[11px]">
                           <div className="text-slate-700 font-medium">
                             {formatVccDateTime(plan.updated_at || plan.created_at)}
@@ -468,14 +448,14 @@ export const AnnualPlansHub = ({
                       </td>
 
                       {/* Actions */}
-                      <td className="py-3 px-3.5 text-right">
-                        <div className="inline-flex items-center gap-1.5 justify-end">
+                      <td className="align-middle py-3.5 px-3.5 text-right w-auto min-w-[170px]">
+                        <div className="flex items-center justify-end gap-1.5 flex-nowrap">
                           {/* Print Icon Button */}
                           <button
                             type="button"
                             onClick={() => onPrintPlan && onPrintPlan(plan)}
                             title="พิมพ์แบบฟอร์มเอกสารควบคุม (A4 แนวนอน)"
-                            className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors cursor-pointer"
+                            className="shrink-0 p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors cursor-pointer"
                           >
                             <Printer size={13} />
                           </button>
@@ -485,7 +465,7 @@ export const AnnualPlansHub = ({
                             type="button"
                             onClick={() => onOpenHistory && onOpenHistory(plan)}
                             title="ดูประวัติการแก้ไขและเวอร์ชัน (Revisions)"
-                            className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors cursor-pointer"
+                            className="shrink-0 p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors cursor-pointer"
                           >
                             <History size={13} />
                           </button>
@@ -494,10 +474,10 @@ export const AnnualPlansHub = ({
                           <button
                             type="button"
                             onClick={() => onOpenPlan && onOpenPlan(plan.id)}
-                            className="inline-flex items-center gap-1 h-7.5 px-3 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold text-xs transition-colors cursor-pointer"
+                            className="whitespace-nowrap inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg shrink-0 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 transition-colors cursor-pointer"
                           >
                             <span>เปิดแผนงาน</span>
-                            <ArrowRight size={12} />
+                            <ArrowRight size={12} className="shrink-0" />
                           </button>
                         </div>
                       </td>

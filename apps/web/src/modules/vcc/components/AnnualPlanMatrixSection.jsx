@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams, useLocation } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { AlertTriangle, Plus } from 'lucide-react';
-import { getPlanStatusLabel, isSavedPlanItem } from '../utils/planLabels';
+import { getPlanStatusLabel, isSavedPlanItem, resolvePlanCode } from '../utils/planLabels';
 import { fetchVccAssets, fetchVccAssetDetail } from '../api/vccApi';
 import {
   fetchVccPlanSettings,
@@ -178,7 +178,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
   const [planForm, setPlanForm] = useState({
     plan_year: new Date().getFullYear(),
     department: '',
-    document_code: `VCC-AP-QC-${new Date().getFullYear()}`,
+    document_code: resolvePlanCode({ dept: userDept, year: new Date().getFullYear() }),
     revision: '01',
     title: '',
     due_date_rule: 'END_OF_MONTH'
@@ -193,7 +193,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
     frequency_label: 'รายปี',
     planned_months: [1],
     responsible_dept: '',
-    responsible_label: 'QC Sup.',
+    responsible_label: userDept ? `${userDept} Sup.` : '',
     remarks: ''
   });
   const [itemError, setItemError] = useState('');
@@ -394,8 +394,8 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
     // Only a real year counts: a click event or a filter label must not turn into NaN
     const fixedYear = Number.isInteger(Number(overrideYear)) && Number(overrideYear) > 0 ? Number(overrideYear) : null;
     const targetYear = fixedYear || (Number(filterYear) > 0 ? Number(filterYear) : currentYear);
-    const targetDept = (!canReadAll && userDept) || filterDept || activeDepartments[0]?.code || 'QC';
-    const defaultDocCode = `VCC-AP-${targetDept || 'QC'}-${targetYear}`;
+    const targetDept = (!canReadAll && userDept) || filterDept || userDept || activeDepartments[0]?.code || '';
+    const defaultDocCode = resolvePlanCode({ dept: targetDept, year: targetYear });
     setEditingPlan(null);
     setPlanFormError('');
     setPlanForm({
@@ -463,13 +463,14 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
         remarks: existingItem.remarks || ''
       });
     } else {
+      const defaultRespDept = planDetail?.plan?.department || userDept || activeDepartments[0]?.code || '';
       setItemForm({
         asset_id: activeAssets[0]?.id || '',
         provider_name: providers[0] || 'ห้องปฏิบัติการภายนอก',
         frequency_label: 'รายปี',
         planned_months: [1],
-        responsible_dept: planDetail?.plan?.department || activeDepartments[0]?.code || '',
-        responsible_label: 'QC Sup.',
+        responsible_dept: defaultRespDept,
+        responsible_label: defaultRespDept ? `${defaultRespDept} Sup.` : '',
         remarks: ''
       });
     }
@@ -510,21 +511,55 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
     }
   };
 
-  const handleQuickAddMonth = async (item, month) => {
+  const handleQuickAddMonth = async (item, month, options = {}) => {
     if (!planDetail?.plan) return;
     const currentMonths = item.planned_months || [];
-    if (currentMonths.includes(month)) return;
-    const updatedMonths = [...currentMonths, month].sort((a, b) => a - b);
+    const isAlreadyPlanned = currentMonths.includes(month);
+    const updatedMonths = isAlreadyPlanned
+      ? currentMonths
+      : [...currentMonths, month].sort((a, b) => a - b);
+
+    let resolvedProvider = options.provider_name;
+    if (!resolvedProvider) {
+      if (options.providerType === 'EXTERNAL') {
+        resolvedProvider = 'ห้องปฏิบัติการภายนอก';
+      } else if (options.providerType === 'INTERNAL') {
+        resolvedProvider = 'ทวนสอบภายใน';
+      } else {
+        resolvedProvider = item.provider_name || 'ทวนสอบภายใน';
+      }
+    }
+
     await saveVccPlanItem(planDetail.plan.id, {
       asset_id: item.asset_id,
-      provider_name: item.provider_name,
+      provider_name: resolvedProvider,
       frequency_label: item.frequency_label || 'รายปี',
       planned_months: updatedMonths,
-      responsible_dept: item.responsible_dept,
+      responsible_dept: item.responsible_dept || planDetail.plan.department,
       responsible_label: item.responsible_label || '',
       remarks: item.remarks || ''
     });
-    toast.success(`เพิ่มเป้าหมายเดือน ${month} สำหรับ ${item.asset_code} แล้ว`);
+    toast.success(`กำหนดรอบเดือน ${month} สำหรับ ${item.asset_code} แล้ว`);
+    const refreshed = await fetchVccPlanDetail(planDetail.plan.id);
+    setPlanDetail(refreshed);
+  };
+
+  const handleToggleProvider = async (item, targetProvider) => {
+    if (!planDetail?.plan) return;
+    const currentProvider = String(item.provider_name || '').trim();
+    const isCurrentExternal = Boolean(currentProvider) && !currentProvider.includes('ภายใน') && currentProvider.toLowerCase() !== 'internal';
+    const nextProvider = targetProvider || (isCurrentExternal ? 'ทวนสอบภายใน' : 'ห้องปฏิบัติการภายนอก');
+
+    await saveVccPlanItem(planDetail.plan.id, {
+      asset_id: item.asset_id,
+      provider_name: nextProvider,
+      frequency_label: item.frequency_label || 'รายปี',
+      planned_months: item.planned_months || [],
+      responsible_dept: item.responsible_dept || planDetail.plan.department,
+      responsible_label: item.responsible_label || '',
+      remarks: item.remarks || ''
+    });
+    toast.success(`สลับวิธีดำเนินการของ ${item.asset_code} เป็น${nextProvider}แล้ว`);
     const refreshed = await fetchVccPlanDetail(planDetail.plan.id);
     setPlanDetail(refreshed);
   };
@@ -1018,6 +1053,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
                   onOpenSmartImport={() => setSmartImportOpen(true)}
                   onQuickAddMonth={handleQuickAddMonth}
                   onQuickRemoveMonth={handleQuickRemoveMonth}
+                  onToggleProvider={handleToggleProvider}
                   onCreateWorkOrder={handleCreateWorkOrder}
                   onOpenJustificationModal={() => setJustificationModalOpen(true)}
                 />

@@ -190,13 +190,19 @@ describe('VCC FM-QC-46 Registry-Driven Annual Planning Board', () => {
       </table>
     );
 
-    // Empty cell button has aria-label
+    // Empty cell button opens mini contextual popover to choose External or Internal
     const targetCellBtn = screen.getByRole('button', { name: /กำหนดเป้าหมายเดือน 5/i });
     expect(targetCellBtn).toBeInTheDocument();
 
-    // Clicking schedules month directly
     fireEvent.click(targetCellBtn);
-    expect(onQuickAddMonth).toHaveBeenCalledWith(item, 5);
+
+    // Contextual popover opens with both options
+    const internalBtn = screen.getByRole('button', { name: /ทวนสอบภายใน \(Internal\)/i });
+    expect(internalBtn).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /สอบเทียบภายนอก \(External\)/i })).toBeInTheDocument();
+
+    fireEvent.click(internalBtn);
+    expect(onQuickAddMonth).toHaveBeenCalledWith(item, 5, expect.objectContaining({ providerType: 'INTERNAL' }));
   });
 
   it('5. กล่องระบุเหตุผลเครื่องมือที่ยังไม่ได้วางแผน (UnplannedJustificationModal)', () => {

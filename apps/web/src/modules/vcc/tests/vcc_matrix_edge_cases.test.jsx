@@ -73,11 +73,12 @@ describe('VCC FM-QC-46 Interactive Planning Board Edge Cases & Exceptions', () =
       </table>
     );
 
-    // February preserves planned cycle (P2✓) indicating delayed completion in another month
-    expect(screen.getByText('P2✓')).toBeInTheDocument();
+    // February preserves planned cycle with green checkmark indicating completion
+    const febBadge = screen.getByRole('button', { name: /เป้าหมายทวนสอบเดือน 2 \(P2\)/i });
+    expect(febBadge).toHaveTextContent('✓');
 
     // Open February popover
-    fireEvent.click(screen.getByText('P2✓'));
+    fireEvent.click(febBadge);
     expect(screen.getByText(/เสร็จสิ้นในเดือน มีนาคม/)).toBeInTheDocument();
     expect(screen.getByText(/CER-2026-001/)).toBeInTheDocument();
     expect(screen.getByText('2026-03-05')).toBeInTheDocument();
@@ -101,12 +102,12 @@ describe('VCC FM-QC-46 Interactive Planning Board Edge Cases & Exceptions', () =
       </table>
     );
 
-    // Both badges must be visible in March: P3 (plan) and A(ก.พ.) (actual from Feb)
-    expect(screen.getByText('P3')).toBeInTheDocument();
-    expect(screen.getByText(/A\(ก\.พ\.\)/)).toBeInTheDocument();
+    // Both badges must be visible in March: planned chip and actual from Feb
+    expect(screen.getByRole('button', { name: /เป้าหมายทวนสอบเดือน 3 \(P3\)/i })).toHaveTextContent('ภายใน');
+    expect(screen.getByText(/✓ \(ก\.พ\.\)/)).toBeInTheDocument();
 
     // Open March popover to verify contextual breakdown
-    fireEvent.click(screen.getByText(/A\(ก\.พ\.\)/));
+    fireEvent.click(screen.getByText(/✓ \(ก\.พ\.\)/));
     expect(screen.getByText(/1\. รอบตามแผนประจำปี/)).toBeInTheDocument();
     expect(screen.getByText(/2\. การดำเนินงานจริงในเดือนนี้/)).toBeInTheDocument();
     expect(screen.getByText(/จากรอบแผน ก\.พ\. \(P2\)/)).toBeInTheDocument();
@@ -179,7 +180,7 @@ describe('VCC FM-QC-46 Interactive Planning Board Edge Cases & Exceptions', () =
       </table>
     );
 
-    fireEvent.click(screen.getByText('P2'));
+    fireEvent.click(screen.getByRole('button', { name: /เป้าหมายทวนสอบเดือน 2 \(P2\)/i }));
     const groupCheckBtn = screen.getByRole('button', { name: /ตรวจรหัสลูกก่อนออกใบงาน/i });
     expect(groupCheckBtn).toBeInTheDocument();
 
@@ -208,7 +209,7 @@ describe('VCC FM-QC-46 Interactive Planning Board Edge Cases & Exceptions', () =
       </table>
     );
 
-    fireEvent.click(screen.getByText('P2'));
+    fireEvent.click(screen.getByRole('button', { name: /เป้าหมายทวนสอบเดือน 2 \(P2\)/i }));
     const initialRemoveBtn = screen.getByRole('button', { name: /ยกเลิกรอบแผนเดือน 2/i });
     expect(initialRemoveBtn).toBeInTheDocument();
 
@@ -300,13 +301,13 @@ describe('VCC FM-QC-46 Interactive Planning Board Edge Cases & Exceptions', () =
     // Context Actions header is present
     expect(screen.getByRole('columnheader', { name: 'การจัดการ' })).toBeInTheDocument();
 
-    // Spec buttons have Thai tooltips and accessible labels
+    // Spec buttons on Column 1 have Thai tooltips and accessible labels
     const specBtns = screen.getAllByRole('button', { name: /สเปก/i });
     expect(specBtns.length).toBe(2);
-    expect(specBtns[0]).toHaveAttribute('title', 'ดูสเปกและรายละเอียดเครื่องมือ');
+    expect(specBtns[0]).toHaveAttribute('title', 'คลิกเพื่อดูรายละเอียดและสเปกเครื่องมือ');
 
-    // Edit buttons have Thai tooltips and accessible labels
-    const editBtns = screen.getAllByRole('button', { name: /แก้ไขข้อมูลในแผน/i });
+    // Edit ("ตั้งค่ารอบ") buttons have Thai tooltips and accessible labels
+    const editBtns = screen.getAllByRole('button', { name: /ตั้งค่ารอบ \/ แก้ไขข้อมูลในแผน/i });
     expect(editBtns.length).toBe(2);
     expect(editBtns[0]).toHaveAttribute('title', 'แก้ไขข้อมูลในแผน');
 
@@ -316,16 +317,16 @@ describe('VCC FM-QC-46 Interactive Planning Board Edge Cases & Exceptions', () =
     // In editable Draft mode, legacy "ตรวจรหัสลูกก่อนออกใบงาน" button must NOT appear on rows
     expect(screen.queryByRole('button', { name: /ตรวจรหัสลูกก่อนออกใบงาน/i })).toBeNull();
 
-    // Delete button has Thai tooltip, accessible label, and requires inline confirmation
-    const deleteBtns = screen.getAllByRole('button', { name: /นำออกจากแผน/i });
+    // Delete button has Thai tooltip, accessible label, and requires modal confirmation
+    const deleteBtns = screen.getAllByRole('button', { name: /^นำออกจากแผน$/i });
     expect(deleteBtns.length).toBe(2);
     expect(deleteBtns[0]).toHaveAttribute('title', 'นำออกจากแผน (เครื่องมือยังอยู่ในทะเบียน)');
 
-    // Initial click on delete enters confirmation state without invoking onDeleteItem
+    // Initial click on delete opens confirmation dialog without invoking onDeleteItem
     fireEvent.click(deleteBtns[0]);
     expect(onDeleteItem).not.toHaveBeenCalled();
 
-    // Confirm button appears
+    // Confirm dialog buttons appear
     const confirmBtn = screen.getByRole('button', { name: 'ยืนยันนำออกจากแผน' });
     const cancelBtn = screen.getByRole('button', { name: 'ยกเลิก' });
     expect(confirmBtn).toBeInTheDocument();
@@ -337,7 +338,7 @@ describe('VCC FM-QC-46 Interactive Planning Board Edge Cases & Exceptions', () =
     expect(screen.queryByRole('button', { name: 'ยืนยันนำออกจากแผน' })).toBeNull();
 
     // Click delete again and confirm
-    const reDeleteBtns = screen.getAllByRole('button', { name: /นำออกจากแผน/i });
+    const reDeleteBtns = screen.getAllByRole('button', { name: /^นำออกจากแผน$/i });
     fireEvent.click(reDeleteBtns[0]);
     const reConfirmBtn = screen.getByRole('button', { name: 'ยืนยันนำออกจากแผน' });
     fireEvent.click(reConfirmBtn);

@@ -110,4 +110,15 @@ describe('Bug Fix: Newly Created Users Missing Sidebar Menus', () => {
     expect(screen.getByText('คลังเอกสารแม่บท')).toBeInTheDocument();
     expect(screen.queryByText('ทะเบียนเอกสารหลัก')).not.toBeInTheDocument();
   });
+
+  it('4. Laboratory department users (สายรุ้ง L4 and วรรณภา L5) are present in the User Switcher select dropdown', () => {
+    render(
+      <MemoryRouter initialEntries={['/vcc']}>
+        <Sidebar />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByRole('option', { name: /สายรุ้ง \(LB\) L4/ })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /วรรณภา \(LB\) L5/ })).toBeInTheDocument();
+  });
 });

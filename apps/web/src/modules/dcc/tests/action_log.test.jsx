@@ -161,17 +161,74 @@ describe('ActionLog Page & Multi-Key Timestamp Synchronization Tests', () => {
     expect(screen.getByText('VCC')).toBeInTheDocument();
     expect(screen.getByText('DCC')).toBeInTheDocument();
 
-    // Switch to VCC only
-    const vccFilterBtn = screen.getByRole('button', { name: /VCC \(สอบเทียบ\/ทวนสอบ\)/i });
-    fireEvent.click(vccFilterBtn);
+    // Switch to VCC only via Module Dropdown
+    const moduleSelect = screen.getByLabelText(/เลือกโมดูล/i);
+    fireEvent.change(moduleSelect, { target: { value: 'VCC' } });
     expect(screen.getByText('VCC_WO_CREATED')).toBeInTheDocument();
     expect(screen.queryByText('DAR_SUBMIT')).not.toBeInTheDocument();
 
-    // Switch to DCC only
-    const dccFilterBtn = screen.getByRole('button', { name: /DCC \(ควบคุมเอกสาร\)/i });
-    fireEvent.click(dccFilterBtn);
+    // Switch to DCC only via Module Dropdown
+    fireEvent.change(moduleSelect, { target: { value: 'DCC' } });
     expect(screen.getByText('DAR_SUBMIT')).toBeInTheDocument();
     expect(screen.queryByText('VCC_WO_CREATED')).not.toBeInTheDocument();
+  });
+
+  it('cascades subcategories into quick chips and subcategory dropdown dynamically when module changes', () => {
+    useStore.setState({
+      currentUser: mockDccAdmin,
+      actionLog: [
+        {
+          id: 'VCC-LOG-001',
+          actionType: 'VCC_WO_CREATED',
+          actor: 'Calibration Officer',
+          actorRole: 'VCC Engineer',
+          details: 'Created Work Order WO-2026-001',
+          date: '2026-08-25T08:00:00.000Z'
+        },
+        {
+          id: 'VCC-LOG-002',
+          actionType: 'VCC_ASSET_CREATED',
+          actor: 'Asset Admin',
+          actorRole: 'VCC Officer',
+          details: 'Registered Caliper',
+          date: '2026-08-25T08:30:00.000Z'
+        },
+        {
+          id: 'DCC-LOG-001',
+          actionType: 'DAR_SUBMIT',
+          actor: 'John Doe',
+          actorRole: 'Requester',
+          details: 'Submitted DAR-2026-001',
+          date: '2026-08-25T01:00:00.000Z'
+        }
+      ]
+    });
+
+    renderWithRouter(<ActionLog />);
+
+    // 1. When module is ALL: Quick chips row is hidden to save vertical space
+    expect(screen.queryByTestId('audit-quick-chips')).not.toBeInTheDocument();
+    const subcategorySelect = screen.getByLabelText(/เลือกหมวดหมู่ย่อย/i);
+    expect(subcategorySelect).toBeDisabled();
+
+    // 2. Select VCC module: Quick chips row appears and displays VCC subcategories
+    const moduleSelect = screen.getByLabelText(/เลือกโมดูล/i);
+    fireEvent.change(moduleSelect, { target: { value: 'VCC' } });
+
+    const quickChips = screen.getByTestId('audit-quick-chips');
+    expect(quickChips).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /เครื่องมือวัด/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /ใบสั่งงาน\/บันทึกผล/i })).toBeInTheDocument();
+
+    // 3. Filter by clicking VCC_WO quick chip
+    const woChip = screen.getByRole('button', { name: /ใบสั่งงาน\/บันทึกผล/i });
+    fireEvent.click(woChip);
+    expect(screen.getByText('VCC_WO_CREATED')).toBeInTheDocument();
+    expect(screen.queryByText('VCC_ASSET_CREATED')).not.toBeInTheDocument();
+
+    // 4. Switch back to ALL: Quick chips disappear
+    fireEvent.change(moduleSelect, { target: { value: 'ALL' } });
+    expect(screen.queryByTestId('audit-quick-chips')).not.toBeInTheDocument();
   });
 
   it('opens event detail modal when clicking view details', () => {

@@ -133,7 +133,7 @@ describe('VCC Phase 1 Step 4: QC/LAB Department Forms & Workflow UI', () => {
     expect(handleOpenPdf).toHaveBeenCalledTimes(1);
   });
 
-  it('4. displays department-specific fields: brand, mpe, calibration points, and acceptance criteria in equipment list', () => {
+  it('4. displays clean 2-line summary in equipment list and delegates technical specs to Side Inspector on click', () => {
     const testItems = [
       {
         id: 'item-01',
@@ -160,10 +160,13 @@ describe('VCC Phase 1 Step 4: QC/LAB Department Forms & Workflow UI', () => {
 
     expect(screen.getByText(/CAL-QC-001/i)).toBeInTheDocument();
     expect(screen.getByText(/Digital Vernier Caliper/i)).toBeInTheDocument();
-    expect(screen.getByText(/\(Mitutoyo\)/i)).toBeInTheDocument();
-    expect(screen.getByText(/MPE: ±0.02 mm/i)).toBeInTheDocument();
-    expect(screen.getByText(/จุดวัด: 0, 50, 100, 150 mm/i)).toBeInTheDocument();
-    expect(screen.getByText(/เกณฑ์: Error ≤ MPE/i)).toBeInTheDocument();
+    expect(screen.getByText(/ห้องปฏิบัติการภายนอก · ความถี่รายปี/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText(/CAL-QC-001/i));
+    expect(screen.getByText(/Mitutoyo/i)).toBeInTheDocument();
+    expect(screen.getByText(/±0.02 mm/i)).toBeInTheDocument();
+    expect(screen.getByText(/0, 50, 100, 150 mm/i)).toBeInTheDocument();
+    expect(screen.getByText(/Error ≤ MPE/i)).toBeInTheDocument();
   });
 
   it('5. PlanFormModal auto-populates paperless electronic defaults when selecting department', () => {

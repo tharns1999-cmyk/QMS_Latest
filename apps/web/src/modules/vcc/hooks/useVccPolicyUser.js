@@ -2,12 +2,15 @@ import { useMemo } from 'react';
 import { isApiMode } from '../../../api/client';
 import { useModuleAccess } from '../../../shared/components/ModuleAccessProvider';
 import useStore from '../../../store/useStore';
+import { VCC_DEPARTMENTS } from '../utils/departmentScope';
 
 // UI hints come from the same server response as the portal; every write is still checked by the API.
 export default function useVccPolicyUser(user) {
   const { modules } = useModuleAccess();
   const storeEnabledDepts = useStore((s) => s.vccEnabledDepartments);
   const storeModuleStatus = useStore((s) => s.vccModuleStatus);
+  const masterDepartments = useStore((s) => s.masterDepartments);
+  const departments = useStore((s) => s.departments);
   const module = modules?.find((m) => m.moduleId === 'vcc');
 
   return useMemo(() => {
@@ -35,7 +38,17 @@ export default function useVccPolicyUser(user) {
       }
     }
     if (!enabledDepts || !Array.isArray(enabledDepts)) {
-      enabledDepts = ['DC', 'QC', 'QA', 'MGT', 'LB'];
+      const sharedList = Array.isArray(masterDepartments) && masterDepartments.length > 0 ? masterDepartments : (departments || []);
+      const vccModuleDepts = (module?.departments || []).filter((d) => d.enabled !== false).map((d) => d.department);
+      if (vccModuleDepts.length > 0) {
+        enabledDepts = vccModuleDepts;
+      } else {
+        const fromStore = sharedList
+          .filter((d) => (d.status || 'ACTIVE') === 'ACTIVE')
+          .map((d) => String(d.code || d.deptCode || d.id || '').toUpperCase())
+          .filter(Boolean);
+        enabledDepts = fromStore.length > 0 ? fromStore : [...VCC_DEPARTMENTS];
+      }
     }
 
     let currentStatus = storeModuleStatus;
@@ -56,6 +69,6 @@ export default function useVccPolicyUser(user) {
       vccEnabledDepartments: enabledDepts,
       vccReadOnly: currentStatus !== 'ACTIVE'
     };
-  }, [user, module, storeEnabledDepts, storeModuleStatus]);
+  }, [user, module, storeEnabledDepts, storeModuleStatus, masterDepartments, departments]);
 }
 

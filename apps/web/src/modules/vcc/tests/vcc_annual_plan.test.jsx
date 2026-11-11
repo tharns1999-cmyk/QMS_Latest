@@ -67,15 +67,14 @@ describe('VCC Phase 2 — Annual Calibration Plan (FM-QC-46) & Approval Workflow
     const planNavBtn = await screen.findByRole('button', { name: /แผนการทวนสอบประจำปี \(FM-QC-46\)/i });
     fireEvent.click(planNavBtn);
 
-    // Must display 2026 DRAFT plan with V001 (due 2026-02-28) and V002 (due 2026-09-30)
+    // Must display 2026 DRAFT plan with V001 (planned in month 2) and V002 (planned in month 9)
     expect(await screen.findByText('V001')).toBeInTheDocument();
-    expect(screen.getByText('2026-02-28')).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /เป้าหมายทวนสอบเดือน 2 \(P2\)/i }).length).toBeGreaterThan(0);
     expect(screen.getByText('V002')).toBeInTheDocument();
-    expect(screen.getByText('2026-09-30')).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /เป้าหมายทวนสอบเดือน 9 \(P9\)/i }).length).toBeGreaterThan(0);
 
-    // Must explicitly show that plan cells are PLANNED_ONLY, not actual completion evidence
-    const plannedOnlyBadges = screen.getAllByText(/วางแผนเท่านั้น • ยังไม่มีหลักฐานใบงาน/i);
-    expect(plannedOnlyBadges.length).toBeGreaterThan(0);
+    // Must explicitly show planned chips (ภายใน / ภายนอก) and legend distinguishing plan from completed (✓)
+    expect(screen.getAllByText(/ทวนสอบภายในตามแผน|สอบเทียบภายนอกตามแผน/i).length).toBeGreaterThan(0);
 
     // Switching status filter to APPROVED must NOT show DRAFT plans
     fireEvent.change(screen.getByLabelText('กรองตามสถานะแผน'), { target: { value: 'APPROVED' } });

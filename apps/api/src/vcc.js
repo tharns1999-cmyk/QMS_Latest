@@ -60,7 +60,13 @@ const fetchAsset = (db, id) =>
 
 export const registerVccRoutes = (app, { requireAuth, audit }) => {
   app.get('/api/vcc/asset-types', requireAuth, requireVccAccess, async (c) => {
-    return c.json({ assetTypes: await loadAssetTypes(c.env.DB) });
+    const assetTypes = await loadAssetTypes(c.env.DB);
+    return c.json({ assetTypes, categories: assetTypes });
+  });
+
+  app.get('/api/vcc/master/categories', requireAuth, requireVccAccess, async (c) => {
+    const assetTypes = await loadAssetTypes(c.env.DB);
+    return c.json({ assetTypes, categories: assetTypes });
   });
 
   app.put('/api/vcc/asset-types', requireAuth, requireDccOnly, async (c) => {

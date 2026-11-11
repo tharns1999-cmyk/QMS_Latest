@@ -121,10 +121,10 @@ describe('VCC Phase 3 — Work Orders, Execution, Review, Close & Hold/NC Contro
     // Now in CLOSED tab
     expect(await screen.findByText('CERT-ST002-2026')).toBeInTheDocument();
 
-    // Verify Annual Plan Act. row updated to A3 and COMPLETED badge
+    // Verify Annual Plan month 3 cell updated to green checkmark (✓)
     fireEvent.click(screen.getByRole('button', { name: /แผนการทวนสอบประจำปี \(FM-QC-46\)/i }));
-    expect(await screen.findByText(/ทวนสอบเสร็จแล้ว • มีใบรับรอง/i)).toBeInTheDocument();
-    expect(screen.getByText('A3')).toBeInTheDocument();
+    const m3Badges = await screen.findAllByRole('button', { name: /เป้าหมายทวนสอบเดือน 3 \(P3\)/i });
+    expect(m3Badges.some((b) => b.textContent.includes('✓'))).toBe(true);
   }, 15000);
 
   it('3. เมื่อผลเป็น FAIL จะขึ้นสถานะระงับใช้ (ON_HOLD) ทันที ไม่ปลดระงับอัตโนมัติเมื่อปิดใบงาน และต้องใช้ผู้อนุมัติ L5+ พร้อมระบุการประเมินผลกระทบจึงจะปลดระงับได้', async () => {

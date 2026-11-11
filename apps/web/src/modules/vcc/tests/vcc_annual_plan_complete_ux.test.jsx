@@ -200,7 +200,7 @@ describe('VCC Annual Plan — Complete UX Architecture Redesign', () => {
         />
       );
 
-      const searchInput = screen.getByPlaceholderText(/ค้นหารหัส \/ ชื่อในตาราง/i);
+      const searchInput = screen.getByPlaceholderText(/ค้นหารหัส \/ ชื่อเครื่องมือ/i);
       fireEvent.change(searchInput, { target: { value: 'Pressure' } });
 
       expect(screen.getByText('EQ-002')).toBeInTheDocument();

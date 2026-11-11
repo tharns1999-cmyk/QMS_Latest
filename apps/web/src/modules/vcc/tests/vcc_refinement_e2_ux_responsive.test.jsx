@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import useStore from '../../../store/useStore';
-import { VccBadge, VccEmptyState, VccSkeleton, VccScrollIndicator } from '../components/VccDesignSystem';
+import { VccBadge, VccEmptyState, VccSkeleton } from '../components/VccDesignSystem';
 import { AnnualPlanMatrixTable } from '../components/AnnualPlanMatrixTable';
 import { WorkOrderTable } from '../components/WorkOrderTable';
 import VccMetricsStrip from '../components/VccMetricsStrip';
@@ -69,7 +69,7 @@ describe('VCC Refinement Round E2 — UX/UI & Responsive Excellence Suite', () =
       }
     ];
 
-    it('renders Column 1 with sticky positioning and Column 2 with desktop-only sticky', () => {
+    it('renders Column 1 with sticky positioning and omits middle due-date column for full 12-month space', () => {
       render(
         <AnnualPlanMatrixTable
           planItems={mockPlanItems}
@@ -83,9 +83,9 @@ describe('VCC Refinement Round E2 — UX/UI & Responsive Excellence Suite', () =
       expect(col1Header).toHaveClass('sticky');
       expect(col1Header).toHaveClass('left-0');
 
-      const col2Header = screen.getByText('วันครบกำหนด / สถานะหลักฐาน');
-      expect(col2Header).toHaveClass('xl:sticky');
-      expect(col2Header).toHaveClass('xl:left-[260px]');
+      expect(screen.queryByText('วันครบกำหนด / สถานะหลักฐาน')).not.toBeInTheDocument();
+      expect(screen.getByRole('columnheader', { name: 'ม.ค.' })).toBeInTheDocument();
+      expect(screen.getByRole('columnheader', { name: 'ธ.ค.' })).toBeInTheDocument();
     });
   });
 

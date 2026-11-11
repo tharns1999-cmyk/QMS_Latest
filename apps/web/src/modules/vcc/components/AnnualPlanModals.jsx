@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import { AlertTriangle, CheckCircle2, FolderTree, Trash2, X, Send, UserCheck, ShieldCheck, Calendar, FileText, Clock, Lock, ChevronDown, ChevronUp, ArrowRight } from 'lucide-react';
 import { computeDueDates, computeDueDateForMonth, fetchVccDocumentProfiles } from '../api/vccPlanApi';
 import { formatVccDateTime, formatVccDueDatesList } from '../utils/vccDateUtils';
+import { resolvePlanCode } from '../utils/planLabels';
 import { useVccModalAccessibility } from '../hooks/useVccModalAccessibility';
 import { VccDiscardConfirmDialog } from './VccDiscardConfirmDialog';
 import { AnnualPlanAuditTrailTimeline } from './AnnualPlanAuditTrailTimeline';
@@ -89,15 +90,17 @@ export const PlanFormModal = ({
   const liveDept = form.department || '';
   const liveYear = form.plan_year ? String(form.plan_year) : '';
   const liveCode = liveDept && liveYear
-    ? `VCC-AP-${liveDept}-${liveYear}`
-    : (form.document_code && form.document_code.startsWith('VCC-AP-') ? form.document_code : `VCC-AP-${liveDept || '[DEPT]'}-${liveYear || '[YEAR]'}`);
+    ? resolvePlanCode({ dept: liveDept, year: liveYear })
+    : (form.document_code && form.document_code.startsWith('VCC-AP-')
+        ? form.document_code
+        : resolvePlanCode({ dept: liveDept || '[DEPT]', year: liveYear || '[YEAR]' }));
   const liveTitle = form.title || (liveDept && liveYear
     ? `แผนการทวนสอบเครื่องมือประจำปี ${liveYear} (${liveDept})`
     : 'แผนการทวนสอบเครื่องมือประจำปี');
 
   const handleFormSubmit = (e) => {
     e.preventDefault();
-    const finalCode = !editingPlan && liveDept && liveYear ? `VCC-AP-${liveDept}-${liveYear}` : (form.document_code || liveCode);
+    const finalCode = !editingPlan && liveDept && liveYear ? resolvePlanCode({ dept: liveDept, year: liveYear }) : (form.document_code || liveCode);
     const finalTitle = form.title || liveTitle;
     if (!editingPlan && (form.document_code !== finalCode || form.title !== finalTitle)) {
       setForm({
@@ -180,7 +183,7 @@ export const PlanFormModal = ({
                       setForm({ ...form, department: dept });
                     } else {
                       const prof = (docProfiles && docProfiles[dept]) || {};
-                      const code = yr ? `VCC-AP-${dept}-${yr}` : (prof.document_code || `VCC-AP-${dept}`);
+                      const code = yr ? resolvePlanCode({ dept, year: yr }) : (prof.document_code || `VCC-AP-${dept}`);
                       const title = yr
                         ? (prof.title_th ? `${prof.title_th} ${yr}` : `แผนการทวนสอบเครื่องมือประจำปี ${yr} (${dept})`)
                         : (prof.title_th || `แผนการทวนสอบเครื่องมือประจำปี (${dept})`);
@@ -236,7 +239,7 @@ export const PlanFormModal = ({
                     const yr = Number(e.target.value);
                     const dept = form.department;
                     const isDefaultTitle = !form.title || form.title.startsWith('แผนการทวนสอบเครื่องมือประจำปี');
-                    const docCode = dept && yr ? `VCC-AP-${dept}-${yr}` : form.document_code;
+                    const docCode = dept && yr ? resolvePlanCode({ dept, year: yr }) : form.document_code;
                     const nextTitle = isDefaultTitle && yr
                       ? (dept ? `แผนการทวนสอบเครื่องมือประจำปี ${yr} (${dept})` : `แผนการทวนสอบเครื่องมือประจำปี ${yr}`)
                       : form.title;

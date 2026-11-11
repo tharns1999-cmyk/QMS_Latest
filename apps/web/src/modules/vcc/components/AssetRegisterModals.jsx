@@ -31,8 +31,10 @@ export const AssetFormModal = ({
   handleSaveAsset,
   formTypeOptions = [],
   assetTypes = [],
+  loadingAssetTypes = false,
   activeDepartments = [],
-  canTransfer = true
+  canTransfer = true,
+  isDepartmentLocked = false
 }) => {
   const isCurrentlyOpen = Boolean(formOpen);
   const [prevOpen, setPrevOpen] = React.useState(isCurrentlyOpen);
@@ -164,12 +166,17 @@ export const AssetFormModal = ({
               </label>
               <select
                 required
+                disabled={loadingAssetTypes || formTypeOptions.length === 0}
                 value={form.asset_type}
                 onChange={(e) => setForm({ ...form, asset_type: e.target.value })}
-                className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium bg-white focus:outline-none focus:border-indigo-600"
+                className="w-full h-10 px-3 pr-8 truncate rounded-xl border border-slate-300 text-sm font-medium bg-white focus:outline-none focus:border-indigo-600 disabled:bg-slate-100 disabled:text-slate-500"
               >
                 <option value="" disabled>
-                  -- เลือกประเภทเครื่องมือ --
+                  {loadingAssetTypes
+                    ? '-- กำลังโหลดประเภทเครื่องมือ... --'
+                    : formTypeOptions.length === 0
+                      ? '-- ไม่มีรายการประเภทเครื่องมือในระบบ --'
+                      : '-- เลือกประเภทเครื่องมือ --'}
                 </option>
                 {formTypeOptions.map((t) => (
                   <option key={t} value={t}>
@@ -201,20 +208,23 @@ export const AssetFormModal = ({
               </label>
               <select
                 required
-                disabled={activeDepartments.length === 0 || (Boolean(editingAsset) && !canTransfer)}
+                disabled={activeDepartments.length === 0 || isDepartmentLocked || (Boolean(editingAsset) && !canTransfer)}
                 value={form.department}
                 onChange={(e) => setForm({ ...form, department: e.target.value })}
-                className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium bg-white focus:outline-none focus:border-indigo-600 disabled:bg-slate-100 disabled:text-slate-500"
+                className="w-full h-10 px-3 pr-8 truncate rounded-xl border border-slate-300 text-sm font-medium bg-white focus:outline-none focus:border-indigo-600 disabled:bg-slate-100 disabled:text-slate-600 disabled:cursor-not-allowed"
               >
                 <option value="" disabled>
                   {activeDepartments.length === 0 ? '-- โหลดแผนกไม่ได้ --' : '-- เลือกแผนก --'}
                 </option>
                 {activeDepartments.map((d) => (
                   <option key={d.code} value={d.code}>
-                    {d.code} — {d.nameTh}
+                    [{d.code}] {d.nameTh}
                   </option>
                 ))}
               </select>
+              {isDepartmentLocked && !editingAsset && activeDepartments.length > 0 && (
+                <p className="mt-1.5 text-xs text-slate-500">ล็อกตามแผนกของผู้ใช้งาน (การเลือกแผนกอื่นทำได้เฉพาะ DCC)</p>
+              )}
               {Boolean(editingAsset) && !canTransfer && (
                 <p className="mt-1.5 text-xs text-slate-500">การโอนเครื่องมือข้ามแผนกทำได้เฉพาะ DCC</p>
               )}

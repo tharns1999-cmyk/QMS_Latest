@@ -108,10 +108,9 @@ describe('VCC Flat Instrument Architecture — End-to-End Acceptance Criteria Su
     expect(within(header).getByTestId('register-vs-plan-scope-note')).toHaveTextContent(/SC-WH-001 สังกัดแผนก WH/i);
     expect(screen.getByText('รอบวางแผนรวม')).toBeInTheDocument();
 
-    // SW001 displays Composite Set badge + sub-component details
+    // SW001 displays Composite Set badge in the clean row
     const swRow = screen.getByText('SW001').closest('tr');
-    expect(within(swRow).getByText(/ชุดเครื่องมือ \(Composite Set\)/i)).toBeInTheDocument();
-    expect(within(swRow).getByText(/อุปกรณ์ในชุด:/i)).toBeInTheDocument();
+    expect(within(swRow).getByText(/ชุดเครื่องมือ/i)).toBeInTheDocument();
 
     // Clicking "+ เพิ่มเข้าแผนนี้" opens SmartAssetImportModal showing SC-WH-001 (WH) ready to be added to the QC plan if needed
     fireEvent.click(within(header).getByRole('button', { name: /\+ เพิ่มเข้าแผนนี้/i }));
@@ -192,12 +191,13 @@ describe('VCC Flat Instrument Architecture — End-to-End Acceptance Criteria Su
 
     fireEvent.click(within(modal).getByRole('button', { name: /ยืนยันการแปลงรายการ/i }));
 
-    // 4. After conversion: GRP-SCALE is gone, SC-WH-001 is scheduled for Month 6 (2025-06-30), and NO lingering group banner remains!
+    // 4. After conversion: GRP-SCALE is gone, SC-WH-001 is scheduled for Month 6, and NO lingering group banner remains!
     await waitFor(() => {
       expect(screen.queryByText(/พบรายการกลุ่มเดิม/i)).not.toBeInTheDocument();
     });
     expect(screen.getByText('SC-WH-001')).toBeInTheDocument();
-    expect(screen.getByText('2025-06-30')).toBeInTheDocument();
+    const scRow = screen.getByText('SC-WH-001').closest('tr');
+    expect(within(scRow).getByRole('button', { name: /เป้าหมายทวนสอบเดือน 6/i })).toBeInTheDocument();
 
     // 5. Submit WH plan -> Review as wh4 -> Approve as wh5 via Task Inbox
     fireEvent.click(screen.getByRole('button', { name: 'ส่งทบทวนแผน' }));

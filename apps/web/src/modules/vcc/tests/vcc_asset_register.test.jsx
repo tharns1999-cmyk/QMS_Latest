@@ -160,7 +160,8 @@ describe('VCC Phase 1 Frontend: Portal Access, Asset Tabs, Mandatory Reason, and
         <AssetRegisterPage />
       </MemoryRouter>
     );
-    await waitFor(() => expect(screen.getByText('ST002')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByTestId('clean-department-empty-state')).toBeInTheDocument());
+    expect(screen.queryByText('ST002')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /เพิ่มเครื่องมือ/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /ตั้งค่าประเภทเครื่องมือ/i })).not.toBeInTheDocument();
   });

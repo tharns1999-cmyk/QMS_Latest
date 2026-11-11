@@ -423,13 +423,24 @@ export const fetchVccAssets = async ({
     const { assets } = await apiGet(`/api/vcc/assets?${params.toString()}`);
     return assets;
   }
-  assertLocalVccAccess();
+  const user = assertLocalVccAccess();
+  const canReadAll = canReadAllVccDepartments(user);
+  const ownDepts = getUserDeptCodes(user);
+  const requestedDept = String(department || '').trim().toUpperCase();
+  if (!canReadAll && requestedDept && !ownDepts.includes(requestedDept)) {
+    return [];
+  }
   const all = getLocalAssets();
   const deptMap = getDepartmentMap();
   const needle = String(q || '').trim().toLowerCase();
   return all
     .filter((a) => a.status === status)
-    .filter((a) => (!department ? true : a.department === department))
+    .filter((a) => {
+      const assetDept = String(a.department || '').trim().toUpperCase();
+      if (!canReadAll && !ownDepts.includes(assetDept)) return false;
+      if (!requestedDept) return true;
+      return assetDept === requestedDept;
+    })
     .filter((a) => (!asset_type ? true : a.asset_type === asset_type))
     .filter((a) => (!parent_id ? true : a.parent_id === parent_id))
     .filter((a) => {
