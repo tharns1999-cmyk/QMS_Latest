@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
@@ -92,7 +92,7 @@ describe('VCC Instrument-Centric Architecture: Flat Table, Option B, Category Ch
     expect(screen.queryByRole('button', { name: /นาฬิกาจับเวลา/i })).not.toBeInTheDocument();
 
     // Search box filters across code, name, department, and asset_type directly
-    const searchInput = screen.getByPlaceholderText(/ค้นหารหัสเครื่องมือ/i);
+    const searchInput = screen.getByPlaceholderText(/ค้นหารหัส, ชื่อ, Serial/i);
     fireEvent.change(searchInput, { target: { value: 'เทอร์โมมิเตอร์' } });
 
     await waitFor(() => {
