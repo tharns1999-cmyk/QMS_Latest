@@ -43,6 +43,7 @@ import { isApiMode } from '../../../../api/client';
 import * as serverData from '../../../../api/masterData';
 import { PasswordNotice, SecurityTab } from './ApiMasterData';
 import { isSystemAdmin } from '../../../admin/adminAccess';
+import UserManagementTable from './components/UserManagementTable';
 
 const MasterDataHub = () => {
   const navigate = useNavigate();
@@ -63,6 +64,7 @@ const MasterDataHub = () => {
     // Actions
     addMasterUser,
     updateMasterUser,
+    switchUser,
     toggleUserStatus,
     resetUserPassword,
     unlockUserAccount,
@@ -1169,174 +1171,60 @@ const MasterDataHub = () => {
             </div>
 
             {/* Users Elevated Table */}
-            <div className="w-full max-w-full overflow-hidden bg-white border border-slate-200/80 rounded-xl shadow-2xs flex flex-col min-h-0">
-              <div className="overflow-x-auto overflow-y-auto max-h-[560px] w-full max-w-full scrollbar-thin">
-                <table className="w-full text-left text-xs table-auto min-w-[960px] border-collapse">
-                  <thead className="bg-slate-50 text-slate-600 font-semibold text-[11px] uppercase tracking-wider border-b border-slate-200 whitespace-nowrap sticky top-0 z-10">
-                    <tr>
-                      <th className="py-2.5 px-3 min-w-[240px] bg-slate-50">ชื่อ-นามสกุล / อีเมล</th>
-                      <th className="py-2.5 px-3 w-28 whitespace-nowrap bg-slate-50">แผนก</th>
-                      <th className="py-2.5 px-3 min-w-[140px] whitespace-nowrap bg-slate-50">ตำแหน่งงาน</th>
-                      <th className="py-2.5 px-3 text-center w-32 whitespace-nowrap bg-slate-50">บทบาท (Role)</th>
-                      <th className="py-2.5 px-3 text-center w-24 whitespace-nowrap bg-slate-50">ระดับอนุมัติ</th>
-                      <th className="py-2.5 px-3 text-center w-24 whitespace-nowrap bg-slate-50">สถานะ</th>
-                      <th className="py-2.5 px-3 text-right w-32 whitespace-nowrap bg-slate-50">การจัดการ</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {userPagination.paginatedData.map(user => (
-                      <tr key={user.id} className="hover:bg-slate-50/70 transition-colors">
-                        <td className="py-2 px-3 min-w-[240px]">
-                          <div className="font-semibold text-slate-900 flex items-center gap-1.5 text-xs">
-                            <span>{user.name}</span>
-                            {user.isLocked && (
-                              <span className="px-1.5 py-0.2 bg-rose-100 text-rose-700 text-[10px] rounded font-mono font-bold">LOCKED</span>
-                            )}
-                          </div>
-                          <div className="text-slate-400 text-[11px] font-mono leading-none mt-0.5">
-                            {user.empId || user.id} • {user.email}
-                          </div>
-                        </td>
-                        <td className="py-2 px-3 font-semibold text-slate-800 whitespace-nowrap">
-                          <div className="flex flex-wrap items-center gap-1 max-w-[220px]">
-                            {(user.affiliated_departments && user.affiliated_departments.length > 0
-                              ? user.affiliated_departments
-                              : (user.depts && user.depts.length > 0 ? user.depts : [user.primary_department || user.department || 'QA'])
-                            ).map(dept => {
-                              const isPrimary = dept === (user.primary_department || user.department);
-                              return (
-                                <span 
-                                  key={dept}
-                                  className={`px-1.5 py-0.5 rounded font-mono text-[10px] font-semibold inline-flex items-center gap-0.5 ${
-                                    isPrimary 
-                                      ? 'bg-sky-50 text-sky-700 border border-sky-200' 
-                                      : 'bg-slate-100 text-slate-600 border border-slate-200'
-                                  }`}
-                                  title={isPrimary ? 'แผนกหลัก (Primary Department)' : 'แผนกที่สังกัดร่วม (Affiliated)'}
-                                >
-                                  {isPrimary && <span>⭐</span>}
-                                  <span>{dept}</span>
-                                </span>
-                              );
-                            })}
-                          </div>
-                        </td>
-                        <td className="py-2 px-3 text-slate-600 whitespace-nowrap text-xs">
-                          {user.position || '-'}
-                        </td>
-                        <td className="py-2 px-3 text-center whitespace-nowrap">
-                          <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium ${
-                            user.role === 'DCC_ADMIN' || user.isDcc
-                              ? 'bg-purple-50 text-purple-700 border border-purple-200'
-                              : user.role === 'DEPT_ADMIN'
-                              ? 'bg-sky-50 text-sky-700 border border-sky-200'
-                              : 'bg-slate-100 text-slate-600'
-                          }`}>
-                            {user.role || (user.isDcc ? 'DCC_ADMIN' : 'GENERAL_USER')}
-                          </span>
-                        </td>
-                        <td className="py-2 px-3 text-center whitespace-nowrap">
-                          <span className="px-2 py-0.5 bg-slate-100 text-slate-700 font-mono font-medium rounded text-xs border border-slate-200">
-                            L{user.level}
-                          </span>
-                        </td>
-                        <td className="py-2 px-3 text-center whitespace-nowrap">
-                          <button
-                            onClick={() => (isApiMode
-                              ? (user.id !== currentUser?.id || user.status !== 'ACTIVE') && serverData.setUserStatus(user.id, user.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE')
-                              : toggleUserStatus(user.id))}
-                            className={`px-2 py-0.5 rounded-full text-[11px] font-medium cursor-pointer transition-colors ${
-                              user.status === 'ACTIVE'
-                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100'
-                                : 'bg-slate-100 text-slate-400 border border-slate-200 hover:bg-slate-200'
-                            }`}
-                          >
-                            {user.status === 'ACTIVE' ? '🟢 Active' : '⚪ Inactive'}
-                          </button>
-                        </td>
-                        <td className="py-2 px-3 text-right whitespace-nowrap">
-                          <div className="flex items-center justify-end gap-1">
-                            <button
-                              onClick={() => handleOpenSignatureModal(user)}
-                              className="w-7 h-7 rounded hover:bg-slate-100 flex items-center justify-center text-slate-500 hover:text-slate-800 transition-colors"
-                              title="จัดการลายเซ็นอิเล็กทรอนิกส์ (Signature Asset)"
-                            >
-                              <PenTool size={13} />
-                            </button>
-                            <button
-                              onClick={() => handleOpenStampSimulator(user)}
-                              className="w-7 h-7 rounded hover:bg-emerald-50 flex items-center justify-center text-slate-500 hover:text-emerald-700 transition-colors"
-                              title="ทดสอบตราประทับจำลอง (21 CFR Part 11 Stamp Simulator)"
-                            >
-                              <ShieldCheck size={13} />
-                            </button>
-                            <button
-                              onClick={() => handleOpenUserModal(user)}
-                              className="w-7 h-7 rounded hover:bg-slate-100 flex items-center justify-center text-slate-500 hover:text-slate-800 transition-colors"
-                              title="แก้ไขข้อมูลผู้ใช้"
-                            >
-                              <Edit size={13} />
-                            </button>
-                            <button
-                              onClick={async () => {
-                                if (isApiMode) {
-                                  if (!window.confirm(`รีเซ็ตรหัสผ่านของ ${user.name}? รหัสเดิมและการเข้าระบบอยู่ตอนนี้จะใช้ไม่ได้`)) return;
-                                  const result = await serverData.resetUserPassword(user.id);
-                                  if (result) setPasswordNotice({ name: user.name, email: user.email, password: result.temporaryPassword });
-                                  return;
-                                }
-                                resetUserPassword(user.id);
-                                toast.success(`รีเซ็ตรหัสผ่านของ ${user.name} เรียบร้อยแล้ว`);
-                              }}
-                              className="w-7 h-7 rounded hover:bg-amber-50 flex items-center justify-center text-slate-500 hover:text-amber-600 transition-colors"
-                              title="รีเซ็ตรหัสผ่านเริ่มต้น"
-                            >
-                              <RotateCcw size={13} />
-                            </button>
-                            {isApiMode && user.twoFactorEnabled && (
-                              <button
-                                onClick={() => window.confirm(`รีเซ็ตการยืนยันสองขั้นตอนของ ${user.name}? เขาจะถูกออกจากระบบและต้องตั้งค่าใหม่`) && serverData.resetUserTwoFactor(user.id)}
-                                className="h-7 px-1.5 rounded hover:bg-amber-50 text-[11px] font-semibold text-amber-700 transition-colors"
-                                title="รีเซ็ตการยืนยันสองขั้นตอน (2FA)"
-                              >
-                                2FA
-                              </button>
-                            )}
-                            {user.isLocked && (
-                              <button
-                                onClick={() => {
-                                  if (isApiMode) { serverData.setUserStatus(user.id, 'ACTIVE'); return; }
-                                  unlockUserAccount(user.id);
-                                  toast.success(`ปลดล็อกบัญชี ${user.name} เรียบร้อยแล้ว`);
-                                }}
-                                className="w-7 h-7 rounded hover:bg-emerald-50 flex items-center justify-center text-emerald-600 transition-colors"
-                                title="ปลดล็อกบัญชี"
-                              >
-                                <Unlock size={13} />
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                    {filteredUsers.length === 0 && (
-                      <tr>
-                        <td colSpan={7} className="px-4 py-8 text-center text-slate-400">
-                          ไม่พบข้อมูลผู้ใช้งานที่ค้นหา
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-              <TablePagination
-                currentPage={userPagination.currentPage}
-                totalItems={userPagination.totalItems}
-                pageSize={userPagination.pageSize}
-                onPageChange={userPagination.setCurrentPage}
-                onPageSizeChange={userPagination.setPageSize}
-              />
-            </div>
+            <UserManagementTable
+              users={userPagination.paginatedData}
+              departmentsList={departmentsList}
+              currentUser={currentUser}
+              isApiMode={isApiMode}
+              onOpenUserModal={handleOpenUserModal}
+              onOpenSignatureModal={handleOpenSignatureModal}
+              onOpenStampSimulator={handleOpenStampSimulator}
+              onResetPassword={async (user) => {
+                if (isApiMode) {
+                  if (!window.confirm(`รีเซ็ตรหัสผ่านของ ${user.name}? รหัสเดิมและการเข้าระบบอยู่ตอนนี้จะใช้ไม่ได้`)) return;
+                  const result = await serverData.resetUserPassword(user.id);
+                  if (result) setPasswordNotice({ name: user.name, email: user.email, password: result.temporaryPassword });
+                  return;
+                }
+                resetUserPassword(user.id);
+                toast.success(`รีเซ็ตรหัสผ่านของ ${user.name} เรียบร้อยแล้ว`);
+              }}
+              onUnlockAccount={(user) => {
+                if (isApiMode) { serverData.setUserStatus(user.id, 'ACTIVE'); return; }
+                unlockUserAccount(user.id);
+                toast.success(`ปลดล็อกบัญชี ${user.name} เรียบร้อยแล้ว`);
+              }}
+              onToggleStatus={(user) => {
+                if (isApiMode) {
+                  (user.id !== currentUser?.id || user.status !== 'ACTIVE') &&
+                    serverData.setUserStatus(user.id, user.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE');
+                } else {
+                  toggleUserStatus(user.id);
+                }
+              }}
+              onSwitchPersona={(user) => {
+                if (switchUser) {
+                  switchUser(user.id);
+                } else {
+                  useStore.getState().setCurrentUser?.(user.id);
+                }
+                toast.success(`สลับมุมมองผู้ใช้เป็น ${user.name} เรียบร้อยแล้ว`);
+              }}
+              onResetTwoFactor={(user) => {
+                if (window.confirm(`รีเซ็ตการยืนยันสองขั้นตอนของ ${user.name}? เขาจะถูกออกจากระบบและต้องตั้งค่าใหม่`)) {
+                  serverData.resetUserTwoFactor(user.id);
+                }
+              }}
+              pagination={
+                <TablePagination
+                  currentPage={userPagination.currentPage}
+                  totalItems={userPagination.totalItems}
+                  pageSize={userPagination.pageSize}
+                  onPageChange={userPagination.setCurrentPage}
+                  onPageSizeChange={userPagination.setPageSize}
+                />
+              }
+            />
           </div>
         )}
 
