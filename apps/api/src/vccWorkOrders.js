@@ -1,6 +1,7 @@
 import { getThresholds } from './approval.js';
 import { computeDueDateForMonth, isUserAuthorizedForPlanDept, getUserDepartments } from './vccPlans.js';
 import { requireVccAccess, requireDccOnly, canReadVccDepartment, vccDeptScopeSql, VCC_DEPT_FORBIDDEN, canManageVccAsset } from './vccAuth.js';
+import { woEventNotice, ncHoldNoticeStatements } from './vccNotifications.js';
 
 const NOW = "strftime('%Y-%m-%dT%H:%M:%SZ', 'now')";
 
@@ -1618,6 +1619,11 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
         approved_by: user.id,
         approved_by_name: user.name,
         comment
+      }),
+      woEventNotice(db, existing, {
+        type: 'EVT_WO_RESCHEDULE_APPROVED', severity: 'SUCCESS', targetUserId: existing.reschedule_requested_by,
+        title: `[อนุมัติเลื่อนวัน] ใบสั่งงาน ${existing.wo_code}`,
+        message: `วันครบกำหนดของเครื่องมือ ${existing.asset_code} เลื่อนเป็น ${targetDueDate} อนุมัติโดย ${user.name}`
       })
     ]);
     if (conflict) return conflict;
@@ -1676,6 +1682,11 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
         rejected_by: user.id,
         rejected_by_name: user.name,
         reject_reason: rejectReason
+      }),
+      woEventNotice(db, existing, {
+        type: 'EVT_WO_RESCHEDULE_REJECTED', severity: 'WARNING', targetUserId: existing.reschedule_requested_by,
+        title: `[ไม่อนุมัติเลื่อนวัน] ใบสั่งงาน ${existing.wo_code}`,
+        message: `คำขอเลื่อนวันของเครื่องมือ ${existing.asset_code} ไม่ได้รับอนุมัติโดย ${user.name}: ${rejectReason}`
       })
     ]);
     if (conflict) return conflict;
@@ -1881,7 +1892,8 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
               hold_started_at = COALESCE(hold_started_at, ${NOW}),
               updated_at = ${NOW}
           WHERE id = ?
-        `).bind(existing.asset_id)
+        `).bind(existing.asset_id),
+        ...ncHoldNoticeStatements(db, existing)
       );
     }
 
@@ -1961,6 +1973,11 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
         comment,
         before: { status: 'PENDING_REVIEW' },
         after: { status: 'CLOSED' }
+      }),
+      woEventNotice(db, existing, {
+        type: 'EVT_WO_VERIFIED', severity: 'SUCCESS', targetUserId: existing.performed_by,
+        title: `[ตรวจรับผ่าน] ใบสั่งงาน ${existing.wo_code} ปิดงานแล้ว`,
+        message: `ผลทวนสอบ/สอบเทียบของเครื่องมือ ${existing.asset_code} (${existing.asset_name}) ได้รับการตรวจรับโดย ${user.name}`
       })
     ]);
     if (conflict) return conflict;
@@ -2027,6 +2044,11 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
         },
         before: { status: 'PENDING_REVIEW' },
         after: { status: 'REJECTED' }
+      }),
+      woEventNotice(db, existing, {
+        type: 'EVT_WO_RETURNED', severity: 'WARNING', targetUserId: existing.performed_by,
+        title: `[ส่งกลับแก้ไข] ใบสั่งงาน ${existing.wo_code}`,
+        message: `ผลของเครื่องมือ ${existing.asset_code} ถูกส่งกลับโดย ${user.name}: ${reason}`
       })
     ]);
     if (conflict) return conflict;

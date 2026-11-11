@@ -39,6 +39,7 @@ import { createPortal } from 'react-dom';
 import ChangePasswordForm from '../auth/ChangePasswordForm';
 import { syncVccTasks } from '../../modules/vcc/api/vccPlanApi';
 import { syncVccWorkTasks } from '../../modules/vcc/api/vccWorkOrderApi';
+import { syncVccNotifications } from '../../modules/vcc/api/vccNotificationApi';
 
 // Defined at module level so React keeps the same component type between renders: nested definitions remount the whole menu on every update, which resets the scroll position.
 const SectionHeader = ({ title }) => (
@@ -128,7 +129,7 @@ const Sidebar = ({ isOpen = false, onClose = () => {} }) => {
   const { 
     currentUser, requestUsers, reviewUsers, approveUsers, tasks, vccWorkTasks, controlledCopyInstances, documents, 
     externalDocuments, periodicReviewSchedules,
-    masterUsers, setCurrentUser, switchUser, notifications,
+    masterUsers, setCurrentUser, switchUser, notifications, vccNotifications,
     resetTransactionDataToCleanSlate, manualSeedData, externalRequests,
     simulatedSystemDate, getEffectiveToday
   } = useStore();
@@ -204,6 +205,11 @@ const Sidebar = ({ isOpen = false, onClose = () => {} }) => {
     syncVccTasks(currentUser).catch(() => {});
     syncVccWorkTasks();
   }, [currentUser]);
+
+  // The bell covers every module: VCC alerts are re-read on each page change so the number follows the work just done.
+  useEffect(() => {
+    syncVccNotifications();
+  }, [currentUser, path]);
 
   // Task Counts Calculations
   const userTasks = (tasks || []).filter(t => isActionableTask(t, currentUser, allDocs, effectiveToday) && !isAssignedToSomeoneElse(t, currentUser));
@@ -334,8 +340,8 @@ const Sidebar = ({ isOpen = false, onClose = () => {} }) => {
   const unreadNotificationCount = useMemo(() => {
     return (notifications || [])
       .filter(n => isNotificationVisibleToUser(n, currentUser))
-      .filter(n => !isNotificationReadByUser(n, currentUser?.id)).length;
-  }, [notifications, currentUser]);
+      .filter(n => !isNotificationReadByUser(n, currentUser?.id)).length + (vccNotifications || []).length;
+  }, [notifications, currentUser, vccNotifications]);
 
   return (
     <aside

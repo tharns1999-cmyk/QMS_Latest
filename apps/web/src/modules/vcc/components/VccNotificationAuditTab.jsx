@@ -27,7 +27,8 @@ import { formatVccDateTime } from '../utils/vccDateUtils';
 const SEVERITY_BADGES = {
   CRITICAL: 'bg-rose-100 text-rose-800 border-rose-200',
   WARNING: 'bg-amber-100 text-amber-800 border-amber-200',
-  INFO: 'bg-blue-100 text-blue-800 border-blue-200'
+  INFO: 'bg-blue-100 text-blue-800 border-blue-200',
+  SUCCESS: 'bg-emerald-100 text-emerald-800 border-emerald-200'
 };
 
 const STATUS_BADGES = {
