@@ -1531,6 +1531,66 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
     return c.json({ plan: await fetchPlan(db, id), items: await fetchPlanItems(db, id) });
   });
 
+  // Delete a draft or returned annual plan (restricted to owning dept L4+ or DCC)
+  app.delete('/api/vcc/plans/:id', requireAuth, requireVccAccess, async (c) => {
+    const db = c.env.DB;
+    const user = c.get('user');
+    const id = c.req.param('id');
+    const plan = await fetchPlan(db, id);
+    if (!plan) return c.json({ error: 'ไม่พบแผนการสอบเทียบประจำปี' }, 404);
+
+    // State Guard: Only DRAFT or REJECTED/RETURNED
+    if (plan.status !== 'DRAFT' && plan.status !== 'REJECTED' && plan.status !== 'RETURNED') {
+      return c.json({ error: 'ไม่อนุญาตให้ลบแผนงานที่อยู่ระหว่างการอนุมัติหรือมีผลบังคับใช้แล้ว' }, 400);
+    }
+
+    // RBAC: Owning department (L4+) or DCC Admin
+    const isDccUser = Boolean(user.isDcc || user.is_dcc);
+    const level = Number(user.approval_level ?? user.approvalLevel ?? 0);
+    const depts = getUserDepartments(user);
+    const isDeptL4Plus = depts.includes(String(plan.department || '').toUpperCase()) && level >= 4;
+
+    if (!isDccUser && !isDeptL4Plus) {
+      return c.json({ error: 'เฉพาะผู้รับผิดชอบของแผนกนั้น (ระดับ L4 ขึ้นไป) หรือ DCC เท่านั้นที่สามารถลบแผนงานได้' }, 403);
+    }
+
+    const body = await c.req.json().catch(() => ({}));
+    const reason = typeof body.reason === 'string' ? clean(body.reason, 500) : '';
+    if (!reason) {
+      return c.json({ error: 'กรุณาระบุเหตุผลการลบแผนงาน' }, 400);
+    }
+
+    const statements = [
+      db.prepare('DELETE FROM vcc_plan_cycles WHERE plan_id = ?').bind(id),
+      db.prepare('DELETE FROM vcc_annual_plan_items WHERE plan_id = ?').bind(id),
+      db.prepare('DELETE FROM vcc_annual_plans WHERE id = ?').bind(id),
+      audit(db, user.id, 'VCC_PLAN_DELETED', {
+        plan_id: id,
+        plan_year: plan.plan_year,
+        department: plan.department,
+        document_code: plan.document_code,
+        revision: plan.revision,
+        status: plan.status,
+        reason
+      })
+    ];
+
+    // Guarantee parent plan remains CURRENT if deleting a revision
+    if (plan.parent_plan_id) {
+      statements.push(
+        db.prepare(`
+          UPDATE vcc_annual_plans
+          SET is_current = 1, effective_status = 'CURRENT', updated_at = ${NOW}
+          WHERE id = ? AND status = 'APPROVED'
+        `).bind(plan.parent_plan_id)
+      );
+    }
+
+    await db.batch(statements);
+
+    return c.json({ success: true, message: 'ลบแผนงานฉบับร่างเรียบร้อยแล้ว', deleted_id: id });
+  });
+
   // Add or update a schedule item in an annual plan
   app.post('/api/vcc/plans/:id/items', requireAuth, requireVccAccess, async (c) => {
     const db = c.env.DB;

@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiPut, isApiMode } from '../../../api/client';
+import { apiGet, apiPost, apiPut, apiDelete, isApiMode } from '../../../api/client';
 import useStore from '../../../store/useStore';
 import { isSameDepartment } from '../../dcc/utils/taskFilter';
 import {
@@ -278,7 +278,7 @@ export const getLocalPlans = () => {
   return plans;
 };
 
-const setLocalPlans = (list) => writeJson(STORAGE_PLANS_KEY, list);
+export const setLocalPlans = (list) => writeJson(STORAGE_PLANS_KEY, list);
 
 export const getLocalPlanItems = () => {
   const items = readJson(STORAGE_PLAN_ITEMS_KEY, () => [...INITIAL_LOCAL_PLAN_ITEMS]);
@@ -1046,6 +1046,53 @@ export const updateVccPlan = async (id, payload) => {
   });
 
   return fetchVccPlanDetail(id);
+};
+
+export const deleteVccPlan = async (id, reason = '') => {
+  if (isApiMode) {
+    return apiDelete(`/api/vcc/plans/${encodeURIComponent(id)}`, { reason });
+  }
+  const user = assertLocalVccAccess();
+  const allPlans = getLocalPlans();
+  const existing = allPlans.find((p) => p.id === id);
+  if (!existing) throw new Error('ไม่พบแผนการสอบเทียบประจำปี');
+  if (existing.status !== 'DRAFT' && existing.status !== 'REJECTED' && existing.status !== 'RETURNED') {
+    throw new Error('ไม่อนุญาตให้ลบแผนงานที่อยู่ระหว่างการอนุมัติหรือมีผลบังคับใช้แล้ว');
+  }
+
+  const isDccUser = Boolean(user.isDcc || user.is_dcc);
+  const userDepts = [user.department, ...(user.extra_departments || [])].map((d) => String(d).toUpperCase());
+  const isOwningDept = userDepts.includes(String(existing.department || '').toUpperCase());
+  const level = Number(user.approval_level ?? user.approvalLevel ?? 0);
+  if (!isDccUser && (!isOwningDept || level < 4)) {
+    throw new Error('เฉพาะผู้รับผิดชอบของแผนกนั้น (ระดับ L4 ขึ้นไป) หรือ DCC เท่านั้นที่สามารถลบแผนงานได้');
+  }
+
+  const trimmedReason = String(reason || '').trim();
+  if (!trimmedReason) throw new Error('กรุณาระบุเหตุผลการลบแผนงาน');
+
+  const nextPlans = allPlans.filter((p) => p.id !== id);
+  if (existing.parent_plan_id) {
+    const parentIdx = nextPlans.findIndex((p) => p.id === existing.parent_plan_id);
+    if (parentIdx !== -1 && nextPlans[parentIdx].status === 'APPROVED') {
+      nextPlans[parentIdx] = { ...nextPlans[parentIdx], is_current: 1, effective_status: 'CURRENT' };
+    }
+  }
+  setLocalPlans(nextPlans);
+
+  const nextItems = getLocalPlanItems().filter((it) => it.plan_id !== id);
+  setLocalPlanItems(nextItems);
+
+  appendLocalAudit('VCC_PLAN_DELETED', {
+    plan_id: id,
+    plan_year: existing.plan_year,
+    department: existing.department,
+    document_code: existing.document_code,
+    revision: existing.revision,
+    reason: trimmedReason
+  });
+
+  return { success: true, message: 'ลบแผนงานฉบับร่างเรียบร้อยแล้ว', deleted_id: id };
 };
 
 export const saveVccPlanItem = async (planId, payload) => {

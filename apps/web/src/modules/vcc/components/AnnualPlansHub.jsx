@@ -11,7 +11,8 @@ import {
   Printer,
   History,
   FileSpreadsheet,
-  CheckCircle2
+  CheckCircle2,
+  Trash2
 } from 'lucide-react';
 import { formatVccDateTime, toBuddhistYear } from '../utils/vccDateUtils';
 import {
@@ -22,6 +23,8 @@ import {
 import { VCC_DEPARTMENTS } from '../utils/departmentScope';
 import DepartmentBadge from '../../../shared/components/ui/DepartmentBadge';
 import useStore, { MASTER_DATA_DEPT } from '../../../store/useStore';
+import { deleteVccPlan } from '../api/vccPlanApi';
+import DeletePlanModal from './DeletePlanModal';
 
 export { resolvePlanCode, resolveDigitalPlanCode };
 
@@ -53,11 +56,38 @@ export const AnnualPlansHub = ({
   onPrintPlan,
   _onExportPlanExcel,
   onOpenHistory,
+  onDeletePlan,
   canCreatePlan = true
 }) => {
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [searchQuery, setSearchQuery] = useState('');
+  const [planToDelete, setPlanToDelete] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const currentUser = useStore((s) => s.currentUser);
   const storeDepartments = useStore((s) => s.masterDepartments || s.departments || []);
+
+  const isDccUser = Boolean(currentUser?.isDcc || currentUser?.is_dcc || currentUser?.role === 'DCC_ADMIN');
+  const userLevel = Number(currentUser?.approval_level ?? currentUser?.approvalLevel ?? 0);
+  const userDepts = useMemo(() => {
+    return [currentUser?.department, ...(currentUser?.extra_departments || [])]
+      .filter(Boolean)
+      .map((d) => String(d).toUpperCase());
+  }, [currentUser]);
+
+  const handleConfirmDelete = async (reason) => {
+    if (!planToDelete) return;
+    setIsDeleting(true);
+    try {
+      if (onDeletePlan) {
+        await onDeletePlan(planToDelete.id, reason);
+      } else {
+        await deleteVccPlan(planToDelete.id, reason);
+      }
+      setPlanToDelete(null);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   // Derive departments dynamically from activeDepartments prop or Central Store (masterDepartments / MASTER_DATA_DEPT)
   const departments = useMemo(() => {
@@ -450,6 +480,20 @@ export const AnnualPlansHub = ({
                       {/* Actions */}
                       <td className="align-middle py-3.5 px-3.5 text-right w-auto min-w-[170px]">
                         <div className="flex items-center justify-end gap-1.5 flex-nowrap">
+                          {/* Delete Draft Plan Button */}
+                          {((plan.status === 'DRAFT' || plan.status === 'REJECTED' || plan.status === 'RETURNED') &&
+                            (isDccUser || (userDepts.includes(String(dept).toUpperCase()) && userLevel >= 4))) && (
+                            <button
+                              type="button"
+                              data-testid={`delete-plan-${plan.id}`}
+                              onClick={() => setPlanToDelete(plan)}
+                              title="ลบแผนงานฉบับร่าง"
+                              className="shrink-0 p-1.5 rounded-lg border border-rose-200 text-rose-600 hover:text-rose-700 hover:bg-rose-50 transition-colors cursor-pointer"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          )}
+
                           {/* Print Icon Button */}
                           <button
                             type="button"
@@ -489,6 +533,14 @@ export const AnnualPlansHub = ({
           </table>
         </div>
       </div>
+
+      <DeletePlanModal
+        isOpen={Boolean(planToDelete)}
+        plan={planToDelete}
+        onClose={() => setPlanToDelete(null)}
+        onConfirm={handleConfirmDelete}
+        loading={isDeleting}
+      />
     </div>
   );
 };

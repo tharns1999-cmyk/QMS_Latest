@@ -15,6 +15,7 @@ import {
   createVccPlan,
   createVccPlanRevision,
   updateVccPlan,
+  deleteVccPlan,
   saveVccPlanItem,
   deleteVccPlanItem,
   convertVccPlanGroupItem,
@@ -896,6 +897,17 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
     }
   };
 
+  const handleDeletePlan = async (planId, reason) => {
+    try {
+      await deleteVccPlan(planId, reason);
+      toast.success('ลบแผนงานฉบับร่างเรียบร้อยแล้ว');
+      await loadPlansAndMeta();
+    } catch (err) {
+      toast.error(err.message || 'เกิดข้อผิดพลาดในการลบแผนงาน');
+      throw err;
+    }
+  };
+
   return (
     <div className="space-y-3" data-testid="annual-plan-matrix">
       {viewState === 'HUB' ? (
@@ -913,6 +925,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
           onPrintPlan={handlePrintPlan}
           onExportPlanExcel={handleExportPlanExcel}
           onOpenHistory={(plan) => { handleSelectPlan(plan.id); setHistoryOpen(true); }}
+          onDeletePlan={handleDeletePlan}
           canCreatePlan={!currentUser?.vccReadOnly}
         />
       ) : (
