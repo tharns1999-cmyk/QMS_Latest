@@ -6,19 +6,7 @@ import {
   Wrench,
   Calendar,
   ClipboardList,
-  BarChart3,
-  Plus,
-  Search,
-  SlidersHorizontal,
-  History,
-  Edit3,
-  Archive,
-  RotateCcw,
-  CheckCircle2,
-  XCircle,
-  AlertTriangle,
-  Layers,
-  X
+  BarChart3
 } from 'lucide-react';
 import useStore from '../../../store/useStore';
 import {
@@ -43,9 +31,7 @@ import AnnualPlanMatrixSection from '../components/AnnualPlanMatrixSection';
 import WorkOrderSection from '../components/WorkOrderSection';
 import VccDashboardSection from '../components/VccDashboardSection';
 import VccTaskInboxSection from '../components/VccTaskInboxSection';
-import MobileCollapsible from '../components/MobileCollapsible';
 import { useVccMobileViewport } from '../hooks/useVccMobileViewport';
-import { getAssetStatusLabel } from '../utils/statusLabels';
 import { AssetRegisterTitleBar } from '../components/AssetRegisterTitleBar';
 import { AssetFilterToolbar } from '../components/AssetFilterToolbar';
 import { AssetRegisterTable } from '../components/AssetRegisterTable';

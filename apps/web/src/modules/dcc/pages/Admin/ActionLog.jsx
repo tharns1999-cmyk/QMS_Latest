@@ -3,20 +3,11 @@ import toast from 'react-hot-toast';
 import useStore from '../../../../store/useStore';
 import { 
   Download, 
-  Search, 
   ShieldAlert, 
   History, 
   FileText, 
   X,
-  Layers,
-  FileCheck,
-  Globe,
-  Calendar,
-  Settings,
   Activity,
-  Wrench,
-  CheckCircle2,
-  CalendarDays,
   Eye
 } from 'lucide-react';
 import dayjs from 'dayjs';
@@ -25,6 +16,8 @@ import ApiAdminPanel from './ApiAdminPanel';
 import { isSystemAdmin } from '../../../admin/adminAccess';
 import { TablePagination } from '../../../../shared/components/common/TablePagination';
 import { useTablePagination } from '../../../../shared/hooks/useTablePagination';
+import AuditFilterToolbar from './AuditFilterToolbar';
+import { matchesAuditModule, matchesAuditCategory } from './auditTaxonomy';
 
 // Server audit rows carry a code and a JSON blob; show them the way a reader says them.
 export const ACTION_TH = {
@@ -390,18 +383,37 @@ const ActionLog = () => {
     return unique.sort((a, b) => new Date(b.rawDate || 0) - new Date(a.rawDate || 0));
   }, [actionLog, controlledCopyAuditTrail, externalAuditTrail, timeline, serverRows]);
 
+  // Dynamic Category Counts based on Selected Module
+  const categoryCounts = useMemo(() => {
+    const counts = { ALL: 0 };
+    const moduleLogs = allNormalizedLogs.filter((log) => matchesAuditModule(log, selectedModule));
+    counts.ALL = moduleLogs.length;
+
+    moduleLogs.forEach((log) => {
+      counts[log.category] = (counts[log.category] || 0) + 1;
+    });
+
+    return counts;
+  }, [allNormalizedLogs, selectedModule]);
+
+  const handleModuleChange = (newModule) => {
+    setSelectedModule(newModule);
+    setSelectedCategory('ALL');
+    pagination.setCurrentPage(1);
+  };
+
   // Filtering Logic
   const filteredLogs = useMemo(() => {
     const searchLower = searchTerm.trim().toLowerCase();
 
     return allNormalizedLogs.filter((log) => {
       // Module Filter
-      if (selectedModule !== 'ALL' && log.module !== selectedModule) {
+      if (!matchesAuditModule(log, selectedModule)) {
         return false;
       }
 
       // Category Filter
-      if (selectedCategory !== 'ALL' && log.category !== selectedCategory) {
+      if (!matchesAuditCategory(log, selectedCategory)) {
         return false;
       }
 
@@ -465,19 +477,6 @@ const ActionLog = () => {
     toast.success('ส่งออกไฟล์ประวัติการดำเนินการ (CSV) สำเร็จ');
   };
 
-  // Category Tabs Configuration
-  const categories = [
-    { id: 'ALL', label: 'ทั้งหมด', icon: Activity, count: allNormalizedLogs.length },
-    { id: 'DAR', label: 'คำร้อง DAR', icon: FileCheck, count: allNormalizedLogs.filter(l => l.category === 'DAR').length },
-    { id: 'CONTROLLED_COPY', label: 'สำเนาควบคุม', icon: Layers, count: allNormalizedLogs.filter(l => l.category === 'CONTROLLED_COPY').length },
-    { id: 'EXTERNAL_DOCS', label: 'เอกสารภายนอก', icon: Globe, count: allNormalizedLogs.filter(l => l.category === 'EXTERNAL_DOCS').length },
-    { id: 'PERIODIC_REVIEW', label: 'ทบทวนตามรอบ', icon: Calendar, count: allNormalizedLogs.filter(l => l.category === 'PERIODIC_REVIEW').length },
-    { id: 'VCC_ASSET', label: 'เครื่องมือ VCC', icon: Wrench, count: allNormalizedLogs.filter(l => l.category === 'VCC_ASSET').length },
-    { id: 'VCC_PLAN', label: 'แผนสอบเทียบ VCC', icon: CalendarDays, count: allNormalizedLogs.filter(l => l.category === 'VCC_PLAN').length },
-    { id: 'VCC_WO', label: 'ใบสั่งงาน VCC', icon: CheckCircle2, count: allNormalizedLogs.filter(l => l.category === 'VCC_WO').length },
-    { id: 'SYSTEM', label: 'ระบบ/ความปลอดภัย', icon: Settings, count: allNormalizedLogs.filter(l => l.category === 'SYSTEM').length },
-  ];
-
   // RBAC Access Denied Fallback
   if (!isDccAdmin) {
     return (
@@ -524,146 +523,46 @@ const ActionLog = () => {
 
       {isApiMode && <ApiAdminPanel />}
 
-      {/* 2. Filter Toolbar (Module, Date Range, Category, Search) */}
-      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs p-4 sm:p-5 space-y-4">
-        {/* Module Switcher & Date Controls */}
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          {/* Module Tabs */}
-          <div className="flex items-center gap-1.5 p-1 bg-slate-100/90 rounded-xl border border-slate-200/60 self-start">
-            {[
-              { id: 'ALL', label: 'ทุกโมดูล' },
-              { id: 'DCC', label: 'DCC (ควบคุมเอกสาร)' },
-              { id: 'VCC', label: 'VCC (สอบเทียบ/ทวนสอบ)' }
-            ].map((m) => (
-              <button
-                key={m.id}
-                type="button"
-                onClick={() => {
-                  setSelectedModule(m.id);
-                  pagination.setCurrentPage(1);
-                }}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                  selectedModule === m.id
-                    ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/70'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
-                }`}
-              >
-                {m.label}
-              </button>
-            ))}
-          </div>
+      {/* 2. Cascading Faceted Filter Toolbar */}
+      <AuditFilterToolbar
+        searchTerm={searchTerm}
+        onSearchChange={(val) => {
+          setSearchTerm(val);
+          pagination.setCurrentPage(1);
+        }}
+        selectedModule={selectedModule}
+        onModuleChange={handleModuleChange}
+        selectedCategory={selectedCategory}
+        onCategoryChange={(val) => {
+          setSelectedCategory(val);
+          pagination.setCurrentPage(1);
+        }}
+        dateFrom={dateFrom}
+        dateTo={dateTo}
+        onDateFromChange={(val) => {
+          setDateFrom(val);
+          pagination.setCurrentPage(1);
+        }}
+        onDateToChange={(val) => {
+          setDateTo(val);
+          pagination.setCurrentPage(1);
+        }}
+        onClearDate={() => {
+          setDateFrom('');
+          setDateTo('');
+          pagination.setCurrentPage(1);
+        }}
+        categoryCounts={categoryCounts}
+      />
 
-          {/* Date Range Inputs */}
-          <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-slate-600">
-            <span className="text-slate-500">ช่วงวันที่:</span>
-            <input
-              type="date"
-              aria-label="วันที่เริ่มต้น"
-              value={dateFrom}
-              onChange={(e) => {
-                setDateFrom(e.target.value);
-                pagination.setCurrentPage(1);
-              }}
-              className="h-8 px-2.5 rounded-lg border border-slate-200 bg-white text-xs font-mono text-slate-800 focus:outline-hidden focus:border-indigo-500"
-            />
-            <span className="text-slate-400">ถึง</span>
-            <input
-              type="date"
-              aria-label="วันที่สิ้นสุด"
-              value={dateTo}
-              onChange={(e) => {
-                setDateTo(e.target.value);
-                pagination.setCurrentPage(1);
-              }}
-              className="h-8 px-2.5 rounded-lg border border-slate-200 bg-white text-xs font-mono text-slate-800 focus:outline-hidden focus:border-indigo-500"
-            />
-            {(dateFrom || dateTo) && (
-              <button
-                type="button"
-                onClick={() => {
-                  setDateFrom('');
-                  setDateTo('');
-                  pagination.setCurrentPage(1);
-                }}
-                className="h-8 px-2 text-xs text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-              >
-                ล้างวันที่
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Category Pills */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
-          {categories
-            .filter((cat) => {
-              if (selectedModule === 'DCC') return !cat.id.startsWith('VCC_');
-              if (selectedModule === 'VCC') return cat.id === 'ALL' || cat.id.startsWith('VCC_');
-              return true;
-            })
-            .map((cat) => {
-              const Icon = cat.icon;
-              const isActive = selectedCategory === cat.id;
-              return (
-                <button
-                  key={cat.id}
-                  type="button"
-                  onClick={() => {
-                    setSelectedCategory(cat.id);
-                    pagination.setCurrentPage(1);
-                  }}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition-all cursor-pointer border ${
-                    isActive
-                      ? 'bg-slate-900 text-white border-slate-900 shadow-2xs font-semibold'
-                      : 'bg-slate-50 text-slate-600 hover:text-slate-900 hover:bg-slate-100 border-slate-200/80'
-                  }`}
-                >
-                  <Icon size={13} className={isActive ? 'text-white' : 'text-slate-400'} />
-                  <span>{cat.label}</span>
-                  <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
-                    isActive ? 'bg-white/20 text-white font-bold' : 'bg-slate-200/70 text-slate-600'
-                  }`}>
-                    {cat.count}
-                  </span>
-                </button>
-              );
-            })}
-        </div>
-
-        {/* Search Bar */}
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2 border-t border-slate-100">
-          <div className="relative w-full sm:max-w-md">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={15} />
-            <input
-              type="text"
-              placeholder="ค้นหาตาม action, ชื่อผู้ใช้งาน, รหัสเอกสาร/เครื่องมือ, หรือรายละเอียด..."
-              className="w-full pl-9 pr-8 h-9 text-xs sm:text-sm bg-slate-50/80 border border-slate-200 rounded-xl focus:bg-white focus:border-indigo-500 focus:outline-hidden text-slate-900 placeholder:text-slate-400 transition-colors"
-              value={searchTerm}
-              onChange={(e) => {
-                setSearchTerm(e.target.value);
-                pagination.setCurrentPage(1);
-              }}
-            />
-            {searchTerm && (
-              <button
-                type="button"
-                onClick={() => {
-                  setSearchTerm('');
-                  pagination.setCurrentPage(1);
-                }}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded cursor-pointer"
-              >
-                <X size={14} />
-              </button>
-            )}
-          </div>
-          <div className="flex items-center gap-2 text-xs text-slate-500 font-mono font-medium self-end sm:self-auto">
-            <span>พบ</span>
-            <span className="font-bold text-slate-900 bg-slate-100 px-2 py-0.5 rounded-md">
-              {filteredLogs.length}
-            </span>
-            <span>รายการ</span>
-          </div>
+      {/* Results Count Summary */}
+      <div className="flex items-center justify-between px-1 text-xs text-slate-500 font-mono">
+        <div className="flex items-center gap-1.5">
+          <span>พบ</span>
+          <span className="font-bold text-slate-900 bg-slate-100 px-2 py-0.5 rounded-md">
+            {filteredLogs.length}
+          </span>
+          <span>รายการ</span>
         </div>
       </div>
 
