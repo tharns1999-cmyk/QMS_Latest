@@ -348,6 +348,7 @@ export const getUserDepartments = (user) => {
   parseList(user.depts);
   parseList(user.secondaryDepartments);
   parseList(user.affiliated_departments);
+  parseList(user.extra_departments);
   return Array.from(depts);
 };
 
@@ -826,7 +827,7 @@ export const fetchVccPlans = async ({ status = 'DRAFT', year = '', department = 
     const params = new URLSearchParams();
     params.set('status', status);
     if (year !== '' && year !== undefined && year !== null) params.set('year', String(year));
-    if (department) params.set('department', department);
+    if (department && department !== 'MY_DEPTS') params.set('department', department);
     const { plans } = await apiGet(`/api/vcc/plans?${params.toString()}`);
     return plans;
   }
@@ -834,6 +835,9 @@ export const fetchVccPlans = async ({ status = 'DRAFT', year = '', department = 
   const allPlans = getLocalPlans();
   const allItems = getLocalPlanItems();
   const deptMap = getDepartmentMap();
+  const myDepts = getUserDepartments(user);
+  const userLevel = Number(user?.approval_level ?? user?.approvalLevel ?? 1);
+  const canReadAll = Boolean(user?.isDcc || user?.isQmr || userLevel >= 6 || myDepts.includes('MGT'));
   const uDept = String(user?.department || user?.dept || '').toUpperCase();
   const deptRank = (d) => {
     const norm = String(d || '').toUpperCase();
@@ -846,7 +850,12 @@ export const fetchVccPlans = async ({ status = 'DRAFT', year = '', department = 
     .filter((p) => isUserAuthorizedForPlanDept(user, p.department))
     .filter((p) => (status === 'ALL' || !status ? true : p.status === status))
     .filter((p) => (year === '' || year === undefined || year === null ? true : Number(p.plan_year) === Number(year)))
-    .filter((p) => (!department ? true : p.department === department))
+    .filter((p) => {
+      if (!department || department === 'MY_DEPTS') {
+        return canReadAll ? true : myDepts.includes(String(p.department).toUpperCase());
+      }
+      return p.department === department;
+    })
     .map((p) => enrichLocalPlan(p, allItems, deptMap))
     .sort(
       (a, b) =>

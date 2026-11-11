@@ -49,9 +49,10 @@ import { AnnualPlanAuditTrailTimeline } from './AnnualPlanAuditTrailTimeline';
 import SmartAssetImportModal from './SmartAssetImportModal';
 import useStore from '../../../store/useStore';
 
-const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
+const AnnualPlanMatrixSection = ({ activeDepartments = [], currentUser: propUser }) => {
   const { currentUser: sessionUser, masterUsers, tasks } = useStore();
-  const currentUser = useVccPolicyUser(sessionUser);
+  const rawUser = propUser || sessionUser;
+  const currentUser = useVccPolicyUser(rawUser);
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const queryTab = searchParams.get('tab');
@@ -128,15 +129,25 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
     return 'DRAFT';
   }, [queryTab, tasks, currentUser]);
 
+  const userDepts = useMemo(() => getUserDeptCodes(currentUser), [currentUser]);
+
   const [statusTab, setStatusTab] = useState(queryTab || initialTab);
   const [filterYear, setFilterYear] = useState('');
-  const [filterDept, setFilterDept] = useState(() => (!canReadAll && userDept ? userDept : ''));
+  const [filterDept, setFilterDept] = useState(() => {
+    if (canReadAll) return '';
+    const depts = userDepts;
+    return depts.length > 1 ? 'MY_DEPTS' : (depts[0] || userDept || '');
+  });
 
   useEffect(() => {
-    if (!canReadAll && userDept) {
-      setFilterDept(userDept);
+    if (!canReadAll) {
+      if (userDepts.length > 1) {
+        setFilterDept((prev) => (prev && (prev === 'MY_DEPTS' || userDepts.includes(prev)) ? prev : 'MY_DEPTS'));
+      } else if (userDepts.length === 1) {
+        setFilterDept(userDepts[0]);
+      }
     }
-  }, [canReadAll, userDept]);
+  }, [canReadAll, userDepts]);
 
   useEffect(() => {
     if (queryTab) {
@@ -253,7 +264,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
   const loadPlansAndMeta = useCallback(async (preferredPlanId = '') => {
     setLoading(true);
     try {
-      const effectiveDept = (!canReadAll && userDept) ? userDept : filterDept;
+      const effectiveDept = filterDept === 'MY_DEPTS' ? '' : filterDept;
       const targetStatus = viewState === 'HUB' ? 'ALL' : statusTab;
       const [settingsRes, planList, allStatusPlans, assetsList] = await Promise.all([
         fetchVccPlanSettings(),
@@ -395,7 +406,10 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
     // Only a real year counts: a click event or a filter label must not turn into NaN
     const fixedYear = Number.isInteger(Number(overrideYear)) && Number(overrideYear) > 0 ? Number(overrideYear) : null;
     const targetYear = fixedYear || (Number(filterYear) > 0 ? Number(filterYear) : currentYear);
-    const targetDept = (!canReadAll && userDept) || filterDept || userDept || activeDepartments[0]?.code || '';
+    const depts = userDepts;
+    const primaryDept = String(currentUser?.department || currentUser?.primary_department || depts[0] || '').toUpperCase();
+    const candidateDept = filterDept && filterDept !== 'MY_DEPTS' ? filterDept : primaryDept;
+    const targetDept = (canReadAll || depts.includes(candidateDept)) ? candidateDept : (primaryDept || createDepartments[0]?.code || '');
     const defaultDocCode = resolvePlanCode({ dept: targetDept, year: targetYear });
     setEditingPlan(null);
     setPlanFormError('');
@@ -927,6 +941,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [] }) => {
           onOpenHistory={(plan) => { handleSelectPlan(plan.id); setHistoryOpen(true); }}
           onDeletePlan={handleDeletePlan}
           canCreatePlan={!currentUser?.vccReadOnly}
+          currentUser={currentUser}
         />
       ) : (
         <>

@@ -1309,7 +1309,7 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
       clauses.push('p.plan_year = ?');
       args.push(yr);
     }
-    if (department) {
+    if (department && department !== 'MY_DEPTS') {
       clauses.push('p.department = ?');
       args.push(department);
     }

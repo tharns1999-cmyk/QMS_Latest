@@ -20,7 +20,11 @@ import {
   resolveDigitalPlanCode,
   getPlanStatusConfig
 } from '../utils/planLabels';
-import { VCC_DEPARTMENTS } from '../utils/departmentScope';
+import {
+  VCC_DEPARTMENTS,
+  getUserDeptCodes,
+  canReadAllVccDepartments
+} from '../utils/departmentScope';
 import DepartmentBadge from '../../../shared/components/ui/DepartmentBadge';
 import useStore, { MASTER_DATA_DEPT } from '../../../store/useStore';
 import { deleteVccPlan } from '../api/vccPlanApi';
@@ -57,22 +61,28 @@ export const AnnualPlansHub = ({
   _onExportPlanExcel,
   onOpenHistory,
   onDeletePlan,
-  canCreatePlan = true
+  canCreatePlan = true,
+  currentUser: propCurrentUser
 }) => {
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [planToDelete, setPlanToDelete] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
-  const currentUser = useStore((s) => s.currentUser);
+  const storeCurrentUser = useStore((s) => s.currentUser);
+  const currentUser = propCurrentUser || storeCurrentUser;
   const storeDepartments = useStore((s) => s.masterDepartments || s.departments || []);
 
   const isDccUser = Boolean(currentUser?.isDcc || currentUser?.is_dcc || currentUser?.role === 'DCC_ADMIN');
   const userLevel = Number(currentUser?.approval_level ?? currentUser?.approvalLevel ?? 0);
-  const userDepts = useMemo(() => {
-    return [currentUser?.department, ...(currentUser?.extra_departments || [])]
-      .filter(Boolean)
-      .map((d) => String(d).toUpperCase());
-  }, [currentUser]);
+  const userDepts = useMemo(() => getUserDeptCodes(currentUser), [currentUser]);
+  const canReadAll = useMemo(() => canReadAllVccDepartments(currentUser), [currentUser]);
+
+  const [internalFilterDept, setInternalFilterDept] = useState(() => (canReadAll ? '' : (userDepts.length > 1 ? 'MY_DEPTS' : (userDepts[0] || ''))));
+  const activeFilterDept = setFilterDept ? (filterDept !== undefined ? filterDept : '') : internalFilterDept;
+  const handleFilterDeptChange = (val) => {
+    setInternalFilterDept(val);
+    if (setFilterDept) setFilterDept(val);
+  };
 
   const handleConfirmDelete = async (reason) => {
     if (!planToDelete) return;
@@ -116,6 +126,23 @@ export const AnnualPlansHub = ({
     }));
   }, [activeDepartments, storeDepartments, plans]);
 
+  const availableDepts = useMemo(() => {
+    if (canReadAll) return departments;
+    const lookup = new Map();
+    departments.forEach((d) => lookup.set(d.code, d.nameTh || d.code));
+    return userDepts.map((code) => ({
+      code,
+      nameTh: lookup.get(code) || code
+    }));
+  }, [canReadAll, departments, userDepts]);
+
+  const allMyDeptsLabel = useMemo(() => {
+    if (userDepts.length <= 3) {
+      return `🏢 ทุกแผนกที่ฉันสังกัด (${userDepts.join(', ')})`;
+    }
+    return `🏢 ทุกแผนกที่ฉันสังกัด (${userDepts.length} แผนก)`;
+  }, [userDepts]);
+
   // Unique years from plans + current & adjacent years dynamically
   const availableYears = useMemo(() => {
     const currentYear = new Date().getFullYear();
@@ -133,7 +160,13 @@ export const AnnualPlansHub = ({
       if (filterYear && String(plan.plan_year) !== String(filterYear)) return false;
 
       // Dept filter
-      if (filterDept && plan.department !== filterDept) return false;
+      if (activeFilterDept === 'MY_DEPTS') {
+        if (!userDepts.includes(plan.department)) return false;
+      } else if (activeFilterDept) {
+        if (plan.department !== activeFilterDept) return false;
+      } else if (!canReadAll) {
+        if (!userDepts.includes(plan.department)) return false;
+      }
 
       // Status filter
       if (statusFilter === 'ACTIVE' && plan.status !== 'APPROVED') return false;
@@ -155,22 +188,49 @@ export const AnnualPlansHub = ({
 
       return true;
     });
-  }, [plans, filterYear, filterDept, statusFilter, searchQuery]);
+  }, [plans, filterYear, activeFilterDept, statusFilter, searchQuery, userDepts, canReadAll]);
+
+  // Scoped plans for KPI metrics
+  const scopedPlans = useMemo(() => {
+    return plans.filter((plan) => {
+      // Year filter
+      if (filterYear && String(plan.plan_year) !== String(filterYear)) return false;
+
+      // Dept filter
+      if (activeFilterDept === 'MY_DEPTS') {
+        return userDepts.includes(plan.department);
+      }
+      if (activeFilterDept) {
+        return plan.department === activeFilterDept;
+      }
+      if (!canReadAll) {
+        return userDepts.includes(plan.department);
+      }
+      return true;
+    });
+  }, [plans, filterYear, activeFilterDept, userDepts, canReadAll]);
 
   // KPI calculations
   const kpiStats = useMemo(() => {
-    const totalPlans = plans.length;
-    const activeCount = plans.filter((p) => p.status === 'APPROVED').length;
-    const pendingCount = plans.filter((p) => ['PENDING_REVIEW', 'PENDING_APPROVAL'].includes(p.status)).length;
-    const draftCount = plans.filter((p) => ['DRAFT', 'REJECTED', 'RETURNED'].includes(p.status)).length;
+    const totalPlans = scopedPlans.length;
+    const activeCount = scopedPlans.filter((p) => p.status === 'APPROVED').length;
+    const pendingCount = scopedPlans.filter((p) => ['PENDING_REVIEW', 'PENDING_APPROVAL'].includes(p.status)).length;
+    const draftCount = scopedPlans.filter((p) => ['DRAFT', 'REJECTED', 'RETURNED'].includes(p.status)).length;
 
     // Coverage calculation
-    const totalCalibratable = activeAssets.length;
-    const plannedAssetCount = plans.reduce((acc, p) => acc + Number(p.planned_items_count || p.item_count || 0), 0);
+    const scopedAssets = activeAssets.filter((a) => {
+      const aDept = String(a.department || '').toUpperCase();
+      if (activeFilterDept === 'MY_DEPTS') return userDepts.includes(aDept);
+      if (activeFilterDept) return aDept === activeFilterDept;
+      if (!canReadAll) return userDepts.includes(aDept);
+      return true;
+    });
+    const totalCalibratable = scopedAssets.length;
+    const plannedAssetCount = scopedPlans.reduce((acc, p) => acc + Number(p.planned_items_count || p.item_count || 0), 0);
     const coveragePct = totalCalibratable > 0 ? Math.min(100, Math.round((plannedAssetCount / totalCalibratable) * 100)) : 100;
 
     return { totalPlans, activeCount, pendingCount, draftCount, coveragePct, totalCalibratable, plannedAssetCount };
-  }, [plans, activeAssets]);
+  }, [scopedPlans, activeAssets, activeFilterDept, userDepts, canReadAll]);
 
   const kpiCards = useMemo(() => [
     {
@@ -325,16 +385,31 @@ export const AnnualPlansHub = ({
             <span className="text-xs font-semibold text-slate-500">แผนก:</span>
             <select
               aria-label="เลือกแผนก"
-              value={filterDept || ''}
-              onChange={(e) => setFilterDept && setFilterDept(e.target.value)}
+              value={activeFilterDept}
+              onChange={(e) => handleFilterDeptChange(e.target.value)}
               className="bg-transparent border-0 text-xs font-bold text-slate-800 focus:outline-none cursor-pointer"
             >
-              <option value="">ทุกแผนก ({departments.length})</option>
-              {departments.map((d) => (
-                <option key={d.code} value={d.code}>
-                  {d.nameTh || d.code} ({d.code})
-                </option>
-              ))}
+              {canReadAll ? (
+                <>
+                  <option value="">🏢 ทุกแผนก (ทั้งหมด)</option>
+                  {departments.map((d) => (
+                    <option key={d.code} value={d.code}>
+                      {d.nameTh || d.code} ({d.code})
+                    </option>
+                  ))}
+                </>
+              ) : (
+                <>
+                  {userDepts.length > 1 && (
+                    <option value="MY_DEPTS">{allMyDeptsLabel}</option>
+                  )}
+                  {availableDepts.map((d) => (
+                    <option key={d.code} value={d.code}>
+                      {d.nameTh || d.code} ({d.code})
+                    </option>
+                  ))}
+                </>
+              )}
             </select>
           </div>
 

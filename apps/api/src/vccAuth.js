@@ -8,13 +8,18 @@ export const getUserDepartments = (user) => {
   if (user.dept) depts.push(user.dept);
   if (user.dept_code) depts.push(user.dept_code);
   let parsedDepts = user.departments;
-  if (typeof parsedDepts === 'string' && parsedDepts.startsWith('[')) {
-    try { parsedDepts = JSON.parse(parsedDepts); } catch {}
+  if (typeof parsedDepts === 'string') {
+    if (parsedDepts.startsWith('[')) {
+      try { parsedDepts = JSON.parse(parsedDepts); } catch {}
+    } else {
+      parsedDepts = parsedDepts.split(',').map((d) => d.trim());
+    }
   }
   if (Array.isArray(parsedDepts)) depts.push(...parsedDepts);
   if (Array.isArray(user.secondaryDepartments)) depts.push(...user.secondaryDepartments);
   if (Array.isArray(user.depts)) depts.push(...user.depts);
   if (Array.isArray(user.affiliated_departments)) depts.push(...user.affiliated_departments);
+  if (Array.isArray(user.extra_departments)) depts.push(...user.extra_departments);
   return [...new Set(depts.filter(Boolean).map((d) => String(d).toUpperCase()))];
 };
 
