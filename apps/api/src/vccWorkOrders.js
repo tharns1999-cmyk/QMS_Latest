@@ -308,7 +308,16 @@ export const buildWorkOrderReconciliationStatements = async (db, planId, actorId
       }
 
       activeCycleIdsInNewRevision.add(stableCycleId);
-      const dueDate = computeDueDateForMonth(planYear, month, dueDateRule);
+      let itemDueDates = [];
+      try {
+        itemDueDates = Array.isArray(item.due_dates) ? item.due_dates : JSON.parse(item.due_dates || '[]');
+      } catch {
+        itemDueDates = [];
+      }
+      const customItemDueDate = itemDueDates[idx];
+      const dueDate = (customItemDueDate && typeof customItemDueDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(customItemDueDate))
+        ? customItemDueDate
+        : computeDueDateForMonth(planYear, month, dueDateRule);
       const cycleKey = (monthCounts.get(month) || 0) > 1
         ? `${planYear}:${planDept}:${item.asset_id}:${month}#${seen}`
         : `${planYear}:${planDept}:${item.asset_id}:${month}`;

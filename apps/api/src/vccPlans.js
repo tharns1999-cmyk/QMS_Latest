@@ -540,7 +540,16 @@ export const getCyclesForPlan = async (db, plan) => {
         }
       }
 
-      const dueDate = computeDueDateForMonth(plan.plan_year, m, plan.due_date_rule);
+      let itemDueDates = [];
+      try {
+        itemDueDates = Array.isArray(item.due_dates) ? item.due_dates : JSON.parse(item.due_dates || '[]');
+      } catch {
+        itemDueDates = [];
+      }
+      const customItemDueDate = itemDueDates[seq - 1];
+      const dueDate = (customItemDueDate && typeof customItemDueDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(customItemDueDate))
+        ? customItemDueDate
+        : computeDueDateForMonth(plan.plan_year, m, plan.due_date_rule);
       cycles.push({
         id: cycleId,
         plan_id: plan.id,
@@ -1645,7 +1654,20 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
     }
     if (!deptRow) return c.json({ error: 'ไม่พบแผนกผู้รับผิดชอบใน Master Data' }, 400);
 
-    const dueDates = computeDueDates(plan.plan_year, plannedMonths, plan.due_date_rule);
+    const inputDueDates = Array.isArray(body.due_dates) ? body.due_dates : null;
+    const dueDates = plannedMonths.map((m, idx) => {
+      const customDate = inputDueDates ? inputDueDates[idx] : null;
+      if (customDate && typeof customDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(customDate)) {
+        const [y, mm, dd] = customDate.split('-').map(Number);
+        if (y === Number(plan.plan_year) && mm === m) {
+          const maxDay = new Date(Date.UTC(y, mm, 0)).getUTCDate();
+          if (dd >= 1 && dd <= maxDay) {
+            return customDate;
+          }
+        }
+      }
+      return computeDueDateForMonth(plan.plan_year, m, plan.due_date_rule || 'END_OF_MONTH');
+    });
     const existingItem = await db.prepare('SELECT * FROM vcc_annual_plan_items WHERE plan_id = ? AND asset_id = ?')
       .bind(planId, assetId)
       .first();

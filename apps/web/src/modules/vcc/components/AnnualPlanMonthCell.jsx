@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   CheckCircle2,
   Clock,
@@ -38,6 +38,7 @@ export const AnnualPlanMonthCell = ({
   onQuickAddMonth,
   onQuickRemoveMonth,
   onToggleProvider,
+  onUpdateDueDate,
   onCreateWorkOrder,
   onOpenGroupCheck,
   onOpenFullEdit,
@@ -110,10 +111,35 @@ export const AnnualPlanMonthCell = ({
   const hasOpenWo = allCellWos.some((w) => w.status === 'OPEN' || w.status === 'PENDING_REVIEW');
   const hasAnyActivity = isPlanned || allCellWos.length > 0;
 
-  // Due date preview
-  const scheduledDueDate = plan?.plan_year
+  // Due date preview & custom due date resolution
+  const monthIdx = (item?.planned_months || []).indexOf(month);
+  const rawDueDates = (() => {
+    try {
+      return Array.isArray(item?.due_dates) ? item.due_dates : JSON.parse(item?.due_dates || '[]');
+    } catch {
+      return [];
+    }
+  })();
+  const customDueDate = monthIdx !== -1 && rawDueDates[monthIdx] ? rawDueDates[monthIdx] : null;
+  const defaultDueDate = plan?.plan_year
     ? computeDueDateForMonth(plan.plan_year, month, plan.due_date_rule || 'END_OF_MONTH')
     : null;
+  const scheduledDueDate = customDueDate || defaultDueDate;
+
+  const planYear = plan?.plan_year;
+  const mm = String(month).padStart(2, '0');
+  const startOfMonth = planYear ? `${planYear}-${mm}-01` : '';
+  const midOfMonth = planYear ? `${planYear}-${mm}-15` : '';
+  const lastDayNum = planYear ? new Date(Date.UTC(planYear, month, 0)).getUTCDate() : 30;
+  const endOfMonth = planYear ? `${planYear}-${mm}-${String(lastDayNum).padStart(2, '0')}` : '';
+
+  const [inputDueDate, setInputDueDate] = useState(scheduledDueDate || '');
+
+  useEffect(() => {
+    if (scheduledDueDate) {
+      setInputDueDate(scheduledDueDate);
+    }
+  }, [scheduledDueDate, isOpen]);
 
   const rawProvider = String(item?.provider_name || item?.calibration_type || '').trim();
   const isExternalProvider =
@@ -159,6 +185,19 @@ export const AnnualPlanMonthCell = ({
       setIsOpen(false);
     } catch (err) {
       setActionError(err.message || 'ไม่สามารถสลับวิธีดำเนินการได้');
+    }
+  };
+
+  // Custom Due Date Update
+  const handleApplyDueDate = async (targetDate) => {
+    if (!onUpdateDueDate || isSaving || !canEditPlan) return;
+    if (!targetDate || targetDate < startOfMonth || targetDate > endOfMonth) return;
+    setActionError('');
+    try {
+      setInputDueDate(targetDate);
+      await onUpdateDueDate(item, month, targetDate);
+    } catch (err) {
+      setActionError(err.message || 'ไม่สามารถบันทึกวันครบกำหนดได้');
     }
   };
 
@@ -465,11 +504,92 @@ export const AnnualPlanMonthCell = ({
               </div>
 
               <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/80 space-y-2 text-xs">
-                {scheduledDueDate && (
-                  <div className="text-slate-700 flex items-center gap-1.5 font-medium">
-                    <Clock size={13} className="text-slate-400 shrink-0" />
-                    <span>วันครบกำหนดตามเกณฑ์: <strong className="text-slate-900 font-bold font-sans" title={`ค.ศ. ${scheduledDueDate}`}>{formatVccDueDate(scheduledDueDate)}</strong></span>
+                {canEditPlan ? (
+                  <div className="space-y-1.5 pt-0.5">
+                    <div className="flex items-center justify-between text-slate-700 font-medium">
+                      <span className="flex items-center gap-1.5 text-xs font-semibold">
+                        <Clock size={13} className="text-indigo-600 shrink-0" />
+                        <span>วันครบกำหนดรอบ (Due Date):</span>
+                      </span>
+                      {scheduledDueDate && (
+                        <span className="text-[11px] font-bold text-slate-600 font-sans" title={`ค.ศ. ${scheduledDueDate}`}>
+                          {formatVccDueDate(scheduledDueDate)}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="date"
+                        aria-label="กำหนดวันครบกำหนดรอบ"
+                        value={inputDueDate || scheduledDueDate || ''}
+                        min={startOfMonth}
+                        max={endOfMonth}
+                        disabled={isSaving}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setInputDueDate(val);
+                          if (val && val >= startOfMonth && val <= endOfMonth) {
+                            handleApplyDueDate(val);
+                          }
+                        }}
+                        className="w-full h-8 px-2.5 py-1 text-xs font-mono font-medium rounded-lg border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 text-slate-800 disabled:opacity-60 shadow-2xs"
+                      />
+                    </div>
+
+                    {/* Quick Preset Chips */}
+                    <div className="flex items-center gap-1 pt-0.5 flex-wrap">
+                      <span className="text-[10px] text-slate-400 font-medium shrink-0">ลัด:</span>
+                      <button
+                        type="button"
+                        disabled={isSaving}
+                        onClick={() => handleApplyDueDate(startOfMonth)}
+                        className={`px-1.5 py-0.5 rounded text-[11px] transition-colors cursor-pointer border ${
+                          (scheduledDueDate || inputDueDate) === startOfMonth
+                            ? 'bg-indigo-100 text-indigo-900 border-indigo-300 font-bold'
+                            : 'bg-white hover:bg-slate-100 text-slate-600 border-slate-200 font-medium'
+                        }`}
+                      >
+                        ต้นเดือน (1)
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isSaving}
+                        onClick={() => handleApplyDueDate(midOfMonth)}
+                        className={`px-1.5 py-0.5 rounded text-[11px] transition-colors cursor-pointer border ${
+                          (scheduledDueDate || inputDueDate) === midOfMonth
+                            ? 'bg-indigo-100 text-indigo-900 border-indigo-300 font-bold'
+                            : 'bg-white hover:bg-slate-100 text-slate-600 border-slate-200 font-medium'
+                        }`}
+                      >
+                        กลางเดือน (15)
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isSaving}
+                        onClick={() => handleApplyDueDate(endOfMonth)}
+                        className={`px-1.5 py-0.5 rounded text-[11px] transition-colors cursor-pointer border ${
+                          (scheduledDueDate || inputDueDate) === endOfMonth
+                            ? 'bg-indigo-100 text-indigo-900 border-indigo-300 font-bold'
+                            : 'bg-white hover:bg-slate-100 text-slate-600 border-slate-200 font-medium'
+                        }`}
+                      >
+                        สิ้นเดือน (Default)
+                      </button>
+                    </div>
                   </div>
+                ) : (
+                  scheduledDueDate && (
+                    <div className="text-slate-700 flex items-center justify-between font-medium">
+                      <span className="flex items-center gap-1.5">
+                        <Clock size={13} className="text-slate-400 shrink-0" />
+                        <span>วันครบกำหนดตามเกณฑ์:</span>
+                      </span>
+                      <strong className="text-slate-900 font-bold font-sans" title={`ค.ศ. ${scheduledDueDate}`}>
+                        {formatVccDueDate(scheduledDueDate)}
+                      </strong>
+                    </div>
+                  )
                 )}
 
                 {cycleWo ? (

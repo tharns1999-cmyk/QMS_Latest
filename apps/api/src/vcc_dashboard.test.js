@@ -221,4 +221,43 @@ describe('VCC Phase 4: Dashboard KPI, Notification Policy, Audit Log & CSV Expor
     const dashAfterWo = await call('GET', '/api/vcc/dashboard?year=2026&reference_date=2026-11-15', 'VDS-DCC');
     expect(dashAfterWo.body.alerts.some((a) => a.alert_type === 'PLAN_DUE' && a.asset_code === 'TC-DASH-001')).toBe(false);
   });
+
+  it('custom due date in vcc_plan_cycles is reflected in PLAN_DUE alert due_date', async () => {
+    const assetRes = await call('POST', '/api/vcc/assets', 'VDS-DCC', {
+      asset_code: 'TC-CUSTOM-001',
+      name: '[ข้อมูลทดสอบ] เทอร์โมมิเตอร์ Custom Date',
+      asset_type: 'เวอร์เนียร์คาลิปเปอร์',
+      department: 'VDSQC',
+      is_group: false
+    });
+    expect(assetRes.status).toBe(201);
+    const assetId = assetRes.body.asset.id;
+
+    const planId = 'plan-custom-due-' + crypto.randomUUID();
+    const itemId = 'item-custom-due-' + crypto.randomUUID();
+    const cycleId = 'cycle-custom-due-' + crypto.randomUUID();
+    const customDate = '2028-11-15';
+
+    await env.DB.batch([
+      env.DB.prepare(`
+        INSERT INTO vcc_annual_plans (id, plan_year, department, revision, title, status, effective_status, is_current, prepared_by, approved_by, approved_at)
+        VALUES (?, 2028, 'VDSQC', '00', 'แผนทดสอบ Custom Due Date', 'APPROVED', 'CURRENT', 1, 'VDS-DCC', 'VDS-APP6', '2028-11-01T00:00:00Z')
+      `).bind(planId),
+      env.DB.prepare(`
+        INSERT INTO vcc_annual_plan_items (id, plan_id, asset_id, frequency_label, provider_name, planned_months, due_dates, responsible_dept)
+        VALUES (?, ?, ?, 'รายปี', 'ทวนสอบภายใน', ?, ?, 'VDSQC')
+      `).bind(itemId, planId, assetId, JSON.stringify([11]), JSON.stringify([customDate])),
+      env.DB.prepare(`
+        INSERT INTO vcc_plan_cycles (id, plan_id, plan_item_id, asset_id, cycle_seq, planned_month, baseline_planned_date, cycle_status, initial_cycle_id)
+        VALUES (?, ?, ?, ?, 1, 11, ?, 'SCHEDULED', ?)
+      `).bind(cycleId, planId, itemId, assetId, customDate, cycleId)
+    ]);
+
+    const dashRes = await call('GET', '/api/vcc/dashboard?year=2028&reference_date=2028-11-05', 'VDS-DCC');
+    expect(dashRes.status).toBe(200);
+
+    const alert = dashRes.body.alerts.find((a) => a.alert_type === 'PLAN_DUE' && a.asset_code === 'TC-CUSTOM-001');
+    expect(alert).toBeTruthy();
+    expect(alert.due_date).toBe(customDate);
+  });
 });

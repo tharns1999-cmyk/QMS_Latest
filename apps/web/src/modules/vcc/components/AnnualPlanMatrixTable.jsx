@@ -91,6 +91,7 @@ export const AnnualPlanMatrixTable = ({
   onQuickAddMonth,
   onQuickRemoveMonth,
   onToggleProvider,
+  onUpdateDueDate,
   onCreateWorkOrder
 }) => {
   const [tableSearch, setTableSearch] = useState('');
@@ -201,6 +202,18 @@ export const AnnualPlanMatrixTable = ({
     try {
       if (onQuickRemoveMonth) {
         await onQuickRemoveMonth(item, month);
+      }
+    } finally {
+      setSavingCellKey('');
+    }
+  };
+
+  const handleCellUpdateDueDate = async (item, month, newDueDate) => {
+    const key = `${item.id}-${month}`;
+    setSavingCellKey(key);
+    try {
+      if (onUpdateDueDate) {
+        await onUpdateDueDate(item, month, newDueDate);
       }
     } finally {
       setSavingCellKey('');
@@ -571,6 +584,7 @@ export const AnnualPlanMatrixTable = ({
                           onQuickAddMonth={handleCellAddMonth}
                           onQuickRemoveMonth={handleCellRemoveMonth}
                           onToggleProvider={onToggleProvider}
+                          onUpdateDueDate={handleCellUpdateDueDate}
                           onCreateWorkOrder={handleCellCreateWo}
                           onOpenGroupCheck={onOpenGroupWorkOrderCheck}
                           onOpenFullEdit={onOpenAddItem}

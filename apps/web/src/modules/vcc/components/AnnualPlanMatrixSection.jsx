@@ -545,11 +545,25 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [], currentUser: propUser
       }
     }
 
+    let oldDueDates = [];
+    try {
+      oldDueDates = Array.isArray(item.due_dates) ? item.due_dates : JSON.parse(item.due_dates || '[]');
+    } catch {
+      oldDueDates = [];
+    }
+    const updatedDueDates = updatedMonths.map((m) => {
+      if (m === month && options.due_date) return options.due_date;
+      const prevIdx = currentMonths.indexOf(m);
+      if (prevIdx !== -1 && oldDueDates[prevIdx]) return oldDueDates[prevIdx];
+      return computeDueDateForMonth(planDetail.plan.plan_year, m, planDetail.plan.due_date_rule || 'END_OF_MONTH');
+    });
+
     await saveVccPlanItem(planDetail.plan.id, {
       asset_id: item.asset_id,
       provider_name: resolvedProvider,
       frequency_label: item.frequency_label || 'รายปี',
       planned_months: updatedMonths,
+      due_dates: updatedDueDates,
       responsible_dept: item.responsible_dept || planDetail.plan.department,
       responsible_label: item.responsible_label || '',
       remarks: item.remarks || ''
@@ -596,16 +610,74 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [], currentUser: propUser
     const currentMonths = item.planned_months || [];
     if (!currentMonths.includes(month)) return;
     const updatedMonths = currentMonths.filter((m) => m !== month);
+    let oldDueDates = [];
+    try {
+      oldDueDates = Array.isArray(item.due_dates) ? item.due_dates : JSON.parse(item.due_dates || '[]');
+    } catch {
+      oldDueDates = [];
+    }
+    const updatedDueDates = updatedMonths.map((m) => {
+      const prevIdx = currentMonths.indexOf(m);
+      return (prevIdx !== -1 && oldDueDates[prevIdx])
+        ? oldDueDates[prevIdx]
+        : computeDueDateForMonth(planDetail.plan.plan_year, m, planDetail.plan.due_date_rule || 'END_OF_MONTH');
+    });
+
     await saveVccPlanItem(planDetail.plan.id, {
       asset_id: item.asset_id,
       provider_name: item.provider_name || 'ทวนสอบภายใน',
       frequency_label: item.frequency_label || 'รายปี',
       planned_months: updatedMonths,
+      due_dates: updatedDueDates,
       responsible_dept: item.responsible_dept || planDetail.plan.department,
       responsible_label: item.responsible_label || '',
       remarks: item.remarks || (updatedMonths.length === 0 ? 'ยังไม่ถึงกำหนดตามรอบความถี่' : '')
     });
     toast.success(`ยกเลิกรอบเดือน ${month} สำหรับ ${item.asset_code} แล้ว`);
+    const refreshed = await fetchVccPlanDetail(planDetail.plan.id);
+    setPlanDetail(refreshed);
+  };
+
+  const handleUpdateMonthDueDate = async (item, month, newDueDate) => {
+    if (!planDetail?.plan) return;
+    const currentMonths = item.planned_months || [];
+    const monthIdx = currentMonths.indexOf(month);
+    if (monthIdx === -1) return;
+
+    let currentDueDates = [];
+    try {
+      currentDueDates = Array.isArray(item.due_dates)
+        ? [...item.due_dates]
+        : JSON.parse(item.due_dates || '[]');
+    } catch {
+      currentDueDates = [];
+    }
+
+    const alignedDueDates = currentMonths.map((m, idx) => {
+      if (m === month) return newDueDate;
+      if (currentDueDates[idx]) return currentDueDates[idx];
+      return computeDueDateForMonth(
+        planDetail.plan.plan_year,
+        m,
+        planDetail.plan.due_date_rule || 'END_OF_MONTH'
+      );
+    });
+
+    await saveVccPlanItem(planDetail.plan.id, {
+      asset_id: item.asset_id,
+      provider_name: item.provider_name || 'ทวนสอบภายใน',
+      frequency_label: item.frequency_label || 'รายปี',
+      planned_months: currentMonths,
+      due_dates: alignedDueDates,
+      responsible_dept: item.responsible_dept || planDetail.plan.department,
+      responsible_label: item.responsible_label || '',
+      remarks: item.remarks || '',
+      mpe: item.mpe,
+      acceptance_criteria: item.acceptance_criteria,
+      calibration_points: item.calibration_points
+    });
+
+    toast.success(`กำหนดวันครบกำหนดรอบเดือน ${month} สำหรับ ${item.asset_code} แล้ว`);
     const refreshed = await fetchVccPlanDetail(planDetail.plan.id);
     setPlanDetail(refreshed);
   };
@@ -616,11 +688,23 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [], currentUser: propUser
       openGroupWorkOrderCheck(item);
       return;
     }
-    const dueDate = computeDueDateForMonth(
-      planDetail.plan.plan_year,
-      month,
-      planDetail.plan.due_date_rule || 'END_OF_MONTH'
-    );
+    let resolvedDueDate = null;
+    const monthIdx = (item.planned_months || []).indexOf(month);
+    let itemDueDates = [];
+    try {
+      itemDueDates = Array.isArray(item.due_dates) ? item.due_dates : JSON.parse(item.due_dates || '[]');
+    } catch {
+      itemDueDates = [];
+    }
+    if (monthIdx !== -1 && itemDueDates[monthIdx]) {
+      resolvedDueDate = itemDueDates[monthIdx];
+    } else {
+      resolvedDueDate = computeDueDateForMonth(
+        planDetail.plan.plan_year,
+        month,
+        planDetail.plan.due_date_rule || 'END_OF_MONTH'
+      );
+    }
     await createVccWorkOrder({
       mode: 'FROM_PLAN',
       plan_id: planDetail.plan.id,
@@ -628,7 +712,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [], currentUser: propUser
       planned_month: month,
       asset_id: item.asset_id,
       provider_name: item.provider_name,
-      due_date: dueDate
+      due_date: resolvedDueDate
     });
     toast.success(`เปิดใบสั่งงานเดือน ${month} สำหรับ ${item.asset_code} แล้ว`);
     const refreshed = await fetchVccPlanDetail(planDetail.plan.id);
@@ -1082,6 +1166,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [], currentUser: propUser
                   onQuickAddMonth={handleQuickAddMonth}
                   onQuickRemoveMonth={handleQuickRemoveMonth}
                   onToggleProvider={handleToggleProvider}
+                  onUpdateDueDate={handleUpdateMonthDueDate}
                   onCreateWorkOrder={handleCreateWorkOrder}
                   onOpenJustificationModal={() => setJustificationModalOpen(true)}
                 />
