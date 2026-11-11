@@ -158,4 +158,67 @@ describe('VCC Phase 4: Dashboard KPI, Notification Policy, Audit Log & CSV Expor
       }
     }
   });
+
+  it('detects due plan cycles in the current month (PLAN_DUE alert) when approved and not yet opened, and clears alert upon work order opening', async () => {
+    // 1. Create an asset in VDSQC
+    const assetRes = await call('POST', '/api/vcc/assets', 'VDS-DCC', {
+      asset_code: 'TC-DASH-001',
+      name: '[ข้อมูลทดสอบ] เทอร์โมคัปเปิล TC-001',
+      asset_type: 'เวอร์เนียร์คาลิปเปอร์',
+      department: 'VDSQC',
+      is_group: false
+    });
+    expect(assetRes.status).toBe(201);
+    const assetId = assetRes.body.asset.id;
+
+    // 2. Insert an approved annual plan for 2026 with a cycle in month 11 (November)
+    const planId = 'plan-due-alert-' + crypto.randomUUID();
+    const itemId = 'item-due-alert-' + crypto.randomUUID();
+    const cycleId = 'cycle-due-alert-' + crypto.randomUUID();
+
+    await env.DB.batch([
+      env.DB.prepare(`
+        INSERT INTO vcc_annual_plans (id, plan_year, department, revision, title, status, effective_status, is_current, prepared_by, approved_by, approved_at)
+        VALUES (?, 2026, 'VDSQC', '00', 'แผนทดสอบแจ้งเตือนรอบประจำเดือน', 'APPROVED', 'CURRENT', 1, 'VDS-DCC', 'VDS-APP6', '2026-11-01T00:00:00Z')
+      `).bind(planId),
+      env.DB.prepare(`
+        INSERT INTO vcc_annual_plan_items (id, plan_id, asset_id, frequency_label, provider_name, planned_months, responsible_dept)
+        VALUES (?, ?, ?, 'รายปี', 'ทวนสอบภายใน', ?, 'VDSQC')
+      `).bind(itemId, planId, assetId, JSON.stringify([11])),
+      env.DB.prepare(`
+        INSERT INTO vcc_plan_cycles (id, plan_id, plan_item_id, asset_id, cycle_seq, planned_month, baseline_planned_date, cycle_status, initial_cycle_id)
+        VALUES (?, ?, ?, ?, 1, 11, '2026-11-30', 'SCHEDULED', ?)
+      `).bind(cycleId, planId, itemId, assetId, cycleId)
+    ]);
+
+    // 3. Query dashboard with reference_date in month 11 (2026-11-15)
+    const dashRes = await call('GET', '/api/vcc/dashboard?year=2026&reference_date=2026-11-15', 'VDS-DCC');
+    expect(dashRes.status).toBe(200);
+
+    const planAlert = dashRes.body.alerts.find((a) => a.alert_type === 'PLAN_DUE' && a.asset_code === 'TC-DASH-001');
+    expect(planAlert).toBeTruthy();
+    expect(planAlert.planned_month).toBe(11);
+    expect(planAlert.department).toBe('VDSQC');
+    expect(planAlert.recommended_action).toContain('เปิดใบสั่งงาน');
+
+    // 4. In a different month (e.g. October 2026-10-15), this cycle does NOT trigger
+    const octRes = await call('GET', '/api/vcc/dashboard?year=2026&reference_date=2026-10-15', 'VDS-DCC');
+    expect(octRes.body.alerts.some((a) => a.alert_type === 'PLAN_DUE' && a.asset_code === 'TC-DASH-001')).toBe(false);
+
+    // 5. Create / Activate a work order for this cycle -> status becomes OPEN
+    const createWo = await call('POST', '/api/vcc/work-orders', 'VDS-DCC', {
+      plan_id: planId,
+      plan_item_id: itemId,
+      planned_month: 11,
+      asset_id: assetId,
+      provider_name: 'ทวนสอบภายใน',
+      due_date: '2026-11-30'
+    });
+    expect(createWo.status).toBe(201);
+    expect(createWo.body.workOrder.status).toBe('OPEN');
+
+    // 6. Once opened, dashboard in month 11 no longer alerts for this cycle
+    const dashAfterWo = await call('GET', '/api/vcc/dashboard?year=2026&reference_date=2026-11-15', 'VDS-DCC');
+    expect(dashAfterWo.body.alerts.some((a) => a.alert_type === 'PLAN_DUE' && a.asset_code === 'TC-DASH-001')).toBe(false);
+  });
 });
