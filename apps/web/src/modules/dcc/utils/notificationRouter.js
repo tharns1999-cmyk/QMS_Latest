@@ -143,6 +143,10 @@ export const resolveNotificationNavigation = (item, storeState = {}) => {
   }
 
   // 3. Category & Metadata-based Intelligent Routing (when link is missing)
+  if (category === 'VCC_PLAN' || category === 'VCC' || item.module === 'VCC' || item.type?.startsWith('VCC_PLAN_') || item.title?.includes('แผนการทวนสอบ')) {
+    return { path: item.link || '/vcc/plans' };
+  }
+
   if (category === 'DAR' || item.title?.includes('DAR') || item.message?.includes('DAR')) {
     if (refId) {
       const dar = dars.find(d => String(d.id) === String(refId) || d.darNumber === refId);

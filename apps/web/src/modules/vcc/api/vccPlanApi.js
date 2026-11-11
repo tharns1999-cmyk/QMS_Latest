@@ -11,7 +11,7 @@ import {
   getLocalAudit,
   appendLocalAudit
 } from './vccApi';
-import { getLocalNotifications } from './vccNotificationApi';
+import { getLocalNotifications, syncVccNotifications } from './vccNotificationApi';
 
 const STORAGE_PLANS_KEY = 'qms-vcc-local-plans-v1';
 const STORAGE_PLAN_ITEMS_KEY = 'qms-vcc-local-plan-items-v1';
@@ -1339,6 +1339,112 @@ export const validateVccPlanItemWorkOrder = async (planId, itemId, childAssetId 
   };
 };
 
+/**
+ * Dispatches workflow event notifications for VCC Annual Plans into the central notification store.
+ */
+export const notifyPlanWorkflowEvent = ({
+  type,
+  plan,
+  user,
+  comment = '',
+  reason = '',
+  reviewerId = null,
+  approverId = null
+}) => {
+  if (!plan) return null;
+  const store = useStore.getState();
+  const currentUser = user || store.currentUser || {};
+  const planYear = plan.plan_year || plan.year || '';
+  const dept = plan.department || '';
+  const rev = plan.revision || '00';
+  const creatorName = plan.prepared_by_name || currentUser.name || plan.created_by_name || 'ผู้จัดทำ';
+  const creatorId = plan.prepared_by || plan.created_by || null;
+  const reviewerName = currentUser.name || plan.reviewed_by_name || 'ผู้ตรวจ';
+  const trimmedReason = String(reason || plan.rejected_reason || comment || '').trim();
+
+  let title = '';
+  let message = '';
+  let severity = 'INFO';
+  let targetDepartment = null;
+  let targetUserId = null;
+  let targetUserIds = [];
+  let targetRole = null;
+  let minApprovalLevel = null;
+
+  if (type === 'VCC_PLAN_PENDING_REVIEW') {
+    title = 'แผนการทวนสอบประจำปีรอการทบทวน';
+    message = `แผนประจำปี ${planYear} (${dept}) ส่งเข้าสู่กระบวนการทบทวนโดย ${creatorName}`;
+    severity = 'INFO';
+    targetDepartment = dept;
+    targetRole = 'REVIEWER';
+    minApprovalLevel = 5;
+    const assignedId = reviewerId || plan.assigned_reviewer_id;
+    if (assignedId) {
+      targetUserId = assignedId;
+      targetUserIds = [assignedId];
+    }
+  } else if (type === 'VCC_PLAN_PENDING_APPROVAL') {
+    title = 'แผนการทวนสอบประจำปีรอการอนุมัติ';
+    message = `แผนประจำปี ${planYear} (${dept}) ได้รับการทบทวนแล้ว รอการอนุมัติขั้นสุดท้าย`;
+    severity = 'INFO';
+    targetDepartment = dept;
+    targetRole = 'APPROVER';
+    minApprovalLevel = 6;
+    const assignedId = approverId || plan.assigned_approver_id;
+    if (assignedId) {
+      targetUserId = assignedId;
+      targetUserIds = [assignedId];
+    }
+  } else if (type === 'VCC_PLAN_APPROVED') {
+    title = 'แผนการทวนสอบประจำปีได้รับการอนุมัติแล้ว';
+    message = `แผนประจำปี ${planYear} (${dept}) Rev.${rev} ได้รับการอนุมัติและมีผลบังคับใช้แล้ว`;
+    severity = 'SUCCESS';
+    targetDepartment = dept;
+    targetUserId = creatorId;
+    if (creatorId) {
+      targetUserIds = [creatorId];
+    }
+  } else if (type === 'VCC_PLAN_RETURNED' || type === 'VCC_PLAN_REJECTED') {
+    title = 'แผนการทวนสอบประจำปีถูกส่งกลับแก้ไข';
+    message = `แผนประจำปี ${planYear} (${dept}) ถูกส่งกลับแก้ไขโดย ${reviewerName}: ${trimmedReason}`;
+    severity = 'WARNING';
+    type = 'VCC_PLAN_RETURNED';
+    targetUserId = creatorId;
+    targetUserIds = creatorId ? [creatorId] : [];
+  }
+
+  const notifObj = {
+    id: `notif-vcc-plan-${plan.id}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    title,
+    message,
+    type,
+    category: 'VCC_PLAN',
+    module: 'VCC',
+    severity,
+    link: '/vcc/plans',
+    planId: plan.id,
+    refId: plan.id,
+    targetDepartment,
+    targetUserId,
+    targetUserIds,
+    targetRole,
+    minApprovalLevel,
+    isGlobal: false,
+    timestamp: new Date().toISOString(),
+    created_at: new Date().toISOString()
+  };
+
+  if (typeof store.addNotification === 'function') {
+    store.addNotification(notifObj);
+  }
+
+  try {
+    syncVccNotifications().catch(() => {});
+  } catch {}
+
+  return notifObj;
+};
+
 export const submitVccPlan = async (planId, maybeAssignees = {}, maybeApproverId = '') => {
   let reviewerId = '';
   let approverId = '';
@@ -1353,6 +1459,13 @@ export const submitVccPlan = async (planId, maybeAssignees = {}, maybeApproverId
     const { plan } = await apiPost(`/api/vcc/plans/${encodeURIComponent(planId)}/submit`, {
       reviewer_id: reviewerId,
       approver_id: approverId
+    });
+    notifyPlanWorkflowEvent({
+      type: 'VCC_PLAN_PENDING_REVIEW',
+      plan,
+      user: useStore.getState().currentUser,
+      reviewerId,
+      approverId
     });
     await syncVccTasks().catch(() => {});
     return plan;
@@ -1477,6 +1590,13 @@ export const submitVccPlan = async (planId, maybeAssignees = {}, maybeApproverId
     before: { status: plan.status },
     after: { status: 'PENDING_REVIEW' }
   });
+  notifyPlanWorkflowEvent({
+    type: 'VCC_PLAN_PENDING_REVIEW',
+    plan: updated,
+    user,
+    reviewerId,
+    approverId
+  });
   await syncVccTasks(user).catch(() => {});
   return enrichLocalPlan(updated, getLocalPlanItems(), getDepartmentMap());
 };
@@ -1484,6 +1604,12 @@ export const submitVccPlan = async (planId, maybeAssignees = {}, maybeApproverId
 export const reviewVccPlan = async (planId, comment = '') => {
   if (isApiMode) {
     const { plan } = await apiPost(`/api/vcc/plans/${encodeURIComponent(planId)}/review`, { comment });
+    notifyPlanWorkflowEvent({
+      type: 'VCC_PLAN_PENDING_APPROVAL',
+      plan,
+      user: useStore.getState().currentUser,
+      comment
+    });
     await syncVccTasks().catch(() => {});
     return plan;
   }
@@ -1541,6 +1667,12 @@ export const reviewVccPlan = async (planId, comment = '') => {
     before: { status: 'PENDING_REVIEW' },
     after: { status: 'PENDING_APPROVAL' }
   });
+  notifyPlanWorkflowEvent({
+    type: 'VCC_PLAN_PENDING_APPROVAL',
+    plan: updated,
+    user,
+    comment
+  });
   await syncVccTasks(user).catch(() => {});
   return enrichLocalPlan(updated, getLocalPlanItems(), getDepartmentMap());
 };
@@ -1548,6 +1680,12 @@ export const reviewVccPlan = async (planId, comment = '') => {
 export const approveVccPlan = async (planId, comment = '') => {
   if (isApiMode) {
     const { plan } = await apiPost(`/api/vcc/plans/${encodeURIComponent(planId)}/approve`, { comment });
+    notifyPlanWorkflowEvent({
+      type: 'VCC_PLAN_APPROVED',
+      plan,
+      user: useStore.getState().currentUser,
+      comment
+    });
     await syncVccTasks().catch(() => {});
     return plan;
   }
@@ -1663,6 +1801,12 @@ export const approveVccPlan = async (planId, comment = '') => {
     before: { status: 'PENDING_APPROVAL' },
     after: { status: 'APPROVED' }
   });
+  notifyPlanWorkflowEvent({
+    type: 'VCC_PLAN_APPROVED',
+    plan: updated,
+    user,
+    comment
+  });
   await syncVccTasks(user).catch(() => {});
   return enrichLocalPlan(updated, getLocalPlanItems(), getDepartmentMap());
 };
@@ -1670,6 +1814,12 @@ export const approveVccPlan = async (planId, comment = '') => {
 export const rejectVccPlan = async (planId, reason = '') => {
   if (isApiMode) {
     const { plan } = await apiPost(`/api/vcc/plans/${encodeURIComponent(planId)}/reject`, { reason });
+    notifyPlanWorkflowEvent({
+      type: 'VCC_PLAN_RETURNED',
+      plan,
+      user: useStore.getState().currentUser,
+      reason
+    });
     await syncVccTasks().catch(() => {});
     return plan;
   }
@@ -1742,6 +1892,12 @@ export const rejectVccPlan = async (planId, reason = '') => {
     next_task_reference: `api-vcc-plan-${planId}-revise`,
     before: { status: plan.status },
     after: { status: 'REJECTED' }
+  });
+  notifyPlanWorkflowEvent({
+    type: 'VCC_PLAN_RETURNED',
+    plan: updated,
+    user,
+    reason: trimmedReason
   });
   await syncVccTasks(user).catch(() => {});
   return enrichLocalPlan(updated, getLocalPlanItems(), getDepartmentMap());
