@@ -5,9 +5,9 @@ import {
   Upload,
   FileText,
   CheckCircle2,
+  ShieldCheck,
   ShieldAlert,
   Info,
-  Hash,
   Trash2,
   Layers,
   ChevronDown,
@@ -683,7 +683,7 @@ export const RecordResultModal = ({
                   <span className="text-xs font-bold text-slate-700 group-hover:text-indigo-600">
                     คลิกเพื่อเลือกไฟล์ หรือลากไฟล์ PDF มาวางที่นี่
                   </span>
-                  <span className="text-xs text-slate-400 mt-0.5">ระบบจะตรวจสอบ %PDF- และสร้าง SHA-256 Hash อัตโนมัติ</span>
+                  <span className="text-xs text-slate-400 mt-0.5">ระบบจะตรวจสอบความสมบูรณ์ของไฟล์ PDF และสร้างรหัสดิจิทัลอัตโนมัติ</span>
                   <input
                     type="file"
                     accept=".pdf,application/pdf"
@@ -724,7 +724,7 @@ export const RecordResultModal = ({
                         aria-label="ดูไฟล์ตัวอย่าง"
                       >
                         <Eye size={13} />
-                        <span>👁️ ดูไฟล์ตัวอย่าง</span>
+                        <span>ดูไฟล์ตัวอย่าง</span>
                       </button>
 
                       <label
@@ -741,7 +741,7 @@ export const RecordResultModal = ({
                         title="เปลี่ยนไฟล์"
                       >
                         <Trash2 size={13} className="text-slate-400" />
-                        <span>🗑️ เปลี่ยนไฟล์</span>
+                        <span>เปลี่ยนไฟล์</span>
                         <input
                           type="file"
                           accept=".pdf,application/pdf"
@@ -754,9 +754,9 @@ export const RecordResultModal = ({
                   </div>
 
                   {(fileHashPreview || form.cert_sha256_hash || form.certificate_file_hash) && (
-                    <div className="p-2 rounded-lg bg-slate-50 border border-slate-100 flex items-center gap-1.5 text-xs font-mono text-slate-600 break-all">
-                      <Hash size={13} className="text-indigo-600 shrink-0" />
-                      <span>SHA-256 Hash: {fileHashPreview || form.cert_sha256_hash || form.certificate_file_hash}</span>
+                    <div className="p-2 rounded-lg bg-emerald-50/70 border border-emerald-200/70 flex items-center gap-1.5 text-xs text-emerald-800">
+                      <ShieldCheck size={14} className="text-emerald-600 shrink-0" />
+                      <span className="font-medium">ตรวจสอบไฟล์ PDF สมบูรณ์พร้อมบันทึก</span>
                     </div>
                   )}
                 </div>
@@ -792,11 +792,11 @@ export const RecordResultModal = ({
                         aria-label="ดูไฟล์ตัวอย่าง"
                       >
                         <Eye size={13} />
-                        <span>👁️ ดูไฟล์ตัวอย่าง</span>
+                        <span>ดูไฟล์ตัวอย่าง</span>
                       </button>
                       <label className="min-h-[32px] h-8 px-2.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-semibold inline-flex items-center gap-1.5 cursor-pointer transition-colors motion-safe:active:scale-[0.98] select-none">
                         <Trash2 size={13} className="text-slate-400" />
-                        <span>🗑️ เปลี่ยนไฟล์</span>
+                        <span>เปลี่ยนไฟล์</span>
                         <input
                           type="file"
                           accept=".pdf,application/pdf"
@@ -808,8 +808,9 @@ export const RecordResultModal = ({
                     </div>
                   </div>
                   {activeWorkOrder.certificate_file_hash && (
-                    <div className="p-1.5 rounded-lg bg-slate-50 border border-slate-100 text-xs font-mono text-slate-500 truncate">
-                      Hash: {activeWorkOrder.certificate_file_hash}
+                    <div className="p-2 rounded-lg bg-emerald-50/70 border border-emerald-200/70 flex items-center gap-1.5 text-xs text-emerald-800">
+                      <ShieldCheck size={13} className="text-emerald-600 shrink-0" />
+                      <span className="font-medium">ตรวจสอบไฟล์ PDF สมบูรณ์พร้อมบันทึก</span>
                     </div>
                   )}
                 </div>

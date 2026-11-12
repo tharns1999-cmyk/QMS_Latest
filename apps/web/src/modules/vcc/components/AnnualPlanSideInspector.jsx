@@ -361,7 +361,7 @@ export const AnnualPlanSideInspector = ({
                                   className="w-full mt-2 min-h-[36px] py-1.5 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs flex items-center justify-center gap-1.5 shadow-2xs transition-colors cursor-pointer motion-safe:active:scale-[0.98] select-none"
                                 >
                                   <FileText size={13} />
-                                  <span>📄 เปิดดูผลและใบรับรอง PDF</span>
+                                  <span>เปิดดูผลและใบรับรอง PDF</span>
                                 </button>
                               )}
                             </div>
@@ -405,7 +405,7 @@ export const AnnualPlanSideInspector = ({
                               className="w-full mt-2 min-h-[36px] py-1.5 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs flex items-center justify-center gap-1.5 shadow-2xs transition-colors cursor-pointer motion-safe:active:scale-[0.98] select-none"
                             >
                               <FileText size={13} />
-                              <span>📄 เปิดดูผลและใบรับรอง PDF</span>
+                              <span>เปิดดูผลและใบรับรอง PDF</span>
                             </button>
                           )}
                         </div>

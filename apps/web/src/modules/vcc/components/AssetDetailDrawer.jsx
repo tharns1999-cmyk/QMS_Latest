@@ -421,7 +421,7 @@ export const AssetDetailDrawer = ({
                               className="min-h-[32px] h-8 inline-flex items-center gap-1.5 px-3 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 text-xs font-semibold hover:bg-indigo-100 transition-colors cursor-pointer motion-safe:active:scale-[0.98] select-none shadow-2xs"
                             >
                               <FileText size={13} className="text-indigo-600" />
-                              <span>📄 ดูผล / ใบรับรอง</span>
+                              <span>ดูผล / ใบรับรอง</span>
                             </button>
                           </div>
                         </div>

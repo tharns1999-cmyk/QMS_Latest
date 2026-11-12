@@ -718,7 +718,7 @@ export const DigitalRecordModal = ({
               className="min-h-[44px] sm:min-h-[36px] h-10 sm:h-9 inline-flex items-center gap-1.5 px-3.5 sm:px-4 rounded-xl border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-800 text-xs font-semibold transition-colors cursor-pointer motion-safe:active:scale-[0.98] select-none whitespace-nowrap shrink-0"
             >
               <Edit3 size={14} />
-              <span>✏️ แก้ไขข้อมูลผล / เปลี่ยนไฟล์ PDF</span>
+              <span>แก้ไขข้อมูลผล / เปลี่ยนไฟล์ PDF</span>
             </button>
             <span className="hidden lg:inline text-slate-400">* เอกสารดิจิทัลตรวจสอบย้อนหลังได้ในระบบ Audit Trail</span>
           </div>
