@@ -108,4 +108,32 @@ describe('Revision dropdown switcher', () => {
     fireEvent.change(select, { target: { value: 'p1' } });
     expect(onSelectPlan).toHaveBeenCalledWith('p1');
   });
+
+  it('handles case-insensitive department matching across multiple revisions (Rev.01, Rev.02, Rev.03)', () => {
+    const rev01 = { id: 'p1', plan_year: 2027, department: 'qc', revision: '01', status: 'APPROVED', is_current: 0, effective_status: 'SUPERSEDED' };
+    const rev02 = { id: 'p2', plan_year: 2027, department: 'QC', revision: '02', status: 'APPROVED', is_current: 1, effective_status: 'EFFECTIVE' };
+    const rev03 = { id: 'p3', plan_year: 2027, department: 'QC', revision: '03', status: 'DRAFT', is_current: 0 };
+    const onSelectPlan = vi.fn();
+
+    render(
+      <AnnualPlanWorkspaceHeader
+        statusTab="DRAFT"
+        setStatusTab={() => {}}
+        activePlan={rev03}
+        plans={[rev03]}
+        planRevisions={[rev01, rev02, rev03]}
+        selectedPlanId="p3"
+        onSelectPlan={onSelectPlan}
+        planItems={[]}
+      />
+    );
+
+    const select = screen.getByLabelText('เลือกแผนประจำปี');
+    const options = within(select).getAllByRole('option');
+    expect(options).toHaveLength(3);
+    expect(options[0]).toHaveTextContent(/Rev\.01/);
+    expect(options[0]).toHaveTextContent(/SUPERSEDED/);
+    expect(options[1]).toHaveTextContent(/Rev\.02/);
+    expect(options[2]).toHaveTextContent(/Rev\.03/);
+  });
 });

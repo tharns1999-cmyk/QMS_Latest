@@ -976,8 +976,8 @@ export const createVccPlanRevision = async (planId, { revision_reason, title } =
   // Check for in-flight active draft/review/approval revision for the same year and department
   const inFlight = allPlans.find(
     (p) =>
-      p.plan_year === sourcePlan.plan_year &&
-      p.department === sourcePlan.department &&
+      Number(p.plan_year) === Number(sourcePlan.plan_year) &&
+      String(p.department).toUpperCase() === String(sourcePlan.department).toUpperCase() &&
       ['DRAFT', 'PENDING_REVIEW', 'PENDING_APPROVAL'].includes(p.status)
   );
   if (inFlight) {
@@ -988,7 +988,9 @@ export const createVccPlanRevision = async (planId, { revision_reason, title } =
 
   // Calculate next revision
   const samePlans = allPlans.filter(
-    (p) => p.plan_year === sourcePlan.plan_year && p.department === sourcePlan.department
+    (p) =>
+      Number(p.plan_year) === Number(sourcePlan.plan_year) &&
+      String(p.department).toUpperCase() === String(sourcePlan.department).toUpperCase()
   );
   const revNumbers = samePlans
     .map((p) => parseInt(p.revision, 10))
@@ -1045,6 +1047,8 @@ export const createVccPlanRevision = async (planId, { revision_reason, title } =
     rejected_at: null,
     rejected_reason: null,
     workflow_round: 1,
+    superseded_by: null,
+    superseded_at: null,
     created_at: now,
     created_by: user.id || null,
     updated_at: now,
@@ -1056,12 +1060,16 @@ export const createVccPlanRevision = async (planId, { revision_reason, title } =
   const sourceItems = allPlanItems.filter((i) => i.plan_id === sourcePlan.id);
   const clonedItems = sourceItems.map((item, idx) => {
     const newItemId = `local-item-${Date.now()}-${idx + 1}-${Math.random().toString(36).slice(2, 6)}`;
+    const plannedMonths = Array.isArray(item.planned_months) ? [...item.planned_months] : [];
+    const dueDates = Array.isArray(item.due_dates) && item.due_dates.length > 0
+      ? [...item.due_dates]
+      : computeDueDates(newPlan.plan_year, plannedMonths, newPlan.due_date_rule);
     return {
       ...item,
       id: newItemId,
       plan_id: newPlanId,
-      planned_months: Array.isArray(item.planned_months) ? [...item.planned_months] : [],
-      due_dates: Array.isArray(item.due_dates) ? [...item.due_dates] : [],
+      planned_months: plannedMonths,
+      due_dates: dueDates,
       calibration_types: Array.isArray(item.calibration_types)
         ? [...item.calibration_types]
         : item.calibration_types
@@ -1091,6 +1099,8 @@ export const createVccPlanRevision = async (planId, { revision_reason, title } =
   await syncVccTasks(user).catch(() => {});
   return enrichLocalPlan(newPlan, getLocalPlanItems(), getDepartmentMap());
 };
+
+export const reviseVccPlan = createVccPlanRevision;
 
 export const createVccPlan = async (payload) => {
   if (isApiMode) {
@@ -1885,8 +1895,20 @@ export const approveVccPlan = async (planId, comment = '') => {
       return updated;
     }
     const isTargetPrevious = (
-      (plan.parent_plan_id && p.id === plan.parent_plan_id) ||
-      (p.plan_year === plan.plan_year && p.department === plan.department && (p.status === 'APPROVED' || p.is_current === 1 || p.effective_status === 'EFFECTIVE' || p.effective_status === 'CURRENT'))
+      p.id !== planId &&
+      (
+        (plan.parent_plan_id && p.id === plan.parent_plan_id) ||
+        (
+          Number(p.plan_year) === Number(plan.plan_year) &&
+          String(p.department).toUpperCase() === String(plan.department).toUpperCase()
+        )
+      ) &&
+      (
+        Number(p.is_current ?? 0) === 1 ||
+        p.effective_status === 'EFFECTIVE' ||
+        p.effective_status === 'CURRENT'
+      ) &&
+      p.effective_status !== 'SUPERSEDED'
     );
     if (isTargetPrevious) {
       return {

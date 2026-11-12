@@ -321,6 +321,13 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [], currentUser: propUser
     try {
       const detail = await fetchVccPlanDetail(planId);
       setPlanDetail(detail);
+      setSearchParams((prev) => {
+        if (!prev.get('id') && !prev.get('planId')) return prev;
+        const next = new URLSearchParams(prev);
+        next.set('id', planId);
+        next.delete('planId');
+        return next;
+      }, { replace: true });
       if (detail?.plan?.status && detail.plan.status !== statusTab) {
         pendingPreferredPlanIdRef.current = planId;
         setStatusTab(detail.plan.status);
@@ -751,6 +758,13 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [], currentUser: propUser
       toast.success(`สร้างแผนปี ${created.plan_year} Rev.${created.revision} (ฉบับร่าง) แล้ว`);
       setRevisionOpen(false);
       setRevisionReason('');
+      setSearchParams((prev) => {
+        if (!prev.get('id') && !prev.get('planId')) return prev;
+        const next = new URLSearchParams(prev);
+        next.set('id', created.id);
+        next.delete('planId');
+        return next;
+      }, { replace: true });
       pendingPreferredPlanIdRef.current = created.id;
       if (statusTab !== 'DRAFT') {
         setStatusTab('DRAFT');

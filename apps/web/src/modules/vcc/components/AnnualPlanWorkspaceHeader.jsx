@@ -130,12 +130,14 @@ export const AnnualPlanWorkspaceHeader = ({
     const sourceRevisions = planRevisions.length > 0 ? planRevisions : rawPlans;
     const map = new Map();
     if (activePlan) {
+      const activeDeptNorm = String(activePlan.department || '').toUpperCase();
+      const activeYearNorm = String(activePlan.plan_year || '');
       sourceRevisions
         .filter(
           (p) =>
             p &&
-            p.department === activePlan.department &&
-            String(p.plan_year) === String(activePlan.plan_year)
+            String(p.department || '').toUpperCase() === activeDeptNorm &&
+            String(p.plan_year || '') === activeYearNorm
         )
         .forEach((p) => {
           if (p.id) map.set(p.id, p);

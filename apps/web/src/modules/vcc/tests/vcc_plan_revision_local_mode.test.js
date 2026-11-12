@@ -3,6 +3,7 @@ import useStore from '../../../store/useStore';
 import { readJson, writeJson } from '../api/vccApi';
 import {
   createVccPlanRevision,
+  reviseVccPlan,
   approveVccPlan,
   fetchVccPlans,
   getLocalPlans,
@@ -259,5 +260,66 @@ describe('VCC Plan Revision in Local Storage / Demo Mode', () => {
     expect(allStatusPlans.length).toBeGreaterThanOrEqual(2);
     expect(allStatusPlans.some((p) => p.id === 'plan-2026-qc-rev01')).toBe(true);
     expect(allStatusPlans.some((p) => p.id === rev02.id)).toBe(true);
+  });
+
+  it('6. Function alias reviseVccPlan works identically to createVccPlanRevision', async () => {
+    expect(typeof reviseVccPlan).toBe('function');
+    expect(reviseVccPlan).toBe(createVccPlanRevision);
+  });
+
+  it('7. Chained Revisions (Rev.01 -> Rev.02 -> Rev.03) preserves historical superseded_by integrity', async () => {
+    // 1. Create and approve Rev.02
+    const rev02 = await createVccPlanRevision('plan-2026-qc-rev01', {
+      revision_reason: 'Revise รอบที่ 1'
+    });
+    let plans = getLocalPlans().map((p) =>
+      p.id === rev02.id ? { ...p, status: 'PENDING_APPROVAL', prepared_by: 'usr-qc-staff' } : p
+    );
+    writeJson(STORAGE_PLANS_KEY, plans);
+
+    useStore.setState({ currentUser: approverQmr });
+    await approveVccPlan(rev02.id, 'อนุมัติ Rev.02');
+
+    // Rev.01 is superseded by Rev.02
+    plans = getLocalPlans();
+    const rev01After = plans.find((p) => p.id === 'plan-2026-qc-rev01');
+    expect(rev01After.is_current).toBe(0);
+    expect(rev01After.effective_status).toBe('SUPERSEDED');
+    expect(rev01After.superseded_by).toBe(rev02.id);
+
+    // 2. Create and approve Rev.03
+    useStore.setState({ currentUser: qcStaff });
+    const rev03 = await createVccPlanRevision(rev02.id, {
+      revision_reason: 'Revise รอบที่ 2'
+    });
+    expect(rev03.revision).toBe('03');
+
+    plans = getLocalPlans().map((p) =>
+      p.id === rev03.id ? { ...p, status: 'PENDING_APPROVAL', prepared_by: 'usr-qc-staff' } : p
+    );
+    writeJson(STORAGE_PLANS_KEY, plans);
+
+    useStore.setState({ currentUser: approverQmr });
+    await approveVccPlan(rev03.id, 'อนุมัติ Rev.03');
+
+    // Verify traceability chain
+    plans = getLocalPlans();
+    const rev01Final = plans.find((p) => p.id === 'plan-2026-qc-rev01');
+    const rev02Final = plans.find((p) => p.id === rev02.id);
+    const rev03Final = plans.find((p) => p.id === rev03.id);
+
+    // Rev.03 is currently EFFECTIVE
+    expect(rev03Final.is_current).toBe(1);
+    expect(rev03Final.effective_status).toBe('EFFECTIVE');
+
+    // Rev.02 was superseded by Rev.03
+    expect(rev02Final.is_current).toBe(0);
+    expect(rev02Final.effective_status).toBe('SUPERSEDED');
+    expect(rev02Final.superseded_by).toBe(rev03.id);
+
+    // CRITICAL: Rev.01 must STILL be superseded by Rev.02, NOT overwritten by Rev.03!
+    expect(rev01Final.is_current).toBe(0);
+    expect(rev01Final.effective_status).toBe('SUPERSEDED');
+    expect(rev01Final.superseded_by).toBe(rev02.id);
   });
 });
