@@ -31,7 +31,7 @@ import {
   canDirectReschedule,
   getReschedulePermissionReason
 } from '../utils/workOrderPermissions';
-import { WORK_ORDER_STATUS_LABELS, getWorkOrderStatusLabel } from '../utils/statusLabels';
+import { WORK_ORDER_STATUS_LABELS, getWorkOrderStatusLabel, getCalibrationMethodLabel } from '../utils/statusLabels';
 import { formatVccDueDate, formatVccDate, formatVccDateTime } from '../utils/vccDateUtils';
 import { useVccModalAccessibility } from '../hooks/useVccModalAccessibility';
 import { useVccMobileViewport } from '../hooks/useVccMobileViewport';
@@ -484,7 +484,7 @@ export const WorkOrderSideDrawer = ({
                       {currentWo.calibration_method && (
                         <div>
                           <span className="text-slate-400 block text-xs">วิธีการสอบเทียบ:</span>
-                          <span className="font-semibold text-slate-800">{currentWo.calibration_method}</span>
+                          <span className="font-semibold text-slate-800">{getCalibrationMethodLabel(currentWo.calibration_method)}</span>
                         </div>
                       )}
                       {currentWo.traceability_ref && (
@@ -738,7 +738,7 @@ export const WorkOrderSideDrawer = ({
                 className="min-h-[44px] sm:min-h-[38px] sm:h-9 w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 sm:px-3.5 rounded-xl bg-amber-600 text-white text-xs sm:text-sm font-semibold hover:bg-amber-700 focus-visible:ring-2 focus-visible:ring-amber-600 focus-visible:ring-offset-2 focus-visible:outline-none motion-safe:active:scale-[0.98] transition-all cursor-pointer shadow-2xs select-none"
               >
                 <History size={15} />
-                <span>ขอแก้ไขผล (Amendment)</span>
+                <span>✏️ แก้ไขผลบันทึก</span>
               </button>
             )}
 

@@ -14,6 +14,7 @@ import {
   Info
 } from 'lucide-react';
 import { formatVccDate, formatVccDateTime } from '../utils/vccDateUtils';
+import { getCalibrationMethodLabel } from '../utils/statusLabels';
 import { useVccModalAccessibility } from '../hooks/useVccModalAccessibility';
 import { useVccMobileViewport } from '../hooks/useVccMobileViewport';
 
@@ -343,7 +344,7 @@ export const DigitalRecordModal = ({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-xs">
               <div>
                 <span className="text-slate-400 block text-xs">วิธีการสอบเทียบ (Method):</span>
-                <span className="font-semibold text-slate-800">{workOrder.calibration_method || 'EXTERNAL_LAB'}</span>
+                <span className="font-semibold text-slate-800">{getCalibrationMethodLabel(workOrder.calibration_method || 'EXTERNAL_LAB')}</span>
               </div>
               <div>
                 <span className="text-slate-400 block text-xs">การสอบกลับได้สู่มาตรฐานแห่งชาติ (Traceability):</span>

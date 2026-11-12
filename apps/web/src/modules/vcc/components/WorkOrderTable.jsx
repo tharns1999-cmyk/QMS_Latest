@@ -70,6 +70,16 @@ export const WorkOrderRowActions = ({
         </button>
       )}
 
+      {wo.status === 'CLOSED' && onAmend && (
+        <button
+          type="button"
+          onClick={() => onAmend(wo)}
+          className="min-h-[44px] sm:min-h-[32px] h-10 sm:h-8 inline-flex items-center gap-1.5 px-3.5 sm:px-3 rounded-lg bg-amber-600 text-white font-medium hover:bg-amber-700 transition-colors cursor-pointer text-xs shadow-2xs whitespace-nowrap motion-safe:active:scale-[0.98] select-none"
+        >
+          <span>✏️ แก้ไขผลบันทึก</span>
+        </button>
+      )}
+
       {wo.status === 'PENDING_REVIEW' && !canReview && (
         <span className="text-xs font-medium text-slate-500 whitespace-nowrap">รอผู้ตรวจรับ</span>
       )}
@@ -204,7 +214,7 @@ export const WorkOrderRowActions = ({
             className="w-full text-left px-3.5 sm:px-3 py-3 sm:py-2 min-h-[44px] sm:min-h-[36px] text-xs font-semibold text-amber-700 hover:bg-amber-50 flex items-center gap-2 transition-colors cursor-pointer motion-safe:active:bg-amber-100 select-none"
           >
             <History size={13} className="text-amber-600" />
-            <span>ขอแก้ไขผล (Amendment)</span>
+            <span>✏️ แก้ไขผลบันทึก</span>
           </button>
         )}
 

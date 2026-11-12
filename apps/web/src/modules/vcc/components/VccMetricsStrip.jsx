@@ -23,7 +23,7 @@ export default function VccMetricsStrip({ eq = {}, wo = {}, certKpi = {}, review
 
   return (
     <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-hidden">
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-7 divide-y md:divide-y-0 md:divide-x divide-slate-100">
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 divide-y md:divide-y-0 md:divide-x divide-slate-100">
         {/* 1. เครื่องมือปกติพร้อมใช้ */}
         <div className="p-4 sm:p-5 flex flex-col justify-between hover:bg-slate-50/50 transition-colors">
           <div className="flex items-center justify-between">
@@ -202,28 +202,7 @@ export default function VccMetricsStrip({ eq = {}, wo = {}, certKpi = {}, review
           </div>
         </div>
 
-        {/* 6. รอตรวจรับ (Pending Review) */}
-        <div className="p-4 sm:p-5 flex flex-col justify-between hover:bg-slate-50/50 transition-colors">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-              รอตรวจรับ
-            </span>
-            {pendingCount > 0 && <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />}
-          </div>
-          <div
-            className={`mt-2 text-2xl sm:text-3xl font-mono tracking-tight ${
-              pendingCount > 0 ? 'font-bold text-indigo-700' : 'font-medium text-slate-300'
-            }`}
-            data-testid="kpi-pending-review-count"
-          >
-            {pendingCount}
-          </div>
-          <div className="mt-2 text-xs text-slate-400 font-medium leading-snug">
-            เกณฑ์ตรวจรับ: {reviewSlaDays} วัน
-          </div>
-        </div>
-
-        {/* 7. ปิดงานแล้ว / ทันกำหนด (Success Metric) */}
+        {/* 6. ปิดงานแล้ว / ทันกำหนด (Success Metric) */}
         <div className="p-4 sm:p-5 flex flex-col justify-between hover:bg-slate-50/50 transition-colors col-span-2 md:col-span-1">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">

@@ -51,7 +51,13 @@ describe('VCC work-order task inbox (/api/vcc/work-tasks)', () => {
     expect(wo.status).toBe(201);
     return { assetId: asset.body.asset.id, woId: wo.body.workOrder.id };
   };
-  const result = (result_status) => ({ performed_at: yesterday, result_status, certificate_no: `CERT-${RUN}`, acceptance_criteria: '± 1.0 g' });
+  const result = (result_status) => ({
+    performed_at: yesterday,
+    result_status,
+    certificate_no: `CERT-${RUN}`,
+    acceptance_criteria: '± 1.0 g',
+    result_remarks: result_status === 'FAIL' ? 'ค่าคลาดเคลื่อนเกินเกณฑ์กำหนด' : ''
+  });
   const release = { release_reason: 'ปรับตั้งและสอบเทียบซ้ำผ่านแล้ว', impact_assessment: 'ตรวจย้อนหลังแล้วไม่กระทบผลิตภัณฑ์' };
 
   beforeAll(async () => {
@@ -99,6 +105,8 @@ describe('VCC work-order task inbox (/api/vcc/work-tasks)', () => {
   it('review: the task moves from the performer to eligible reviewers; the performer and a level-2 colleague never get it', async () => {
     const { woId } = await newWorkOrder('REV');
     expect((await call('POST', `/api/vcc/work-orders/${woId}/submit-result`, 'WT-L2', result('PASS'))).status).toBe(200);
+    // Legacy review flow test on PENDING_REVIEW work order
+    await env.DB.prepare("UPDATE vcc_work_orders SET status = 'PENDING_REVIEW' WHERE id = ?").bind(woId).run();
 
     // the record task is gone for everyone; review goes to L4+ of the department, not the performer
     expect(await kindsFor('WT-L2', woId)).toEqual([]);
@@ -116,8 +124,8 @@ describe('VCC work-order task inbox (/api/vcc/work-tasks)', () => {
   it('release hold: only an approver-level user other than the performer, only after the result is reviewed; gone once released', async () => {
     const { woId, assetId } = await newWorkOrder('HOLD');
     expect((await call('POST', `/api/vcc/work-orders/${woId}/submit-result`, 'WT-PERF5', result('FAIL'))).status).toBe(200);
-    // not yet reviewed: reviewers get the review task, nobody gets the release task
-    expect(await kindsFor('WT-APP5', woId)).toEqual(['REVIEW_RESULT']);
+    // Closed on FAIL with open NC -> approver gets release hold task immediately
+    expect(await kindsFor('WT-APP5', woId)).toEqual(['RELEASE_HOLD']);
     expect((await call('POST', `/api/vcc/work-orders/${woId}/approve`, 'WT-REV4', { comment: 'ตรวจรับ' })).status).toBe(200);
 
     expect(await kindsFor('WT-APP5', woId)).toEqual(['RELEASE_HOLD']);

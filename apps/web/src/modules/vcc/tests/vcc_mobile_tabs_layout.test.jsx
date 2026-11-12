@@ -39,7 +39,7 @@ describe('VCC tabs and titles stay on screen on a phone', () => {
     expect(tablist.className).toContain('xl:flex-nowrap');
     expect(tablist.className).not.toMatch(/(^|\s)overflow-x-auto/);
     expect(tablist.className).toContain('xl:overflow-x-auto');
-    expect(screen.getAllByRole('tab')).toHaveLength(5);
+    expect(screen.getAllByRole('tab')).toHaveLength(3);
   });
 
   it('page title wraps instead of running off the screen (truncate does nothing on an inline span)', async () => {

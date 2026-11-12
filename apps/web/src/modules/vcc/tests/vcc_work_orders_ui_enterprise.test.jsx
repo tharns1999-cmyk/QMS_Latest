@@ -61,12 +61,12 @@ describe('VCC Work Orders — Enterprise UI/UX Redesign Tests', () => {
     expect(screen.queryByText(/ใบสั่งงานต้องผูกกับ/i)).not.toBeInTheDocument();
   });
 
-  it('2. Status Navigation แสดงแท็บสถานะครบ 5 แท็บพร้อมจำนวนรายการ (Badge Count) และอัปเดตสถานะแบบ Single Row', async () => {
+  it('2. Status Navigation แสดงแท็บสถานะครบ 3 แท็บหลักพร้อมจำนวนรายการ (Badge Count) และอัปเดตสถานะแบบ Single Row', async () => {
     render(<AssetRegisterPage />);
     fireEvent.click(await screen.findByRole('button', { name: /ใบสั่งงานและบันทึกผล \(Work Orders\)/i }));
 
     const tabs = screen.getAllByRole('tab');
-    expect(tabs).toHaveLength(5);
+    expect(tabs).toHaveLength(3);
 
     // Initial seed WO is in OPEN tab (1 item)
     const openTab = screen.getByRole('tab', { name: /เปิดงาน \/ รอบันทึกผล/i });

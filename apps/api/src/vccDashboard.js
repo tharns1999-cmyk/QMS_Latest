@@ -280,7 +280,7 @@ export const registerVccDashboardRoutes = (app, { requireAuth, audit }) => {
         }
       }
 
-      if (wo.status === 'CLOSED') {
+      if (wo.status === 'CLOSED' || wo.status === 'PENDING_REVIEW' || wo.status === 'PENDING_VERIFY') {
         completedCount += 1;
         if (wo.result_status === 'PASS') {
           passCount += 1;
@@ -293,31 +293,6 @@ export const registerVccDashboardRoutes = (app, { requireAuth, audit }) => {
       }
 
       if (wo.status === 'CANCELLED') continue;
-
-      if (wo.status === 'PENDING_REVIEW') {
-        pendingReviewCount += 1;
-        const waitDays = wo.performed_at ? Math.max(0, -diffDays(wo.performed_at, refDate)) : 0;
-        const slaExceeded = waitDays >= notificationSettings.review_sla_days;
-        pushAlert({
-          dedupe_key: `${wo.id}:PENDING_REVIEW`,
-          alert_type: 'PENDING_REVIEW',
-          severity: slaExceeded ? 'HIGH' : 'MEDIUM',
-          wo_id: wo.id,
-          wo_code: wo.wo_code,
-          asset_id: wo.asset_id,
-          asset_code: wo.asset_code,
-          asset_name: wo.asset_name,
-          department: wo.department,
-          due_date: wo.due_date,
-          required_due_date: wo.required_due_date || wo.original_due_date || wo.due_date,
-          sla_exceeded: slaExceeded,
-          message: slaExceeded
-            ? `รอผู้ตรวจรับเกิน SLA (${waitDays} วัน / เกณฑ์ ${notificationSettings.review_sla_days} วัน)`
-            : `รอผู้ตรวจรับตรวจสอบผลและใบรับรอง (${wo.certificate_no || '-'})`,
-          recommended_action: 'ผู้ตรวจรับระดับ L4+ ดำเนินการตรวจสอบผลและลงนามปิดงาน'
-        });
-        continue;
-      }
 
       // Active work orders: SCHEDULED, OPEN, IN_PROGRESS, REJECTED
       const requiredDueDate = wo.required_due_date || wo.original_due_date || wo.due_date;
@@ -758,9 +733,9 @@ export const registerVccDashboardRoutes = (app, { requireAuth, audit }) => {
       }
       const d = deptMap.get(wo.department);
       d.total_work_orders += 1;
-      if (wo.status === 'CLOSED') {
+      if (wo.status === 'CLOSED' || wo.status === 'PENDING_REVIEW' || wo.status === 'PENDING_VERIFY') {
         d.closed_work_orders += 1;
-      } else if (wo.status !== 'CANCELLED' && wo.status !== 'PENDING_REVIEW') {
+      } else if (wo.status !== 'CANCELLED') {
         const reqDue = wo.required_due_date || wo.original_due_date || wo.due_date;
         const days = diffDays(reqDue, refDate);
         if (days !== null && days < 0) d.overdue_work_orders += 1;

@@ -225,7 +225,7 @@ describe('VCC Phase 3: Work Orders, Execution, Review, Close & Hold/NC Control',
       acceptance_criteria: '± 1.0 g ตามพิกัดเครื่องชั่ง'
     });
     expect(submitted.status).toBe(200);
-    expect(submitted.body.workOrder.status).toBe('PENDING_REVIEW');
+    expect(submitted.body.workOrder.status).toBe('CLOSED');
 
     // Performer cannot approve own work order
     expect((await call('POST', `/api/vcc/work-orders/${woId}/approve`, 'VWO-DCC')).status).toBe(403);

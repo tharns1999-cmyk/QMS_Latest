@@ -205,7 +205,7 @@ export const fetchVccDashboard = async ({ year = 2026, reference_date } = {}) =>
       });
     }
 
-    if (wo.status === 'CLOSED') {
+    if (wo.status === 'CLOSED' || wo.status === 'PENDING_REVIEW' || wo.status === 'PENDING_VERIFY') {
       completedCount += 1;
       if (wo.result_status === 'PASS') passCount += 1;
       if (wo.performed_at && String(wo.performed_at).slice(0, 10) <= String(wo.due_date).slice(0, 10)) {
@@ -215,28 +215,6 @@ export const fetchVccDashboard = async ({ year = 2026, reference_date } = {}) =>
     }
 
     if (wo.status === 'CANCELLED') continue;
-
-    if (wo.status === 'PENDING_REVIEW') {
-      pendingReviewCount += 1;
-      const waitDays = wo.performed_at ? Math.max(0, -diffDays(wo.performed_at, refDate)) : 0;
-      const slaExceeded = waitDays >= notificationSettings.review_sla_days;
-      pushAlert({
-        dedupe_key: `${wo.id}:PENDING_REVIEW`,
-        alert_type: 'PENDING_REVIEW',
-        severity: slaExceeded ? 'HIGH' : 'MEDIUM',
-        wo_id: wo.id,
-        wo_code: wo.wo_code,
-        asset_code: asset.asset_code || '-',
-        asset_name: asset.name || '-',
-        department: asset.department || '-',
-        due_date: wo.due_date,
-        sla_exceeded: slaExceeded,
-        message: slaExceeded
-          ? `รอผู้ตรวจรับเกิน SLA (${waitDays} วัน / เกณฑ์ ${notificationSettings.review_sla_days} วัน)`
-          : `รอผู้ตรวจรับตรวจสอบผลและใบรับรอง (${wo.certificate_no || '-'})`
-      });
-      continue;
-    }
 
     const daysUntilDue = diffDays(wo.due_date, refDate);
     if (daysUntilDue === null) continue;
@@ -404,8 +382,8 @@ export const fetchVccDashboard = async ({ year = 2026, reference_date } = {}) =>
     }
     const d = deptMap.get(dept);
     d.total_work_orders += 1;
-    if (wo.status === 'CLOSED') d.closed_work_orders += 1;
-    else if (wo.status !== 'CANCELLED' && wo.status !== 'PENDING_REVIEW') {
+    if (wo.status === 'CLOSED' || wo.status === 'PENDING_REVIEW' || wo.status === 'PENDING_VERIFY') d.closed_work_orders += 1;
+    else if (wo.status !== 'CANCELLED') {
       const days = diffDays(wo.due_date, refDate);
       if (days !== null && days < 0) d.overdue_work_orders += 1;
     }

@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useId } from 'react';
+import React, { useMemo, useState, useEffect, useId } from 'react';
 import { AlertTriangle, Trash2, X } from 'lucide-react';
 import { formatVccDueDate, formatVccDate } from '../utils/vccDateUtils';
 import { useVccModalAccessibility } from '../hooks/useVccModalAccessibility';
@@ -7,6 +7,46 @@ import { VccDiscardConfirmDialog } from './VccDiscardConfirmDialog';
 import { getUserDeptCodes, canReadAllVccDepartments } from '../utils/departmentScope';
 import useStore from '../../../store/useStore';
 import { SearchableSelect } from '../../../shared/components/ui/SearchableSelect';
+
+export const getItemPlannedMonths = (item) => {
+  if (Array.isArray(item?.planned_months) && item.planned_months.length > 0) {
+    return item.planned_months.map(Number);
+  }
+  if (Array.isArray(item?.months) && item.months.length > 0) {
+    return item.months.map(Number);
+  }
+  if (item?.planned_month) {
+    return [Number(item.planned_month)];
+  }
+  return [1];
+};
+
+export const getBookedMonthsForItem = (item, wos, planId) => {
+  return (wos || [])
+    .filter((w) => {
+      if (w.status === 'CANCELLED' || w.status === 'SCHEDULED') return false;
+      const matchPlan = planId ? String(w.plan_id) === String(planId) : true;
+      if (!matchPlan) return false;
+      const matchItem = (item?.id && w.plan_item_id === item.id) || (item?.asset_id && w.asset_id === item.asset_id);
+      return Boolean(matchItem);
+    })
+    .map((w) => Number(w.planned_month))
+    .filter((m) => !isNaN(m) && m > 0);
+};
+
+export const getAvailableMonthsForItem = (item, wos, planId) => {
+  if (!item) return [];
+  const allMonths = getItemPlannedMonths(item);
+  const booked = getBookedMonthsForItem(item, wos, planId);
+  const remaining = [...allMonths];
+  for (const b of booked) {
+    const idx = remaining.indexOf(b);
+    if (idx !== -1) {
+      remaining.splice(idx, 1);
+    }
+  }
+  return remaining;
+};
 
 const serializeCreateForm = (f) => JSON.stringify({
   mode: f?.mode || 'ADHOC',
@@ -31,7 +71,8 @@ export const CreateWorkOrderModal = ({
   planItems,
   individualAssets,
   providers,
-  currentUser: propCurrentUser
+  currentUser: propCurrentUser,
+  workOrders = []
 }) => {
   const titleId = useId();
   const storeUser = useStore((s) => s.currentUser);
@@ -67,8 +108,16 @@ export const CreateWorkOrderModal = ({
     }));
   }, [filteredApprovedPlans]);
 
+  const availablePlanItems = useMemo(() => {
+    if (!form.plan_id) return [];
+    return (planItems || []).filter((it) => {
+      const avail = getAvailableMonthsForItem(it, workOrders, form.plan_id);
+      return avail.length > 0;
+    });
+  }, [planItems, workOrders, form.plan_id]);
+
   const planItemOptions = useMemo(() => {
-    return (planItems || []).map((it) => {
+    return availablePlanItems.map((it) => {
       const isLegacyGroup = Number(it.is_group) === 1 && it.group_nature !== 'COMPOSITE_SET';
       const isSet = it.group_nature === 'COMPOSITE_SET';
       return {
@@ -83,7 +132,7 @@ export const CreateWorkOrderModal = ({
         keywords: [it.asset_code, it.asset_name, it.group_nature, it.remarks].filter(Boolean)
       };
     });
-  }, [planItems]);
+  }, [availablePlanItems]);
 
   const individualAssetOptions = useMemo(() => {
     return filteredIndividualAssets.map((a) => {
@@ -146,14 +195,37 @@ export const CreateWorkOrderModal = ({
     isDirty
   });
 
-  if (!open) return null;
+  const selectedPlanItem = (planItems || []).find((i) => i.id === form?.plan_item_id);
+  const selectedItemAvailableMonths = useMemo(() => {
+    if (!selectedPlanItem) return [];
+    return getAvailableMonthsForItem(selectedPlanItem, workOrders, form?.plan_id);
+  }, [selectedPlanItem, workOrders, form?.plan_id]);
 
-  const selectedPlanItem = planItems.find((i) => i.id === form.plan_item_id);
+  useEffect(() => {
+    if (open && selectedPlanItem && selectedItemAvailableMonths.length > 0) {
+      if (!selectedItemAvailableMonths.includes(Number(form?.planned_month))) {
+        setForm?.((prev) => ({ ...prev, planned_month: selectedItemAvailableMonths[0] }));
+      }
+    }
+  }, [open, selectedPlanItem, selectedItemAvailableMonths, form?.planned_month, setForm]);
+
+  useEffect(() => {
+    if (open && form?.mode === 'PLAN' && form?.plan_item_id) {
+      if (!planItems || planItems.length === 0) return;
+      const isAvailable = availablePlanItems.some((it) => it.id === form.plan_item_id);
+      if (!isAvailable) {
+        setForm?.((prev) => ({ ...prev, plan_item_id: '', planned_month: '' }));
+      }
+    }
+  }, [open, form?.mode, form?.plan_item_id, availablePlanItems, planItems, setForm]);
+
   const isGroupPlanItem =
     Number(selectedPlanItem?.is_group) === 1 && selectedPlanItem?.group_nature !== 'COMPOSITE_SET';
   const groupChildren = isGroupPlanItem
     ? filteredIndividualAssets.filter((a) => a.parent_id === selectedPlanItem.asset_id)
     : [];
+
+  if (!open) return null;
 
   return (
     <>
@@ -239,65 +311,75 @@ export const CreateWorkOrderModal = ({
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1.5">รายการในแผนประจำปี</label>
-                <SearchableSelect
-                  required
-                  value={form.plan_item_id}
-                  onChange={(val) => {
-                    const item = planItems.find((i) => i.id === val);
-                    setForm({
-                      ...form,
-                      plan_item_id: val,
-                      planned_month: item?.planned_months?.[0] || 1,
-                      child_asset_id: ''
-                    });
-                  }}
-                  options={planItemOptions}
-                  placeholder="-- เลือกรายการเครื่องมือในแผน --"
-                  ariaLabel="รายการในแผนประจำปี"
-                />
-              </div>
-
-              {selectedPlanItem && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+              {form.plan_id && (planItems || []).length > 0 && availablePlanItems.length === 0 ? (
+                <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-sm font-semibold flex items-center gap-2.5">
+                  <AlertTriangle size={18} className="text-amber-600 shrink-0" />
+                  <span>เครื่องมือทุกรายการในแผนนี้ถูกเปิดใบสั่งงานครบทั้งหมดแล้ว</span>
+                </div>
+              ) : (
+                <>
                   <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">รอบเดือนตามแผน</label>
-                    <select
-                      value={form.planned_month}
-                      onChange={(e) => setForm({ ...form, planned_month: Number(e.target.value) })}
-                      className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium bg-white"
-                    >
-                      {(selectedPlanItem.planned_months || [1]).map((m) => (
-                        <option key={m} value={m}>เดือน {m}</option>
-                      ))}
-                    </select>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">รายการในแผนประจำปี</label>
+                    <SearchableSelect
+                      required
+                      value={form.plan_item_id}
+                      onChange={(val) => {
+                        const item = planItems.find((i) => i.id === val);
+                        const avail = getAvailableMonthsForItem(item, workOrders, form.plan_id);
+                        setForm({
+                          ...form,
+                          plan_item_id: val,
+                          planned_month: avail[0] || 1,
+                          child_asset_id: ''
+                        });
+                      }}
+                      options={planItemOptions}
+                      placeholder="-- เลือกรายการเครื่องมือในแผน --"
+                      ariaLabel="รายการในแผนประจำปี"
+                    />
                   </div>
 
-                  {isGroupPlanItem && (
-                    <div>
-                      <label className="block text-sm font-semibold text-indigo-900 mb-1.5">
-                        เลือกรหัสเครื่องมือลูกรายตัว <span className="text-rose-600">*</span>
-                      </label>
-                      <select
-                        required
-                        value={form.child_asset_id}
-                        onChange={(e) => setForm({ ...form, child_asset_id: e.target.value })}
-                        className="w-full h-10 px-3.5 rounded-xl border border-indigo-300 text-sm font-medium bg-white"
-                      >
-                        <option value="">-- เลือกเครื่องมือลูก --</option>
-                        {groupChildren.map((ch) => {
-                          const prefix = showDeptPrefix && ch.department ? `[${ch.department}] ` : '';
-                          return (
-                            <option key={ch.id} value={ch.id}>
-                              {prefix}{ch.asset_code} — {ch.name}
-                            </option>
-                          );
-                        })}
-                      </select>
+                  {selectedPlanItem && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                      <div>
+                        <label className="block text-sm font-semibold text-slate-700 mb-1.5">รอบเดือนตามแผน</label>
+                        <select
+                          value={form.planned_month}
+                          onChange={(e) => setForm({ ...form, planned_month: Number(e.target.value) })}
+                          className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium bg-white"
+                        >
+                          {(selectedItemAvailableMonths.length > 0 ? selectedItemAvailableMonths : [1]).map((m, idx) => (
+                            <option key={`${m}-${idx}`} value={m}>เดือน {m}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {isGroupPlanItem && (
+                        <div>
+                          <label className="block text-sm font-semibold text-indigo-900 mb-1.5">
+                            เลือกรหัสเครื่องมือลูกรายตัว <span className="text-rose-600">*</span>
+                          </label>
+                          <select
+                            required
+                            value={form.child_asset_id}
+                            onChange={(e) => setForm({ ...form, child_asset_id: e.target.value })}
+                            className="w-full h-10 px-3.5 rounded-xl border border-indigo-300 text-sm font-medium bg-white"
+                          >
+                            <option value="">-- เลือกเครื่องมือลูก --</option>
+                            {groupChildren.map((ch) => {
+                              const prefix = showDeptPrefix && ch.department ? `[${ch.department}] ` : '';
+                              return (
+                                <option key={ch.id} value={ch.id}>
+                                  {prefix}{ch.asset_code} — {ch.name}
+                                </option>
+                              );
+                            })}
+                          </select>
+                        </div>
+                      )}
                     </div>
                   )}
-                </div>
+                </>
               )}
             </>
           ) : (
@@ -365,7 +447,7 @@ export const CreateWorkOrderModal = ({
             </button>
             <button
               type="submit"
-              disabled={saving}
+              disabled={saving || (form.mode === 'PLAN' && (!form.plan_item_id || availablePlanItems.length === 0))}
               className="order-2 sm:order-2 w-full sm:w-auto min-h-[44px] h-11 sm:h-10 px-5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 transition-colors cursor-pointer shadow-2xs motion-safe:active:scale-[0.98] select-none"
             >
               {saving ? 'กำลังสร้าง...' : 'ยืนยันสร้างใบสั่งงาน'}

@@ -17,15 +17,13 @@ test.describe('VCC task inbox: work-order tasks', () => {
     await page.addInitScript((wos) => localStorage.setItem('qms-vcc-local-work-orders-v1', JSON.stringify(wos)), WORK_ORDERS);
   });
 
-  test('shows record, review and hold tasks; a task opens its own work order', async ({ page }) => {
+  test('shows record and hold tasks; a task opens its own work order', async ({ page }) => {
     await page.goto('/vcc/tasks');
     await expect(page.getByTestId('vcc-work-task-RECORD_RESULT:wo-e2e-open')).toBeVisible();
-    await expect(page.getByTestId('vcc-work-task-REVIEW_RESULT:wo-e2e-pend')).toBeVisible();
     await expect(page.getByTestId('vcc-work-task-RELEASE_HOLD:wo-e2e-hold')).toBeVisible();
 
     await page.getByTestId('vcc-inbox-tab-RECORD_RESULT').click();
     await expect(page.getByTestId('vcc-work-task-RECORD_RESULT:wo-e2e-open')).toBeVisible();
-    await expect(page.getByTestId('vcc-work-task-REVIEW_RESULT:wo-e2e-pend')).toHaveCount(0);
 
     await page.getByTestId('vcc-work-task-open-RECORD_RESULT:wo-e2e-open').click();
     await expect(page).toHaveURL(/\/vcc\/work-orders\?wo=wo-e2e-open$/);

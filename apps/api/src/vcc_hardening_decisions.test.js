@@ -518,7 +518,7 @@ describe('VCC Pre-UAT Product Hardening & Refinement Decisions (DEC-01 to DEC-04
       expect(res.body.workOrder.actual_result).toBe('Go สวมผ่าน No-Go ไม่ผ่าน สภาพผิวสมบูรณ์ไม่มีรอยแตกหัก');
       expect(res.body.workOrder.uncertainty_value).toContain('N/A (การทวนสอบเชิงคุณภาพ');
       expect(res.body.workOrder.calibration_error_value).toContain('N/A (การทวนสอบเชิงคุณภาพ)');
-      expect(res.body.workOrder.status).toBe('PENDING_REVIEW');
+      expect(res.body.workOrder.status).toBe('CLOSED');
     });
   });
 

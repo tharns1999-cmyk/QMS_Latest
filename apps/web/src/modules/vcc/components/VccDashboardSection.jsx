@@ -46,8 +46,7 @@ const ALERT_TABS = [
   { key: 'OVERDUE', label: 'เลยกำหนด', alertBadgeClass: 'bg-amber-100 text-amber-900' },
   { key: 'PLAN_DUE', label: 'รอบตามแผนประจำเดือนนี้', alertBadgeClass: 'bg-emerald-100 text-emerald-900' },
   { key: 'ON_HOLD', label: 'ระงับใช้', alertBadgeClass: 'bg-rose-100 text-rose-900' },
-  { key: 'DUE_SOON', label: 'ใกล้ครบกำหนด', alertBadgeClass: 'bg-blue-100 text-blue-900' },
-  { key: 'PENDING_REVIEW', label: 'รอตรวจรับ', alertBadgeClass: 'bg-indigo-100 text-indigo-900' }
+  { key: 'DUE_SOON', label: 'ใกล้ครบกำหนด', alertBadgeClass: 'bg-blue-100 text-blue-900' }
 ];
 
 const parseDaysInput = (text) =>

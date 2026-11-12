@@ -264,7 +264,7 @@ describe('VCC Multi-Department Access & Approval Workflow (RBAC & SoD)', () => {
       acceptance_criteria: '± 0.02 mm ตามเกณฑ์'
     });
     expect(resultRes.status).toBe(200);
-    expect(resultRes.body.workOrder.status).toBe('PENDING_REVIEW');
+    expect(resultRes.body.workOrder.status).toBe('CLOSED');
     expect(resultRes.body.workOrder.performed_by).toBe('QC-STAFF');
 
     // SoD Check: QC Staff cannot inspect/approve their own work order result

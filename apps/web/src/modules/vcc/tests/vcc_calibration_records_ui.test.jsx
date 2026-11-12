@@ -39,7 +39,7 @@ describe('VCC Phase 3.2 — Calibration Records & Execution UI Tests', () => {
     });
   });
 
-  it('RecordResultModal_TabsAndPdfValidation: สลับแท็บข้อมูลหลักและข้อมูลความสอบกลับได้ พร้อมตรวจไฟล์ PDF ขนาดไม่เกิน 25MB', async () => {
+  it('RecordResultModal_TabsAndPdfValidation: Single-View Smart Form พร้อม Accordion ข้อมูลเทคนิค และตรวจไฟล์ PDF ขนาดไม่เกิน 25MB', async () => {
     let formState = {
       performed_at: '2026-05-20',
       result_status: 'PASS',
@@ -77,20 +77,22 @@ describe('VCC Phase 3.2 — Calibration Records & Execution UI Tests', () => {
     expect(screen.getByText(/บันทึกผลการสอบเทียบและหลักฐานดิจิทัล/i)).toBeInTheDocument();
     expect(screen.getByText(/WO-2026-099/i)).toBeInTheDocument();
 
-    // Verify Tab navigation
-    expect(screen.getByRole('button', { name: /ผลการตรวจและใบรับรอง/i })).toBeInTheDocument();
-    const traceTabBtn = screen.getByRole('button', { name: /การสอบกลับได้และสภาวะแวดล้อม/i });
-    expect(traceTabBtn).toBeInTheDocument();
+    // Verify Single-View Form elements: Segmented Pill
+    expect(screen.getByRole('button', { name: /ผ่านเกณฑ์ \(PASS\)/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /ไม่ผ่านเกณฑ์ \(FAIL\)/i })).toBeInTheDocument();
 
-    // Switch to Traceability tab
-    fireEvent.click(traceTabBtn);
+    // Verify Collapsible Accordion for Traceability
+    const traceAccordionBtn = screen.getByRole('button', { name: /ข้อมูลเพิ่มเติมทางเทคนิคและการสอบกลับได้/i });
+    expect(traceAccordionBtn).toBeInTheDocument();
+
+    // Open Accordion
+    fireEvent.click(traceAccordionBtn);
     expect(screen.getByText(/การสอบกลับได้สู่มาตรฐานแห่งชาติ/i)).toBeInTheDocument();
     expect(screen.getByText(/สภาวะแวดล้อมขณะสอบเทียบ/i)).toBeInTheDocument();
     expect(screen.getByText(/ค่าความไม่แน่นอนขยาย/i)).toBeInTheDocument();
     expect(screen.getByText(/ค่าความคลาดเคลื่อนที่วัดได้/i)).toBeInTheDocument();
 
     // File validation: Reject non-pdf file
-    fireEvent.click(screen.getByRole('button', { name: /ผลการตรวจและใบรับรอง/i }));
     const fileInput = screen.getByLabelText(/อัปโหลดไฟล์ใบรับรอง PDF/i);
 
     const txtFile = new File(['Hello text'], 'test.txt', { type: 'text/plain' });
@@ -169,8 +171,8 @@ describe('VCC Phase 3.2 — Calibration Records & Execution UI Tests', () => {
       />
     );
 
-    expect(screen.getByText(/ขอแก้ไขผลการสอบเทียบที่ปิดงานแล้ว \(Controlled Amendment\)/i)).toBeInTheDocument();
-    const submitBtn = screen.getByRole('button', { name: /บันทึกการขอแก้ไข \(Amendment\)/i });
+    expect(screen.getByText(/แก้ไขผลการสอบเทียบที่ปิดงานแล้ว/i)).toBeInTheDocument();
+    const submitBtn = screen.getByRole('button', { name: /บันทึกแก้ไขผล/i });
     // When amendment_reason is empty, submit button must be disabled
     expect(submitBtn).toBeDisabled();
   });

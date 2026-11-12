@@ -955,7 +955,9 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
         return c.json({ error: 'สถานะใบสั่งงานไม่ถูกต้อง' }, 400);
       }
       if (targetStatus === 'OPEN') {
-        where.push("w.status IN ('OPEN', 'SCHEDULED')");
+        where.push("w.status IN ('OPEN', 'SCHEDULED', 'REJECTED', 'RETURNED')");
+      } else if (targetStatus === 'CLOSED') {
+        where.push("w.status IN ('CLOSED', 'PENDING_REVIEW', 'PENDING_VERIFY')");
       } else {
         where.push('w.status = ?');
         params.push(targetStatus);
@@ -1714,7 +1716,7 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
     const resultStatus = String(body.result_status || '').trim().toUpperCase();
     const certificateNo = String(body.certificate_no || '').trim();
     const acceptanceCriteria = String(body.acceptance_criteria || '').trim();
-    const resultRemarks = String(body.result_remarks || '').trim();
+    let resultRemarks = String(body.result_remarks || '').trim();
 
     if (!DATE_RE.test(performedAt)) return c.json({ error: 'กรุณาระบุวันที่ทวนสอบจริง (YYYY-MM-DD)' }, 400);
     const [pYear, pMonth, pDay] = performedAt.split('-').map(Number);
@@ -1733,6 +1735,9 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
     }
     if (!VALID_RESULT_STATUSES.has(resultStatus)) {
       return c.json({ error: 'ผลการทวนสอบต้องเป็น PASS, FAIL หรือ INCONCLUSIVE' }, 400);
+    }
+    if (resultStatus === 'FAIL' && !resultRemarks) {
+      resultRemarks = 'ไม่ผ่านเกณฑ์ยอมรับตามที่กำหนด';
     }
     if (!certificateNo) {
       return c.json({ error: 'กรุณาระบุเลขที่ใบรับรอง (Certificate No.) หรืออ้างอิงหลักฐานการทวนสอบก่อนส่งตรวจรับ' }, 400);
@@ -1808,12 +1813,17 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
     }
 
     // FAIL or INCONCLUSIVE immediately triggers ON_HOLD / NC control; a later PASS retest keeps the NC open until an L5+ release
+    const isPass = resultStatus === 'PASS';
+    const isInconclusive = resultStatus === 'INCONCLUSIVE';
+    const nextStatus = isInconclusive ? 'PENDING_REVIEW' : 'CLOSED';
     const nextNcStatus = HOLDING_RESULTS.has(resultStatus) ? 'OPEN' : existing.nc_status;
+    const reviewerId = isInconclusive ? null : user.id;
+    const reviewedAt = isInconclusive ? null : new Date().toISOString();
 
     const batchStmts = [
       db.prepare(`
         UPDATE vcc_work_orders
-        SET status = 'PENDING_REVIEW',
+        SET status = ?,
             result_status = ?,
             performed_at = ?,
             certificate_no = ?,
@@ -1828,6 +1838,8 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
             certificate_issue_date = ?,
             certificate_valid_until = ?,
             performed_by = ?,
+            reviewed_by = ?,
+            reviewed_at = ?,
             nc_status = ?,
             verification_type = ?,
             actual_result = ?,
@@ -1835,8 +1847,9 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
             rejected_reason = NULL,
             updated_at = ${NOW},
             updated_by = ?
-        WHERE id = ? AND status IN ('OPEN', 'SCHEDULED', 'REJECTED')
+        WHERE id = ? AND status IN ('OPEN', 'SCHEDULED', 'REJECTED', 'PENDING_REVIEW')
       `).bind(
+        nextStatus,
         resultStatus,
         performedAt,
         certificateNo,
@@ -1851,6 +1864,8 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
         certificateIssueDate,
         certificateValidUntil,
         user.id,
+        reviewerId,
+        reviewedAt,
         nextNcStatus,
         verificationType,
         actualResult,
@@ -1880,19 +1895,61 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
         certificate_valid_until: certificateValidUntil,
         nc_status: nextNcStatus,
         before: { status: existing.status },
-        after: { status: 'PENDING_REVIEW' }
+        after: { status: nextStatus }
       })
     ];
 
-    if (HOLDING_RESULTS.has(resultStatus)) {
+    if (isPass) {
+      batchStmts.push(
+        woEventNotice(db, existing, {
+          type: 'EVT_WO_VERIFIED', severity: 'SUCCESS', targetUserId: user.id,
+          title: `[ปิดงานสำเร็จ] ใบสั่งงาน ${existing.wo_code}`,
+          message: `ผลทวนสอบ/สอบเทียบของเครื่องมือ ${existing.asset_code} (${existing.asset_name}) ผ่านเกณฑ์และปิดงานเรียบร้อยแล้ว`
+        })
+      );
+    }
+
+    if (isPass && existing.nc_status !== 'OPEN') {
+      batchStmts.push(
+        db.prepare(`
+          UPDATE vcc_assets
+          SET status = 'ACTIVE',
+              updated_at = ${NOW},
+              updated_by = ?
+          WHERE id = ?
+        `).bind(user.id, existing.asset_id)
+      );
+      if (existing.cycle_id) {
+        batchStmts.push(
+          db.prepare(`
+            UPDATE vcc_plan_cycles
+            SET cycle_status = 'CLOSED'
+            WHERE id = ?
+          `).bind(existing.cycle_id)
+        );
+      } else if (existing.plan_item_id && existing.planned_month) {
+        batchStmts.push(
+          db.prepare(`
+            UPDATE vcc_plan_cycles
+            SET cycle_status = 'CLOSED'
+            WHERE id = (
+              SELECT id FROM vcc_plan_cycles
+              WHERE plan_item_id = ? AND planned_month = ? AND cycle_status != 'CLOSED'
+              LIMIT 1
+            )
+          `).bind(existing.plan_item_id, existing.planned_month)
+        );
+      }
+    } else if (HOLDING_RESULTS.has(resultStatus)) {
       batchStmts.push(
         db.prepare(`
           UPDATE vcc_assets
           SET status = 'ON_HOLD',
               hold_started_at = COALESCE(hold_started_at, ${NOW}),
-              updated_at = ${NOW}
+              updated_at = ${NOW},
+              updated_by = ?
           WHERE id = ?
-        `).bind(existing.asset_id),
+        `).bind(user.id, existing.asset_id),
         ...ncHoldNoticeStatements(db, existing)
       );
     }
@@ -1913,14 +1970,47 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
 
     const existing = await fetchWorkOrder(db, id);
     if (!existing) return c.json({ error: 'ไม่พบใบสั่งงานทวนสอบ/สอบเทียบ' }, 404);
+    if (!isUserAuthorizedForPlanDept(user, existing.department)) {
+      return c.json({ error: 'ไม่มีสิทธิ์ตรวจรับและอนุมัติใบสั่งงานของแผนกนี้' }, 403);
+    }
+    if (user.id === existing.performed_by) {
+      return c.json({ error: 'ผู้บันทึกผลไม่สามารถตรวจรับและอนุมัติปิดใบสั่งงานของตนเองได้' }, 403);
+    }
+    if (existing.status === 'CLOSED') {
+      await db.batch([
+        db.prepare(`
+          UPDATE vcc_work_orders
+          SET reviewed_by = ?,
+              reviewed_at = ${NOW},
+              review_comment = COALESCE(?, review_comment),
+              updated_at = ${NOW},
+              updated_by = ?
+          WHERE id = ?
+        `).bind(user.id, comment || null, user.id, id),
+        audit(db, user.id, 'VCC_WO_APPROVED', {
+          wo_id: id,
+          wo_code: existing.wo_code,
+          asset_id: existing.asset_id,
+          asset_code: existing.asset_code,
+          result_status: existing.result_status,
+          nc_status: existing.nc_status,
+          comment: comment || 'ตรวจรับและปิดงาน',
+          before: { status: 'CLOSED' },
+          after: { status: 'CLOSED' }
+        }),
+        woEventNotice(db, existing, {
+          type: 'EVT_WO_VERIFIED', severity: 'SUCCESS', targetUserId: existing.performed_by,
+          title: `[ตรวจรับผ่าน] ใบสั่งงาน ${existing.wo_code} ปิดงานแล้ว`,
+          message: `ผลทวนสอบ/สอบเทียบของเครื่องมือ ${existing.asset_code} (${existing.asset_name}) ได้รับการตรวจรับโดย ${user.name}`
+        })
+      ]);
+      return c.json({ workOrder: await fetchWorkOrder(db, id) });
+    }
     if (existing.status !== 'PENDING_REVIEW') {
       return c.json({ error: 'อนุมัติปิดงานได้เฉพาะใบสั่งงานที่อยู่ในสถานะรอตรวจรับผล (PENDING_REVIEW) เท่านั้น' }, 409);
     }
     if (existing.result_status === 'INCONCLUSIVE') {
       return c.json({ error: 'ผลรอตรวจซ้ำ (INCONCLUSIVE) ปิดงานไม่ได้ กรุณาส่งกลับเพื่อตรวจซ้ำและบันทึกผลใหม่' }, 409);
-    }
-    if (!isUserAuthorizedForPlanDept(user, existing.department)) {
-      return c.json({ error: 'ไม่มีสิทธิ์ตรวจรับและอนุมัติใบสั่งงานของแผนกนี้' }, 403);
     }
 
     const settings = await readWorkOrderSettings(db);
@@ -2190,10 +2280,10 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
       if (wo.status === 'OPEN' || wo.status === 'SCHEDULED') {
         // a SCHEDULED order is not work yet until its month is near
         if (wo.status === 'OPEN' || (wo.due_date && wo.due_date <= horizon)) add('RECORD_RESULT', wo, { created_at: wo.created_at });
-      } else if (wo.status === 'REJECTED') {
-        if (isPerformer || user.isDcc || user.isQmr) add('REVISE_RESULT', wo, { reason: wo.rejected_reason, created_at: wo.performed_at || wo.created_at });
       } else if (wo.status === 'PENDING_REVIEW') {
         if (!isPerformer && userLevel >= thresholds.required_reviewer_level) add('REVIEW_RESULT', wo, { created_at: wo.performed_at || wo.created_at });
+      } else if (wo.status === 'REJECTED') {
+        if (isPerformer || user.is_dcc || user.isDcc) add('REVISE_RESULT', wo, { reason: wo.rejected_reason, created_at: wo.performed_at || wo.created_at });
       } else if (wo.status === 'CLOSED' && wo.nc_status === 'OPEN') {
         if (!isPerformer && userLevel >= thresholds.required_approver_level) add('RELEASE_HOLD', wo, { created_at: wo.performed_at || wo.created_at });
       }
@@ -2291,7 +2381,10 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
     const existing = await fetchWorkOrder(db, id);
     if (!existing) return c.json({ error: 'ไม่พบใบสั่งงานทวนสอบ/สอบเทียบ' }, 404);
     if (existing.status === 'CLOSED') {
-      return c.json({ error: 'ใบสั่งงานปิดสมบูรณ์แล้ว การเปลี่ยนหรือแก้ไขไฟล์ใบรับรองต้องทำผ่านกระบวนการขอแก้ไข (Amendment) เท่านั้น' }, 409);
+      const isAmendment = c.req.query('amendment') === '1' || c.req.query('purpose') === 'amendment';
+      if (!isAmendment) {
+        return c.json({ error: 'ใบสั่งงานปิดสมบูรณ์แล้ว การเปลี่ยนหรือแก้ไขไฟล์ใบรับรองต้องทำผ่านกระบวนการขอแก้ไข (Amendment) เท่านั้น' }, 409);
+      }
     }
     if (existing.status === 'CANCELLED') {
       return c.json({ error: 'ไม่สามารถแนบไฟล์ใบรับรองในใบสั่งงานที่ยกเลิกไปแล้วได้' }, 409);
@@ -2813,6 +2906,15 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
         id
       ),
       assertRowUpdated(db),
+      audit(db, user.id, 'VCC_WO_RESULT_AMENDED', {
+        wo_id: id,
+        wo_code: existing.wo_code,
+        asset_id: existing.asset_id,
+        request_id: reqRow.id,
+        amendment_seq: nextSeq,
+        reason,
+        amended_by: user.id
+      }),
       audit(db, user.id, 'VCC_WO_AMENDED', {
         wo_id: id,
         wo_code: existing.wo_code,
@@ -2972,6 +3074,135 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
     }
     if (action === 'reject') {
       return handleRejectAmendment(c);
+    }
+    if (action === 'direct' || rawBody.direct === true) {
+      const db = c.env.DB;
+      const user = c.get('user');
+      const id = c.req.param('id');
+      const existing = await fetchWorkOrder(db, id);
+      if (!existing) return c.json({ error: 'ไม่พบใบสั่งงานทวนสอบ/สอบเทียบ' }, 404);
+      if (existing.status !== 'CLOSED') {
+        return c.json({ error: 'การแก้ไขทำได้เฉพาะใบสั่งงานที่ปิดงาน (CLOSED) แล้วเท่านั้น' }, 409);
+      }
+      if (!isUserAuthorizedForPlanDept(user, existing.department)) {
+        return c.json({ error: 'ไม่มีสิทธิ์แก้ไขผลของแผนกนี้' }, 403);
+      }
+      const reason = String(rawBody.amendment_reason || rawBody.reason || '').trim();
+      if (!reason) {
+        return c.json({ error: 'กรุณาระบุเหตุผลในการแก้ไขผลการสอบเทียบ' }, 400);
+      }
+      const newResultStatus = rawBody.result_status ? String(rawBody.result_status).trim().toUpperCase() : existing.result_status;
+      const certificateNo = rawBody.certificate_no !== undefined ? String(rawBody.certificate_no).trim() : existing.certificate_no;
+      const acceptanceCriteria = rawBody.acceptance_criteria !== undefined ? String(rawBody.acceptance_criteria).trim() : existing.acceptance_criteria;
+      const actualResult = rawBody.actual_result !== undefined ? (String(rawBody.actual_result || '').trim() || null) : existing.actual_result;
+      const resultRemarks = rawBody.result_remarks !== undefined ? (String(rawBody.result_remarks || '').trim() || null) : existing.result_remarks;
+      const providerName = rawBody.calibration_provider_name !== undefined ? (String(rawBody.calibration_provider_name || '').trim() || null) : existing.calibration_provider_name;
+      const method = rawBody.calibration_method !== undefined ? (String(rawBody.calibration_method || '').trim() || null) : existing.calibration_method;
+      const traceability = rawBody.traceability_ref !== undefined ? (String(rawBody.traceability_ref || '').trim() || null) : existing.traceability_ref;
+      const env = rawBody.environmental_conditions !== undefined ? (String(rawBody.environmental_conditions || '').trim() || null) : existing.environmental_conditions;
+      const uncertainty = rawBody.uncertainty_value !== undefined ? (String(rawBody.uncertainty_value || '').trim() || null) : existing.uncertainty_value;
+      const calError = rawBody.calibration_error_value !== undefined ? (String(rawBody.calibration_error_value || '').trim() || null) : existing.calibration_error_value;
+      const issueDate = rawBody.certificate_issue_date !== undefined ? (String(rawBody.certificate_issue_date || '').trim() || null) : existing.certificate_issue_date;
+      const validUntil = rawBody.certificate_valid_until !== undefined ? (String(rawBody.certificate_valid_until || '').trim() || null) : existing.certificate_valid_until;
+      const nextNcStatus = newResultStatus === 'FAIL' ? 'OPEN' : existing.nc_status;
+
+      const batch = [
+        db.prepare(`
+          UPDATE vcc_work_orders
+          SET result_status = ?,
+              certificate_no = ?,
+              acceptance_criteria = ?,
+              actual_result = ?,
+              result_remarks = ?,
+              calibration_provider_name = ?,
+              calibration_method = ?,
+              traceability_ref = ?,
+              environmental_conditions = ?,
+              uncertainty_value = ?,
+              calibration_error_value = ?,
+              certificate_issue_date = ?,
+              certificate_valid_until = ?,
+              nc_status = ?,
+              is_amended = 1,
+              amended_at = ${NOW},
+              amended_by = ?,
+              amendment_reason = ?,
+              updated_at = ${NOW},
+              updated_by = ?
+          WHERE id = ? AND status = 'CLOSED'
+        `).bind(
+          newResultStatus,
+          certificateNo,
+          acceptanceCriteria,
+          actualResult,
+          resultRemarks,
+          providerName,
+          method,
+          traceability,
+          env,
+          uncertainty,
+          calError,
+          issueDate,
+          validUntil,
+          nextNcStatus,
+          user.id,
+          reason,
+          user.id,
+          id
+        ),
+        assertRowUpdated(db),
+        audit(db, user.id, 'VCC_WO_RESULT_AMENDED', {
+          wo_id: id,
+          wo_code: existing.wo_code,
+          asset_id: existing.asset_id,
+          reason,
+          amended_by: user.id,
+          before: {
+            result_status: existing.result_status,
+            certificate_no: existing.certificate_no,
+            nc_status: existing.nc_status
+          },
+          after: {
+            result_status: newResultStatus,
+            certificate_no: certificateNo,
+            nc_status: nextNcStatus
+          }
+        }),
+        audit(db, user.id, 'VCC_WO_AMENDED', {
+          wo_id: id,
+          wo_code: existing.wo_code,
+          reason,
+          amended_by: user.id
+        })
+      ];
+
+      if (newResultStatus === 'FAIL') {
+        batch.push(
+          db.prepare(`
+            UPDATE vcc_assets
+            SET status = 'ON_HOLD',
+                hold_started_at = COALESCE(hold_started_at, ${NOW}),
+                updated_at = ${NOW},
+                updated_by = ?
+            WHERE id = ?
+          `).bind(user.id, existing.asset_id),
+          ...ncHoldNoticeStatements(db, existing)
+        );
+      } else if (newResultStatus === 'PASS' && existing.result_status === 'FAIL') {
+        batch.push(
+          db.prepare(`
+            UPDATE vcc_assets
+            SET status = 'ACTIVE',
+                updated_at = ${NOW},
+                updated_by = ?
+            WHERE id = ?
+          `).bind(user.id, existing.asset_id)
+        );
+      }
+
+      const conflict = await runTransition(c, db, batch);
+      if (conflict) return conflict;
+      return c.json({ workOrder: await fetchWorkOrder(db, id) });
     }
     return handleRequestAmendment(c);
   });
