@@ -10,13 +10,15 @@ import {
   Hash,
   Trash2,
   Layers,
-  ChevronDown
+  ChevronDown,
+  Eye
 } from 'lucide-react';
 import { getResultStatusLabel, getCalibrationMethodLabel, CALIBRATION_METHOD_LABELS } from '../utils/statusLabels';
 import { formatVccDate } from '../utils/vccDateUtils';
 import { useVccModalAccessibility } from '../hooks/useVccModalAccessibility';
 import { useVccMobileViewport } from '../hooks/useVccMobileViewport';
 import { VccDiscardConfirmDialog } from './VccDiscardConfirmDialog';
+import { saveVccPdfFile, getVccPdfBlobUrl } from '../utils/vccFileStorage';
 
 const MAX_PDF_BYTES = 25 * 1024 * 1024; // 25 MB
 
@@ -47,7 +49,8 @@ const serializeResultForm = (f) => JSON.stringify({
   environmental_conditions: f?.environmental_conditions || '',
   uncertainty_value: f?.uncertainty_value || '',
   calibration_error_value: f?.calibration_error_value || '',
-  hasFile: Boolean(f?.certificate_file)
+  cert_file_key: f?.cert_file_key || '',
+  hasFile: Boolean(f?.certificate_file || f?.cert_file_key)
 });
 
 export const RecordResultModal = ({
@@ -67,6 +70,7 @@ export const RecordResultModal = ({
   const [fileError, setFileError] = useState('');
   const [fileHashPreview, setFileHashPreview] = useState('');
   const [isAccordionOpen, setIsAccordionOpen] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
 
   // Active work order being displayed and edited
   const [activeWorkOrder, setActiveWorkOrder] = useState(workOrder);
@@ -241,53 +245,95 @@ export const RecordResultModal = ({
 
   if (!activeWorkOrder) return null;
 
-  const handleFileChange = async (e) => {
-    const file = e.target.files?.[0];
+  const processSelectedPdf = async (file) => {
     setFileError('');
     setFileHashPreview('');
 
     if (!file) {
-      setForm({ ...form, certificate_file: null });
+      setForm((prev) => ({
+        ...prev,
+        certificate_file: null,
+        certificate_file_name: '',
+        certificate_file_size: 0,
+        certificate_file_hash: '',
+        cert_file_key: null,
+        cert_file_name: '',
+        cert_file_size: 0,
+        cert_sha256_hash: '',
+        cert_preview_url: ''
+      }));
       return;
     }
 
     if (file.size > MAX_PDF_BYTES) {
       setFileError('ไฟล์ PDF ต้องมีขนาดไม่เกิน 25 MB');
-      e.target.value = '';
       return;
     }
 
     try {
-      const headerBytes = await file.slice(0, 5).arrayBuffer();
-      const headerStr = new TextDecoder().decode(headerBytes);
-      if (headerStr !== '%PDF-') {
-        setFileError('รูปแบบไฟล์ไม่ถูกต้อง ต้องเป็นเอกสาร PDF เท่านั้น (%PDF-)');
-        e.target.value = '';
-        return;
-      }
+      const fileKey = `vcc_cert_${activeWorkOrder.id || 'wo'}_${Date.now()}`;
+      const saved = await saveVccPdfFile(fileKey, file);
+      const previewUrl = await getVccPdfBlobUrl(saved.fileKey, activeWorkOrder);
 
-      // Compute client-side SHA-256 for instant verification
-      if (window.crypto?.subtle) {
-        const fullBytes = await file.arrayBuffer();
-        const hashBuf = await window.crypto.subtle.digest('SHA-256', fullBytes);
-        const hashHex = Array.from(new Uint8Array(hashBuf))
-          .map((b) => b.toString(16).padStart(2, '0'))
-          .join('');
-        setFileHashPreview(hashHex);
-      }
-
-      setForm({
-        ...form,
+      setFileHashPreview(saved.sha256);
+      setForm((prev) => ({
+        ...prev,
         certificate_file: file,
-        certificate_file_name: file.name
-      });
-    } catch {
-      setFileError('เกิดข้อผิดพลาดในการตรวจสอบไฟล์ กรุณาลองใหม่อีกครั้ง');
+        certificate_file_name: saved.fileName,
+        certificate_file_size: saved.fileSize,
+        certificate_file_hash: saved.sha256,
+        cert_file_key: saved.fileKey,
+        cert_file_name: saved.fileName,
+        cert_file_size: saved.fileSize,
+        cert_sha256_hash: saved.sha256,
+        cert_preview_url: previewUrl
+      }));
+    } catch (err) {
+      setFileError(err.message || 'เกิดข้อผิดพลาดในการตรวจสอบไฟล์ กรุณาลองใหม่อีกครั้ง');
+    }
+  };
+
+  const handleFileChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (e.target) e.target.value = '';
+    await processSelectedPdf(file);
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+  };
+
+  const handleDrop = async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+    const file = e.dataTransfer?.files?.[0];
+    if (file) {
+      await processSelectedPdf(file);
     }
   };
 
   const handleRemoveFile = () => {
-    setForm({ ...form, certificate_file: null, certificate_file_name: '' });
+    setForm((prev) => ({
+      ...prev,
+      certificate_file: null,
+      certificate_file_name: '',
+      certificate_file_size: 0,
+      certificate_file_hash: '',
+      cert_file_key: null,
+      cert_file_name: '',
+      cert_file_size: 0,
+      cert_sha256_hash: '',
+      cert_preview_url: ''
+    }));
     setFileHashPreview('');
     setFileError('');
   };
@@ -611,7 +657,14 @@ export const RecordResultModal = ({
             )}
 
             {/* Digital PDF Upload Box */}
-            <div className="p-4 rounded-xl border-2 border-dashed border-indigo-200 bg-indigo-50/30 space-y-3">
+            <div
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              className={`p-4 rounded-xl border-2 border-dashed transition-colors space-y-3 ${
+                isDragOver ? 'border-indigo-500 bg-indigo-100/50' : 'border-indigo-200 bg-indigo-50/30'
+              }`}
+            >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <FileText size={18} className="text-indigo-600" />
@@ -643,8 +696,8 @@ export const RecordResultModal = ({
 
               {/* Selected File Card */}
               {form.certificate_file && (
-                <div className="p-3 rounded-xl bg-white border border-indigo-200 space-y-2">
-                  <div className="flex items-center justify-between">
+                <div className="p-3.5 rounded-xl bg-white border border-indigo-200 space-y-2.5">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                     <div className="flex items-center gap-2 min-w-0">
                       <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
                       <span className="text-xs font-bold text-slate-900 truncate">
@@ -654,20 +707,56 @@ export const RecordResultModal = ({
                         ({formatBytes(form.certificate_file.size)})
                       </span>
                     </div>
-                    <button
-                      type="button"
-                      onClick={handleRemoveFile}
-                      className="p-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 cursor-pointer"
-                      title="นำไฟล์ออก"
-                    >
-                      <Trash2 size={14} />
-                    </button>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          let url = form.cert_preview_url;
+                          if (!url && form.cert_file_key) {
+                            url = await getVccPdfBlobUrl(form.cert_file_key, activeWorkOrder);
+                          }
+                          if (url && typeof window !== 'undefined') {
+                            window.open(url, '_blank');
+                          }
+                        }}
+                        className="min-h-[32px] h-8 px-2.5 rounded-lg border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold inline-flex items-center gap-1.5 cursor-pointer transition-colors motion-safe:active:scale-[0.98] select-none"
+                        title="ดูไฟล์ตัวอย่าง"
+                        aria-label="ดูไฟล์ตัวอย่าง"
+                      >
+                        <Eye size={13} />
+                        <span>👁️ ดูไฟล์ตัวอย่าง</span>
+                      </button>
+
+                      <label
+                        role="button"
+                        aria-label="เปลี่ยนไฟล์"
+                        tabIndex={0}
+                        onClick={handleRemoveFile}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            handleRemoveFile();
+                          }
+                        }}
+                        className="min-h-[32px] h-8 px-2.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-semibold inline-flex items-center gap-1.5 cursor-pointer transition-colors motion-safe:active:scale-[0.98] select-none"
+                        title="เปลี่ยนไฟล์"
+                      >
+                        <Trash2 size={13} className="text-slate-400" />
+                        <span>🗑️ เปลี่ยนไฟล์</span>
+                        <input
+                          type="file"
+                          accept=".pdf,application/pdf"
+                          onChange={handleFileChange}
+                          className="hidden"
+                          aria-label="เปลี่ยนไฟล์ PDF"
+                        />
+                      </label>
+                    </div>
                   </div>
 
-                  {fileHashPreview && (
+                  {(fileHashPreview || form.cert_sha256_hash || form.certificate_file_hash) && (
                     <div className="p-2 rounded-lg bg-slate-50 border border-slate-100 flex items-center gap-1.5 text-xs font-mono text-slate-600 break-all">
                       <Hash size={13} className="text-indigo-600 shrink-0" />
-                      <span>SHA-256: {fileHashPreview}</span>
+                      <span>SHA-256 Hash: {fileHashPreview || form.cert_sha256_hash || form.certificate_file_hash}</span>
                     </div>
                   )}
                 </div>
@@ -675,8 +764,8 @@ export const RecordResultModal = ({
 
               {/* Existing certificate in work order */}
               {!form.certificate_file && activeWorkOrder.certificate_file_name && (
-                <div className="p-3 rounded-xl bg-white border border-slate-200 space-y-2">
-                  <div className="flex items-center justify-between">
+                <div className="p-3.5 rounded-xl bg-white border border-slate-200 space-y-2.5">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                     <div className="flex items-center gap-2 min-w-0">
                       <FileText size={16} className="text-indigo-600 shrink-0" />
                       <div className="min-w-0">
@@ -688,16 +777,35 @@ export const RecordResultModal = ({
                         </span>
                       </div>
                     </div>
-                    <label className="text-xs font-bold text-indigo-600 hover:text-indigo-700 hover:underline cursor-pointer">
-                      เปลี่ยนไฟล์
-                      <input
-                        type="file"
-                        accept=".pdf,application/pdf"
-                        onChange={handleFileChange}
-                        className="hidden"
-                        aria-label="เปลี่ยนไฟล์ใบรับรอง PDF"
-                      />
-                    </label>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const fileKey = activeWorkOrder.cert_file_key || activeWorkOrder.certificate_file_key || activeWorkOrder.certificate_file_name;
+                          const url = await getVccPdfBlobUrl(fileKey, activeWorkOrder);
+                          if (url && typeof window !== 'undefined') {
+                            window.open(url, '_blank');
+                          }
+                        }}
+                        className="min-h-[32px] h-8 px-2.5 rounded-lg border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold inline-flex items-center gap-1.5 cursor-pointer transition-colors motion-safe:active:scale-[0.98] select-none"
+                        title="ดูไฟล์ตัวอย่าง"
+                        aria-label="ดูไฟล์ตัวอย่าง"
+                      >
+                        <Eye size={13} />
+                        <span>👁️ ดูไฟล์ตัวอย่าง</span>
+                      </button>
+                      <label className="min-h-[32px] h-8 px-2.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-semibold inline-flex items-center gap-1.5 cursor-pointer transition-colors motion-safe:active:scale-[0.98] select-none">
+                        <Trash2 size={13} className="text-slate-400" />
+                        <span>🗑️ เปลี่ยนไฟล์</span>
+                        <input
+                          type="file"
+                          accept=".pdf,application/pdf"
+                          onChange={handleFileChange}
+                          className="hidden"
+                          aria-label="เปลี่ยนไฟล์ใบรับรอง PDF"
+                        />
+                      </label>
+                    </div>
                   </div>
                   {activeWorkOrder.certificate_file_hash && (
                     <div className="p-1.5 rounded-lg bg-slate-50 border border-slate-100 text-xs font-mono text-slate-500 truncate">

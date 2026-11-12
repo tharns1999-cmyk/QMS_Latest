@@ -572,9 +572,12 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
     }
   };
 
-  const handleDownloadCert = async (workOrder) => {
+  const handleDownloadCert = async (workOrder, options = {}) => {
     try {
-      await downloadVccWorkOrderCertificate(workOrder.id, workOrder.certificate_file_name);
+      const opts = typeof options === 'object' && options !== null
+        ? { purpose: 'download', filename: workOrder.certificate_file_name, ...options }
+        : { purpose: 'download', filename: workOrder.certificate_file_name };
+      await downloadVccWorkOrderCertificate(workOrder.id, opts);
     } catch (err) {
       toast.error(err.message || 'ดาวน์โหลดใบรับรองไม่สำเร็จ');
     }
@@ -967,6 +970,10 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
         workOrder={digitalRecordWo}
         onClose={() => setDigitalRecordWo(null)}
         onDownloadCert={handleDownloadCert}
+        onEditResult={(wo) => {
+          setDigitalRecordWo(null);
+          openAmendModal(wo);
+        }}
       />
 
       <WorkOrderActionModal

@@ -1,6 +1,7 @@
 import React from 'react';
 import {
   FileCheck2,
+  FileText,
   CalendarClock,
   CheckCircle2,
   XCircle,
@@ -241,8 +242,8 @@ export const WorkOrderRowActions = ({
             }}
             className="w-full text-left px-3.5 sm:px-3 py-3 sm:py-2 min-h-[44px] sm:min-h-[36px] text-xs font-semibold text-indigo-700 hover:bg-indigo-50 flex items-center gap-2 transition-colors cursor-pointer motion-safe:active:bg-indigo-100 select-none"
           >
-            <Printer size={13} className="text-indigo-600" />
-            <span>พิมพ์/ดูเอกสารดิจิทัล</span>
+            <FileText size={13} className="text-indigo-600" />
+            <span>📄 ดูผล / ใบรับรอง</span>
           </button>
         )}
 
@@ -281,8 +282,10 @@ export const WorkOrderTable = ({
   onOpenCreate,
   onAmend,
   onCancel,
-  onViewDigitalRecord
+  onViewDigitalRecord: propOnViewDigitalRecord,
+  onViewRecord
 }) => {
+  const onViewDigitalRecord = propOnViewDigitalRecord || onViewRecord;
   const reqApproverLevel = thresholds.required_approver_level ?? 5;
   const { isMobile } = useVccMobileViewport();
 
@@ -504,6 +507,11 @@ export const WorkOrderTable = ({
               <div>
                 <span className="text-slate-500 block text-[11px]">ผลตรวจ / รับรอง:</span>
                 <div className="mt-0.5">{getResultBadge(wo.result_status)}</div>
+                {(wo.actual_result || wo.actual_measurement) && (
+                  <div className="text-[11px] text-slate-700 mt-0.5 line-clamp-1">
+                    <span className="text-slate-500 font-medium">ผลวัดจริง:</span> {wo.actual_result || wo.actual_measurement}
+                  </div>
+                )}
                 {wo.certificate_no && (
                   <div className="font-mono text-slate-800 font-semibold text-[11px] mt-1 flex items-center gap-1 flex-wrap">
                     <span>{wo.certificate_no}</span>
@@ -535,7 +543,20 @@ export const WorkOrderTable = ({
             )}
 
             {/* Action Row */}
-            <div className="pt-2 border-t border-slate-100 flex items-center justify-end" onClick={(e) => e.stopPropagation()}>
+            <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2" onClick={(e) => e.stopPropagation()}>
+              {(wo.status === 'CLOSED' || wo.status === 'SUSPENDED' || wo.performed_at) && onViewDigitalRecord ? (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onViewDigitalRecord(wo);
+                  }}
+                  className="min-h-[36px] h-9 px-3 rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700 text-xs font-semibold hover:bg-indigo-100 inline-flex items-center gap-1.5 cursor-pointer shadow-2xs transition-colors"
+                >
+                  <FileText size={13} className="text-indigo-600" />
+                  <span>📄 ดูผล / ใบรับรอง</span>
+                </button>
+              ) : <div />}
               <WorkOrderRowActions
                 wo={wo}
                 reqApproverLevel={reqApproverLevel}
@@ -666,6 +687,12 @@ export const WorkOrderTable = ({
                     {getResultBadge(wo.result_status)}
                   </div>
 
+                  {(wo.actual_result || wo.actual_measurement) && (
+                    <div className="text-xs text-slate-800 line-clamp-1" title={`ผลวัดจริง: ${wo.actual_result || wo.actual_measurement}`}>
+                      <span className="text-slate-500 font-medium">ผลวัดจริง:</span> {wo.actual_result || wo.actual_measurement}
+                    </div>
+                  )}
+
                   {wo.certificate_no && (
                     <div className="text-xs flex items-center gap-1.5 flex-wrap">
                       <span className="text-slate-500 font-medium">ใบรับรอง:</span>{' '}
@@ -682,6 +709,12 @@ export const WorkOrderTable = ({
                           AMENDED
                         </span>
                       )}
+                    </div>
+                  )}
+
+                  {wo.traceability_ref && !wo.certificate_no && (
+                    <div className="text-xs text-slate-600 line-clamp-1" title={wo.traceability_ref}>
+                      <span className="text-slate-500 font-medium">Master:</span> {wo.traceability_ref}
                     </div>
                   )}
 
@@ -714,21 +747,37 @@ export const WorkOrderTable = ({
 
                 {/* Column 6: การจัดการ (Single Primary Action + More Menu via FloatingOverlay) */}
                 <td className="py-3 px-4 align-middle text-right" onClick={(e) => e.stopPropagation()}>
-                  <WorkOrderRowActions
-                    wo={wo}
-                    reqApproverLevel={reqApproverLevel}
-                    thresholds={thresholds}
-                    onRecordResult={onRecordResult}
-                    onApprove={onApprove}
-                    onReleaseHold={onReleaseHold}
-                    onReschedule={onReschedule}
-                    onReviewReschedule={onReviewReschedule}
-                    onReject={onReject}
-                    onRowClick={onRowClick}
-                    onAmend={onAmend}
-                    onCancel={onCancel}
-                    onViewDigitalRecord={onViewDigitalRecord}
-                  />
+                  <div className="inline-flex items-center justify-end gap-2">
+                    {(wo.status === 'CLOSED' || wo.status === 'SUSPENDED' || wo.performed_at) && onViewDigitalRecord && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onViewDigitalRecord(wo);
+                        }}
+                        className="min-h-[32px] h-8 inline-flex items-center gap-1.5 px-3 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 text-xs font-semibold hover:bg-indigo-100 transition-colors cursor-pointer motion-safe:active:scale-[0.98] select-none shadow-2xs whitespace-nowrap"
+                        title="ดูผล / ใบรับรอง"
+                      >
+                        <FileText size={13} className="text-indigo-600" />
+                        <span>📄 ดูผล / ใบรับรอง</span>
+                      </button>
+                    )}
+                    <WorkOrderRowActions
+                      wo={wo}
+                      reqApproverLevel={reqApproverLevel}
+                      thresholds={thresholds}
+                      onRecordResult={onRecordResult}
+                      onApprove={onApprove}
+                      onReleaseHold={onReleaseHold}
+                      onReschedule={onReschedule}
+                      onReviewReschedule={onReviewReschedule}
+                      onReject={onReject}
+                      onRowClick={onRowClick}
+                      onAmend={onAmend}
+                      onCancel={onCancel}
+                      onViewDigitalRecord={onViewDigitalRecord}
+                    />
+                  </div>
                 </td>
               </tr>
             );

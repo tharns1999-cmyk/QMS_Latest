@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { computeDueDateForMonth } from '../api/vccPlanApi';
 import AnnualPlanSideInspector from './AnnualPlanSideInspector';
+import { DigitalRecordModal } from './DigitalRecordModal';
 
 const MONTH_NAMES = [
   'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.',
@@ -60,6 +61,7 @@ export const AnnualPlanQuarterlyView = ({
 }) => {
   const [collapsedQuarters, setCollapsedQuarters] = useState({});
   const [inspectorItem, setInspectorItem] = useState(null);
+  const [digitalRecordWo, setDigitalRecordWo] = useState(null);
 
   const toggleQuarter = (qKey) => {
     setCollapsedQuarters((prev) => ({
@@ -306,6 +308,15 @@ export const AnnualPlanQuarterlyView = ({
           activePlan={activePlan}
           workOrders={workOrders}
           onClose={() => setInspectorItem(null)}
+          onViewDigitalRecord={(wo) => setDigitalRecordWo(wo)}
+        />
+      )}
+
+      {/* Digital Record Inspector Modal */}
+      {digitalRecordWo && (
+        <DigitalRecordModal
+          workOrder={digitalRecordWo}
+          onClose={() => setDigitalRecordWo(null)}
         />
       )}
     </div>

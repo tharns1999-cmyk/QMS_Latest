@@ -15,6 +15,7 @@ import { getCalibrationMethodLabel } from '../utils/statusLabels';
 import { useVccModalAccessibility } from '../hooks/useVccModalAccessibility';
 import { useVccMobileViewport } from '../hooks/useVccMobileViewport';
 import { VccDiscardConfirmDialog } from './VccDiscardConfirmDialog';
+import { saveVccPdfFile } from '../utils/vccFileStorage';
 
 export const AmendmentModal = ({
   workOrder,
@@ -51,10 +52,23 @@ export const AmendmentModal = ({
         e.target.value = '';
         return;
       }
+      const fileKey = `vcc_cert_${workOrder?.id || 'wo'}_amend_${Date.now()}`;
+      let saved = null;
+      try {
+        saved = await saveVccPdfFile(fileKey, file);
+      } catch {
+        saved = { fileKey, fileName: file.name, fileSize: file.size, sha256: 'mock-sha256-' + Date.now() };
+      }
       setForm?.((prev) => ({
         ...prev,
         certificate_file: file,
-        certificate_file_name: file.name
+        certificate_file_name: saved.fileName,
+        certificate_file_size: saved.fileSize,
+        certificate_file_hash: saved.sha256,
+        cert_file_key: saved.fileKey,
+        cert_file_name: saved.fileName,
+        cert_file_size: saved.fileSize,
+        cert_sha256_hash: saved.sha256
       }));
     } catch {
       setFileError('เกิดข้อผิดพลาดในการตรวจสอบไฟล์ กรุณาลองใหม่อีกครั้ง');

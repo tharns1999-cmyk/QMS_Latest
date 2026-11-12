@@ -20,6 +20,7 @@ import AnnualPlanMonthCell from './AnnualPlanMonthCell';
 import { isSavedPlanItem } from '../utils/planLabels';
 import AnnualPlanSideInspector from './AnnualPlanSideInspector';
 import { VccScrollIndicator } from './VccDesignSystem';
+import { DigitalRecordModal } from './DigitalRecordModal';
 
 const useDismiss = (open, onClose) => {
   const ref = useRef(null);
@@ -92,11 +93,13 @@ export const AnnualPlanMatrixTable = ({
   onQuickRemoveMonth,
   onToggleProvider,
   onUpdateDueDate,
-  onCreateWorkOrder
+  onCreateWorkOrder,
+  onViewDigitalRecord
 }) => {
   const [tableSearch, setTableSearch] = useState('');
   const [localCategory, setLocalCategory] = useState('');
   const [inspectorItem, setInspectorItem] = useState(null);
+  const [digitalRecordWo, setDigitalRecordWo] = useState(null);
   const [savingCellKey, setSavingCellKey] = useState('');
   const [confirmDeleteItem, setConfirmDeleteItem] = useState(null);
   const [filterOpen, setFilterOpen] = useState(false);
@@ -833,6 +836,18 @@ export const AnnualPlanMatrixTable = ({
           onOpenAddItem={onOpenAddItem}
           onDeleteItem={onDeleteItem}
           onOpenGroupWorkOrderCheck={onOpenGroupWorkOrderCheck}
+          onViewDigitalRecord={(wo) => {
+            if (onViewDigitalRecord) onViewDigitalRecord(wo);
+            else setDigitalRecordWo(wo);
+          }}
+        />
+      )}
+
+      {/* Digital Record Inspector Modal */}
+      {digitalRecordWo && (
+        <DigitalRecordModal
+          workOrder={digitalRecordWo}
+          onClose={() => setDigitalRecordWo(null)}
         />
       )}
     </div>
