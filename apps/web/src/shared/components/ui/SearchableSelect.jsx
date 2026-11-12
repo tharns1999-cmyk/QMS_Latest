@@ -328,7 +328,6 @@ export const SearchableSelect = ({
         required={required}
         disabled={disabled}
         aria-label={ariaLabel}
-        title={title}
         tabIndex={-1}
         className="sr-only opacity-0 absolute pointer-events-none -z-10"
         style={{
