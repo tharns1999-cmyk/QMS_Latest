@@ -8,6 +8,7 @@ import { resolvePlanCode } from '../utils/planLabels';
 import { useVccModalAccessibility } from '../hooks/useVccModalAccessibility';
 import { VccDiscardConfirmDialog } from './VccDiscardConfirmDialog';
 import { AnnualPlanAuditTrailTimeline } from './AnnualPlanAuditTrailTimeline';
+import { SearchableSelect } from '../../../shared/components/ui/SearchableSelect';
 
 const PLAN_AUDIT_LABELS = {
   VCC_PLAN_CREATED: { label: 'สร้างแผนประจำปีใหม่', badge: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
@@ -531,6 +532,26 @@ export const PlanItemModal = ({
     discardMessage: 'คุณมีข้อมูลตารางทวนสอบที่กำลังกำหนด ต้องการยกเลิกและปิดหน้าต่างใช่หรือไม่?'
   });
 
+  const assetOptions = useMemo(() => {
+    return (activeAssets || [])
+      .filter((a) => Number(a.is_group) === 0 || a.group_nature === 'COMPOSITE_SET')
+      .map((a) => {
+        const isSet = a.group_nature === 'COMPOSITE_SET';
+        const sub = [
+          a.serial_no ? `S/N: ${a.serial_no}` : null,
+          a.model ? `รุ่น: ${a.model}` : null
+        ].filter(Boolean).join(' • ');
+
+        return {
+          value: a.id,
+          label: `${a.asset_code} — ${a.name}${isSet ? ' (ชุดเครื่องมือ)' : ''}`,
+          subLabel: sub || null,
+          badge: isSet ? 'ชุดเครื่องมือ' : a.department,
+          keywords: [a.asset_code, a.name, a.serial_no, a.model, a.department].filter(Boolean)
+        };
+      });
+  }, [activeAssets]);
+
   if (!open || !plan) return null;
 
   const handleAssetChange = (newAssetId) => {
@@ -610,21 +631,14 @@ export const PlanItemModal = ({
             <label className="block text-sm font-semibold text-slate-700 mb-1.5">
               เครื่องมือวัด / ชุดเครื่องมือ (เฉพาะที่ใช้งานปกติ) <span className="text-rose-600">*</span>
             </label>
-            <select
+            <SearchableSelect
               required
+              ariaLabel="เครื่องมือวัด / ชุดเครื่องมือ"
               value={itemForm.asset_id}
-              onChange={(e) => handleAssetChange(e.target.value)}
-              className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium bg-white"
-            >
-              <option value="" disabled>-- เลือกเครื่องมือจากทะเบียน --</option>
-              {activeAssets
-                .filter((a) => Number(a.is_group) === 0 || a.group_nature === 'COMPOSITE_SET')
-                .map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.asset_code} — {a.name} {a.group_nature === 'COMPOSITE_SET' ? '(ชุดเครื่องมือ)' : ''}
-                  </option>
-                ))}
-            </select>
+              onChange={(val) => handleAssetChange(val)}
+              options={assetOptions}
+              placeholder="-- เลือกเครื่องมือจากทะเบียน --"
+            />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

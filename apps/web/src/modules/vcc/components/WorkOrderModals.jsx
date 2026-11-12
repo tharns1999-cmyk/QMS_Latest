@@ -6,6 +6,7 @@ import { useVccMobileViewport } from '../hooks/useVccMobileViewport';
 import { VccDiscardConfirmDialog } from './VccDiscardConfirmDialog';
 import { getUserDeptCodes, canReadAllVccDepartments } from '../utils/departmentScope';
 import useStore from '../../../store/useStore';
+import { SearchableSelect } from '../../../shared/components/ui/SearchableSelect';
 
 const serializeCreateForm = (f) => JSON.stringify({
   mode: f?.mode || 'ADHOC',
@@ -55,6 +56,53 @@ export const CreateWorkOrderModal = ({
       return userDepts.includes(dept);
     });
   }, [approvedPlans, canReadAll, userDepts]);
+
+  const approvedPlanOptions = useMemo(() => {
+    return filteredApprovedPlans.map((p) => ({
+      value: p.id,
+      label: `ปี ${p.plan_year} • ${p.department} (${p.title})`,
+      subLabel: p.document_code || '',
+      badge: p.department,
+      keywords: [p.plan_year, p.department, p.title, p.document_code].filter(Boolean)
+    }));
+  }, [filteredApprovedPlans]);
+
+  const planItemOptions = useMemo(() => {
+    return (planItems || []).map((it) => {
+      const isLegacyGroup = Number(it.is_group) === 1 && it.group_nature !== 'COMPOSITE_SET';
+      const isSet = it.group_nature === 'COMPOSITE_SET';
+      return {
+        value: it.id,
+        label: `${it.asset_code} — ${it.asset_name}`,
+        subLabel: isLegacyGroup
+          ? 'กลุ่มเดิมในประวัติ — ต้องเลือกรหัสเครื่องมือจริง'
+          : isSet
+          ? 'ชุดเครื่องมือ (Composite Set)'
+          : it.remarks || it.acceptance_criteria || '',
+        badge: isSet ? 'ชุดเครื่องมือ' : isLegacyGroup ? 'กลุ่มเดิม' : null,
+        keywords: [it.asset_code, it.asset_name, it.group_nature, it.remarks].filter(Boolean)
+      };
+    });
+  }, [planItems]);
+
+  const individualAssetOptions = useMemo(() => {
+    return filteredIndividualAssets.map((a) => {
+      const prefix = showDeptPrefix && a.department ? `[${a.department}] ` : '';
+      const isSet = a.group_nature === 'COMPOSITE_SET';
+      const sub = [
+        a.serial_no ? `S/N: ${a.serial_no}` : null,
+        a.model ? `รุ่น: ${a.model}` : null
+      ].filter(Boolean).join(' • ');
+
+      return {
+        value: a.id,
+        label: `${prefix}${a.asset_code} — ${a.name}${isSet ? ' (ชุดเครื่องมือ)' : ''}`,
+        subLabel: sub || null,
+        badge: isSet ? 'ชุดเครื่องมือ' : a.department,
+        keywords: [prefix, a.asset_code, a.name, a.serial_no, a.model, a.department].filter(Boolean)
+      };
+    });
+  }, [filteredIndividualAssets, showDeptPrefix]);
 
   const isCurrentlyOpen = Boolean(open);
   const [prevOpen, setPrevOpen] = useState(isCurrentlyOpen);
@@ -181,47 +229,34 @@ export const CreateWorkOrderModal = ({
             <>
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-1.5">แผนประจำปีที่อนุมัติแล้ว</label>
-                <select
+                <SearchableSelect
                   required
                   value={form.plan_id}
-                  onChange={(e) => setForm({ ...form, plan_id: e.target.value, plan_item_id: '', asset_id: '' })}
-                  className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium bg-white"
-                >
-                  <option value="">-- เลือกแผนประจำปีที่อนุมัติแล้ว --</option>
-                  {filteredApprovedPlans.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      ปี {p.plan_year} • {p.department} ({p.title})
-                    </option>
-                  ))}
-                </select>
+                  onChange={(val) => setForm({ ...form, plan_id: val, plan_item_id: '', asset_id: '' })}
+                  options={approvedPlanOptions}
+                  placeholder="-- เลือกแผนประจำปีที่อนุมัติแล้ว --"
+                  ariaLabel="แผนประจำปีที่อนุมัติแล้ว"
+                />
               </div>
 
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-1.5">รายการในแผนประจำปี</label>
-                <select
+                <SearchableSelect
                   required
                   value={form.plan_item_id}
-                  onChange={(e) => {
-                    const item = planItems.find((i) => i.id === e.target.value);
+                  onChange={(val) => {
+                    const item = planItems.find((i) => i.id === val);
                     setForm({
                       ...form,
-                      plan_item_id: e.target.value,
+                      plan_item_id: val,
                       planned_month: item?.planned_months?.[0] || 1,
                       child_asset_id: ''
                     });
                   }}
-                  className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium bg-white"
-                >
-                  <option value="">-- เลือกรายการเครื่องมือในแผน --</option>
-                  {planItems.map((it) => {
-                    const isLegacyGroup = Number(it.is_group) === 1 && it.group_nature !== 'COMPOSITE_SET';
-                    return (
-                      <option key={it.id} value={it.id}>
-                        {it.asset_code} — {it.asset_name} {isLegacyGroup ? '(กลุ่มเดิมในประวัติ — ต้องเลือกรหัสเครื่องมือจริง)' : it.group_nature === 'COMPOSITE_SET' ? '(ชุดเครื่องมือ)' : ''}
-                      </option>
-                    );
-                  })}
-                </select>
+                  options={planItemOptions}
+                  placeholder="-- เลือกรายการเครื่องมือในแผน --"
+                  ariaLabel="รายการในแผนประจำปี"
+                />
               </div>
 
               {selectedPlanItem && (
@@ -271,24 +306,14 @@ export const CreateWorkOrderModal = ({
                 <label className="block text-sm font-semibold text-slate-700 mb-1.5">
                   เครื่องมือวัด / ชุดเครื่องมือที่ใช้งานปกติ <span className="text-rose-600">*</span>
                 </label>
-                <select
+                <SearchableSelect
                   required
-                  aria-label="เลือกเครื่องมือรายตัว"
+                  ariaLabel="เลือกเครื่องมือรายตัว"
                   value={form.asset_id}
-                  onChange={(e) => setForm({ ...form, asset_id: e.target.value })}
-                  className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium bg-white"
-                >
-                  <option value="">-- เลือกเครื่องมือหรือชุดเครื่องมือที่ใช้งานปกติ --</option>
-                  {filteredIndividualAssets.map((a) => {
-                    const prefix = showDeptPrefix && a.department ? `[${a.department}] ` : '';
-                    const isSet = a.group_nature === 'COMPOSITE_SET' ? ' (ชุดเครื่องมือ)' : '';
-                    return (
-                      <option key={a.id} value={a.id}>
-                        {prefix}{a.asset_code} — {a.name}{isSet}
-                      </option>
-                    );
-                  })}
-                </select>
+                  onChange={(val) => setForm({ ...form, asset_id: val })}
+                  options={individualAssetOptions}
+                  placeholder="-- เลือกเครื่องมือหรือชุดเครื่องมือที่ใช้งานปกติ --"
+                />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
