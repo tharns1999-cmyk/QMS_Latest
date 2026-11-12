@@ -212,11 +212,13 @@ describe('VCC Digital Record Inspector & PDF Preview Engine', () => {
         />
       );
 
-      // File info card should now display file name and SHA-256
+      // File info card should now display file name and verification status
       await waitFor(() => {
         expect(screen.getByText('test_lab_certificate.pdf')).toBeInTheDocument();
       });
-      expect(screen.getByText(/SHA-256 Hash/i)).toBeInTheDocument();
+      expect(screen.getByText(/ตรวจสอบไฟล์ PDF สมบูรณ์พร้อมบันทึก/i)).toBeInTheDocument();
+      // Ensure SHA-256 is kept internally in form state
+      expect(formState.cert_sha256_hash.length).toBe(64);
 
       // Check preview button [ 👁️ ดูไฟล์ตัวอย่าง ]
       const previewBtn = screen.getByRole('button', { name: /ดูไฟล์ตัวอย่าง/i });
