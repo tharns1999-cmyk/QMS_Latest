@@ -28,6 +28,7 @@ import {
 import toast from 'react-hot-toast';
 import NotificationPopover from './NotificationPopover';
 import { isActionableTask, isAssignedToSomeoneElse, isSameDepartment } from '../../modules/dcc/utils/taskFilter';
+import { SearchableSelect } from '../../shared/components/ui/SearchableSelect';
 import { isSystemAdmin } from '../../modules/admin/adminAccess';
 import { isAdminPath, ADMIN_MASTER_DATA, ADMIN_AUDIT_LOG } from '../../modules/admin/adminRoutes';
 import { evaluateDocumentReviewStatus } from '../../modules/dcc/utils/documentUtils';
@@ -148,6 +149,16 @@ const Sidebar = ({ isOpen = false, onClose = () => {} }) => {
     });
     return Array.from(map.values());
   }, [masterUsers]);
+
+  const switcherOptions = useMemo(() => {
+    return switcherUsers.map((user) => ({
+      value: user.id || user.empId,
+      label: `${user.name} (${user.department}) L${user.level}`,
+      subLabel: user.position || null,
+      badge: user.department,
+      keywords: [user.name, user.department, `L${user.level}`, user.position].filter(Boolean)
+    }));
+  }, [switcherUsers]);
 
   const [isCleanSlateOpen, setIsCleanSlateOpen] = useState(false);
   const [changingPassword, setChangingPassword] = useState(false);
@@ -622,21 +633,19 @@ const Sidebar = ({ isOpen = false, onClose = () => {} }) => {
             </div>
           ) : (
           <div className="relative">
-            <select
-              className="w-full h-8 px-2.5 text-xs font-medium text-slate-800 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all cursor-pointer leading-normal shadow-none"
+            <SearchableSelect
+              size="sm"
               value={currentUser?.id || ''}
-              onChange={(e) => {
+              onChange={(val) => {
                 const fn = switchUser || setCurrentUser;
-                fn(e.target.value);
+                fn(val);
               }}
+              options={switcherOptions}
+              placeholder="สลับผู้ใช้งานจำลอง..."
+              ariaLabel="สลับผู้ใช้งาน / บทบาทจำลอง"
               title="สลับผู้ใช้งาน / บทบาทจำลอง"
-            >
-              {switcherUsers.map(user => (
-                <option key={user.id} value={user.id}>
-                  {user.name} ({user.department}) L{user.level}
-                </option>
-              ))}
-            </select>
+              autoFlip={true}
+            />
           </div>
           )}
         </div>
