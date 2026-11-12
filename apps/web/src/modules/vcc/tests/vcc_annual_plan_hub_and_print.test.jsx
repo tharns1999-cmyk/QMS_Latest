@@ -271,8 +271,8 @@ describe('VCC Annual Plan Hub & Spoke Architecture and ISO Print View', () => {
     });
   });
 
-  describe('2. AnnualPlanPrintView (Corporate Banner, Dual-Row Matrix & Clean Signatures)', () => {
-    it('แสดงหัวกระดาษแบนเนอร์ บริษัท เศรษฐชล จำกัด 3 ภาษา และไม่แสดงรหัสเอกสาร/Rev/วันที่มีผล', () => {
+  describe('2. AnnualPlanPrintView (Corporate Banner, Plan Control Box, Multi-Page A4 Pagination & Signatories)', () => {
+    it('แสดงหัวกระดาษแบนเนอร์ บริษัท เศรษฐชล จำกัด กล่องข้อมูลควบคุมแผน 4 แถวมุมขวาบน และตาราง table-fixed แยกแถว Plan/Act.', () => {
       const onClose = vi.fn();
       render(
         <AnnualPlanPrintView
@@ -287,6 +287,16 @@ describe('VCC Annual Plan Hub & Spoke Architecture and ISO Print View', () => {
       expect(bannerImg).toBeInTheDocument();
       expect(bannerImg).toHaveAttribute('src', '/banner.png');
 
+      // กล่องข้อมูลควบคุมแผน 4 แถวมุมขวาบน
+      expect(screen.getByText('เลขที่แผน (Plan No.)')).toBeInTheDocument();
+      expect(screen.getByText('VCC-AP-QC-2026')).toBeInTheDocument();
+      expect(screen.getByText('แก้ไขครั้งที่ (Rev.)')).toBeInTheDocument();
+      expect(screen.getByText('Rev.01')).toBeInTheDocument();
+      expect(screen.getByText('วันที่บังคับใช้')).toBeInTheDocument();
+      expect(screen.getByText('10/01/2569')).toBeInTheDocument();
+      expect(screen.getByText('แผ่นที่ (Page)')).toBeInTheDocument();
+      expect(screen.getByText('1 / 1')).toBeInTheDocument();
+
       // ชื่อเรื่องเอกสาร
       expect(screen.getByText('แผนการทวนสอบและสอบเทียบเครื่องมือวัด ประจำปี 2026 (พ.ศ. 2569)')).toBeInTheDocument();
       expect(screen.getByText('Annual Equipment Verification & Calibration Plan')).toBeInTheDocument();
@@ -295,14 +305,16 @@ describe('VCC Annual Plan Hub & Spoke Architecture and ISO Print View', () => {
       // แถบหัว Modal (ตัวอย่างก่อนพิมพ์: แผนการทวนสอบและสอบเทียบประจำปี 2569)
       expect(screen.getByText('ตัวอย่างก่อนพิมพ์: แผนการทวนสอบและสอบเทียบประจำปี 2569')).toBeInTheDocument();
 
-      // ตัด Metadata และข้อความผูกมัดออกทั้งหมด (Audit-Safe Clean-up)
-      expect(screen.queryByText('FM-QC-42')).not.toBeInTheDocument();
-      expect(screen.queryByText('Rev.01')).not.toBeInTheDocument();
-      expect(screen.queryByText('2026-01-15')).not.toBeInTheDocument();
+      // ไม่มีข้อความผูกมัดของระบบอื่นๆ
       expect(screen.queryByText(/เกณฑ์วันครบกำหนด/)).not.toBeInTheDocument();
       expect(screen.queryByText(/จำนวนเครื่องมือทั้งหมดในแผน/)).not.toBeInTheDocument();
       expect(screen.queryByText(/ISO 9001:2015 Clause 7.1.5/)).not.toBeInTheDocument();
       expect(screen.queryByText(/เอกสารควบคุมฉบับอิเล็กทรอนิกส์/)).not.toBeInTheDocument();
+
+      // ตรวจสอบโครงสร้างตาราง table-fixed ป้องกันหมายเหตุตกขอบขวา
+      const matrixTable = screen.getByText('รายการเครื่องมือวัด').closest('table');
+      expect(matrixTable).toHaveClass('table-fixed');
+      expect(matrixTable).toHaveClass('w-full');
 
       // รายการเครื่องมือ
       expect(screen.getByText('CAL-001')).toBeInTheDocument();
@@ -319,6 +331,105 @@ describe('VCC Annual Plan Hub & Spoke Architecture and ISO Print View', () => {
       expect(screen.getByText('ผู้จัดทำ (Prepared By)')).toBeInTheDocument();
       expect(screen.getByText('ผู้ทบทวน (Reviewed By)')).toBeInTheDocument();
       expect(screen.getByText('ผู้อนุมัติ (Approved By)')).toBeInTheDocument();
+    });
+
+    it('แสดงเหตุผลการแก้ไขเมื่อเป็นฉบับปรับปรุง (revision_no > 1) และดึงเกณฑ์ยอมรับจากข้อมูลเครื่องมือ (tolerance)', () => {
+      const revisedPlan = {
+        ...mockPlans[0],
+        plan_code: 'VCC-AP-QC-2026',
+        revision_no: 2,
+        revision_reason: 'เพิ่มเครื่องมือใหม่เข้าสายการผลิต'
+      };
+      const itemsWithAssetFallback = [
+        {
+          id: 'item-fallback-1',
+          asset_id: 'ast-tol-1',
+          asset_code: 'SCALE-09',
+          asset_name: 'Digital Balance',
+          provider_name: 'EXTERNAL',
+          planned_months: [3],
+          actual_months: [3],
+          remarks: 'ข้อความหมายเหตุแบบยาวเพื่อทดสอบการขึ้นบรรทัดใหม่ไม่ให้ตกขอบขวา'
+        }
+      ];
+      const assetsList = [
+        {
+          id: 'ast-tol-1',
+          asset_code: 'SCALE-09',
+          tolerance: '±0.05 g'
+        }
+      ];
+
+      render(
+        <AnnualPlanPrintView
+          plan={revisedPlan}
+          items={itemsWithAssetFallback}
+          assets={assetsList}
+        />
+      );
+
+      expect(screen.getByText('Rev.02')).toBeInTheDocument();
+      expect(screen.getByText(/เหตุผลการแก้ไข \(Rev\.02\):/)).toBeInTheDocument();
+      expect(screen.getByText(/เพิ่มเครื่องมือใหม่เข้าสายการผลิต/)).toBeInTheDocument();
+      expect(screen.getByText('±0.05 g')).toBeInTheDocument();
+    });
+
+    it('ตัดแบ่งหน้ากระดาษ A4 แนวนอนอัตโนมัติ (6 รายการ/หน้า) พร้อมเลขหน้า หัวกระดาษ และกล่องลายเซ็น 3 ช่องครบทุกหน้า', () => {
+      const fourteenItems = Array.from({ length: 14 }, (_, idx) => ({
+        id: `multi-item-${idx + 1}`,
+        asset_id: `ast-m-${idx + 1}`,
+        asset_code: `EQ-${String(idx + 1).padStart(3, '0')}`,
+        asset_name: `Measuring Device ${idx + 1}`,
+        acceptance_criteria: `±0.${idx + 1} mm`,
+        provider_name: 'INTERNAL',
+        frequency_label: 'ปีละ 1 ครั้ง',
+        planned_months: [(idx % 12) + 1],
+        actual_months: idx < 6 ? [(idx % 12) + 1] : []
+      }));
+
+      render(
+        <AnnualPlanPrintView
+          plan={mockPlans[0]}
+          items={fourteenItems}
+        />
+      );
+
+      // 14 รายการ / 6 รายการต่อหน้า = 3 แผ่น A4 แนวนอน
+      const sheet1 = screen.getByTestId('a4-landscape-sheet-1');
+      const sheet2 = screen.getByTestId('a4-landscape-sheet-2');
+      const sheet3 = screen.getByTestId('a4-landscape-sheet-3');
+
+      expect(sheet1).toHaveClass('print:break-after-page');
+      expect(sheet2).toHaveClass('print:break-after-page');
+      expect(sheet3).toHaveClass('print:break-after-auto');
+
+      // ตรวจสอบเลขหน้า 1 / 3, 2 / 3, 3 / 3 และองค์ประกอบครบทั้ง 3 หน้า
+      expect(within(sheet1).getByText('1 / 3')).toBeInTheDocument();
+      expect(within(sheet2).getByText('2 / 3')).toBeInTheDocument();
+      expect(within(sheet3).getByText('3 / 3')).toBeInTheDocument();
+
+      // ตรวจสอบลำดับที่รันต่อเนื่องข้ามหน้า (หน้า 1: EQ-001..006, หน้า 2: EQ-007..012, หน้า 3: EQ-013..014)
+      expect(within(sheet1).getByText('EQ-001')).toBeInTheDocument();
+      expect(within(sheet1).getByText('EQ-006')).toBeInTheDocument();
+      expect(within(sheet1).queryByText('EQ-007')).not.toBeInTheDocument();
+
+      expect(within(sheet2).getByText('EQ-007')).toBeInTheDocument();
+      expect(within(sheet2).getByText('EQ-012')).toBeInTheDocument();
+      expect(within(sheet2).getByText('7')).toBeInTheDocument();
+      expect(within(sheet2).getByText('12')).toBeInTheDocument();
+
+      expect(within(sheet3).getByText('EQ-013')).toBeInTheDocument();
+      expect(within(sheet3).getByText('EQ-014')).toBeInTheDocument();
+      expect(within(sheet3).getByText('13')).toBeInTheDocument();
+      expect(within(sheet3).getByText('14')).toBeInTheDocument();
+
+      // ทุกหน้าต้องมีแบนเนอร์และกล่องลายเซ็นครบ 3 ช่องเสมอ
+      [sheet1, sheet2, sheet3].forEach((sheet) => {
+        expect(within(sheet).getByAltText('บริษัท เศรษฐชล จำกัด (SETHACHON CO., LTD.)')).toBeInTheDocument();
+        expect(within(sheet).getByText('ผู้จัดทำ (Prepared By)')).toBeInTheDocument();
+        expect(within(sheet).getByText('ผู้ทบทวน (Reviewed By)')).toBeInTheDocument();
+        expect(within(sheet).getByText('ผู้อนุมัติ (Approved By)')).toBeInTheDocument();
+      });
     });
 
     it('ไม่แสดงคำว่า "ฝ่ายฝ่าย..." ซ้ำซ้อน หากชื่อแผนกมีคำว่า "ฝ่าย" นำหน้าอยู่แล้ว และจัดการคำว่า "แผนก" อย่างถูกต้อง', () => {

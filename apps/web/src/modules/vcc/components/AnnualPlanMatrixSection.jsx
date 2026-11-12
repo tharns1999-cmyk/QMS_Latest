@@ -1222,6 +1222,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [], currentUser: propUser
         <AnnualPlanPrintView
           plan={printPlan}
           items={printPlanItems}
+          assets={activeAssets}
           onClose={() => setPrintPlan(null)}
           onExportExcel={() => handleExportPlanExcel(printPlan)}
         />
