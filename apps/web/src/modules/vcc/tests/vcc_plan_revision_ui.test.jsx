@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import AnnualPlanWorkspaceHeader from '../components/AnnualPlanWorkspaceHeader';
 import { PlanRevisionModal } from '../components/AnnualPlanModals';
@@ -76,5 +76,36 @@ describe('Plan revision dialog', () => {
     const { setReason } = setup();
     fireEvent.change(screen.getByLabelText(/เหตุผลการขอปรับปรุงแผน/), { target: { value: 'เปลี่ยนรอบ' } });
     expect(setReason).toHaveBeenCalledWith('เปลี่ยนรอบ');
+  });
+});
+
+describe('Revision dropdown switcher', () => {
+  it('displays both Rev.01 and Rev.02 and invokes onSelectPlan when switched', () => {
+    const rev01 = { id: 'p1', plan_year: 2027, department: 'QC', revision: '01', status: 'APPROVED', is_current: 1 };
+    const rev02 = { id: 'p2', plan_year: 2027, department: 'QC', revision: '02', status: 'DRAFT', is_current: 0, parent_plan_id: 'p1' };
+    const onSelectPlan = vi.fn();
+
+    render(
+      <AnnualPlanWorkspaceHeader
+        statusTab="DRAFT"
+        setStatusTab={() => {}}
+        activePlan={rev02}
+        plans={[rev02]}
+        planRevisions={[rev01, rev02]}
+        selectedPlanId="p2"
+        onSelectPlan={onSelectPlan}
+        planItems={[]}
+      />
+    );
+
+    const select = screen.getByLabelText('เลือกแผนประจำปี');
+    expect(select).toBeInTheDocument();
+    const options = within(select).getAllByRole('option');
+    expect(options).toHaveLength(2);
+    expect(options[0]).toHaveTextContent(/Rev\.01/);
+    expect(options[1]).toHaveTextContent(/Rev\.02/);
+
+    fireEvent.change(select, { target: { value: 'p1' } });
+    expect(onSelectPlan).toHaveBeenCalledWith('p1');
   });
 });
