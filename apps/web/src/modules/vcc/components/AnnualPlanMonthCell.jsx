@@ -106,7 +106,7 @@ export const AnnualPlanMonthCell = ({
   ];
 
   const hasHoldOrNc = allCellWos.some((w) => w.nc_status === 'OPEN' || w.result_status === 'FAIL');
-  const hasClosedPass = (cycleWo?.status === 'CLOSED' && cycleWo?.result_status === 'PASS') ||
+  const hasClosedPass = (cycleWo?.status === 'CLOSED' && cycleWo?.result_status === 'PASS' && !cycleIsDifferentMonth) ||
     externalActualWos.some((w) => w.status === 'CLOSED' && w.result_status === 'PASS');
   const hasOpenWo = allCellWos.some((w) => w.status === 'OPEN' || w.status === 'PENDING_REVIEW');
   const hasAnyActivity = isPlanned || allCellWos.length > 0;
@@ -266,7 +266,7 @@ export const AnnualPlanMonthCell = ({
                     ? 'ตรวจไม่ผ่าน / ระงับใช้ (NC)'
                     : cycleWo?.status === 'CLOSED'
                     ? cycleIsDifferentMonth
-                      ? `ตรวจจริง ${cycleActualDate} (${THAI_MONTH_NAMES[cycleActualMonth - 1]} - ล่าช้ากว่าแผน)`
+                      ? `รอบแผนเดือน ${month} ➔ ตรวจจริง ${cycleActualDate} (${THAI_MONTH_NAMES_SHORT[cycleActualMonth - 1]})`
                       : 'ตรวจรับปิดงานแล้วตามกำหนด'
                     : cycleWo?.status === 'PENDING_REVIEW'
                     ? 'ส่งผลแล้ว รอผู้ตรวจรับ'
@@ -280,7 +280,9 @@ export const AnnualPlanMonthCell = ({
                   cycleWo?.nc_status === 'OPEN' || cycleWo?.result_status === 'FAIL'
                     ? 'bg-rose-50 text-rose-700 border-rose-300 font-bold'
                     : cycleWo?.status === 'CLOSED'
-                    ? 'bg-emerald-50 text-emerald-700 border-emerald-300 font-bold'
+                    ? cycleIsDifferentMonth
+                      ? 'border-dashed border-slate-300 bg-slate-50/90 text-slate-600 hover:bg-slate-100/90'
+                      : 'bg-emerald-50 text-emerald-700 border-emerald-300 font-bold'
                     : cycleWo?.status === 'PENDING_REVIEW'
                     ? 'bg-amber-50 text-amber-800 border-amber-300 font-semibold'
                     : cycleWo?.status === 'OPEN'
@@ -296,10 +298,16 @@ export const AnnualPlanMonthCell = ({
                     <span>NC</span>
                   </span>
                 ) : cycleWo?.status === 'CLOSED' ? (
-                  <span className="inline-flex items-center gap-0.5" title={cycleIsDifferentMonth ? `ทำจริง ${cycleActualDate}` : undefined}>
-                    <CheckCircle2 size={11} className="text-emerald-600 shrink-0" />
-                    <span>✓</span>
-                  </span>
+                  cycleIsDifferentMonth ? (
+                    <span className="inline-flex items-center gap-0.5" title={`ทำจริง ${cycleActualDate}`}>
+                      <span>แผน ➔ {THAI_MONTH_NAMES_SHORT[cycleActualMonth - 1]}</span>
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-0.5">
+                      <CheckCircle2 size={11} className="text-emerald-600 shrink-0" />
+                      <span>✓ เสร็จสิ้น</span>
+                    </span>
+                  )
                 ) : cycleWo?.status === 'PENDING_REVIEW' ? (
                   <span className="inline-flex items-center gap-0.5">
                     <Clock size={11} className="text-amber-600 shrink-0" />
@@ -347,8 +355,8 @@ export const AnnualPlanMonthCell = ({
                       : 'bg-amber-50 text-amber-800 border-amber-300'
                   }`}
                 >
-                  {isClosed ? <CheckCircle2 size={11} className="text-emerald-600" /> : <Clock size={11} />}
-                  <span>✓ ({pMonth ? THAI_MONTH_NAMES_SHORT[pMonth - 1] : 'นอก'})</span>
+                  {isClosed ? <CheckCircle2 size={11} className="text-emerald-600 shrink-0" /> : <Clock size={11} />}
+                  <span>✓ ทำจริง {pMonth ? `(แผน ${THAI_MONTH_NAMES_SHORT[pMonth - 1]})` : '(นอกแผน)'}</span>
                 </button>
               );
             })}

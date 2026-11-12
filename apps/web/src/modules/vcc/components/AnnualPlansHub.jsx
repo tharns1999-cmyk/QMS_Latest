@@ -32,6 +32,32 @@ import DeletePlanModal from './DeletePlanModal';
 
 export { resolvePlanCode, resolveDigitalPlanCode };
 
+export const isPlanSuperseded = (plan, allPlans = []) => {
+  if (!plan) return false;
+  if (String(plan.effective_status || '').toUpperCase() === 'SUPERSEDED') return true;
+  if (plan.status === 'APPROVED' && (plan.is_current === 0 || plan.is_current === false || plan.is_current === '0')) {
+    return true;
+  }
+  if (Array.isArray(allPlans) && allPlans.length > 0 && plan.status === 'APPROVED') {
+    const hasHigherApprovedRev = allPlans.some((other) => {
+      if (!other || other.id === plan.id) return false;
+      const sameYear = Number(other.plan_year) === Number(plan.plan_year);
+      const sameDept = String(other.department || '').toUpperCase() === String(plan.department || '').toUpperCase();
+      if (!sameYear || !sameDept) return false;
+      if (other.status !== 'APPROVED') return false;
+      if (other.is_current === 1 || other.is_current === true || String(other.effective_status || '').toUpperCase() === 'CURRENT' || String(other.effective_status || '').toUpperCase() === 'EFFECTIVE') {
+        const otherRev = parseInt(other.revision, 10);
+        const thisRev = parseInt(plan.revision, 10);
+        if (!Number.isNaN(otherRev) && !Number.isNaN(thisRev) && otherRev > thisRev) return true;
+        if (Number(plan.is_current ?? 1) === 0) return true;
+      }
+      return false;
+    });
+    if (hasHigherApprovedRev) return true;
+  }
+  return false;
+};
+
 const STATUS_ICON_MAP = {
   ShieldCheck,
   Clock,
@@ -156,6 +182,9 @@ export const AnnualPlansHub = ({
   // Filter plans based on toolbar criteria
   const filteredPlans = useMemo(() => {
     return plans.filter((plan) => {
+      // Hide superseded plans from main directory table
+      if (isPlanSuperseded(plan, plans)) return false;
+
       // Year filter
       if (filterYear && String(plan.plan_year) !== String(filterYear)) return false;
 
@@ -212,12 +241,14 @@ export const AnnualPlansHub = ({
 
   // KPI calculations
   const kpiStats = useMemo(() => {
-    const totalPlans = scopedPlans.length;
-    const activeCount = scopedPlans.filter((p) => p.status === 'APPROVED').length;
-    const pendingCount = scopedPlans.filter((p) => ['PENDING_REVIEW', 'PENDING_APPROVAL'].includes(p.status)).length;
-    const draftCount = scopedPlans.filter((p) => ['DRAFT', 'REJECTED', 'RETURNED'].includes(p.status)).length;
+    // Only calculate KPI over active/current non-superseded plans
+    const currentScopedPlans = scopedPlans.filter((p) => !isPlanSuperseded(p, plans));
+    const totalPlans = currentScopedPlans.length;
+    const activeCount = currentScopedPlans.filter((p) => p.status === 'APPROVED').length;
+    const pendingCount = currentScopedPlans.filter((p) => ['PENDING_REVIEW', 'PENDING_APPROVAL'].includes(p.status)).length;
+    const draftCount = currentScopedPlans.filter((p) => ['DRAFT', 'REJECTED', 'RETURNED'].includes(p.status)).length;
 
-    // Coverage calculation
+    // Coverage calculation: count instruments only from current plans, no double counting!
     const scopedAssets = activeAssets.filter((a) => {
       const aDept = String(a.department || '').toUpperCase();
       if (activeFilterDept === 'MY_DEPTS') return userDepts.includes(aDept);
@@ -226,11 +257,11 @@ export const AnnualPlansHub = ({
       return true;
     });
     const totalCalibratable = scopedAssets.length;
-    const plannedAssetCount = scopedPlans.reduce((acc, p) => acc + Number(p.planned_items_count || p.item_count || 0), 0);
+    const plannedAssetCount = currentScopedPlans.reduce((acc, p) => acc + Number(p.planned_items_count || p.item_count || 0), 0);
     const coveragePct = totalCalibratable > 0 ? Math.min(100, Math.round((plannedAssetCount / totalCalibratable) * 100)) : 100;
 
     return { totalPlans, activeCount, pendingCount, draftCount, coveragePct, totalCalibratable, plannedAssetCount };
-  }, [scopedPlans, activeAssets, activeFilterDept, userDepts, canReadAll]);
+  }, [scopedPlans, plans, activeAssets, activeFilterDept, userDepts, canReadAll]);
 
   const kpiCards = useMemo(() => [
     {
@@ -274,7 +305,17 @@ export const AnnualPlansHub = ({
     }
   ], [kpiStats]);
 
-  const getStatusBadge = (status) => {
+  const getStatusBadge = (planOrStatus) => {
+    const isPlanObj = typeof planOrStatus === 'object' && planOrStatus !== null;
+    const status = isPlanObj ? planOrStatus.status : planOrStatus;
+    const isSuperseded = isPlanObj && isPlanSuperseded(planOrStatus, plans);
+    if (isSuperseded) {
+      return (
+        <span className="inline-flex items-center gap-1 text-[11px] font-semibold border px-2.5 py-0.5 rounded-full text-slate-700 bg-slate-100 border-slate-300">
+          <Clock size={12} className="text-slate-500" /> ถูกแทนที่ (Superseded)
+        </span>
+      );
+    }
     const cfg = getPlanStatusConfig(status);
     const IconComponent = STATUS_ICON_MAP[cfg.iconName] || Edit3;
     return (
@@ -516,7 +557,7 @@ export const AnnualPlansHub = ({
 
                       {/* Status Badge */}
                       <td className="align-middle py-3.5 px-3.5">
-                        {getStatusBadge(plan.status)}
+                        {getStatusBadge(plan)}
                       </td>
 
                       {/* Coverage with sleek Mini Progress Bar */}

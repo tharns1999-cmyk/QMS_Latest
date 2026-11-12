@@ -38,7 +38,7 @@ describe('VCC FM-QC-46 Interactive Planning Board Edge Cases & Exceptions', () =
     vi.clearAllMocks();
   });
 
-  it('1. Plan Month vs Actual Month mismatch: Plan Feb executed on 05/03/2026 renders P2✓ in Feb and A(ก.พ.) alongside P3 in March', () => {
+  it('1. Plan Month vs Actual Month mismatch: Plan Feb executed on 05/03/2026 renders "แผน ➔ มี.ค." in Feb and "✓ ทำจริง (แผน ก.พ.)" in March', () => {
     // Work order planned for Month 2 (Feb), but performed on 2026-03-05 (March)
     const delayedWo = {
       id: 'WO-2026-001',
@@ -73,9 +73,10 @@ describe('VCC FM-QC-46 Interactive Planning Board Edge Cases & Exceptions', () =
       </table>
     );
 
-    // February preserves planned cycle with green checkmark indicating completion
+    // February renders dashed indicator indicating execution in March (NO green checkmark)
     const febBadge = screen.getByRole('button', { name: /เป้าหมายทวนสอบเดือน 2 \(P2\)/i });
-    expect(febBadge).toHaveTextContent('✓');
+    expect(febBadge).toHaveTextContent('แผน ➔ มี.ค.');
+    expect(febBadge).not.toHaveTextContent('✓');
 
     // Open February popover
     fireEvent.click(febBadge);
@@ -104,10 +105,10 @@ describe('VCC FM-QC-46 Interactive Planning Board Edge Cases & Exceptions', () =
 
     // Both badges must be visible in March: planned chip and actual from Feb
     expect(screen.getByRole('button', { name: /เป้าหมายทวนสอบเดือน 3 \(P3\)/i })).toHaveTextContent('ภายใน');
-    expect(screen.getByText(/✓ \(ก\.พ\.\)/)).toBeInTheDocument();
+    expect(screen.getByText(/✓ ทำจริง \(แผน ก\.พ\.\)/)).toBeInTheDocument();
 
     // Open March popover to verify contextual breakdown
-    fireEvent.click(screen.getByText(/✓ \(ก\.พ\.\)/));
+    fireEvent.click(screen.getByText(/✓ ทำจริง \(แผน ก\.พ\.\)/));
     expect(screen.getByText(/1\. รอบตามแผนประจำปี/)).toBeInTheDocument();
     expect(screen.getByText(/2\. การดำเนินงานจริงในเดือนนี้/)).toBeInTheDocument();
     expect(screen.getByText(/จากรอบแผน ก\.พ\. \(P2\)/)).toBeInTheDocument();
