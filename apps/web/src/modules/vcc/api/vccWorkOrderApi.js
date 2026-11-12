@@ -263,8 +263,25 @@ const enrichLocalWo = (wo, allAssets, deptMap, allPlans) => {
   const providerType = isInternal ? 'INTERNAL' : (wo.provider_type || 'EXTERNAL');
   const calibrationType = isInternal ? 'INTERNAL' : (wo.calibration_type || 'EXTERNAL');
 
+  const recordedBy = wo.recorded_by || wo.performed_by || null;
+  const recordedByName = wo.recorded_by_name || wo.performed_by_name || null;
+  const closedBy = wo.closed_by || (wo.status === 'CLOSED' ? (wo.reviewed_by || wo.performed_by) : null);
+  const closedByName = wo.closed_by_name || (wo.status === 'CLOSED' ? (wo.reviewed_by_name || wo.performed_by_name) : null);
+  const verifiedBy = wo.verified_by !== undefined
+    ? wo.verified_by
+    : (wo.reviewed_by && wo.performed_by && wo.reviewed_by !== wo.performed_by ? wo.reviewed_by : null);
+  const verifiedByName = wo.verified_by_name !== undefined
+    ? wo.verified_by_name
+    : (wo.reviewed_by && wo.performed_by && wo.reviewed_by !== wo.performed_by ? wo.reviewed_by_name : null);
+
   return {
     ...wo,
+    recorded_by: recordedBy,
+    recorded_by_name: recordedByName,
+    closed_by: closedBy,
+    closed_by_name: closedByName,
+    verified_by: verifiedBy,
+    verified_by_name: verifiedByName,
     provider_name: providerName,
     provider_type: providerType,
     calibration_type: calibrationType,
@@ -764,9 +781,17 @@ export const submitVccWorkOrderResult = async (id, payload) => {
     certificate_file_hash: payload.cert_sha256_hash || payload.certificate_file_hash || existing.certificate_file_hash || null,
     performed_by: user.id,
     performed_by_name: user.name,
-    reviewed_by: user.id,
-    reviewed_by_name: user.name,
-    reviewed_at: now,
+    recorded_by: user.id,
+    recorded_by_name: user.name,
+    closed_by: nextStatus === 'CLOSED' ? user.id : null,
+    closed_by_name: nextStatus === 'CLOSED' ? user.name : null,
+    closed_at: nextStatus === 'CLOSED' ? now : null,
+    reviewed_by: null,
+    reviewed_by_name: null,
+    reviewed_at: null,
+    verified_by: null,
+    verified_by_name: null,
+    verified_at: null,
     nc_status: nextNcStatus,
     rejected_reason: null,
     updated_at: now,
@@ -855,6 +880,12 @@ export const approveVccWorkOrder = async (id, comment = '') => {
     reviewed_by: user.id,
     reviewed_by_name: user.name,
     reviewed_at: now,
+    verified_by: user.id,
+    verified_by_name: user.name,
+    verified_at: now,
+    closed_by: user.id,
+    closed_by_name: user.name,
+    closed_at: now,
     review_comment: String(comment || '').trim(),
     updated_at: now,
     updated_by: user.id

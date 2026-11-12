@@ -226,6 +226,9 @@ describe('VCC Phase 3: Work Orders, Execution, Review, Close & Hold/NC Control',
     });
     expect(submitted.status).toBe(200);
     expect(submitted.body.workOrder.status).toBe('CLOSED');
+    expect(submitted.body.workOrder.recorded_by).toBe('VWO-DCC');
+    expect(submitted.body.workOrder.closed_by).toBe('VWO-DCC');
+    expect(submitted.body.workOrder.verified_by).toBeNull();
 
     // Performer cannot approve own work order
     expect((await call('POST', `/api/vcc/work-orders/${woId}/approve`, 'VWO-DCC')).status).toBe(403);
@@ -236,6 +239,8 @@ describe('VCC Phase 3: Work Orders, Execution, Review, Close & Hold/NC Control',
     });
     expect(approved.status).toBe(200);
     expect(approved.body.workOrder.status).toBe('CLOSED');
+    expect(approved.body.workOrder.verified_by).toBe('VWO-REV4');
+    expect(approved.body.workOrder.closed_by).toBe('VWO-REV4');
 
     const planDetail = await call('GET', `/api/vcc/plans/${planId}`, 'VWO-DCC');
     const updatedScItem = planDetail.body.items.find((i) => i.id === scItemRes.body.item.id);

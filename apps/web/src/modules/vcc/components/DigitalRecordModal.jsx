@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   X,
   Printer,
@@ -56,14 +56,25 @@ export const DigitalRecordModal = ({
 
   const [pdfBlobUrl, setPdfBlobUrl] = useState('');
   const [loadingPdf, setLoadingPdf] = useState(true);
+  const activeBlobUrlRef = useRef(null);
+  const lastLoadedKeyRef = useRef(null);
+
+  const currentWorkOrderId = workOrder?.id || '';
+  const currentKey = workOrder ? (
+    workOrder.cert_file_key ||
+    workOrder.certificate_file_key ||
+    workOrder.file_key ||
+    workOrder.certificate_file_name ||
+    workOrder.cert_file_name ||
+    (workOrder.id ? `vcc_cert_${workOrder.id}` : '')
+  ) : '';
 
   useEffect(() => {
+    if (!workOrder || !isActualOpen) return;
+
     let active = true;
-    let createdUrl = null;
 
     const loadPdf = async () => {
-      if (!workOrder || !isActualOpen) return;
-
       const isInternal = Boolean(
         workOrder.provider_type === 'INTERNAL' ||
         workOrder.calibration_type === 'INTERNAL' ||
@@ -82,14 +93,27 @@ export const DigitalRecordModal = ({
         workOrder.cert_file_name ||
         workOrder.cert_file_key ||
         workOrder.certificate_file_key ||
+        workOrder.file_key ||
         !isInternal
       );
 
       if (!hasPdf) {
         if (active) {
+          if (activeBlobUrlRef.current) {
+            revokeVccBlobUrl(activeBlobUrlRef.current);
+            activeBlobUrlRef.current = null;
+          }
+          lastLoadedKeyRef.current = null;
           setPdfBlobUrl('');
           setLoadingPdf(false);
         }
+        return;
+      }
+
+      // If we already loaded a URL for this exact key and it is still valid, retain it
+      if (lastLoadedKeyRef.current === currentKey && activeBlobUrlRef.current) {
+        setPdfBlobUrl(activeBlobUrlRef.current);
+        setLoadingPdf(false);
         return;
       }
 
@@ -98,15 +122,41 @@ export const DigitalRecordModal = ({
         const fileKey =
           workOrder.cert_file_key ||
           workOrder.certificate_file_key ||
+          workOrder.file_key ||
+          workOrder.cert_file_name ||
           workOrder.certificate_file_name ||
           `vcc_cert_${workOrder.id}`;
         const url = await getVccPdfBlobUrl(fileKey, workOrder);
-        if (active) {
-          createdUrl = url;
+        if (!active) {
+          if (url) revokeVccBlobUrl(url);
+          return;
+        }
+
+        if (url) {
+          if (activeBlobUrlRef.current && activeBlobUrlRef.current !== url) {
+            revokeVccBlobUrl(activeBlobUrlRef.current);
+          }
+          activeBlobUrlRef.current = url;
+          lastLoadedKeyRef.current = currentKey;
           setPdfBlobUrl(url);
+        } else {
+          if (activeBlobUrlRef.current) {
+            revokeVccBlobUrl(activeBlobUrlRef.current);
+            activeBlobUrlRef.current = null;
+          }
+          lastLoadedKeyRef.current = null;
+          setPdfBlobUrl('');
         }
       } catch (err) {
         console.warn('Failed to load PDF preview:', err);
+        if (active) {
+          if (activeBlobUrlRef.current) {
+            revokeVccBlobUrl(activeBlobUrlRef.current);
+            activeBlobUrlRef.current = null;
+          }
+          lastLoadedKeyRef.current = null;
+          setPdfBlobUrl('');
+        }
       } finally {
         if (active) setLoadingPdf(false);
       }
@@ -116,11 +166,31 @@ export const DigitalRecordModal = ({
 
     return () => {
       active = false;
-      if (createdUrl) {
-        revokeVccBlobUrl(createdUrl);
+      // Do not revoke activeBlobUrlRef.current here on parent re-renders.
+      // Revocation happens only when modal closes (isActualOpen becomes false) or on unmount.
+    };
+  }, [currentWorkOrderId, currentKey, isActualOpen]);
+
+  // Clean up Blob URL when modal is closed
+  useEffect(() => {
+    if (!isActualOpen && activeBlobUrlRef.current) {
+      revokeVccBlobUrl(activeBlobUrlRef.current);
+      activeBlobUrlRef.current = null;
+      lastLoadedKeyRef.current = null;
+      setPdfBlobUrl('');
+    }
+  }, [isActualOpen]);
+
+  // Clean up Blob URL on unmount
+  useEffect(() => {
+    return () => {
+      if (activeBlobUrlRef.current) {
+        revokeVccBlobUrl(activeBlobUrlRef.current);
+        activeBlobUrlRef.current = null;
+        lastLoadedKeyRef.current = null;
       }
     };
-  }, [workOrder, isActualOpen]);
+  }, []);
 
   if (!isActualOpen || !workOrder) return null;
 
@@ -137,6 +207,8 @@ export const DigitalRecordModal = ({
       const fileKey =
         workOrder.cert_file_key ||
         workOrder.certificate_file_key ||
+        workOrder.file_key ||
+        workOrder.cert_file_name ||
         workOrder.certificate_file_name ||
         `vcc_cert_${workOrder.id}`;
       const blob = await getVccPdfBlob(fileKey, workOrder);
@@ -185,6 +257,51 @@ export const DigitalRecordModal = ({
     workOrder.cert_sha256_hash ||
     workOrder.certificate_file_hash ||
     'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
+
+  const recordedById = workOrder.recorded_by || workOrder.performed_by || workOrder.closed_by || null;
+  const recordedByName =
+    workOrder.recorded_by_name ||
+    workOrder.performed_by_name ||
+    workOrder.closed_by_name ||
+    workOrder.performed_by ||
+    workOrder.recorded_by ||
+    '-';
+  const roleOrDept =
+    workOrder.performer_role ||
+    workOrder.performer_department ||
+    workOrder.department_name_th ||
+    workOrder.department ||
+    '';
+  const closedAt =
+    workOrder.performed_at ||
+    workOrder.closed_at ||
+    workOrder.reviewed_at ||
+    workOrder.updated_at ||
+    '';
+
+  const rawVerifierId = workOrder.verified_by !== undefined
+    ? (workOrder.verified_by || null)
+    : (workOrder.reviewed_by && workOrder.reviewed_by !== recordedById ? workOrder.reviewed_by : null);
+
+  const rawVerifierName = workOrder.verified_by_name !== undefined
+    ? (workOrder.verified_by_name || '')
+    : (rawVerifierId
+        ? (workOrder.reviewed_by_name || workOrder.reviewed_by || '')
+        : (!recordedById && workOrder.reviewed_by_name && (!recordedByName || workOrder.reviewed_by_name.trim().toLowerCase() !== recordedByName.trim().toLowerCase())
+            ? workOrder.reviewed_by_name
+            : '')
+      );
+
+  // Backward compatibility: only show reviewer if verified_by has value AND is distinct from recorded_by
+  const hasSeparateVerifier = Boolean(
+    (rawVerifierId && rawVerifierId !== '-' && rawVerifierId !== recordedById) ||
+    (!rawVerifierId && rawVerifierName && rawVerifierName !== '-' && rawVerifierName.trim().length > 0 &&
+      (!recordedByName || recordedByName === '-' || rawVerifierName.trim().toLowerCase() !== recordedByName.trim().toLowerCase()))
+  );
+
+  const verifiedById = rawVerifierId;
+  const verifiedByName = rawVerifierName || rawVerifierId || '';
+  const verifiedAt = workOrder.verified_at || workOrder.reviewed_at || '';
 
   return (
     <div
@@ -582,22 +699,57 @@ export const DigitalRecordModal = ({
               )}
 
               {/* Section 6: Signatures & Verification Sign-off */}
-              <div className="pt-3 border-t border-slate-200 grid grid-cols-2 gap-4 text-xs text-center vcc-print-section">
-                <div className="space-y-6 p-2.5 rounded-xl border border-slate-200 bg-slate-50/50">
-                  <span className="font-bold text-slate-700 block">ผู้บันทึกผลการสอบเทียบ (Performer)</span>
-                  <div className="border-b border-dashed border-slate-400 w-3/4 mx-auto pb-1 font-semibold text-slate-900">
-                    {workOrder.performed_by_name || workOrder.performed_by || '-'}
-                  </div>
-                  <span className="text-xs text-slate-500 block font-sans">วันที่: {formatVccDate(workOrder.performed_at)}</span>
-                </div>
+              <div className="pt-3 border-t border-slate-200 vcc-print-section">
+                {hasSeparateVerifier ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs text-center">
+                    <div className="space-y-4 p-3.5 rounded-xl border border-slate-200 bg-slate-50/50">
+                      <span className="font-bold text-slate-700 block">ผู้บันทึกผลการสอบเทียบ (Recorded By)</span>
+                      <div className="border-b border-dashed border-slate-400 w-3/4 mx-auto pb-1 font-semibold text-slate-900">
+                        {recordedByName}
+                      </div>
+                      <div className="text-xs text-slate-500 space-y-0.5">
+                        {roleOrDept && <div>บทบาท/แผนก: {roleOrDept}</div>}
+                        <div className="font-sans">วันที่: {formatVccDate(closedAt)}</div>
+                      </div>
+                    </div>
 
-                <div className="space-y-6 p-2.5 rounded-xl border border-slate-200 bg-slate-50/50">
-                  <span className="font-bold text-slate-700 block">ผู้ตรวจรับและปิดใบสั่งงาน (Reviewer / Approver)</span>
-                  <div className="border-b border-dashed border-slate-400 w-3/4 mx-auto pb-1 font-semibold text-slate-900">
-                    {workOrder.reviewed_by_name || workOrder.reviewed_by || '-'}
+                    <div className="space-y-4 p-3.5 rounded-xl border border-slate-200 bg-slate-50/50">
+                      <span className="font-bold text-slate-700 block">ผู้ตรวจรับและปิดใบสั่งงาน (Reviewer / Approver)</span>
+                      <div className="border-b border-dashed border-slate-400 w-3/4 mx-auto pb-1 font-semibold text-slate-900">
+                        {verifiedByName}
+                      </div>
+                      <div className="text-xs text-slate-500 space-y-0.5">
+                        <div className="font-sans">วันที่: {formatVccDate(verifiedAt)}</div>
+                      </div>
+                    </div>
                   </div>
-                  <span className="text-xs text-slate-500 block font-sans">วันที่: {formatVccDate(workOrder.reviewed_at)}</span>
-                </div>
+                ) : (
+                  <div
+                    data-testid="vcc-single-signer-card"
+                    className="p-4 rounded-xl border border-slate-200 bg-slate-50/60 text-xs text-center space-y-3"
+                  >
+                    <span className="font-bold text-slate-800 block text-xs sm:text-sm">
+                      ผู้บันทึกผลและปิดใบสั่งงาน (Recorded & Closed By)
+                    </span>
+                    <div className="border-b border-dashed border-slate-400 w-1/2 sm:w-1/3 mx-auto pb-1 font-bold text-slate-900 text-sm">
+                      {recordedByName}
+                    </div>
+                    <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-1 text-slate-600 text-xs">
+                      {roleOrDept && (
+                        <div>
+                          <span className="text-slate-400">บทบาท/แผนก:</span>{' '}
+                          <span className="font-semibold text-slate-700">{roleOrDept}</span>
+                        </div>
+                      )}
+                      <div>
+                        <span className="text-slate-400">วันที่และเวลาบันทึกปิดงาน:</span>{' '}
+                        <span className="font-semibold text-slate-700 font-sans" title={closedAt || ''}>
+                          {closedAt ? (closedAt.includes('T') ? formatVccDateTime(closedAt) : formatVccDate(closedAt)) : '-'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -614,7 +766,7 @@ export const DigitalRecordModal = ({
                   <div className="flex items-center gap-1.5">
                     <button
                       type="button"
-                      onClick={() => window.open(pdfBlobUrl, '_blank')}
+                      onClick={() => window.open(pdfBlobUrl, '_blank', 'noopener,noreferrer')}
                       className="h-8 inline-flex items-center gap-1 px-2.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-indigo-700 text-xs font-semibold cursor-pointer transition-colors shadow-2xs select-none"
                       title="เปิดในแท็บใหม่"
                     >
@@ -642,12 +794,44 @@ export const DigitalRecordModal = ({
                 </div>
               ) : pdfBlobUrl ? (
                 <div className="w-full space-y-2">
-                  <iframe
-                    src={pdfBlobUrl}
-                    className="w-full h-[520px] rounded-xl border border-slate-200 shadow-inner bg-white"
-                    title="PDF Preview"
-                    data-testid="pdf-preview-iframe"
-                  />
+                  <div className="relative">
+                    <iframe
+                      src={pdfBlobUrl}
+                      className="w-full h-[520px] rounded-xl border border-slate-200 shadow-inner bg-white"
+                      title="PDF Preview"
+                      data-testid="pdf-preview-iframe"
+                    >
+                      <p className="p-4 text-xs text-slate-500">
+                        เบราว์เซอร์ไม่รองรับการแสดงตัวอย่าง PDF ในหน้าต่างนี้{' '}
+                        <a href={pdfBlobUrl} target="_blank" rel="noopener noreferrer" className="text-indigo-600 underline font-semibold">
+                          คลิกที่นี่เพื่อเปิดไฟล์ในแท็บใหม่
+                        </a>
+                      </p>
+                    </iframe>
+                    {/* Backup action buttons at the top-right corner of preview container */}
+                    <div className="absolute top-2.5 right-2.5 flex items-center gap-1.5 bg-white/95 backdrop-blur-xs p-1 rounded-lg border border-slate-200 shadow-xs z-10">
+                      <button
+                        type="button"
+                        onClick={() => window.open(pdfBlobUrl, '_blank', 'noopener,noreferrer')}
+                        className="h-7 px-2.5 inline-flex items-center gap-1 rounded-md bg-white hover:bg-indigo-50 text-indigo-700 text-xs font-semibold border border-indigo-200 shadow-2xs transition-colors cursor-pointer select-none"
+                        title="เปิดไฟล์ PDF ในแท็บใหม่"
+                        aria-label="เปิดไฟล์ PDF ในแท็บใหม่"
+                      >
+                        <ExternalLink size={12} />
+                        <span>↗ เปิดไฟล์ PDF ในแท็บใหม่</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleDownload}
+                        className="h-7 px-2.5 inline-flex items-center gap-1 rounded-md bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold border border-slate-300 shadow-2xs transition-colors cursor-pointer select-none"
+                        title="ดาวน์โหลด"
+                        aria-label="ดาวน์โหลด"
+                      >
+                        <Download size={12} />
+                        <span>⬇ ดาวน์โหลด</span>
+                      </button>
+                    </div>
+                  </div>
                   <div className="flex items-center justify-between text-[11px] text-slate-500 px-1 font-mono">
                     <span>SHA-256: {hashValue.slice(0, 24)}...</span>
                     <span>✓ PDF Validated</span>
@@ -681,9 +865,15 @@ export const DigitalRecordModal = ({
                       <span className="font-bold text-emerald-700">{workOrder.result_status || 'PASS'}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-slate-500">ผู้ตรวจรับ:</span>
-                      <span className="font-medium text-slate-900">{workOrder.reviewed_by_name || '-'}</span>
+                      <span className="text-slate-500">{hasSeparateVerifier ? 'ผู้บันทึกผล:' : 'ผู้บันทึกและปิดงาน:'}</span>
+                      <span className="font-medium text-slate-900">{recordedByName || '-'}</span>
                     </div>
+                    {hasSeparateVerifier && (
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">ผู้ตรวจรับ:</span>
+                        <span className="font-medium text-slate-900">{verifiedByName || '-'}</span>
+                      </div>
+                    )}
                   </div>
                   <div className="flex items-center justify-center gap-2 pt-2">
                     <button
