@@ -45,13 +45,9 @@ export const isPlanSuperseded = (plan, allPlans = []) => {
       const sameDept = String(other.department || '').toUpperCase() === String(plan.department || '').toUpperCase();
       if (!sameYear || !sameDept) return false;
       if (other.status !== 'APPROVED') return false;
-      if (other.is_current === 1 || other.is_current === true || String(other.effective_status || '').toUpperCase() === 'CURRENT' || String(other.effective_status || '').toUpperCase() === 'EFFECTIVE') {
-        const otherRev = parseInt(other.revision, 10);
-        const thisRev = parseInt(plan.revision, 10);
-        if (!Number.isNaN(otherRev) && !Number.isNaN(thisRev) && otherRev > thisRev) return true;
-        if (Number(plan.is_current ?? 1) === 0) return true;
-      }
-      return false;
+      const otherRev = parseInt(other.revision, 10);
+      const thisRev = parseInt(plan.revision, 10);
+      return !Number.isNaN(otherRev) && !Number.isNaN(thisRev) && otherRev > thisRev;
     });
     if (hasHigherApprovedRev) return true;
   }
@@ -257,7 +253,34 @@ export const AnnualPlansHub = ({
       return true;
     });
     const totalCalibratable = scopedAssets.length;
-    const plannedAssetCount = currentScopedPlans.reduce((acc, p) => acc + Number(p.planned_items_count || p.item_count || 0), 0);
+
+    // Pick canonical current plan per department/year to avoid counting instruments across revisions
+    const canonicalPlansByScope = new Map();
+    for (const p of currentScopedPlans) {
+      const scopeKey = `${p.plan_year}:${String(p.department || '').toUpperCase()}`;
+      const existing = canonicalPlansByScope.get(scopeKey);
+      if (!existing) {
+        canonicalPlansByScope.set(scopeKey, p);
+      } else {
+        const pIsCurrent = (p.is_current === 1 || p.is_current === true || String(p.effective_status).toUpperCase() === 'CURRENT');
+        const existIsCurrent = (existing.is_current === 1 || existing.is_current === true || String(existing.effective_status).toUpperCase() === 'CURRENT');
+        if (pIsCurrent && !existIsCurrent) {
+          canonicalPlansByScope.set(scopeKey, p);
+        } else if (p.status === 'APPROVED' && existing.status !== 'APPROVED') {
+          canonicalPlansByScope.set(scopeKey, p);
+        } else {
+          const pRev = parseInt(p.revision, 10) || 0;
+          const existRev = parseInt(existing.revision, 10) || 0;
+          if (pRev > existRev && !existIsCurrent) {
+            canonicalPlansByScope.set(scopeKey, p);
+          }
+        }
+      }
+    }
+    const plannedAssetCount = Array.from(canonicalPlansByScope.values()).reduce(
+      (acc, p) => acc + Number(p.planned_items_count || p.item_count || 0),
+      0
+    );
     const coveragePct = totalCalibratable > 0 ? Math.min(100, Math.round((plannedAssetCount / totalCalibratable) * 100)) : 100;
 
     return { totalPlans, activeCount, pendingCount, draftCount, coveragePct, totalCalibratable, plannedAssetCount };

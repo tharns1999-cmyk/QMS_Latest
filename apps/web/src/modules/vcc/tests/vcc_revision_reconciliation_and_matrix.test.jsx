@@ -107,6 +107,47 @@ describe('VCC Revision Reconciliation & Plan vs Actual Matrix Suite', () => {
       expect(screen.getByText('(5 รายการ)')).toBeInTheDocument();
       expect(screen.queryByText('(10 รายการ)')).not.toBeInTheDocument();
     });
+
+    it('KPI Strip does not double-count instruments when an in-flight Draft revision exists alongside an approved revision', () => {
+      const plansWithDraftRevision = [
+        {
+          id: 'plan-qc-rev01-approved',
+          plan_year: 2026,
+          department: 'QC',
+          revision: '01',
+          status: 'APPROVED',
+          is_current: 1,
+          effective_status: 'CURRENT',
+          planned_items_count: 5,
+          item_count: 5
+        },
+        {
+          id: 'plan-qc-rev02-draft',
+          plan_year: 2026,
+          department: 'QC',
+          revision: '02',
+          status: 'DRAFT',
+          is_current: 0,
+          effective_status: 'DRAFT',
+          planned_items_count: 5,
+          item_count: 5
+        }
+      ];
+
+      render(
+        <AnnualPlansHub
+          plans={plansWithDraftRevision}
+          activeAssets={mockAssets}
+          activeDepartments={[{ code: 'QC', nameTh: 'ควบคุมคุณภาพ' }]}
+          filterYear={2026}
+          currentUser={{ id: 'u-dcc', isDcc: true, approval_level: 6, departments: ['QC'] }}
+        />
+      );
+
+      // KPI coverage must still be 5 items, NOT 10 items!
+      expect(screen.getByText('(5 รายการ)')).toBeInTheDocument();
+      expect(screen.queryByText('(10 รายการ)')).not.toBeInTheDocument();
+    });
   });
 
   describe('Part 2: Work Order Reconciliation on Revision Approval', () => {
@@ -257,6 +298,161 @@ describe('VCC Revision Reconciliation & Plan vs Actual Matrix Suite', () => {
       expect(closedWo.result_status).toBe('PASS');
       expect(closedWo.performed_at).toBe('2026-03-25');
       expect(closedWo.planned_month).toBe(3);
+    });
+
+    it('Handles quarterly multi-cycle rescheduling: cancels removed Month 6 and pairs shifted Month 9 -> Month 10 by closest distance', async () => {
+      const STORAGE_PLANS_KEY = 'qms-vcc-local-plans-v1';
+      const STORAGE_PLAN_ITEMS_KEY = 'qms-vcc-local-plan-items-v1';
+      const STORAGE_WO_KEY = 'qms-vcc-local-work-orders-v1';
+
+      useStore.setState({
+        currentUser: {
+          id: 'u-mgt-approver',
+          approval_level: 6,
+          departments: ['QC'],
+          status: 'ACTIVE'
+        }
+      });
+
+      const rev01 = {
+        id: 'plan-quarterly-rev01',
+        plan_year: 2026,
+        department: 'QC',
+        revision: '01',
+        status: 'APPROVED',
+        is_current: 1,
+        effective_status: 'CURRENT'
+      };
+
+      const rev02 = {
+        id: 'plan-quarterly-rev02',
+        plan_year: 2026,
+        department: 'QC',
+        revision: '02',
+        parent_plan_id: rev01.id,
+        status: 'PENDING_APPROVAL',
+        is_current: 0,
+        effective_status: 'PENDING',
+        due_date_rule: 'END_OF_MONTH'
+      };
+
+      // In Rev.02: Month 6 is removed, and Month 9 is shifted to Month 10. Months 3 and 12 remain unchanged.
+      const rev02Items = [
+        {
+          id: 'item-q-rev02',
+          plan_id: rev02.id,
+          asset_id: 'MULTI_CYCLE_01',
+          planned_months: [3, 10, 12],
+          is_group: 0,
+          provider_name: 'ทวนสอบภายใน'
+        }
+      ];
+
+      // Existing 4 quarterly work orders from Rev.01
+      const existingWos = [
+        { id: 'wo-m03', wo_code: 'WO-2026-010', plan_year: 2026, department: 'QC', plan_id: rev01.id, asset_id: 'MULTI_CYCLE_01', planned_month: 3, due_date: '2026-03-31', status: 'OPEN' },
+        { id: 'wo-m06', wo_code: 'WO-2026-011', plan_year: 2026, department: 'QC', plan_id: rev01.id, asset_id: 'MULTI_CYCLE_01', planned_month: 6, due_date: '2026-06-30', status: 'OPEN' },
+        { id: 'wo-m09', wo_code: 'WO-2026-012', plan_year: 2026, department: 'QC', plan_id: rev01.id, asset_id: 'MULTI_CYCLE_01', planned_month: 9, due_date: '2026-09-30', status: 'OPEN' },
+        { id: 'wo-m12', wo_code: 'WO-2026-013', plan_year: 2026, department: 'QC', plan_id: rev01.id, asset_id: 'MULTI_CYCLE_01', planned_month: 12, due_date: '2026-12-31', status: 'OPEN' }
+      ];
+
+      storageStore.set(STORAGE_PLANS_KEY, JSON.stringify([rev01, rev02]));
+      storageStore.set(STORAGE_PLAN_ITEMS_KEY, JSON.stringify(rev02Items));
+      storageStore.set(STORAGE_WO_KEY, JSON.stringify(existingWos));
+
+      await approveVccPlan(rev02.id, 'อนุมัติรอบไตรมาสใหม่');
+
+      const savedWos = JSON.parse(storageStore.get(STORAGE_WO_KEY));
+
+      // Month 3 and Month 12 remain mapped to their work orders
+      expect(savedWos.find((w) => w.id === 'wo-m03').planned_month).toBe(3);
+      expect(savedWos.find((w) => w.id === 'wo-m12').planned_month).toBe(12);
+
+      // Month 9 was shifted to Month 10: wo-m09 must be mapped to Month 10 (diff = 1 vs diff = 4 for wo-m06)
+      const wo10 = savedWos.find((w) => w.id === 'wo-m09');
+      expect(wo10.planned_month).toBe(10);
+      expect(wo10.due_date).toBe('2026-10-31');
+      expect(wo10.status).toBe('OPEN');
+
+      // Month 6 was removed from plan: wo-m06 must be CANCELLED
+      const wo06 = savedWos.find((w) => w.id === 'wo-m06');
+      expect(wo06.status).toBe('CANCELLED');
+      expect(wo06.cancellation_category).toBe('PLAN_REVISION');
+    });
+
+    it('Cancels work order of removed asset even when department is only specified on asset record', async () => {
+      const STORAGE_PLANS_KEY = 'qms-vcc-local-plans-v1';
+      const STORAGE_PLAN_ITEMS_KEY = 'qms-vcc-local-plan-items-v1';
+      const STORAGE_WO_KEY = 'qms-vcc-local-work-orders-v1';
+      const STORAGE_ASSETS_KEY = 'qms-vcc-local-assets-v1';
+
+      useStore.setState({
+        currentUser: {
+          id: 'u-mgt-approver',
+          approval_level: 6,
+          departments: ['QC'],
+          status: 'ACTIVE'
+        }
+      });
+
+      const rev01 = {
+        id: 'plan-dept-asset-rev01',
+        plan_year: 2026,
+        department: 'QC',
+        revision: '01',
+        status: 'APPROVED',
+        is_current: 1
+      };
+
+      const rev02 = {
+        id: 'plan-dept-asset-rev02',
+        plan_year: 2026,
+        department: 'QC',
+        revision: '02',
+        parent_plan_id: rev01.id,
+        status: 'PENDING_APPROVAL',
+        is_current: 0,
+        due_date_rule: 'END_OF_MONTH'
+      };
+
+      // In Rev.02, ASSET_REMOVED_NO_DEPT is removed! Only KEPT_ASSET remains
+      const rev02Items = [
+        { id: 'item-kept', plan_id: rev02.id, asset_id: 'KEPT_ASSET', planned_months: [7], is_group: 0 }
+      ];
+
+      // Assets registry has department 'QC'
+      const assets = [
+        { id: 'KEPT_ASSET', asset_code: 'KEPT_ASSET', department: 'QC', status: 'ACTIVE' },
+        { id: 'ASSET_REMOVED_NO_DEPT', asset_code: 'REM001', department: 'QC', status: 'ACTIVE' }
+      ];
+
+      // Work order has NO department field on the work order object directly
+      const existingWos = [
+        {
+          id: 'wo-no-dept-prop',
+          wo_code: 'WO-2026-030',
+          plan_year: 2026,
+          plan_id: rev01.id,
+          asset_id: 'ASSET_REMOVED_NO_DEPT',
+          planned_month: 5,
+          due_date: '2026-05-31',
+          status: 'SCHEDULED'
+          // notice: no department property here!
+        }
+      ];
+
+      storageStore.set(STORAGE_PLANS_KEY, JSON.stringify([rev01, rev02]));
+      storageStore.set(STORAGE_PLAN_ITEMS_KEY, JSON.stringify(rev02Items));
+      storageStore.set(STORAGE_ASSETS_KEY, JSON.stringify(assets));
+      storageStore.set(STORAGE_WO_KEY, JSON.stringify(existingWos));
+
+      await approveVccPlan(rev02.id, 'อนุมัติแผนนำเครื่องมือออก');
+
+      const savedWos = JSON.parse(storageStore.get(STORAGE_WO_KEY));
+      const removedWo = savedWos.find((w) => w.id === 'wo-no-dept-prop');
+      expect(removedWo).toBeDefined();
+      expect(removedWo.status).toBe('CANCELLED');
+      expect(removedWo.cancellation_category).toBe('PLAN_REVISION');
     });
   });
 

@@ -1964,12 +1964,25 @@ export const approveVccPlan = async (planId, comment = '') => {
     }
 
     // 2. Identify work orders in this scope (matching plan_year & department or target assets)
+    const allAssets = getLocalAssets();
+    const assetById = new Map((allAssets || []).map((a) => [a.id, a]));
+    const planRevisionIds = new Set(
+      allPlans
+        .filter((p) =>
+          Number(p.plan_year) === Number(plan.plan_year) &&
+          String(p.department).toUpperCase() === String(plan.department).toUpperCase()
+        )
+        .map((p) => p.id)
+    );
+
     const isWoInThisScope = (w) => {
       const matchesYear = Number(w.plan_year) === Number(plan.plan_year) ||
         (w.due_date && String(w.due_date).startsWith(String(plan.plan_year)));
       if (!matchesYear) return false;
-      if (w.plan_id === planId) return true;
-      if (w.department && String(w.department).toUpperCase() === String(plan.department).toUpperCase()) return true;
+      if (w.plan_id === planId || (w.plan_id && planRevisionIds.has(w.plan_id))) return true;
+      const woAsset = assetById.get(w.asset_id);
+      const woDept = w.department || woAsset?.department;
+      if (woDept && String(woDept).toUpperCase() === String(plan.department).toUpperCase()) return true;
       if (targetCyclesByAsset.has(w.asset_id)) return true;
       return false;
     };
@@ -2065,10 +2078,23 @@ export const approveVccPlan = async (planId, comment = '') => {
         }
       }
 
-      // Pass 2: Rescheduled month match (e.g. TC001 moved from month 6 to month 11)
+      // Pass 2: Rescheduled month match using closest month distance (e.g. TC001 moved from month 6 to month 11)
       while (unmatchedTargets.length > 0 && unmatchedWos.length > 0) {
-        const tc = unmatchedTargets.shift();
-        const matchedWo = unmatchedWos.shift();
+        let bestTargetIdx = 0;
+        let bestWoIdx = 0;
+        let minDiff = Infinity;
+        for (let tIdx = 0; tIdx < unmatchedTargets.length; tIdx++) {
+          for (let wIdx = 0; wIdx < unmatchedWos.length; wIdx++) {
+            const diff = Math.abs(Number(unmatchedTargets[tIdx].month) - Number(unmatchedWos[wIdx].planned_month || 0));
+            if (diff < minDiff) {
+              minDiff = diff;
+              bestTargetIdx = tIdx;
+              bestWoIdx = wIdx;
+            }
+          }
+        }
+        const tc = unmatchedTargets.splice(bestTargetIdx, 1)[0];
+        const matchedWo = unmatchedWos.splice(bestWoIdx, 1)[0];
         nextWos.push({
           ...matchedWo,
           plan_id: planId,

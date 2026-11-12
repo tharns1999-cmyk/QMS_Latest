@@ -352,11 +352,25 @@ export const AnnualPlanMonthCell = ({
                       ? 'bg-rose-50 text-rose-700 border-rose-300 font-bold'
                       : isClosed
                       ? 'bg-emerald-50 text-emerald-700 border-emerald-300 font-bold'
-                      : 'bg-amber-50 text-amber-800 border-amber-300'
+                      : 'bg-amber-50 text-amber-800 border-amber-300 font-semibold'
                   }`}
                 >
-                  {isClosed ? <CheckCircle2 size={11} className="text-emerald-600 shrink-0" /> : <Clock size={11} />}
-                  <span>✓ ทำจริง {pMonth ? `(แผน ${THAI_MONTH_NAMES_SHORT[pMonth - 1]})` : '(นอกแผน)'}</span>
+                  {isNc ? (
+                    <span className="inline-flex items-center gap-0.5">
+                      <AlertTriangle size={11} className="text-rose-600 shrink-0" />
+                      <span>NC</span>
+                    </span>
+                  ) : isClosed ? (
+                    <span className="inline-flex items-center gap-0.5">
+                      <CheckCircle2 size={11} className="text-emerald-600 shrink-0" />
+                      <span>✓ ทำจริง {pMonth ? `(แผน ${THAI_MONTH_NAMES_SHORT[pMonth - 1]})` : '(นอกแผน)'}</span>
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-0.5">
+                      <Clock size={11} className="text-amber-600 shrink-0" />
+                      <span>รอตรวจ</span>
+                    </span>
+                  )}
                 </button>
               );
             })}

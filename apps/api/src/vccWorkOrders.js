@@ -504,8 +504,8 @@ export const buildWorkOrderReconciliationStatements = async (db, planId, actorId
         } else {
           skipped.push({ wo_id: matchedWo.id, wo_code: matchedWo.wo_code, cycle_id: effectiveCycleId });
         }
-      } else if (matchedWo.status === 'IN_PROGRESS' || matchedWo.status === 'PENDING_REVIEW') {
-        // Case A (IN_PROGRESS / PENDING_REVIEW): Keep active execution state intact, only link plan metadata if needed
+      } else if (matchedWo.status === 'PENDING_REVIEW' || (matchedWo.status === 'IN_PROGRESS' && matchedWo.result_status && matchedWo.result_status !== 'PENDING' && matchedWo.result_status !== 'NONE')) {
+        // Case A (PENDING_REVIEW or IN_PROGRESS with recorded results): Keep active execution state intact, only link plan metadata if needed
         if (matchedWo.plan_id !== planId || matchedWo.plan_item_id !== item.id || matchedWo.plan_revision !== planRevision) {
           batchStatements.push(
             db.prepare(`
@@ -524,7 +524,7 @@ export const buildWorkOrderReconciliationStatements = async (db, planId, actorId
           skipped.push({ wo_id: matchedWo.id, wo_code: matchedWo.wo_code, cycle_id: effectiveCycleId });
         }
       } else {
-        // Case A & Case E (OPEN / SCHEDULED): Sync metadata (due_date, provider_name, plan_id, plan_item_id, plan_revision)
+        // Case A & Case E (OPEN / SCHEDULED / IN_PROGRESS without recorded results): Sync metadata (due_date, provider_name, plan_id, plan_item_id, plan_revision)
         const isUserRescheduled = Boolean(matchedWo.reschedule_reason);
         const finalScheduledDate = isUserRescheduled ? (matchedWo.scheduled_date || matchedWo.due_date) : dueDate;
         const finalDueDate = isUserRescheduled ? (matchedWo.due_date || matchedWo.scheduled_date) : dueDate;
@@ -723,7 +723,8 @@ export const buildWorkOrderReconciliationStatements = async (db, planId, actorId
     const cycleIdentity = c.initial_cycle_id || c.id;
     if (!activeCycleIdsInNewRevision.has(cycleIdentity)) {
       const existingWo = byCycleId.get(cycleIdentity) || byCycleId.get(c.id);
-      if (existingWo && (existingWo.status === 'CLOSED' || existingWo.status === 'IN_PROGRESS' || existingWo.status === 'PENDING_REVIEW' || boundWoIds.has(existingWo.id))) {
+      const hasRecordedResult = existingWo && existingWo.result_status && existingWo.result_status !== 'PENDING' && existingWo.result_status !== 'NONE';
+      if (existingWo && (existingWo.status === 'CLOSED' || existingWo.status === 'PENDING_REVIEW' || hasRecordedResult || boundWoIds.has(existingWo.id))) {
         continue;
       }
       if (c.cycle_status !== 'CANCELLED' && c.cycle_status !== 'CLOSED') {
@@ -737,7 +738,7 @@ export const buildWorkOrderReconciliationStatements = async (db, planId, actorId
           `).bind(actorId, c.id)
         );
       }
-      if (existingWo && (existingWo.status === 'OPEN' || existingWo.status === 'SCHEDULED') && !cancelledWoIds.has(existingWo.id)) {
+      if (existingWo && (existingWo.status === 'OPEN' || existingWo.status === 'SCHEDULED' || (existingWo.status === 'IN_PROGRESS' && !hasRecordedResult)) && !cancelledWoIds.has(existingWo.id)) {
         cancelledWoIds.add(existingWo.id);
         batchStatements.push(
           db.prepare(`
@@ -749,7 +750,7 @@ export const buildWorkOrderReconciliationStatements = async (db, planId, actorId
                 cancelled_at = ${NOW},
                 updated_at = ${NOW},
                 updated_by = ?
-            WHERE id = ? AND status IN ('OPEN', 'SCHEDULED')
+            WHERE id = ? AND status IN ('OPEN', 'SCHEDULED', 'IN_PROGRESS')
           `).bind(autoCancelReason, actorId, actorId, existingWo.id)
         );
       }
@@ -760,10 +761,11 @@ export const buildWorkOrderReconciliationStatements = async (db, planId, actorId
   for (const wo of (existingWos || [])) {
     if (boundWoIds.has(wo.id) || cancelledWoIds.has(wo.id)) continue;
     if (!wo.plan_id && !wo.cycle_id) continue; // Do not auto-cancel purely manual ad-hoc work orders
-    if (wo.status === 'CLOSED' || wo.status === 'IN_PROGRESS' || wo.status === 'PENDING_REVIEW') {
+    const hasRecordedResult = wo.result_status && wo.result_status !== 'PENDING' && wo.result_status !== 'NONE';
+    if (wo.status === 'CLOSED' || wo.status === 'PENDING_REVIEW' || (wo.status === 'IN_PROGRESS' && hasRecordedResult)) {
       continue;
     }
-    if (wo.status === 'OPEN' || wo.status === 'SCHEDULED') {
+    if (wo.status === 'OPEN' || wo.status === 'SCHEDULED' || (wo.status === 'IN_PROGRESS' && !hasRecordedResult)) {
       cancelledWoIds.add(wo.id);
       batchStatements.push(
         db.prepare(`
@@ -775,7 +777,7 @@ export const buildWorkOrderReconciliationStatements = async (db, planId, actorId
               cancelled_at = ${NOW},
               updated_at = ${NOW},
               updated_by = ?
-          WHERE id = ? AND status IN ('OPEN', 'SCHEDULED')
+          WHERE id = ? AND status IN ('OPEN', 'SCHEDULED', 'IN_PROGRESS')
         `).bind(autoCancelReason, actorId, actorId, wo.id)
       );
     }
