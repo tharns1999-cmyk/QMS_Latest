@@ -14,7 +14,8 @@ import {
   MapPin,
   Building2,
   Wrench,
-  AlertTriangle
+  AlertTriangle,
+  FileText
 } from 'lucide-react';
 import { getWorkOrderStatusLabel, getResultStatusLabel } from '../utils/statusLabels';
 import { formatVccDueDate, formatVccDueDatesList } from '../utils/vccDateUtils';
@@ -39,7 +40,8 @@ export const AnnualPlanSideInspector = ({
   onClose,
   onOpenAddItem,
   onDeleteItem,
-  onOpenGroupWorkOrderCheck
+  onOpenGroupWorkOrderCheck,
+  onViewDigitalRecord
 }) => {
   const {
     dialogRef,
@@ -68,8 +70,9 @@ export const AnnualPlanSideInspector = ({
   const isLogicalGroup = Number(item.is_group) === 1 && !isCompositeSet;
 
   // Matching work orders for this item
-  const matchingWos = workOrders.filter(
-    (w) => w.plan_item_id === item.id || (w.plan_id === plan?.id && w.asset_id === item.asset_id)
+  const allWos = (Array.isArray(workOrders) && workOrders.length > 0) ? workOrders : (Array.isArray(item.work_orders) ? item.work_orders : []);
+  const matchingWos = allWos.filter(
+    (w) => w.plan_item_id === item.id || (plan?.id && w.plan_id === plan.id && w.asset_id === item.asset_id) || (w.asset_code && w.asset_code === item.asset_code)
   );
 
   const hasHoldOrNc = matchingWos.some((w) => w.nc_status === 'OPEN' || w.result_status === 'FAIL');
@@ -343,6 +346,24 @@ export const AnnualPlanSideInspector = ({
                                   <span className="font-mono font-semibold">Cert: {w.certificate_no}</span>
                                 )}
                               </div>
+
+                              {(w.actual_result || w.actual_measurement) && (
+                                <div className="text-xs text-slate-800 bg-white/70 p-2 rounded-lg border border-slate-200 mt-1">
+                                  <span className="text-slate-500 font-semibold block text-[11px]">ผลที่ตรวจวัดได้จริง:</span>
+                                  <span className="font-medium">{w.actual_result || w.actual_measurement}</span>
+                                </div>
+                              )}
+
+                              {(w.status === 'CLOSED' || w.status === 'SUSPENDED' || w.performed_at) && (
+                                <button
+                                  type="button"
+                                  onClick={() => onViewDigitalRecord?.(w)}
+                                  className="w-full mt-2 min-h-[36px] py-1.5 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs flex items-center justify-center gap-1.5 shadow-2xs transition-colors cursor-pointer motion-safe:active:scale-[0.98] select-none"
+                                >
+                                  <FileText size={13} />
+                                  <span>📄 เปิดดูผลและใบรับรอง PDF</span>
+                                </button>
+                              )}
                             </div>
                           );
                         })
@@ -369,6 +390,24 @@ export const AnnualPlanSideInspector = ({
                             <span>วันที่ตรวจจริง: <strong className="font-mono font-bold">{ext.performed_at}</strong></span>
                             <span>ผล: <strong className="font-bold">{getResultStatusLabel(ext.result_status)}</strong></span>
                           </div>
+
+                          {(ext.actual_result || ext.actual_measurement) && (
+                            <div className="text-xs text-slate-800 bg-white/70 p-2 rounded-lg border border-slate-200 mt-1">
+                              <span className="text-slate-500 font-semibold block text-[11px]">ผลที่ตรวจวัดได้จริง:</span>
+                              <span className="font-medium">{ext.actual_result || ext.actual_measurement}</span>
+                            </div>
+                          )}
+
+                          {(ext.status === 'CLOSED' || ext.status === 'SUSPENDED' || ext.performed_at) && (
+                            <button
+                              type="button"
+                              onClick={() => onViewDigitalRecord?.(ext)}
+                              className="w-full mt-2 min-h-[36px] py-1.5 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs flex items-center justify-center gap-1.5 shadow-2xs transition-colors cursor-pointer motion-safe:active:scale-[0.98] select-none"
+                            >
+                              <FileText size={13} />
+                              <span>📄 เปิดดูผลและใบรับรอง PDF</span>
+                            </button>
+                          )}
                         </div>
                       ))}
                     </div>

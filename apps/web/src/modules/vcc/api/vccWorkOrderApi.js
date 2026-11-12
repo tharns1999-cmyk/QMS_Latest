@@ -13,7 +13,8 @@ import {
 } from './vccApi';
 import { computeDueDateForMonth, getLocalPlans, getLocalPlanItems, syncVccTasks as syncVccPlanTasks, isUserAuthorizedForPlanDept } from './vccPlanApi';
 import { canManageVccAsset } from '../utils/departmentScope';
-import { canReviewWorkOrder, canReleaseWorkOrderHold, canApproveReschedule } from '../utils/workOrderPermissions';
+import { canReleaseWorkOrderHold, canApproveReschedule } from '../utils/workOrderPermissions';
+import { saveVccPdfFile, getVccPdfBlob } from '../utils/vccFileStorage';
 
 const STORAGE_WO_KEY = 'qms-vcc-local-work-orders-v1';
 const STORAGE_WO_SETTINGS_KEY = 'qms-vcc-local-wo-settings-v1';
@@ -743,6 +744,7 @@ export const submitVccWorkOrderResult = async (id, payload) => {
     performed_at: performedAt,
     certificate_no: certificateNo,
     acceptance_criteria: acceptanceCriteria,
+    actual_result: payload.actual_result !== undefined ? payload.actual_result : (existing.actual_result || null),
     result_remarks: resultRemarks,
     calibration_provider_name: payload.calibration_provider_name || (isInternal ? 'ทวนสอบภายใน' : existing.calibration_provider_name) || null,
     calibration_method: payload.calibration_method || (isInternal ? 'IN_HOUSE' : (existing.calibration_method || null)),
@@ -752,6 +754,14 @@ export const submitVccWorkOrderResult = async (id, payload) => {
     calibration_error_value: payload.calibration_error_value || existing.calibration_error_value || null,
     certificate_issue_date: payload.certificate_issue_date || existing.certificate_issue_date || null,
     certificate_valid_until: payload.certificate_valid_until || existing.certificate_valid_until || null,
+    cert_file_key: payload.cert_file_key || payload.certificate_file_key || existing.cert_file_key || existing.certificate_file_key || null,
+    cert_file_name: payload.cert_file_name || payload.certificate_file_name || existing.cert_file_name || existing.certificate_file_name || null,
+    cert_file_size: payload.cert_file_size || payload.certificate_file_size || existing.cert_file_size || existing.certificate_file_size || null,
+    cert_sha256_hash: payload.cert_sha256_hash || payload.certificate_file_hash || existing.cert_sha256_hash || existing.certificate_file_hash || null,
+    certificate_file_key: payload.cert_file_key || payload.certificate_file_key || existing.certificate_file_key || null,
+    certificate_file_name: payload.cert_file_name || payload.certificate_file_name || existing.certificate_file_name || null,
+    certificate_file_size: payload.cert_file_size || payload.certificate_file_size || existing.certificate_file_size || null,
+    certificate_file_hash: payload.cert_sha256_hash || payload.certificate_file_hash || existing.certificate_file_hash || null,
     performed_by: user.id,
     performed_by_name: user.name,
     reviewed_by: user.id,
@@ -1021,12 +1031,31 @@ export const uploadVccWorkOrderCertificate = async (id, file, { filename, certif
   const idx = allWos.findIndex((w) => w.id === id);
   if (idx === -1) throw new Error('ไม่พบใบสั่งงานทวนสอบ/สอบเทียบ');
   const existing = allWos[idx];
+
+  const fileKey = `vcc_cert_${id}_v${(existing.certificate_version || 0) + 1}`;
+  let savedFile = null;
+  try {
+    savedFile = await saveVccPdfFile(fileKey, file);
+  } catch {
+    savedFile = {
+      fileKey,
+      fileName: filename || file?.name || 'certificate.pdf',
+      fileSize: file?.size || 0,
+      sha256: 'mock-sha256-hash-' + Date.now()
+    };
+  }
+
   const now = new Date().toISOString();
   const updated = {
     ...existing,
-    certificate_file_name: filename || file.name || 'certificate.pdf',
-    certificate_file_size: file.size || 0,
-    certificate_file_hash: 'mock-sha256-hash-' + Date.now(),
+    cert_file_key: savedFile.fileKey,
+    cert_file_name: savedFile.fileName,
+    cert_file_size: savedFile.fileSize,
+    cert_sha256_hash: savedFile.sha256,
+    certificate_file_key: savedFile.fileKey,
+    certificate_file_name: savedFile.fileName,
+    certificate_file_size: savedFile.fileSize,
+    certificate_file_hash: savedFile.sha256,
     certificate_version: (existing.certificate_version || 0) + 1,
     certificate_uploaded_at: now,
     certificate_uploaded_by: user.id,
@@ -1040,7 +1069,11 @@ export const uploadVccWorkOrderCertificate = async (id, file, { filename, certif
   return { workOrder: enrichLocalWo(updated, getLocalAssets(), getDepartmentMap(), getLocalPlans()), certificate_version: updated.certificate_version };
 };
 
-export const downloadVccWorkOrderCertificate = async (id, { version, purpose = 'view' } = {}) => {
+export const downloadVccWorkOrderCertificate = async (id, options = {}) => {
+  const opts = typeof options === 'string'
+    ? { filename: options, purpose: 'download' }
+    : { purpose: 'view', ...options };
+  const { version, purpose = 'view', filename } = opts;
   if (isApiMode) {
     const params = new URLSearchParams();
     if (version) params.append('version', version);
@@ -1049,7 +1082,28 @@ export const downloadVccWorkOrderCertificate = async (id, { version, purpose = '
     const blob = await apiBlob(`/api/vcc/work-orders/${encodeURIComponent(id)}/certificate-file${qs}`, { purpose });
     return blob;
   }
-  return new Blob(['%PDF-1.4 Mock Calibration Certificate'], { type: 'application/pdf' });
+  const allWos = getLocalWos();
+  const wo = allWos.find((w) => w.id === id);
+  const fileKey = wo?.cert_file_key || wo?.certificate_file_key || wo?.certificate_file_name || `vcc_cert_${id}`;
+  const blob = await getVccPdfBlob(fileKey, wo);
+
+  if (purpose === 'download' && typeof document !== 'undefined') {
+    const downloadBlob = blob || new Blob(['%PDF-1.4 Mock Calibration Certificate'], { type: 'application/pdf' });
+    const url = URL.createObjectURL(downloadBlob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename || wo?.cert_file_name || wo?.certificate_file_name || `certificate_${wo?.wo_code || id}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => {
+      try {
+        URL.revokeObjectURL(url);
+      } catch {}
+    }, 2000);
+    return downloadBlob;
+  }
+  return blob || new Blob(['%PDF-1.4 Mock Calibration Certificate'], { type: 'application/pdf' });
 };
 
 export const fetchVccWorkOrderCertificates = async (id) => {

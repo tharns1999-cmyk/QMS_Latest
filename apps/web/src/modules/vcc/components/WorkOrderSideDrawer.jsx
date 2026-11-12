@@ -49,9 +49,11 @@ export const WorkOrderSideDrawer = ({
   onCancel,
   onAmend,
   onDownloadCert,
-  onViewDigitalRecord,
+  onViewDigitalRecord: propOnViewDigitalRecord,
+  onViewRecord,
   onAmendmentResolved
 }) => {
+  const onViewDigitalRecord = propOnViewDigitalRecord || onViewRecord;
   const [detail, setDetail] = useState(null);
   const [loading, setLoading] = useState(false);
   const currentUser = useStore((s) => s.currentUser);
@@ -203,14 +205,14 @@ export const WorkOrderSideDrawer = ({
             </div>
 
             <div className="flex items-center gap-1.5 shrink-0">
-              {currentWo.performed_at && (
+              {(currentWo.status === 'CLOSED' || currentWo.status === 'SUSPENDED' || currentWo.performed_at) && (
                 <button
                   type="button"
                   onClick={() => onViewDigitalRecord?.(currentWo)}
                   className="min-h-[44px] sm:min-h-[36px] sm:h-9 inline-flex items-center gap-1.5 px-3 rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700 text-xs font-semibold hover:bg-indigo-100 motion-safe:active:scale-[0.98] transition-all cursor-pointer shadow-2xs select-none"
                 >
-                  <Printer size={15} />
-                  <span className="hidden sm:inline">พิมพ์/ดูเอกสารดิจิทัล</span>
+                  <FileText size={15} />
+                  <span className="hidden sm:inline">📄 ดูผล / ใบรับรอง</span>
                 </button>
               )}
 
@@ -742,14 +744,14 @@ export const WorkOrderSideDrawer = ({
               </button>
             )}
 
-            {currentWo.performed_at && (
+            {(currentWo.status === 'CLOSED' || currentWo.status === 'SUSPENDED' || currentWo.performed_at) && (
               <button
                 type="button"
                 onClick={() => onViewDigitalRecord?.(currentWo)}
                 className="min-h-[44px] sm:min-h-[38px] sm:h-9 w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 sm:px-3.5 rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700 text-xs sm:text-sm font-semibold hover:bg-indigo-100 focus-visible:ring-2 focus-visible:ring-indigo-600 focus-visible:ring-offset-2 focus-visible:outline-none motion-safe:active:scale-[0.98] transition-all cursor-pointer shadow-2xs select-none"
               >
-                <Printer size={15} />
-                <span>พิมพ์/ดูเอกสารดิจิทัล</span>
+                <FileText size={15} />
+                <span>📄 ดูผล / ใบรับรอง</span>
               </button>
             )}
 

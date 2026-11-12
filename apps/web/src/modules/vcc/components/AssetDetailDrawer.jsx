@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import {
   X,
@@ -13,9 +13,14 @@ import {
   Building2,
   Layers,
   ShieldCheck,
+  ShieldAlert,
+  FileCheck2,
   FileText
 } from 'lucide-react';
 import { useVccModalAccessibility } from '../hooks/useVccModalAccessibility';
+import { fetchVccWorkOrders } from '../api/vccWorkOrderApi';
+import { formatVccDate } from '../utils/vccDateUtils';
+import { DigitalRecordModal } from './DigitalRecordModal';
 
 const ACTION_LABELS = {
   VCC_ASSET_CREATED: { label: 'เพิ่มเครื่องมือใหม่', badge: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
@@ -73,6 +78,38 @@ export const AssetDetailDrawer = ({
   const actualOnClose = onClose || (() => setDetailModalOpen && setDetailModalOpen(false));
   const actualLoading = Boolean(loading || loadingDetail);
   const actualData = data || detailData;
+  const asset = actualData?.asset || null;
+  const history = actualData?.history || [];
+  const isComposite = asset?.group_nature === 'COMPOSITE_SET';
+
+  const [assetWorkOrders, setAssetWorkOrders] = useState([]);
+  const [loadingWos, setLoadingWos] = useState(false);
+  const [selectedRecordWo, setSelectedRecordWo] = useState(null);
+
+  useEffect(() => {
+    let active = true;
+    if (!isActualOpen || !asset?.id) {
+      setAssetWorkOrders([]);
+      return;
+    }
+    const loadWos = async () => {
+      setLoadingWos(true);
+      try {
+        const wos = await fetchVccWorkOrders({ asset_id: asset.id });
+        if (active) {
+          setAssetWorkOrders(Array.isArray(wos) ? wos : []);
+        }
+      } catch {
+        if (active) setAssetWorkOrders([]);
+      } finally {
+        if (active) setLoadingWos(false);
+      }
+    };
+    loadWos();
+    return () => {
+      active = false;
+    };
+  }, [isActualOpen, asset?.id, asset?.asset_code]);
 
   const {
     dialogRef,
@@ -86,9 +123,9 @@ export const AssetDetailDrawer = ({
   if (!isActualOpen) return null;
   if (typeof document === 'undefined') return null;
 
-  const asset = actualData?.asset || null;
-  const history = actualData?.history || [];
-  const isComposite = asset?.group_nature === 'COMPOSITE_SET';
+  const closedWos = assetWorkOrders.filter(
+    (w) => w.status === 'CLOSED' || w.status === 'SUSPENDED' || w.performed_at
+  );
 
   return createPortal(
     <div
@@ -315,6 +352,85 @@ export const AssetDetailDrawer = ({
                 </div>
               </div>
 
+              {/* SECTION 3.5: ประวัติการสอบเทียบและใบรับรอง (Calibration & Verification History) */}
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-2xs space-y-3.5">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                  <div className="flex items-center gap-2">
+                    <FileCheck2 size={16} className="text-emerald-600" />
+                    <h3 className="text-sm font-bold text-slate-900">
+                      ประวัติการสอบเทียบ / ทวนสอบ (Calibration Records)
+                    </h3>
+                  </div>
+                  <span className="text-xs text-slate-500 font-medium">
+                    {closedWos.length} รายการ
+                  </span>
+                </div>
+
+                {loadingWos ? (
+                  <div className="py-4 text-center text-xs text-slate-400">กำลังโหลดประวัติการสอบเทียบ...</div>
+                ) : closedWos.length === 0 ? (
+                  <div className="py-6 text-center text-xs text-slate-500 bg-slate-50 rounded-xl border border-slate-100">
+                    ยังไม่มีประวัติการสอบเทียบที่ปิดงานแล้ว
+                  </div>
+                ) : (
+                  <div className="space-y-2.5">
+                    {closedWos.map((wo) => {
+                      const isPass = wo.result_status === 'PASS';
+                      return (
+                        <div
+                          key={wo.id}
+                          className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/60 space-y-2 text-xs"
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono font-bold text-indigo-700">{wo.wo_code}</span>
+                              <span
+                                className={`px-2 py-0.5 rounded-full font-bold text-[11px] border ${
+                                  isPass
+                                    ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                                    : 'bg-rose-100 text-rose-800 border-rose-200'
+                                }`}
+                              >
+                                {isPass ? '✓ PASS' : '✕ FAIL'}
+                              </span>
+                            </div>
+                            <span className="text-slate-500">
+                              วันที่ดำเนินการ: {formatVccDate(wo.performed_at)}
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-slate-700 pt-1 border-t border-slate-200/60">
+                            {wo.certificate_no && (
+                              <div>
+                                <span className="text-slate-400">เลขที่ใบรับรอง:</span>{' '}
+                                <span className="font-mono font-bold text-slate-900">{wo.certificate_no}</span>
+                              </div>
+                            )}
+                            {(wo.actual_result || wo.actual_measurement) && (
+                              <div className="sm:col-span-2">
+                                <span className="text-slate-400">ผลการวัดจริง:</span>{' '}
+                                <span className="font-medium text-slate-900">{wo.actual_result || wo.actual_measurement}</span>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="pt-2 flex justify-end">
+                            <button
+                              type="button"
+                              onClick={() => setSelectedRecordWo(wo)}
+                              className="min-h-[32px] h-8 inline-flex items-center gap-1.5 px-3 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 text-xs font-semibold hover:bg-indigo-100 transition-colors cursor-pointer motion-safe:active:scale-[0.98] select-none shadow-2xs"
+                            >
+                              <FileText size={13} className="text-indigo-600" />
+                              <span>📄 ดูผล / ใบรับรอง</span>
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
               {/* SECTION 4: ประวัติการใช้งานและ Audit Log */}
               <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-2xs space-y-3.5">
                 <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
@@ -439,6 +555,13 @@ export const AssetDetailDrawer = ({
           </button>
         </div>
       </div>
+
+      {selectedRecordWo && (
+        <DigitalRecordModal
+          workOrder={selectedRecordWo}
+          onClose={() => setSelectedRecordWo(null)}
+        />
+      )}
     </div>,
     document.body
   );
