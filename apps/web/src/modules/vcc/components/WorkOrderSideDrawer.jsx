@@ -541,6 +541,112 @@ export const WorkOrderSideDrawer = ({
                   </div>
                 )}
 
+                {/* Sign-off Card (Recorded & Closed By) */}
+                {(currentWo.status === 'CLOSED' || currentWo.performed_at) && (() => {
+                  const drawerRecordedById = currentWo.recorded_by || currentWo.performed_by || currentWo.closed_by || null;
+                  const drawerRecordedByName =
+                    currentWo.recorded_by_name ||
+                    currentWo.performed_by_name ||
+                    currentWo.closed_by_name ||
+                    currentWo.performed_by ||
+                    currentWo.recorded_by ||
+                    '-';
+                  const drawerRoleOrDept =
+                    currentWo.performer_role ||
+                    currentWo.performer_department ||
+                    currentWo.department_name_th ||
+                    currentWo.department ||
+                    '';
+                  const drawerClosedAt =
+                    currentWo.performed_at ||
+                    currentWo.closed_at ||
+                    currentWo.reviewed_at ||
+                    currentWo.updated_at ||
+                    '';
+
+                  const rawVerifierId = currentWo.verified_by !== undefined
+                    ? (currentWo.verified_by || null)
+                    : (currentWo.reviewed_by && currentWo.reviewed_by !== drawerRecordedById ? currentWo.reviewed_by : null);
+
+                  const rawVerifierName = currentWo.verified_by_name !== undefined
+                    ? (currentWo.verified_by_name || '')
+                    : (rawVerifierId
+                        ? (currentWo.reviewed_by_name || currentWo.reviewed_by || '')
+                        : (!drawerRecordedById && currentWo.reviewed_by_name && (!drawerRecordedByName || currentWo.reviewed_by_name.trim().toLowerCase() !== drawerRecordedByName.trim().toLowerCase())
+                            ? currentWo.reviewed_by_name
+                            : '')
+                      );
+
+                  // Backward compatibility: only show reviewer if verified_by has value AND is distinct from recorded_by
+                  const hasSeparateVerifier = Boolean(
+                    (rawVerifierId && rawVerifierId !== '-' && rawVerifierId !== drawerRecordedById) ||
+                    (!rawVerifierId && rawVerifierName && rawVerifierName !== '-' && rawVerifierName.trim().length > 0 &&
+                      (!drawerRecordedByName || drawerRecordedByName === '-' || rawVerifierName.trim().toLowerCase() !== drawerRecordedByName.trim().toLowerCase()))
+                  );
+
+                  const drawerVerifiedById = rawVerifierId;
+                  const drawerVerifiedByName = rawVerifierName || rawVerifierId || '';
+                  const drawerVerifiedAt = currentWo.verified_at || currentWo.reviewed_at || '';
+
+                  return (
+                    <div className="pt-2 border-t border-slate-200">
+                      {hasSeparateVerifier ? (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                          <div className="p-3 rounded-xl border border-slate-200 bg-white space-y-1.5">
+                            <span className="font-bold text-slate-700 block text-xs">
+                              ผู้บันทึกผลการสอบเทียบ
+                            </span>
+                            <div className="font-semibold text-slate-900">
+                              {drawerRecordedByName}
+                            </div>
+                            <div className="text-[11px] text-slate-500">
+                              {drawerRoleOrDept && <div>บทบาท/แผนก: {drawerRoleOrDept}</div>}
+                              <div className="font-sans">วันที่: {formatVccDate(drawerClosedAt)}</div>
+                            </div>
+                          </div>
+                          <div className="p-3 rounded-xl border border-slate-200 bg-white space-y-1.5">
+                            <span className="font-bold text-slate-700 block text-xs">
+                              ผู้ตรวจรับและปิดใบสั่งงาน
+                            </span>
+                            <div className="font-semibold text-slate-900">
+                              {drawerVerifiedByName}
+                            </div>
+                            <div className="text-[11px] text-slate-500">
+                              <div className="font-sans">วันที่: {formatVccDate(drawerVerifiedAt)}</div>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div
+                          data-testid="vcc-side-drawer-signer-card"
+                          className="p-3.5 rounded-xl border border-slate-200 bg-white space-y-2 text-xs"
+                        >
+                          <span className="font-bold text-slate-800 block text-xs">
+                            ผู้บันทึกผลและปิดใบสั่งงาน (Recorded & Closed By)
+                          </span>
+                          <div className="font-bold text-slate-900 text-sm">
+                            {drawerRecordedByName}
+                          </div>
+                          <div className="flex flex-wrap items-center justify-between gap-2 text-slate-500 text-xs pt-1.5 border-t border-slate-100">
+                            {drawerRoleOrDept && (
+                              <div>
+                                <span className="text-slate-400">บทบาท/แผนก:</span>{' '}
+                                <span className="font-semibold text-slate-700">{drawerRoleOrDept}</span>
+                              </div>
+                            )}
+                            <div>
+                              <span className="text-slate-400">วันที่/เวลาปิดงาน:</span>{' '}
+                              <span className="font-semibold text-slate-700 font-sans" title={drawerClosedAt || ''}>
+                                {drawerClosedAt ? (drawerClosedAt.includes('T') ? formatVccDateTime(drawerClosedAt) : formatVccDate(drawerClosedAt)) : '-'}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
                 {currentWo.status === 'CLOSED' && (
                   <WorkOrderAmendmentRequests workOrderId={currentWo.id} onResolved={onAmendmentResolved} />
                 )}

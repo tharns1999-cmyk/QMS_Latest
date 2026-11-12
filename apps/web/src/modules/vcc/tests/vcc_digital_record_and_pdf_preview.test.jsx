@@ -84,6 +84,17 @@ describe('VCC Digital Record Inspector & PDF Preview Engine', () => {
       expect(resView.sha256).toBe(resBuffer.sha256);
     });
 
+    it('normalizes MIME type to application/pdf when uploaded file has empty or generic octet-stream MIME type', async () => {
+      const validPdfHeader = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2D, 0x31, 0x2E, 0x34, 0x0A, 0x25, 0xC4, 0xE5, 0xF2, 0xE5]);
+      const rawOctetFile = new File([validPdfHeader], 'cert_raw.pdf', { type: '' });
+      const res = await saveVccPdfFile('key-octet-mime', rawOctetFile);
+      expect(res.mimeType).toBe('application/pdf');
+
+      const retrievedBlob = await getVccPdfBlob('key-octet-mime');
+      expect(retrievedBlob).toBeTruthy();
+      expect(retrievedBlob.type).toBe('application/pdf');
+    });
+
     it('generates a full-featured authentic calibration certificate PDF (size > 2000 bytes) with Thai seed data without WinAnsi errors', async () => {
       const thaiSeedRecord = {
         wo_code: 'WO-2025-088',
@@ -346,6 +357,176 @@ describe('VCC Digital Record Inspector & PDF Preview Engine', () => {
       expect(screen.getByText(/สรุปผลการทวนสอบดิจิทัลภายในระบบ/i)).toBeInTheDocument();
       expect(screen.getByText(/บันทึกการทวนสอบนี้ได้รับการรับรองผ่านระบบดิจิทัล/i)).toBeInTheDocument();
     });
+
+    it('renders single signer card "ผู้บันทึกผลและปิดใบสั่งงาน" and removes duplicate reviewer card when performed_by closed directly', () => {
+      const singleSignerRecord = {
+        id: 'wo-single-signer',
+        wo_code: 'WO-2026-SINGLE',
+        asset_code: 'VN002',
+        asset_name: 'Vernier Caliper',
+        department: 'QC',
+        department_name_th: 'ฝ่ายควบคุมคุณภาพ (QC)',
+        status: 'CLOSED',
+        result_status: 'PASS',
+        performed_at: '2026-11-12T10:00:00Z',
+        performed_by: 'U-BEAM',
+        performed_by_name: 'บีม (QC Officer)',
+        recorded_by: 'U-BEAM',
+        recorded_by_name: 'บีม (QC Officer)',
+        closed_by: 'U-BEAM',
+        closed_by_name: 'บีม (QC Officer)',
+        // Even if old bug set reviewed_by to the same person:
+        reviewed_by: 'U-BEAM',
+        reviewed_by_name: 'บีม (QC Officer)',
+        verified_by: null,
+        certificate_file_name: null,
+        calibration_type: 'INTERNAL_VERIFICATION'
+      };
+
+      render(
+        <DigitalRecordModal
+          isOpen={true}
+          onClose={vi.fn()}
+          record={singleSignerRecord}
+        />
+      );
+
+      // Verify single card exists
+      const singleCard = screen.getByTestId('vcc-single-signer-card');
+      expect(singleCard).toBeInTheDocument();
+      expect(singleCard.textContent).toContain('ผู้บันทึกผลและปิดใบสั่งงาน (Recorded & Closed By)');
+      expect(singleCard.textContent).toContain('บีม (QC Officer)');
+      expect(singleCard.textContent).toContain('ฝ่ายควบคุมคุณภาพ (QC)');
+
+      // Verify duplicate reviewer card is NOT rendered
+      expect(screen.queryByText(/ผู้ตรวจรับและปิดใบสั่งงาน \(Reviewer \/ Approver\)/i)).not.toBeInTheDocument();
+    });
+
+    it('supports backward compatibility by displaying reviewer card when verified_by has value and is distinct from recorded_by', () => {
+      const dualSignerRecord = {
+        id: 'wo-dual-signer',
+        wo_code: 'WO-2026-DUAL',
+        asset_code: 'VN003',
+        asset_name: 'Micrometer',
+        department_name_th: 'ฝ่ายควบคุมคุณภาพ (QC)',
+        status: 'CLOSED',
+        result_status: 'PASS',
+        performed_at: '2026-10-10',
+        performed_by: 'U-PERF',
+        performed_by_name: 'บีม (QC Officer)',
+        recorded_by: 'U-PERF',
+        recorded_by_name: 'บีม (QC Officer)',
+        verified_by: 'U-REV',
+        verified_by_name: 'หัวหน้าสมชาย (QC Supervisor)',
+        reviewed_by: 'U-REV',
+        reviewed_by_name: 'หัวหน้าสมชาย (QC Supervisor)',
+        reviewed_at: '2026-10-11',
+        certificate_file_name: null,
+        calibration_type: 'INTERNAL_VERIFICATION'
+      };
+
+      render(
+        <DigitalRecordModal
+          isOpen={true}
+          onClose={vi.fn()}
+          record={dualSignerRecord}
+        />
+      );
+
+      // Both boxes must be present
+      expect(screen.getByText(/ผู้บันทึกผลการสอบเทียบ \(Recorded By\)/i)).toBeInTheDocument();
+      expect(screen.getByText(/ผู้ตรวจรับและปิดใบสั่งงาน \(Reviewer \/ Approver\)/i)).toBeInTheDocument();
+      expect(screen.getAllByText('บีม (QC Officer)').length).toBeGreaterThan(0);
+      expect(screen.getAllByText('หัวหน้าสมชาย (QC Supervisor)').length).toBeGreaterThan(0);
+      expect(screen.queryByTestId('vcc-single-signer-card')).not.toBeInTheDocument();
+    });
+
+    it('renders backup buttons [ ↗ เปิดไฟล์ PDF ในแท็บใหม่ ] and [ ⬇ ดาวน์โหลด ] and handles click interactions', async () => {
+      const onDownloadCert = vi.fn();
+      render(
+        <DigitalRecordModal
+          isOpen={true}
+          onClose={vi.fn()}
+          record={sampleRecord}
+          onDownloadCert={onDownloadCert}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('pdf-preview-iframe')).toBeInTheDocument();
+      });
+
+      // Verify backup buttons overlaying the iframe
+      const openBtn = screen.getByRole('button', { name: /เปิดไฟล์ PDF ในแท็บใหม่/i });
+      const dlBtn = screen.getByRole('button', { name: /^ดาวน์โหลด$/i });
+      expect(openBtn).toBeInTheDocument();
+      expect(dlBtn).toBeInTheDocument();
+
+      // Click open in new tab
+      fireEvent.click(openBtn);
+      expect(window.open).toHaveBeenCalledWith(expect.stringContaining('blob:'), '_blank', 'noopener,noreferrer');
+
+      // Click download button
+      fireEvent.click(dlBtn);
+      expect(onDownloadCert).toHaveBeenCalledWith(sampleRecord, { purpose: 'download' });
+    });
+
+    it('collapses into single signer card when user IDs are identical despite differing name formatting', () => {
+      const sameIdDifferingNames = {
+        id: 'wo-same-id-diff-names',
+        wo_code: 'WO-2026-SAMEID',
+        asset_code: 'VN-009',
+        department_name_th: 'ฝ่ายควบคุมคุณภาพ (QC)',
+        status: 'CLOSED',
+        result_status: 'PASS',
+        performed_at: '2026-11-12T10:00:00Z',
+        performed_by: 'U-BEAM',
+        performed_by_name: 'บีม',
+        reviewed_by: 'U-BEAM',
+        reviewed_by_name: 'บีม (QC Officer)'
+      };
+
+      render(
+        <DigitalRecordModal
+          isOpen={true}
+          onClose={vi.fn()}
+          record={sameIdDifferingNames}
+        />
+      );
+
+      // Must collapse to single signer card based on identical ID
+      const singleCard = screen.getByTestId('vcc-single-signer-card');
+      expect(singleCard).toBeInTheDocument();
+      expect(singleCard.textContent).toContain('ผู้บันทึกผลและปิดใบสั่งงาน (Recorded & Closed By)');
+      expect(screen.queryByText(/ผู้ตรวจรับและปิดใบสั่งงาน/i)).not.toBeInTheDocument();
+    });
+
+    it('gracefully handles missing/null performed_by_name with fallback to "-" without throwing', () => {
+      const nullPerformerRecord = {
+        id: 'wo-null-perf',
+        wo_code: 'WO-2026-NULLPERF',
+        asset_code: 'VN-010',
+        status: 'CLOSED',
+        result_status: 'PASS',
+        performed_at: '2026-11-12T10:00:00Z',
+        performed_by: null,
+        performed_by_name: null,
+        reviewed_by: null,
+        reviewed_by_name: null
+      };
+
+      render(
+        <DigitalRecordModal
+          isOpen={true}
+          onClose={vi.fn()}
+          record={nullPerformerRecord}
+        />
+      );
+
+      const singleCard = screen.getByTestId('vcc-single-signer-card');
+      expect(singleCard).toBeInTheDocument();
+      expect(singleCard.textContent).toContain('-');
+    });
   });
 
   describe('Part 4: Cross-Screen Integration Buttons', () => {
@@ -410,6 +591,101 @@ describe('VCC Digital Record Inspector & PDF Preview Engine', () => {
       expect(viewBtns.length).toBeGreaterThan(0);
       fireEvent.click(viewBtns[0]);
       expect(onViewRecord).toHaveBeenCalledWith(closedWo);
+    });
+
+    it('WorkOrderSideDrawer renders single card "ผู้บันทึกผลและปิดใบสั่งงาน" for closed work order', () => {
+      const closedWo = {
+        id: 'wo-closed-drawer-signer',
+        wo_code: 'WO-2026-999',
+        asset_code: 'CAL-99',
+        asset_name: 'Pressure Sensor',
+        department_name_th: 'แผนกสอบเทียบ',
+        status: 'CLOSED',
+        result_status: 'PASS',
+        performed_at: '2026-11-12T12:00:00Z',
+        performed_by_name: 'บีม (QC)',
+        reviewed_by_name: 'บีม (QC)',
+        actual_measurement: '50.0 bar'
+      };
+
+      render(
+        <WorkOrderSideDrawer
+          isOpen={true}
+          onClose={vi.fn()}
+          workOrder={closedWo}
+        />
+      );
+
+      const signerCard = screen.getByTestId('vcc-side-drawer-signer-card');
+      expect(signerCard).toBeInTheDocument();
+      expect(signerCard.textContent).toContain('ผู้บันทึกผลและปิดใบสั่งงาน (Recorded & Closed By)');
+      expect(signerCard.textContent).toContain('บีม (QC)');
+      expect(signerCard.textContent).toContain('แผนกสอบเทียบ');
+      expect(screen.queryByText(/ผู้ตรวจรับและปิดใบสั่งงาน/i)).not.toBeInTheDocument();
+    });
+
+    it('WorkOrderSideDrawer supports backward compatibility by rendering dual signers without ReferenceError when verified_by is distinct', () => {
+      const legacyDualWo = {
+        id: 'wo-legacy-drawer-dual',
+        wo_code: 'WO-2026-LEGACY',
+        asset_code: 'CAL-100',
+        asset_name: 'Pressure Transmitter',
+        department_name_th: 'ฝ่ายควบคุมคุณภาพ (QC)',
+        status: 'CLOSED',
+        result_status: 'PASS',
+        performed_at: '2026-10-10',
+        performed_by: 'U-PERF',
+        performed_by_name: 'บีม (QC Officer)',
+        verified_by: 'U-SUP',
+        verified_by_name: 'หัวหน้าสมชาย (QC Supervisor)',
+        reviewed_by: 'U-SUP',
+        reviewed_by_name: 'หัวหน้าสมชาย (QC Supervisor)',
+        reviewed_at: '2026-10-11',
+        actual_measurement: '100.0 kPa'
+      };
+
+      render(
+        <WorkOrderSideDrawer
+          isOpen={true}
+          onClose={vi.fn()}
+          workOrder={legacyDualWo}
+        />
+      );
+
+      // Verify both signers are present and drawerVerifiedByName is rendered without ReferenceError
+      expect(screen.getByText('ผู้บันทึกผลการสอบเทียบ')).toBeInTheDocument();
+      expect(screen.getByText('ผู้ตรวจรับและปิดใบสั่งงาน')).toBeInTheDocument();
+      expect(screen.getByText('บีม (QC Officer)')).toBeInTheDocument();
+      expect(screen.getByText('หัวหน้าสมชาย (QC Supervisor)')).toBeInTheDocument();
+      expect(screen.queryByTestId('vcc-side-drawer-signer-card')).not.toBeInTheDocument();
+    });
+
+    it('WorkOrderSideDrawer collapses into single card when IDs match despite different name strings', () => {
+      const sameIdWo = {
+        id: 'wo-drawer-same-id',
+        wo_code: 'WO-2026-SAMEID-DRAWER',
+        asset_code: 'CAL-101',
+        asset_name: 'Pressure Gauge',
+        status: 'CLOSED',
+        result_status: 'PASS',
+        performed_at: '2026-11-12T10:00:00Z',
+        performed_by: 'U-SAME',
+        performed_by_name: 'บีม',
+        reviewed_by: 'U-SAME',
+        reviewed_by_name: 'บีม (QC Officer)'
+      };
+
+      render(
+        <WorkOrderSideDrawer
+          isOpen={true}
+          onClose={vi.fn()}
+          workOrder={sameIdWo}
+        />
+      );
+
+      const signerCard = screen.getByTestId('vcc-side-drawer-signer-card');
+      expect(signerCard).toBeInTheDocument();
+      expect(screen.queryByText(/ผู้ตรวจรับและปิดใบสั่งงาน/i)).not.toBeInTheDocument();
     });
 
     it('AnnualPlanSideInspector renders actual measurement and [ 📄 เปิดดูผลและใบรับรอง PDF ] for completed month', () => {

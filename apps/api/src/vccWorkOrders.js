@@ -154,6 +154,12 @@ const fetchWorkOrder = async (db, id) => {
 
   return {
     ...wo,
+    recorded_by: wo.performed_by,
+    recorded_by_name: wo.performed_by_name,
+    closed_by: wo.status === 'CLOSED' ? (wo.reviewed_by || wo.performed_by) : null,
+    closed_by_name: wo.status === 'CLOSED' ? (wo.reviewed_by_name || wo.performed_by_name) : null,
+    verified_by: wo.reviewed_by !== wo.performed_by ? wo.reviewed_by : null,
+    verified_by_name: wo.reviewed_by !== wo.performed_by ? wo.reviewed_by_name : null,
     child_assets: Array.isArray(childAssets) ? childAssets : [],
     is_legacy_without_snapshot: isLegacyWithoutSnapshot
   };
@@ -1028,7 +1034,17 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
       ORDER BY w.due_date ASC, w.wo_code ASC
     `).bind(...params).all();
 
-    return c.json({ workOrders: results });
+    const mapped = (results || []).map((wo) => ({
+      ...wo,
+      recorded_by: wo.performed_by,
+      recorded_by_name: wo.performed_by_name,
+      closed_by: wo.status === 'CLOSED' ? (wo.reviewed_by || wo.performed_by) : null,
+      closed_by_name: wo.status === 'CLOSED' ? (wo.reviewed_by_name || wo.performed_by_name) : null,
+      verified_by: wo.reviewed_by !== wo.performed_by ? wo.reviewed_by : null,
+      verified_by_name: wo.reviewed_by !== wo.performed_by ? wo.reviewed_by_name : null
+    }));
+
+    return c.json({ workOrders: mapped });
   });
 
   app.get('/api/vcc/work-orders/:id', requireAuth, requireVccAccess, async (c) => {
@@ -1819,8 +1835,8 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
     const isInconclusive = resultStatus === 'INCONCLUSIVE';
     const nextStatus = isInconclusive ? 'PENDING_REVIEW' : 'CLOSED';
     const nextNcStatus = HOLDING_RESULTS.has(resultStatus) ? 'OPEN' : existing.nc_status;
-    const reviewerId = isInconclusive ? null : user.id;
-    const reviewedAt = isInconclusive ? null : new Date().toISOString();
+    const reviewerId = null;
+    const reviewedAt = null;
 
     const batchStmts = [
       db.prepare(`

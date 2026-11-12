@@ -160,6 +160,12 @@ export const saveVccPdfFile = async (fileKey, file) => {
     throw new Error('รูปแบบไฟล์ไม่ถูกต้อง ต้องเป็นเอกสาร PDF เท่านั้น (%PDF-)');
   }
 
+  // Ensure blob always has application/pdf MIME type for browser iframe rendering
+  if (!blob || blob.type !== 'application/pdf') {
+    blob = new Blob([fullBuffer], { type: 'application/pdf' });
+    mimeType = 'application/pdf';
+  }
+
   // 3. Calculate full file SHA-256 hash
   const sha256 = await calculateSha256(fullBuffer);
 
@@ -358,28 +364,47 @@ export const generateFallbackPdfBlob = createFallbackPdfBlob;
  * @returns {Promise<Blob|null>}
  */
 export const getVccPdfBlob = async (fileKey, fallbackRecord) => {
-  const keyStr = fileKey ? String(fileKey) : null;
+  const candidateKeys = [
+    fileKey,
+    fallbackRecord?.cert_file_key,
+    fallbackRecord?.certificate_file_key,
+    fallbackRecord?.file_key,
+    fallbackRecord?.cert_file_name,
+    fallbackRecord?.certificate_file_name,
+    fallbackRecord?.id ? `vcc_cert_${fallbackRecord.id}` : null,
+    fallbackRecord?.wo_code ? `vcc_cert_${fallbackRecord.wo_code}` : null
+  ].filter(Boolean).map(String);
 
-  // 1. Check in-memory registry
-  if (keyStr && vccPdfMemoryRegistry.has(keyStr)) {
-    const entry = vccPdfMemoryRegistry.get(keyStr);
-    return entry?.blob || entry;
+  // 1. Check in-memory registry for any candidate key
+  for (const k of candidateKeys) {
+    if (vccPdfMemoryRegistry.has(k)) {
+      const entry = vccPdfMemoryRegistry.get(k);
+      const raw = entry?.blob || entry;
+      if (raw instanceof Blob) {
+        return raw.type === 'application/pdf' ? raw : new Blob([raw], { type: 'application/pdf' });
+      }
+    }
   }
 
-  // 2. Check IndexedDB
-  if (keyStr) {
+  // 2. Check IndexedDB for candidate keys
+  if (candidateKeys.length > 0) {
     try {
       const db = await initVccDB();
-      const dbBlob = await new Promise((resolve, reject) => {
-        const tx = db.transaction(STORE_NAME, 'readonly');
-        const store = tx.objectStore(STORE_NAME);
-        const req = store.get(keyStr);
-        req.onsuccess = () => resolve(req.result);
-        req.onerror = (e) => reject(e.target.error);
-      });
-      if (dbBlob) {
-        vccPdfMemoryRegistry.set(keyStr, { blob: dbBlob, metadata: { fileKey: keyStr } });
-        return dbBlob;
+      for (const k of candidateKeys) {
+        const dbBlob = await new Promise((resolve, reject) => {
+          const tx = db.transaction(STORE_NAME, 'readonly');
+          const store = tx.objectStore(STORE_NAME);
+          const req = store.get(k);
+          req.onsuccess = () => resolve(req.result);
+          req.onerror = (e) => reject(e.target.error);
+        });
+        if (dbBlob) {
+          const validBlob = (dbBlob instanceof Blob)
+            ? (dbBlob.type === 'application/pdf' ? dbBlob : new Blob([dbBlob], { type: 'application/pdf' }))
+            : new Blob([dbBlob], { type: 'application/pdf' });
+          vccPdfMemoryRegistry.set(k, { blob: validBlob, metadata: { fileKey: k } });
+          return validBlob;
+        }
       }
     } catch {
       // IndexedDB unavailable or record not found
@@ -389,12 +414,11 @@ export const getVccPdfBlob = async (fileKey, fallbackRecord) => {
   // 3. Fallback for Seed Data (e.g. ST002) or any record provided
   if (fallbackRecord) {
     const generatedBlob = await createFallbackPdfBlob(fallbackRecord);
-    const cacheKey = keyStr || fallbackRecord.cert_file_key || fallbackRecord.certificate_file_key || (fallbackRecord.id ? `vcc_cert_${fallbackRecord.id}` : null) || fallbackRecord.wo_code;
-    if (cacheKey) {
-      vccPdfMemoryRegistry.set(String(cacheKey), {
+    for (const k of candidateKeys) {
+      vccPdfMemoryRegistry.set(k, {
         blob: generatedBlob,
         metadata: {
-          fileKey: String(cacheKey),
+          fileKey: k,
           fileName: fallbackRecord.certificate_file_name || fallbackRecord.cert_file_name || `cert_${fallbackRecord.wo_code || 'record'}.pdf`,
           fileSize: generatedBlob.size,
           mimeType: 'application/pdf',
