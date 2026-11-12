@@ -32,6 +32,28 @@ import DeletePlanModal from './DeletePlanModal';
 
 export { resolvePlanCode, resolveDigitalPlanCode };
 
+export const isPlanSuperseded = (plan, allPlans = []) => {
+  if (!plan) return false;
+  if (String(plan.effective_status || '').toUpperCase() === 'SUPERSEDED') return true;
+  if (plan.status === 'APPROVED' && (plan.is_current === 0 || plan.is_current === false || plan.is_current === '0')) {
+    return true;
+  }
+  if (Array.isArray(allPlans) && allPlans.length > 0 && plan.status === 'APPROVED') {
+    const hasHigherApprovedRev = allPlans.some((other) => {
+      if (!other || other.id === plan.id) return false;
+      const sameYear = Number(other.plan_year) === Number(plan.plan_year);
+      const sameDept = String(other.department || '').toUpperCase() === String(plan.department || '').toUpperCase();
+      if (!sameYear || !sameDept) return false;
+      if (other.status !== 'APPROVED') return false;
+      const otherRev = parseInt(other.revision, 10);
+      const thisRev = parseInt(plan.revision, 10);
+      return !Number.isNaN(otherRev) && !Number.isNaN(thisRev) && otherRev > thisRev;
+    });
+    if (hasHigherApprovedRev) return true;
+  }
+  return false;
+};
+
 const STATUS_ICON_MAP = {
   ShieldCheck,
   Clock,
@@ -156,6 +178,9 @@ export const AnnualPlansHub = ({
   // Filter plans based on toolbar criteria
   const filteredPlans = useMemo(() => {
     return plans.filter((plan) => {
+      // Hide superseded plans from main directory table
+      if (isPlanSuperseded(plan, plans)) return false;
+
       // Year filter
       if (filterYear && String(plan.plan_year) !== String(filterYear)) return false;
 
@@ -212,12 +237,14 @@ export const AnnualPlansHub = ({
 
   // KPI calculations
   const kpiStats = useMemo(() => {
-    const totalPlans = scopedPlans.length;
-    const activeCount = scopedPlans.filter((p) => p.status === 'APPROVED').length;
-    const pendingCount = scopedPlans.filter((p) => ['PENDING_REVIEW', 'PENDING_APPROVAL'].includes(p.status)).length;
-    const draftCount = scopedPlans.filter((p) => ['DRAFT', 'REJECTED', 'RETURNED'].includes(p.status)).length;
+    // Only calculate KPI over active/current non-superseded plans
+    const currentScopedPlans = scopedPlans.filter((p) => !isPlanSuperseded(p, plans));
+    const totalPlans = currentScopedPlans.length;
+    const activeCount = currentScopedPlans.filter((p) => p.status === 'APPROVED').length;
+    const pendingCount = currentScopedPlans.filter((p) => ['PENDING_REVIEW', 'PENDING_APPROVAL'].includes(p.status)).length;
+    const draftCount = currentScopedPlans.filter((p) => ['DRAFT', 'REJECTED', 'RETURNED'].includes(p.status)).length;
 
-    // Coverage calculation
+    // Coverage calculation: count instruments only from current plans, no double counting!
     const scopedAssets = activeAssets.filter((a) => {
       const aDept = String(a.department || '').toUpperCase();
       if (activeFilterDept === 'MY_DEPTS') return userDepts.includes(aDept);
@@ -226,11 +253,38 @@ export const AnnualPlansHub = ({
       return true;
     });
     const totalCalibratable = scopedAssets.length;
-    const plannedAssetCount = scopedPlans.reduce((acc, p) => acc + Number(p.planned_items_count || p.item_count || 0), 0);
+
+    // Pick canonical current plan per department/year to avoid counting instruments across revisions
+    const canonicalPlansByScope = new Map();
+    for (const p of currentScopedPlans) {
+      const scopeKey = `${p.plan_year}:${String(p.department || '').toUpperCase()}`;
+      const existing = canonicalPlansByScope.get(scopeKey);
+      if (!existing) {
+        canonicalPlansByScope.set(scopeKey, p);
+      } else {
+        const pIsCurrent = (p.is_current === 1 || p.is_current === true || String(p.effective_status).toUpperCase() === 'CURRENT');
+        const existIsCurrent = (existing.is_current === 1 || existing.is_current === true || String(existing.effective_status).toUpperCase() === 'CURRENT');
+        if (pIsCurrent && !existIsCurrent) {
+          canonicalPlansByScope.set(scopeKey, p);
+        } else if (p.status === 'APPROVED' && existing.status !== 'APPROVED') {
+          canonicalPlansByScope.set(scopeKey, p);
+        } else {
+          const pRev = parseInt(p.revision, 10) || 0;
+          const existRev = parseInt(existing.revision, 10) || 0;
+          if (pRev > existRev && !existIsCurrent) {
+            canonicalPlansByScope.set(scopeKey, p);
+          }
+        }
+      }
+    }
+    const plannedAssetCount = Array.from(canonicalPlansByScope.values()).reduce(
+      (acc, p) => acc + Number(p.planned_items_count || p.item_count || 0),
+      0
+    );
     const coveragePct = totalCalibratable > 0 ? Math.min(100, Math.round((plannedAssetCount / totalCalibratable) * 100)) : 100;
 
     return { totalPlans, activeCount, pendingCount, draftCount, coveragePct, totalCalibratable, plannedAssetCount };
-  }, [scopedPlans, activeAssets, activeFilterDept, userDepts, canReadAll]);
+  }, [scopedPlans, plans, activeAssets, activeFilterDept, userDepts, canReadAll]);
 
   const kpiCards = useMemo(() => [
     {
@@ -274,7 +328,17 @@ export const AnnualPlansHub = ({
     }
   ], [kpiStats]);
 
-  const getStatusBadge = (status) => {
+  const getStatusBadge = (planOrStatus) => {
+    const isPlanObj = typeof planOrStatus === 'object' && planOrStatus !== null;
+    const status = isPlanObj ? planOrStatus.status : planOrStatus;
+    const isSuperseded = isPlanObj && isPlanSuperseded(planOrStatus, plans);
+    if (isSuperseded) {
+      return (
+        <span className="inline-flex items-center gap-1 text-[11px] font-semibold border px-2.5 py-0.5 rounded-full text-slate-700 bg-slate-100 border-slate-300">
+          <Clock size={12} className="text-slate-500" /> ถูกแทนที่ (Superseded)
+        </span>
+      );
+    }
     const cfg = getPlanStatusConfig(status);
     const IconComponent = STATUS_ICON_MAP[cfg.iconName] || Edit3;
     return (
@@ -516,7 +580,7 @@ export const AnnualPlansHub = ({
 
                       {/* Status Badge */}
                       <td className="align-middle py-3.5 px-3.5">
-                        {getStatusBadge(plan.status)}
+                        {getStatusBadge(plan)}
                       </td>
 
                       {/* Coverage with sleek Mini Progress Bar */}

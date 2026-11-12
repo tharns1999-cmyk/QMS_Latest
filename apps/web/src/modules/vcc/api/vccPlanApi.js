@@ -1903,11 +1903,6 @@ export const approveVccPlan = async (planId, comment = '') => {
           String(p.department).toUpperCase() === String(plan.department).toUpperCase()
         )
       ) &&
-      (
-        Number(p.is_current ?? 0) === 1 ||
-        p.effective_status === 'EFFECTIVE' ||
-        p.effective_status === 'CURRENT'
-      ) &&
       p.effective_status !== 'SUPERSEDED'
     );
     if (isTargetPrevious) {
@@ -1915,8 +1910,8 @@ export const approveVccPlan = async (planId, comment = '') => {
         ...p,
         is_current: 0,
         effective_status: 'SUPERSEDED',
-        superseded_by: plan.id,
-        superseded_at: now,
+        superseded_by: p.superseded_by || plan.id,
+        superseded_at: p.superseded_at || now,
         updated_at: now,
         updated_by: user.id
       };
@@ -1925,60 +1920,248 @@ export const approveVccPlan = async (planId, comment = '') => {
   });
   setLocalPlans(next);
 
-  // Auto-generate local work orders for all calibratable planned cycles
+  // Work Order Reconciliation on Revision Approval (Local Storage Mode)
   try {
     const STORAGE_WO_KEY = 'qms-vcc-local-work-orders-v1';
-    const existingWos = readJson(STORAGE_WO_KEY, () => []);
+    const allWos = readJson(STORAGE_WO_KEY, () => []);
     const planItems = getLocalPlanItems().filter((i) => i.plan_id === planId);
     const calibratableItems = planItems.filter((i) => Number(i.is_group) === 0 || i.group_nature === 'COMPOSITE_SET');
-    const newWos = [...existingWos];
+
+    // 1. Build target cycles for the newly approved plan
+    const targetCyclesByAsset = new Map();
+    for (const item of calibratableItems) {
+      let months = [];
+      try {
+        months = Array.isArray(item.planned_months) ? item.planned_months : JSON.parse(item.planned_months || '[]');
+      } catch {
+        months = [];
+      }
+      const cleanMonths = months.filter((m) => Number.isInteger(m) && m >= 1 && m <= 12).sort((a, b) => a - b);
+
+      let itemDueDates = [];
+      try {
+        itemDueDates = Array.isArray(item.due_dates) ? item.due_dates : JSON.parse(item.due_dates || '[]');
+      } catch {
+        itemDueDates = [];
+      }
+
+      const cycles = cleanMonths.map((m, idx) => {
+        const customDueDate = itemDueDates[idx];
+        const dueDate = (customDueDate && typeof customDueDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(customDueDate))
+          ? customDueDate
+          : computeDueDateForMonth(plan.plan_year, m, plan.due_date_rule || 'END_OF_MONTH');
+        return {
+          plan_item_id: item.id,
+          asset_id: item.asset_id,
+          month: m,
+          dueDate,
+          provider_name: item.provider_name || 'ทวนสอบภายใน',
+          cycle_id: `cyc-${item.id}-${m}`,
+          cycle_key: `${plan.plan_year}:${plan.department}:${item.asset_id}:${m}`
+        };
+      });
+      targetCyclesByAsset.set(item.asset_id, cycles);
+    }
+
+    // 2. Identify work orders in this scope (matching plan_year & department or target assets)
+    const allAssets = getLocalAssets();
+    const assetById = new Map((allAssets || []).map((a) => [a.id, a]));
+    const planRevisionIds = new Set(
+      allPlans
+        .filter((p) =>
+          Number(p.plan_year) === Number(plan.plan_year) &&
+          String(p.department).toUpperCase() === String(plan.department).toUpperCase()
+        )
+        .map((p) => p.id)
+    );
+
+    const isWoInThisScope = (w) => {
+      const matchesYear = Number(w.plan_year) === Number(plan.plan_year) ||
+        (w.due_date && String(w.due_date).startsWith(String(plan.plan_year)));
+      if (!matchesYear) return false;
+      if (w.plan_id === planId || (w.plan_id && planRevisionIds.has(w.plan_id))) return true;
+      const woAsset = assetById.get(w.asset_id);
+      const woDept = w.department || woAsset?.department;
+      if (woDept && String(woDept).toUpperCase() === String(plan.department).toUpperCase()) return true;
+      if (targetCyclesByAsset.has(w.asset_id)) return true;
+      return false;
+    };
+
     let maxSeq = 0;
-    for (const w of newWos) {
+    for (const w of allWos) {
       const parts = (w.wo_code || '').split('-');
       if (parts.length >= 3) {
         const num = parseInt(parts[2], 10);
         if (!Number.isNaN(num) && num > maxSeq) maxSeq = num;
       }
     }
-    for (const item of calibratableItems) {
-      const months = Array.isArray(item.planned_months) ? item.planned_months : [];
-      for (const m of months) {
-        const cycleKey = `${plan.plan_year}:${plan.department}:${item.asset_id}:${m}`;
-        const cycleId = `cyc-${item.id}-${m}`;
-        const already = newWos.find((w) => w.cycle_id === cycleId || w.cycle_key === cycleKey || (w.plan_item_id === item.id && w.planned_month === m));
-        if (!already) {
-          maxSeq += 1;
-          const dueDate = computeDueDateForMonth(plan.plan_year, m, plan.due_date_rule || 'END_OF_MONTH');
-          newWos.push({
-            id: `vcc-wo-${crypto.randomUUID()}`,
-            wo_code: `WO-${plan.plan_year}-${String(maxSeq).padStart(3, '0')}`,
-            cycle_id: cycleId,
-            cycle_key: cycleKey,
-            plan_year: plan.plan_year,
-            plan_revision: plan.revision || '00',
+
+    const nextWos = [];
+    const pendingWosByAsset = new Map();
+
+    for (const w of allWos) {
+      if (!isWoInThisScope(w)) {
+        nextWos.push(w);
+        continue;
+      }
+
+      const isPending = (
+        ['OPEN', 'SCHEDULED', 'IN_PROGRESS'].includes(w.status) &&
+        w.status !== 'CLOSED' &&
+        w.status !== 'CANCELLED' &&
+        (!w.result_status || w.result_status === 'PENDING' || w.result_status === 'NONE')
+      );
+
+      if (!isPending) {
+        // Strict preservation: CLOSED work orders or those with recorded results remain unchanged
+        nextWos.push(w);
+      } else {
+        if (!pendingWosByAsset.has(w.asset_id)) {
+          pendingWosByAsset.set(w.asset_id, []);
+        }
+        pendingWosByAsset.get(w.asset_id).push(w);
+      }
+    }
+
+    // 3. Reconcile per asset
+    const allAssetIds = new Set([
+      ...targetCyclesByAsset.keys(),
+      ...pendingWosByAsset.keys()
+    ]);
+
+    for (const assetId of allAssetIds) {
+      const targetCycles = targetCyclesByAsset.get(assetId) || [];
+      const pendingWos = pendingWosByAsset.get(assetId) || [];
+
+      if (targetCycles.length === 0) {
+        // Instrument removed in this revision: cancel pending work orders automatically
+        for (const pw of pendingWos) {
+          nextWos.push({
+            ...pw,
+            status: 'CANCELLED',
+            cancellation_category: 'PLAN_REVISION',
+            cancellation_reason: `ยกเลิกอัตโนมัติจากการอนุมัติแผนฉบับแก้ไข Rev.${plan.revision || '00'} (เครื่องมือไม่อยู่ในแผนฉบับใหม่)`,
+            cancelled_at: now,
+            cancelled_by: user.id,
+            updated_at: now,
+            updated_by: user.id
+          });
+        }
+        continue;
+      }
+
+      const unmatchedTargets = [...targetCycles];
+      const unmatchedWos = [...pendingWos];
+
+      // Pass 1: Exact month match
+      for (let i = unmatchedTargets.length - 1; i >= 0; i--) {
+        const tc = unmatchedTargets[i];
+        const woIdx = unmatchedWos.findIndex((w) => Number(w.planned_month) === Number(tc.month));
+        if (woIdx !== -1) {
+          const matchedWo = unmatchedWos.splice(woIdx, 1)[0];
+          unmatchedTargets.splice(i, 1);
+          nextWos.push({
+            ...matchedWo,
             plan_id: planId,
-            plan_item_id: item.id,
-            planned_month: m,
-            asset_id: item.asset_id,
-            provider_name: item.provider_name || 'ทวนสอบภายใน',
-            baseline_planned_date: dueDate,
-            scheduled_date: dueDate,
-            due_date: dueDate,
-            original_due_date: dueDate,
-            required_due_date: dueDate,
-            is_carryover: 0,
-            status: 'SCHEDULED',
-            result_status: 'PENDING',
-            created_at: now,
-            created_by: user.id,
+            plan_revision: plan.revision || '00',
+            plan_item_id: tc.plan_item_id,
+            due_date: matchedWo.reschedule_reason ? matchedWo.due_date : tc.dueDate,
+            scheduled_date: matchedWo.reschedule_reason ? matchedWo.scheduled_date : tc.dueDate,
+            required_due_date: tc.dueDate,
+            baseline_planned_date: matchedWo.baseline_planned_date || tc.dueDate,
+            provider_name: tc.provider_name,
+            cycle_id: tc.cycle_id,
+            cycle_key: tc.cycle_key,
             updated_at: now,
             updated_by: user.id
           });
         }
       }
+
+      // Pass 2: Rescheduled month match using closest month distance (e.g. TC001 moved from month 6 to month 11)
+      while (unmatchedTargets.length > 0 && unmatchedWos.length > 0) {
+        let bestTargetIdx = 0;
+        let bestWoIdx = 0;
+        let minDiff = Infinity;
+        for (let tIdx = 0; tIdx < unmatchedTargets.length; tIdx++) {
+          for (let wIdx = 0; wIdx < unmatchedWos.length; wIdx++) {
+            const diff = Math.abs(Number(unmatchedTargets[tIdx].month) - Number(unmatchedWos[wIdx].planned_month || 0));
+            if (diff < minDiff) {
+              minDiff = diff;
+              bestTargetIdx = tIdx;
+              bestWoIdx = wIdx;
+            }
+          }
+        }
+        const tc = unmatchedTargets.splice(bestTargetIdx, 1)[0];
+        const matchedWo = unmatchedWos.splice(bestWoIdx, 1)[0];
+        nextWos.push({
+          ...matchedWo,
+          plan_id: planId,
+          plan_revision: plan.revision || '00',
+          plan_item_id: tc.plan_item_id,
+          planned_month: tc.month,
+          due_date: tc.dueDate,
+          scheduled_date: tc.dueDate,
+          required_due_date: tc.dueDate,
+          baseline_planned_date: tc.dueDate,
+          provider_name: tc.provider_name,
+          cycle_id: tc.cycle_id,
+          cycle_key: tc.cycle_key,
+          updated_at: now,
+          updated_by: user.id
+        });
+      }
+
+      // Pass 3: Surplus target cycles -> generate new work orders
+      for (const tc of unmatchedTargets) {
+        maxSeq += 1;
+        nextWos.push({
+          id: `vcc-wo-${crypto.randomUUID()}`,
+          wo_code: `WO-${plan.plan_year}-${String(maxSeq).padStart(3, '0')}`,
+          cycle_id: tc.cycle_id,
+          cycle_key: tc.cycle_key,
+          plan_year: plan.plan_year,
+          plan_revision: plan.revision || '00',
+          plan_id: planId,
+          plan_item_id: tc.plan_item_id,
+          planned_month: tc.month,
+          asset_id: tc.asset_id,
+          provider_name: tc.provider_name,
+          baseline_planned_date: tc.dueDate,
+          scheduled_date: tc.dueDate,
+          due_date: tc.dueDate,
+          original_due_date: tc.dueDate,
+          required_due_date: tc.dueDate,
+          is_carryover: 0,
+          status: 'SCHEDULED',
+          result_status: 'PENDING',
+          created_at: now,
+          created_by: user.id,
+          updated_at: now,
+          updated_by: user.id
+        });
+      }
+
+      // Pass 4: Surplus pending work orders -> cancel
+      for (const pw of unmatchedWos) {
+        nextWos.push({
+          ...pw,
+          status: 'CANCELLED',
+          cancellation_category: 'PLAN_REVISION',
+          cancellation_reason: `ยกเลิกอัตโนมัติจากการอนุมัติแผนฉบับแก้ไข Rev.${plan.revision || '00'} (รอบการสอบเทียบถูกยกเลิก)`,
+          cancelled_at: now,
+          cancelled_by: user.id,
+          updated_at: now,
+          updated_by: user.id
+        });
+      }
     }
-    writeJson(STORAGE_WO_KEY, newWos);
-  } catch {}
+
+    writeJson(STORAGE_WO_KEY, nextWos);
+  } catch (reconcileErr) {
+    console.error('Work order reconciliation failed:', reconcileErr);
+  }
 
   appendLocalAudit('VCC_PLAN_APPROVED', {
     plan_id: planId,

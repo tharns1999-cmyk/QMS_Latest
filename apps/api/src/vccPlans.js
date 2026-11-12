@@ -2482,7 +2482,7 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
             is_current = 0,
             superseded_at = ${NOW},
             superseded_by = ?
-        WHERE plan_year = ? AND department = ? AND id != ? AND effective_status = 'CURRENT'
+        WHERE plan_year = ? AND department = ? AND id != ?
       `).bind(user.id, plan.plan_year, plan.department, id),
       db.prepare(`
         UPDATE vcc_annual_plans
