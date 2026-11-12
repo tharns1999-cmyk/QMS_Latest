@@ -243,7 +243,7 @@ export const WorkOrderRowActions = ({
             className="w-full text-left px-3.5 sm:px-3 py-3 sm:py-2 min-h-[44px] sm:min-h-[36px] text-xs font-semibold text-indigo-700 hover:bg-indigo-50 flex items-center gap-2 transition-colors cursor-pointer motion-safe:active:bg-indigo-100 select-none"
           >
             <FileText size={13} className="text-indigo-600" />
-            <span>📄 ดูผล / ใบรับรอง</span>
+            <span>ดูผล / ใบรับรอง</span>
           </button>
         )}
 
@@ -554,7 +554,7 @@ export const WorkOrderTable = ({
                   className="min-h-[36px] h-9 px-3 rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700 text-xs font-semibold hover:bg-indigo-100 inline-flex items-center gap-1.5 cursor-pointer shadow-2xs transition-colors"
                 >
                   <FileText size={13} className="text-indigo-600" />
-                  <span>📄 ดูผล / ใบรับรอง</span>
+                  <span>ดูผล / ใบรับรอง</span>
                 </button>
               ) : <div />}
               <WorkOrderRowActions
@@ -759,7 +759,7 @@ export const WorkOrderTable = ({
                         title="ดูผล / ใบรับรอง"
                       >
                         <FileText size={13} className="text-indigo-600" />
-                        <span>📄 ดูผล / ใบรับรอง</span>
+                        <span>ดูผล / ใบรับรอง</span>
                       </button>
                     )}
                     <WorkOrderRowActions
