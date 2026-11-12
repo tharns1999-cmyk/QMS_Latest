@@ -63,7 +63,117 @@ const INITIAL_LOCAL_WORK_ORDERS = [
   }
 ];
 
-export const getLocalWos = () => readJson(STORAGE_WO_KEY, () => [...INITIAL_LOCAL_WORK_ORDERS]);
+const syncLocalOpenWorkOrders = (wos) => {
+  if (!Array.isArray(wos)) return wos;
+  let allPlans = [];
+  let allPlanItems = [];
+  let allAssets = [];
+  try {
+    allPlans = getLocalPlans();
+    allPlanItems = getLocalPlanItems();
+    allAssets = getLocalAssets();
+  } catch {
+    return wos;
+  }
+
+  let changed = false;
+  const synced = wos.map((wo) => {
+    const isPending = (
+      ['OPEN', 'SCHEDULED', 'IN_PROGRESS'].includes(wo.status) &&
+      wo.status !== 'CLOSED' &&
+      wo.status !== 'CANCELLED' &&
+      (!wo.result_status || wo.result_status === 'PENDING' || wo.result_status === 'NONE')
+    );
+    if (!isPending) return wo;
+
+    const asset = allAssets.find((a) => a.id === wo.asset_id || a.asset_code === wo.asset_id);
+    const isTc001 = wo.asset_id === 'vcc-seed-tc001' || wo.asset_id === 'TC001' || asset?.asset_code === 'TC001' || wo.asset_code === 'TC001';
+
+    let planItem = null;
+    let targetPlan = null;
+    if (wo.plan_id) {
+      targetPlan = allPlans.find((p) => p.id === wo.plan_id);
+    }
+    if (targetPlan && targetPlan.effective_status === 'SUPERSEDED') {
+      const newer = allPlans.find((p) => p.status === 'APPROVED' && p.is_current !== 0 && p.effective_status !== 'SUPERSEDED' && p.plan_year === targetPlan.plan_year && p.department === targetPlan.department);
+      if (newer) targetPlan = newer;
+    }
+    if (!targetPlan) {
+      targetPlan = allPlans.find((p) => p.status === 'APPROVED' && p.is_current !== 0 && p.effective_status !== 'SUPERSEDED' && (String(p.department).toUpperCase() === String(wo.department || asset?.department).toUpperCase()));
+    }
+    if (targetPlan) {
+      planItem = allPlanItems.find((i) => i.plan_id === targetPlan.id && (i.asset_id === wo.asset_id || (asset && i.asset_id === asset.id)));
+    }
+    if (!planItem) {
+      planItem = allPlanItems.find((i) => i.asset_id === wo.asset_id || (asset && i.asset_id === asset.id));
+    }
+
+    let nextProviderName = wo.provider_name;
+    let nextPlannedMonth = wo.planned_month;
+    let nextDueDate = wo.due_date;
+
+    if (isTc001) {
+      nextProviderName = 'ทวนสอบภายใน';
+      if (planItem && Array.isArray(planItem.planned_months) && planItem.planned_months.length > 0) {
+        nextPlannedMonth = planItem.planned_months[0];
+        if (!wo.reschedule_reason && planItem.due_dates?.[0]) {
+          nextDueDate = planItem.due_dates[0];
+        }
+      } else if (Number(nextPlannedMonth) === 6 || !nextPlannedMonth) {
+        nextPlannedMonth = 11;
+        if (!wo.reschedule_reason) {
+          nextDueDate = '2026-11-30';
+        }
+      }
+    } else if (planItem) {
+      if (planItem.provider_name) nextProviderName = planItem.provider_name;
+      if (Array.isArray(planItem.planned_months) && planItem.planned_months.length > 0 && !planItem.planned_months.includes(Number(wo.planned_month))) {
+        nextPlannedMonth = planItem.planned_months[0];
+        if (!wo.reschedule_reason && planItem.due_dates?.[0]) {
+          nextDueDate = planItem.due_dates[0];
+        }
+      }
+    }
+
+    const isInternal = isTc001 ||
+      Boolean(nextProviderName && (nextProviderName.includes('ภายใน') || nextProviderName.toUpperCase() === 'INTERNAL')) ||
+      wo.provider_type === 'INTERNAL' ||
+      wo.calibration_type === 'INTERNAL' ||
+      asset?.calibration_type === 'INTERNAL';
+    const providerType = isInternal ? 'INTERNAL' : 'EXTERNAL';
+    const calibrationType = isInternal ? 'INTERNAL' : (wo.calibration_type || 'EXTERNAL');
+
+    if (
+      wo.provider_name !== nextProviderName ||
+      wo.provider_type !== providerType ||
+      wo.calibration_type !== calibrationType ||
+      Number(wo.planned_month) !== Number(nextPlannedMonth) ||
+      wo.due_date !== nextDueDate
+    ) {
+      changed = true;
+      return {
+        ...wo,
+        provider_name: nextProviderName,
+        provider_type: providerType,
+        calibration_type: calibrationType,
+        planned_month: nextPlannedMonth,
+        due_date: nextDueDate,
+        scheduled_date: wo.reschedule_reason ? wo.scheduled_date : nextDueDate
+      };
+    }
+    return wo;
+  });
+
+  if (changed) {
+    setLocalWos(synced);
+  }
+  return synced;
+};
+
+export const getLocalWos = () => {
+  const list = readJson(STORAGE_WO_KEY, () => [...INITIAL_LOCAL_WORK_ORDERS]);
+  return syncLocalOpenWorkOrders(list);
+};
 const setLocalWos = (list) => writeJson(STORAGE_WO_KEY, list);
 const getLocalWoSettings = () => readJson(STORAGE_WO_SETTINGS_KEY, () => ({ ...DEFAULT_VCC_WO_SETTINGS }));
 const setLocalWoSettings = (obj) => writeJson(STORAGE_WO_SETTINGS_KEY, obj);
@@ -134,21 +244,39 @@ const syncVccTasks = async (user) => {
 };
 
 const enrichLocalWo = (wo, allAssets, deptMap, allPlans) => {
-  const asset = allAssets.find((a) => a.id === wo.asset_id) || {};
+  const asset = allAssets.find((a) => a.id === wo.asset_id || a.asset_code === wo.asset_id) || {};
   const parent = asset.parent_id ? allAssets.find((p) => p.id === asset.parent_id) : null;
   const plan = wo.plan_id ? allPlans.find((pl) => pl.id === wo.plan_id) : null;
+
+  const isTc001 = asset.asset_code === 'TC001' || wo.asset_code === 'TC001' || wo.asset_id === 'vcc-seed-tc001' || wo.asset_id === 'TC001';
+  let providerName = wo.provider_name;
+  if (isTc001 && (!providerName || providerName === 'ห้องปฏิบัติการภายนอก')) {
+    providerName = 'ทวนสอบภายใน';
+  }
+  const isInternal = isTc001 ||
+    Boolean(providerName && (providerName.includes('ภายใน') || providerName.toUpperCase() === 'INTERNAL')) ||
+    wo.provider_type === 'INTERNAL' ||
+    wo.calibration_type === 'INTERNAL' ||
+    asset.calibration_type === 'INTERNAL';
+
+  const providerType = isInternal ? 'INTERNAL' : (wo.provider_type || 'EXTERNAL');
+  const calibrationType = isInternal ? 'INTERNAL' : (wo.calibration_type || 'EXTERNAL');
+
   return {
     ...wo,
-    asset_code: asset.asset_code || '-',
-    asset_name: asset.name || '-',
-    asset_type: asset.asset_type || '-',
-    department: asset.department || '',
-    location: asset.location || '',
+    provider_name: providerName,
+    provider_type: providerType,
+    calibration_type: calibrationType,
+    asset_code: asset.asset_code || wo.asset_code || '-',
+    asset_name: asset.name || wo.asset_name || '-',
+    asset_type: asset.asset_type || wo.asset_type || '-',
+    department: asset.department || wo.department || '',
+    location: asset.location || wo.location || '',
     group_nature: asset.group_nature || 'LOGICAL_GROUP',
     composite_details: asset.composite_details || '',
     parent_asset_code: parent?.asset_code || null,
-    department_name_th: deptMap[asset.department] || asset.department,
-    plan_year: plan?.plan_year || null
+    department_name_th: deptMap[asset.department || wo.department] || asset.department || wo.department,
+    plan_year: plan?.plan_year || wo.plan_year || null
   };
 };
 
@@ -572,9 +700,24 @@ export const submitVccWorkOrderResult = async (id, payload) => {
 
   const performedAt = String(payload.performed_at || '').trim();
   const resultStatus = String(payload.result_status || '').trim().toUpperCase();
-  const certificateNo = String(payload.certificate_no || '').trim();
   const acceptanceCriteria = String(payload.acceptance_criteria || '').trim();
   const resultRemarks = String(payload.result_remarks || '').trim();
+
+  const isInternal = Boolean(
+    existing.provider_type === 'INTERNAL' ||
+    existing.calibration_type === 'INTERNAL' ||
+    (existing.provider_name && existing.provider_name.includes('ภายใน')) ||
+    payload.provider_type === 'INTERNAL' ||
+    payload.calibration_type === 'INTERNAL' ||
+    existing.asset_code === 'TC001' ||
+    existing.asset_id === 'TC001' ||
+    existing.asset_id === 'vcc-seed-tc001'
+  );
+
+  let certificateNo = String(payload.certificate_no || '').trim();
+  if (isInternal && !certificateNo) {
+    certificateNo = existing.wo_code;
+  }
 
   if (!/^\d{4}-\d{2}-\d{2}$/.test(performedAt)) throw new Error('กรุณาระบุวันที่ทวนสอบจริง (YYYY-MM-DD)');
   if (!['PASS', 'FAIL', 'INCONCLUSIVE'].includes(resultStatus)) {
@@ -601,8 +744,8 @@ export const submitVccWorkOrderResult = async (id, payload) => {
     certificate_no: certificateNo,
     acceptance_criteria: acceptanceCriteria,
     result_remarks: resultRemarks,
-    calibration_provider_name: payload.calibration_provider_name || existing.calibration_provider_name || null,
-    calibration_method: payload.calibration_method || existing.calibration_method || null,
+    calibration_provider_name: payload.calibration_provider_name || (isInternal ? 'ทวนสอบภายใน' : existing.calibration_provider_name) || null,
+    calibration_method: payload.calibration_method || (isInternal ? 'IN_HOUSE' : (existing.calibration_method || null)),
     traceability_ref: payload.traceability_ref || existing.traceability_ref || null,
     environmental_conditions: payload.environmental_conditions || existing.environmental_conditions || null,
     uncertainty_value: payload.uncertainty_value || existing.uncertainty_value || null,

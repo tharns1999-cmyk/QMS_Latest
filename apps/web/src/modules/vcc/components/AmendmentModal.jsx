@@ -465,21 +465,21 @@ export const AmendmentModal = ({
             <span className="text-xs text-slate-400">
               * การแก้ไขต้องผ่านการตรวจสอบโดยผู้มีอำนาจ L4+
             </span>
-            <div className="flex flex-col sm:flex-row gap-2.5 w-full sm:w-auto">
+            <div className="flex flex-col sm:flex-row gap-2.5 w-full sm:w-auto shrink-0">
               <button
                 type="button"
                 onClick={requestClose}
-                className="order-1 sm:order-1 w-full sm:w-auto min-h-[44px] h-11 sm:h-10 px-4 rounded-xl border border-slate-300 text-sm font-semibold hover:bg-slate-50 transition-colors cursor-pointer motion-safe:active:scale-[0.98] select-none text-center"
+                className="order-1 sm:order-1 w-full sm:w-auto min-h-[44px] h-11 sm:h-10 px-4 rounded-xl border border-slate-300 text-sm font-semibold hover:bg-slate-50 transition-colors cursor-pointer motion-safe:active:scale-[0.98] select-none text-center whitespace-nowrap shrink-0"
               >
                 ยกเลิก
               </button>
               <button
                 type="submit"
                 disabled={saving || !form.amendment_reason?.trim()}
-                className="order-2 sm:order-2 w-full sm:w-auto min-h-[44px] h-11 sm:h-10 px-5 rounded-xl bg-amber-600 text-white text-sm font-semibold hover:bg-amber-700 disabled:opacity-50 transition-colors cursor-pointer shadow-2xs flex items-center justify-center gap-2 motion-safe:active:scale-[0.98] select-none"
+                className="order-2 sm:order-2 w-full sm:w-auto min-h-[44px] h-11 sm:h-10 px-5 rounded-xl bg-amber-600 text-white text-sm font-semibold hover:bg-amber-700 disabled:opacity-50 transition-colors cursor-pointer shadow-2xs flex items-center justify-center gap-2 motion-safe:active:scale-[0.98] select-none whitespace-nowrap shrink-0"
               >
-                {saving && <span className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" />}
-                <span>{saving ? 'กำลังบันทึก...' : '✓ บันทึกแก้ไขผล'}</span>
+                {saving && <span className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full shrink-0" />}
+                <span className="whitespace-nowrap">{saving ? 'กำลังบันทึก...' : '✓ บันทึกแก้ไขผล'}</span>
               </button>
             </div>
           </div>

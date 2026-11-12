@@ -20,6 +20,12 @@ import { VccDiscardConfirmDialog } from './VccDiscardConfirmDialog';
 
 const MAX_PDF_BYTES = 25 * 1024 * 1024; // 25 MB
 
+const DEFAULT_MASTER_INSTRUMENTS = [
+  'ST002 - เทอร์โมมิเตอร์มาตรฐาน (Testo 176T4, NIMT Ref: REF-TH-2025)',
+  'ST001 - ชุดตุ้มน้ำหนักมาตรฐาน Class E2 (Cert: REF-NIMT-9988)',
+  'ST003 - ชุดเกจบล็อคมาตรฐาน Grade 0 (Cert: NIMT-GB-012)'
+];
+
 const formatMethodLabel = (val) => {
   if (!val) return '';
   return getCalibrationMethodLabel(val);
@@ -54,7 +60,8 @@ export const RecordResultModal = ({
   saving,
   onSubmit,
   criteriaOptions = [],
-  providers = []
+  providers = [],
+  masterAssets = []
 }) => {
   const titleId = useId();
   const [fileError, setFileError] = useState('');
@@ -67,6 +74,37 @@ export const RecordResultModal = ({
   const lastHandledPropRef = useRef(workOrder);
   const pendingSwitchWoRef = useRef(undefined);
   const [showSwitchConfirm, setShowSwitchConfirm] = useState(false);
+
+  const isInternal = useMemo(() => {
+    if (!activeWorkOrder) return false;
+    const provider = String(activeWorkOrder.provider_name || '').trim();
+    const assetCode = String(activeWorkOrder.asset_code || '').trim();
+    const pType = String(activeWorkOrder.provider_type || activeWorkOrder.calibration_type || '').toUpperCase();
+    if (assetCode === 'TC001' || activeWorkOrder.asset_id === 'vcc-seed-tc001' || activeWorkOrder.asset_id === 'TC001') return true;
+    if (pType === 'INTERNAL') return true;
+    if (provider.includes('ภายใน') || provider.toUpperCase() === 'INTERNAL') return true;
+    return false;
+  }, [activeWorkOrder]);
+
+  const masterOptions = useMemo(() => {
+    const list = [];
+    if (Array.isArray(masterAssets) && masterAssets.length > 0) {
+      masterAssets.forEach((a) => {
+        const code = a.asset_code || a.code || '';
+        const name = a.asset_name || a.name || '';
+        if (code.startsWith('ST') || name.includes('มาตรฐาน') || name.toLowerCase().includes('standard')) {
+          list.push(`${code} - ${name}`);
+        }
+      });
+    }
+    DEFAULT_MASTER_INSTRUMENTS.forEach((item) => {
+      const code = item.split(' - ')[0];
+      if (!list.some((existing) => existing.startsWith(code))) {
+        list.push(item);
+      }
+    });
+    return list;
+  }, [masterAssets]);
 
   const filteredCriteriaOptions = useMemo(() => {
     const assetCode = activeWorkOrder?.asset_code || '';
@@ -152,6 +190,18 @@ export const RecordResultModal = ({
   };
 
   const handleFormSubmit = async (e) => {
+    e?.preventDefault?.();
+    if (isInternal) {
+      if (!form.certificate_no?.trim()) {
+        form.certificate_no = activeWorkOrder.wo_code;
+      }
+      if (!form.calibration_method) {
+        form.calibration_method = 'IN_HOUSE';
+      }
+      if (!form.calibration_provider_name) {
+        form.calibration_provider_name = activeWorkOrder.provider_name || 'ทวนสอบภายใน';
+      }
+    }
     setInitialSnapshot(serializeResultForm(form));
     await onSubmit?.(e);
   };
@@ -291,6 +341,17 @@ export const RecordResultModal = ({
               <h2 id={titleId} className="text-base sm:text-lg font-bold text-slate-900 tracking-tight mt-1 truncate">
                 บันทึกผลการสอบเทียบและหลักฐานดิจิทัล (Digital Record)
               </h2>
+              <div className="mt-1.5 flex items-center gap-2">
+                {isInternal ? (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                    🏠 ทวนสอบภายในองค์กร (เทียบกับเครื่องมือมาตรฐาน)
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-blue-50 text-blue-800 border border-blue-200">
+                    🌐 สอบเทียบโดยห้องปฏิบัติการภายนอก
+                  </span>
+                )}
+              </div>
             </div>
             <button
               type="button"
@@ -431,59 +492,123 @@ export const RecordResultModal = ({
               </div>
             </div>
 
-            {/* Row 3: Certificate Details & PDF Upload */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wide">
-                  เลขที่ใบรับรอง (Cert No.) <span className="text-rose-600">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  aria-label="เลขที่ใบรับรอง"
-                  value={form.certificate_no}
-                  onChange={(e) => setForm({ ...form, certificate_no: e.target.value })}
-                  placeholder="เช่น CERT-2026-001"
-                  className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-mono font-bold text-slate-900 focus:outline-none focus:border-indigo-600 shadow-2xs"
-                />
-              </div>
+            {/* Row 3: Certificate Details & Reference Fields */}
+            {isInternal ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div>
+                  <label htmlFor="record-master-ref-input" className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wide">
+                    เครื่องมือมาตรฐานที่ใช้เทียบ (Master Reference)
+                  </label>
+                  <input
+                    id="record-master-ref-input"
+                    type="text"
+                    aria-label="เครื่องมือมาตรฐานที่ใช้เทียบ"
+                    list="vcc-master-instruments-list"
+                    value={form.traceability_ref || ''}
+                    onChange={(e) => setForm({ ...form, traceability_ref: e.target.value })}
+                    placeholder="เช่น ST002 - เทอร์โมมิเตอร์มาตรฐาน หรือระบุรหัส/เลข Cert"
+                    className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium focus:outline-none focus:border-indigo-600 shadow-2xs"
+                  />
+                  <datalist id="vcc-master-instruments-list">
+                    {masterOptions.map((opt) => (
+                      <option key={opt} value={opt} />
+                    ))}
+                  </datalist>
+                  <div className="flex flex-wrap gap-1.5 mt-2" data-testid="master-reference-chips">
+                    {masterOptions.slice(0, 3).map((opt) => {
+                      const code = opt.split(' - ')[0];
+                      const isSelected = (form.traceability_ref || '').includes(code);
+                      return (
+                        <button
+                          key={opt}
+                          type="button"
+                          onClick={() => setForm({ ...form, traceability_ref: opt })}
+                          className={`min-h-[28px] px-2.5 py-1 rounded-lg text-xs font-semibold cursor-pointer transition-colors motion-safe:active:scale-[0.98] select-none ${
+                            isSelected
+                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold'
+                              : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200/80'
+                          }`}
+                          aria-label={`เลือกเครื่องมือมาตรฐาน ${code}`}
+                        >
+                          {code}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wide">
-                  วันที่ออกใบรับรอง
-                </label>
-                <input
-                  type="date"
-                  aria-label="วันที่ออกใบรับรอง"
-                  value={form.certificate_issue_date || ''}
-                  onChange={(e) => setForm({ ...form, certificate_issue_date: e.target.value })}
-                  className="w-full h-10 px-3 rounded-xl border border-slate-300 text-sm font-medium focus:outline-none focus:border-indigo-600 shadow-2xs"
-                />
-                {form.certificate_issue_date && (
-                  <span className="text-xs text-slate-500 font-medium mt-1 block">
-                    ตรงกับ: {formatVccDate(form.certificate_issue_date)}
+                <div>
+                  <label htmlFor="record-internal-doc-no" className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wide">
+                    เลขที่ใบบันทึกการทวนสอบภายใน (ถ้ามี - ไม่บังคับ)
+                  </label>
+                  <input
+                    id="record-internal-doc-no"
+                    type="text"
+                    aria-label="เลขที่ใบบันทึกการทวนสอบภายใน"
+                    value={form.certificate_no || ''}
+                    onChange={(e) => setForm({ ...form, certificate_no: e.target.value })}
+                    placeholder={`ไม่ระบุ (จะใช้อ้างอิง ${activeWorkOrder.wo_code} อัตโนมัติ)`}
+                    className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-mono font-medium text-slate-900 focus:outline-none focus:border-indigo-600 shadow-2xs"
+                  />
+                  <span className="text-xs text-slate-400 mt-1 block">
+                    * ไม่บังคับ หากเว้นว่างระบบจะใช้รหัสใบสั่งงาน ({activeWorkOrder.wo_code}) เป็นเลขอ้างอิงผลให้อัตโนมัติ
                   </span>
-                )}
+                </div>
               </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wide">
+                    เลขที่ใบรับรอง (Cert No.) <span className="text-rose-600">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    aria-label="เลขที่ใบรับรอง"
+                    value={form.certificate_no}
+                    onChange={(e) => setForm({ ...form, certificate_no: e.target.value })}
+                    placeholder="เช่น CERT-2026-001"
+                    className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-mono font-bold text-slate-900 focus:outline-none focus:border-indigo-600 shadow-2xs"
+                  />
+                </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wide">
-                  วันที่หมดอายุใบรับรอง
-                </label>
-                <input
-                  type="date"
-                  aria-label="วันที่หมดอายุใบรับรอง"
-                  value={form.certificate_valid_until || ''}
-                  onChange={(e) => setForm({ ...form, certificate_valid_until: e.target.value })}
-                  className="w-full h-10 px-3 rounded-xl border border-slate-300 text-sm font-medium focus:outline-none focus:border-indigo-600 shadow-2xs"
-                />
-                {form.certificate_valid_until && (
-                  <span className="text-xs text-slate-500 font-medium mt-1 block">
-                    ตรงกับ: {formatVccDate(form.certificate_valid_until)}
-                  </span>
-                )}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wide">
+                    วันที่ออกใบรับรอง
+                  </label>
+                  <input
+                    type="date"
+                    aria-label="วันที่ออกใบรับรอง"
+                    value={form.certificate_issue_date || ''}
+                    onChange={(e) => setForm({ ...form, certificate_issue_date: e.target.value })}
+                    className="w-full h-10 px-3 rounded-xl border border-slate-300 text-sm font-medium focus:outline-none focus:border-indigo-600 shadow-2xs"
+                  />
+                  {form.certificate_issue_date && (
+                    <span className="text-xs text-slate-500 font-medium mt-1 block">
+                      ตรงกับ: {formatVccDate(form.certificate_issue_date)}
+                    </span>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wide">
+                    วันที่หมดอายุใบรับรอง
+                  </label>
+                  <input
+                    type="date"
+                    aria-label="วันที่หมดอายุใบรับรอง"
+                    value={form.certificate_valid_until || ''}
+                    onChange={(e) => setForm({ ...form, certificate_valid_until: e.target.value })}
+                    className="w-full h-10 px-3 rounded-xl border border-slate-300 text-sm font-medium focus:outline-none focus:border-indigo-600 shadow-2xs"
+                  />
+                  {form.certificate_valid_until && (
+                    <span className="text-xs text-slate-500 font-medium mt-1 block">
+                      ตรงกับ: {formatVccDate(form.certificate_valid_until)}
+                    </span>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Digital PDF Upload Box */}
             <div className="p-4 rounded-xl border-2 border-dashed border-indigo-200 bg-indigo-50/30 space-y-3">
@@ -491,7 +616,9 @@ export const RecordResultModal = ({
                 <div className="flex items-center gap-2">
                   <FileText size={18} className="text-indigo-600" />
                   <span className="text-xs font-bold text-slate-900 uppercase tracking-wide">
-                    แนบไฟล์ใบรับรองดิจิทัล (Digital PDF Attachment)
+                    {isInternal
+                      ? 'แนบไฟล์ใบบันทึกการทวนสอบ / หลักฐานภาพถ่าย (ถ้ามี - ไม่บังคับ)'
+                      : 'แนบไฟล์ใบรับรองดิจิทัล (Digital PDF Attachment)'}
                   </span>
                 </div>
                 <span className="text-xs font-semibold text-slate-400">PDF สูงสุด 25 MB</span>
@@ -760,17 +887,17 @@ export const RecordResultModal = ({
             </div>
 
             {/* Actions */}
-            <div className="pt-4 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] border-t border-slate-200 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 shrink-0">
-              <span className="text-xs text-slate-400 text-center sm:text-left">
+            <div className="pt-4 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] border-t border-slate-200 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-3 shrink-0">
+              <span className="text-xs text-slate-400 text-center sm:text-left flex-1 min-w-0">
                 {isFail
                   ? '* ยืนยันผลไม่ผ่านเกณฑ์ จะปิดใบงานและเปลี่ยนสถานะเครื่องมือเป็นระงับใช้ทันที'
-                  : '* บันทึกผลแล้วจะปิดใบงานและอัปเดตสถานะเครื่องมือเป็นพร้อมใช้งานทันที'}
+                  : '* บันทึกผลแล้วระบบจะปิดใบงานและอัปเดตสถานะเครื่องมือทันที'}
               </span>
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full sm:w-auto">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full sm:w-auto shrink-0">
                 <button
                   type="button"
                   onClick={requestClose}
-                  className="w-full sm:w-auto min-h-[44px] sm:min-h-[40px] px-4 rounded-xl border border-slate-300 text-sm font-semibold hover:bg-slate-50 motion-safe:active:scale-[0.98] transition-all cursor-pointer select-none order-1 sm:order-1"
+                  className="w-full sm:w-auto min-h-[44px] sm:min-h-[40px] px-4 rounded-xl border border-slate-300 text-sm font-semibold hover:bg-slate-50 motion-safe:active:scale-[0.98] transition-all cursor-pointer select-none order-1 sm:order-1 whitespace-nowrap shrink-0"
                 >
                   ยกเลิก
                 </button>
@@ -778,18 +905,18 @@ export const RecordResultModal = ({
                   type="submit"
                   disabled={
                     saving ||
-                    !form.certificate_no?.trim() ||
+                    (!isInternal && !form.certificate_no?.trim()) ||
                     !form.acceptance_criteria?.trim() ||
                     (isFail && !form.result_remarks?.trim())
                   }
-                  className={`w-full sm:w-auto min-h-[44px] sm:min-h-[40px] px-5 rounded-xl text-white text-sm font-semibold motion-safe:active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none transition-all cursor-pointer shadow-2xs flex items-center justify-center gap-2 select-none order-2 sm:order-2 ${
+                  className={`w-full sm:w-auto min-h-[44px] sm:min-h-[40px] px-5 rounded-xl text-white text-sm font-semibold motion-safe:active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none transition-all cursor-pointer shadow-2xs flex items-center justify-center gap-2 select-none order-2 sm:order-2 whitespace-nowrap shrink-0 ${
                     isFail
                       ? 'bg-rose-600 hover:bg-rose-700'
                       : 'bg-indigo-600 hover:bg-indigo-700'
                   }`}
                 >
-                  {saving && <span className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" />}
-                  <span>
+                  {saving && <span className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full shrink-0" />}
+                  <span className="whitespace-nowrap">
                     {saving
                       ? 'กำลังบันทึก...'
                       : isFail
