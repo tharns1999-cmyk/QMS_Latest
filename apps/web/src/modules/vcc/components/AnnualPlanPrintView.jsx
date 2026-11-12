@@ -159,29 +159,17 @@ export const AnnualPlanPrintView = ({
         )}
 
         {/* 1. Corporate Header Section: Sethachon Corporate Banner & Title */}
-        <div className="border border-slate-900 mb-4 p-3 bg-white">
-          {/* Corporate Banner: Logo + 3-Language Company Info */}
-          <div className="flex items-center gap-4 pb-3 border-b border-slate-300">
+        <div className="mb-4 bg-white">
+          <div className="pb-2">
             <img
-              src="/logo.png"
-              alt="Sethachon Logo"
-              className="h-14 w-auto object-contain shrink-0"
+              src="/banner.png"
+              alt="บริษัท เศรษฐชล จำกัด (SETHACHON CO., LTD.)"
+              className="w-full max-h-24 object-contain object-left"
             />
-            <div className="flex-1 text-slate-800 leading-tight">
-              <div className="font-bold text-sm sm:text-base text-slate-900">
-                บริษัท เศรษฐชล จำกัด  |  SETHACHON CO., LTD.  |  勝豐有限公司
-              </div>
-              <div className="text-[11px] sm:text-xs text-slate-600 mt-1 leading-normal">
-                225 หมู่ 12 ถนนเทพารักษ์ ตำบลบางพลีใหญ่ อำเภอบางพลี จังหวัดสมุทรปราการ 10540 โทร. (02) 3160421-8 โทรสาร. (02) 3160420, (02) 7521668
-              </div>
-              <div className="text-[10px] sm:text-[11px] text-slate-500 mt-0.5 leading-normal font-sans">
-                225 MOO 12 TEPARAK ROAD BANGPLI YAI, BANGPLI SAMUTPRAKARN 10540, THAILAND
-              </div>
-            </div>
           </div>
 
           {/* Document Title (Centered under Corporate Banner) */}
-          <div className="text-center pt-3 pb-1">
+          <div className="text-center pt-2 pb-1">
             <h1 className="text-base sm:text-lg font-bold text-slate-900">
               แผนการทวนสอบและสอบเทียบเครื่องมือวัด ประจำปี {planYear} (พ.ศ. {buddhistYear})
             </h1>

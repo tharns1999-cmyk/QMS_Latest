@@ -282,11 +282,10 @@ describe('VCC Annual Plan Hub & Spoke Architecture and ISO Print View', () => {
         />
       );
 
-      // โลโก้และหัวกระดาษแบนเนอร์ 3 ภาษา
-      expect(screen.getByAltText('Sethachon Logo')).toBeInTheDocument();
-      expect(screen.getByText(/บริษัท เศรษฐชล จำกัด.*SETHACHON CO\., LTD\..*勝豐有限公司/)).toBeInTheDocument();
-      expect(screen.getByText(/225 หมู่ 12 ถนนเทพารักษ์/)).toBeInTheDocument();
-      expect(screen.getByText(/225 MOO 12 TEPARAK ROAD/)).toBeInTheDocument();
+      // แบนเนอร์ภาพทางการของ บริษัท เศรษฐชล จำกัด (/banner.png)
+      const bannerImg = screen.getByAltText('บริษัท เศรษฐชล จำกัด (SETHACHON CO., LTD.)');
+      expect(bannerImg).toBeInTheDocument();
+      expect(bannerImg).toHaveAttribute('src', '/banner.png');
 
       // ชื่อเรื่องเอกสาร
       expect(screen.getByText('แผนการทวนสอบและสอบเทียบเครื่องมือวัด ประจำปี 2026 (พ.ศ. 2569)')).toBeInTheDocument();
