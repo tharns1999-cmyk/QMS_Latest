@@ -14,9 +14,11 @@ import {
   MoreHorizontal,
   History,
   Printer,
-  Ban
+  Ban,
+  Edit3
 } from 'lucide-react';
 import { FloatingOverlay } from '../../../shared/components/ui/FloatingOverlay';
+import { TablePagination } from '../../../shared/components/common/TablePagination';
 import useStore from '../../../store/useStore';
 import {
   canReviewWorkOrder,
@@ -75,9 +77,10 @@ export const WorkOrderRowActions = ({
         <button
           type="button"
           onClick={() => onAmend(wo)}
-          className="min-h-[44px] sm:min-h-[32px] h-10 sm:h-8 inline-flex items-center gap-1.5 px-3.5 sm:px-3 rounded-lg bg-amber-600 text-white font-medium hover:bg-amber-700 transition-colors cursor-pointer text-xs shadow-2xs whitespace-nowrap motion-safe:active:scale-[0.98] select-none"
+          className="min-h-[44px] sm:min-h-[32px] h-10 sm:h-8 inline-flex items-center gap-1.5 px-3.5 sm:px-3 rounded-lg border border-slate-200 bg-white text-slate-600 font-medium hover:bg-slate-50 hover:text-slate-900 transition-colors cursor-pointer text-xs shadow-2xs whitespace-nowrap motion-safe:active:scale-[0.98] select-none"
         >
-          <span>✏️ แก้ไขผลบันทึก</span>
+          <Edit3 size={13} className="text-slate-500" />
+          <span>แก้ไขผลบันทึก</span>
         </button>
       )}
 
@@ -212,10 +215,10 @@ export const WorkOrderRowActions = ({
               handleClose();
               onAmend(wo);
             }}
-            className="w-full text-left px-3.5 sm:px-3 py-3 sm:py-2 min-h-[44px] sm:min-h-[36px] text-xs font-semibold text-amber-700 hover:bg-amber-50 flex items-center gap-2 transition-colors cursor-pointer motion-safe:active:bg-amber-100 select-none"
+            className="w-full text-left px-3.5 sm:px-3 py-3 sm:py-2 min-h-[44px] sm:min-h-[36px] text-xs font-semibold text-slate-700 hover:bg-slate-50 flex items-center gap-2 transition-colors cursor-pointer motion-safe:active:bg-slate-100 select-none"
           >
-            <History size={13} className="text-amber-600" />
-            <span>✏️ แก้ไขผลบันทึก</span>
+            <Edit3 size={13} className="text-slate-500" />
+            <span>แก้ไขผลบันทึก</span>
           </button>
         )}
 
@@ -265,11 +268,13 @@ export const WorkOrderRowActions = ({
 
 export const WorkOrderTable = ({
   workOrders = [],
+  pagination,
   loading = false,
   error = null,
   activeTab = 'OPEN',
   searchTerm = '',
   filterDept = '',
+  isFiltered: isFilteredProp,
   thresholds = {},
   onRowClick,
   onRecordResult,
@@ -338,7 +343,7 @@ export const WorkOrderTable = ({
   }
 
   if (workOrders.length === 0) {
-    const isFiltered = Boolean(searchTerm || filterDept);
+    const isFiltered = isFilteredProp !== undefined ? isFilteredProp : Boolean(searchTerm || filterDept);
     return (
       <div className="w-full bg-white rounded-xl border border-slate-200 shadow-2xs p-10 text-center space-y-3">
         <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-slate-50 border border-slate-200 text-slate-400">
@@ -349,7 +354,7 @@ export const WorkOrderTable = ({
         </div>
         <p className="text-sm text-slate-500 max-w-md mx-auto">
           {isFiltered
-            ? 'ไม่มีรายการใบสั่งงานที่ตรงกับคำค้นหาหรือตัวกรองแผนกที่คุณเลือก'
+            ? 'ไม่มีรายการใบสั่งงานที่ตรงกับคำค้นหาหรือตัวกรองที่คุณเลือก'
             : 'เลือกแท็บสถานะอื่น หรือกดปุ่ม "สร้างใบสั่งงานใหม่" ด้านบนเพื่อเปิดใบงาน'}
         </p>
         <div className="flex items-center justify-center gap-2 pt-1">
@@ -498,9 +503,11 @@ export const WorkOrderTable = ({
                     <div>
                       วันเดิม: <span className="line-through text-slate-400 font-sans" title={`วันครบกำหนดเดิม: ${wo.original_due_date}`}>{formatVccDueDate(wo.original_due_date)}</span>
                     </div>
-                    <div className="truncate max-w-[130px]" title={wo.reschedule_reason}>
-                      ({wo.reschedule_reason})
-                    </div>
+                    {wo.reschedule_reason && wo.reschedule_reason.trim() ? (
+                      <div className="truncate max-w-[130px]" title={wo.reschedule_reason}>
+                        ({wo.reschedule_reason})
+                      </div>
+                    ) : null}
                   </div>
                 )}
               </div>
@@ -575,13 +582,25 @@ export const WorkOrderTable = ({
             </div>
           </div>
         ))}
+        {pagination && pagination.totalItems > 0 && (
+          <TablePagination
+            currentPage={pagination.currentPage}
+            totalItems={pagination.totalItems}
+            pageSize={pagination.pageSize}
+            onPageChange={pagination.onPageChange || pagination.setCurrentPage}
+            onPageSizeChange={pagination.onPageSizeChange || pagination.setPageSize}
+            pageSizeOptions={pagination.pageSizeOptions || [15, 25, 50, 100]}
+            className="rounded-xl border border-slate-200 mt-3"
+          />
+        )}
       </div>
     );
   }
 
   return (
-    <div className="w-full bg-white rounded-xl border border-slate-200 shadow-2xs overflow-x-auto min-h-[300px]">
-      <table className="w-full text-left border-collapse min-w-[960px]">
+    <div className="w-full bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden min-h-[300px] flex flex-col justify-between">
+      <div className="overflow-x-auto w-full">
+        <table className="w-full text-left border-collapse min-w-[960px]">
         <thead>
           <tr className="bg-slate-50 border-b border-slate-200 text-slate-700 text-xs font-semibold uppercase tracking-wider select-none">
             <th className="py-3 px-4 w-[16%] min-w-[130px]">เลขที่ใบงาน</th>
@@ -673,9 +692,11 @@ export const WorkOrderTable = ({
                           </span>
                         </span>
                       </div>
-                      <div className="truncate max-w-[130px]" title={wo.reschedule_reason}>
-                        ({wo.reschedule_reason})
-                      </div>
+                      {wo.reschedule_reason && wo.reschedule_reason.trim() ? (
+                        <div className="truncate max-w-[130px]" title={wo.reschedule_reason}>
+                          ({wo.reschedule_reason})
+                        </div>
+                      ) : null}
                     </div>
                   )}
                 </td>
@@ -784,6 +805,17 @@ export const WorkOrderTable = ({
           })}
         </tbody>
       </table>
+      </div>
+      {pagination && pagination.totalItems > 0 && (
+        <TablePagination
+          currentPage={pagination.currentPage}
+          totalItems={pagination.totalItems}
+          pageSize={pagination.pageSize}
+          onPageChange={pagination.onPageChange || pagination.setCurrentPage}
+          onPageSizeChange={pagination.onPageSizeChange || pagination.setPageSize}
+          pageSizeOptions={pagination.pageSizeOptions || [15, 25, 50, 100]}
+        />
+      )}
     </div>
   );
 };
