@@ -498,7 +498,7 @@ export const WorkOrderTable = ({
                     )}
                   </div>
                 )}
-                {wo.due_date !== wo.original_due_date && wo.reschedule_status !== 'REQUESTED' && (
+                {Boolean(wo.original_due_date) && wo.due_date !== wo.original_due_date && wo.reschedule_status !== 'REQUESTED' && (
                   <div className="text-[11px] text-amber-900 bg-amber-50 p-1 rounded border border-amber-200 font-medium mt-1 leading-tight">
                     <div>
                       วันเดิม: <span className="line-through text-slate-400 font-sans" title={`วันครบกำหนดเดิม: ${wo.original_due_date}`}>{formatVccDueDate(wo.original_due_date)}</span>
@@ -681,15 +681,17 @@ export const WorkOrderTable = ({
                       )}
                     </div>
                   )}
-                  {wo.due_date !== wo.original_due_date && wo.reschedule_status !== 'REQUESTED' && (
+                  {Boolean(wo.original_due_date) && wo.due_date !== wo.original_due_date && wo.reschedule_status !== 'REQUESTED' && (
                     <div className="text-xs text-amber-900 bg-amber-50 p-1 rounded border border-amber-200 font-medium mt-1 leading-tight">
                       <div>
                         วันเดิม:{' '}
                         <span className="line-through text-slate-400 font-sans" title={`วันครบกำหนดเดิม: ${wo.original_due_date}`}>
                           {formatVccDueDate(wo.original_due_date)}
-                          <span className="block sm:inline text-slate-400 font-normal font-mono text-[11px] sm:text-xs sm:ml-1">
-                            (<span>{wo.original_due_date}</span>)
-                          </span>
+                          {wo.original_due_date && (
+                            <span className="block sm:inline text-slate-400 font-normal font-mono text-[11px] sm:text-xs sm:ml-1">
+                              (<span>{wo.original_due_date}</span>)
+                            </span>
+                          )}
                         </span>
                       </div>
                       {wo.reschedule_reason && wo.reschedule_reason.trim() ? (

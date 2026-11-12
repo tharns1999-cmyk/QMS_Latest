@@ -134,9 +134,16 @@ export const AssetDetailDrawer = ({
     onClose: actualOnClose
   });
 
+  const currentBangkokYear = useMemo(() => {
+    return (
+      Number(new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok', year: 'numeric' }).format(new Date())) ||
+      new Date().getFullYear()
+    );
+  }, []);
+
   const closedWos = useMemo(() => {
     return assetWorkOrders.filter(
-      (w) => w.status === 'CLOSED' || w.status === 'SUSPENDED' || w.performed_at
+      (w) => w.status !== 'CANCELLED' && (w.status === 'CLOSED' || w.status === 'SUSPENDED' || Boolean(w.performed_at))
     );
   }, [assetWorkOrders]);
 
@@ -149,9 +156,6 @@ export const AssetDetailDrawer = ({
   }, [closedWos]);
 
   const availableYears = useMemo(() => {
-    const currentBangkokYear =
-      Number(new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok', year: 'numeric' }).format(new Date())) ||
-      2026;
     const yearSet = new Set([currentBangkokYear]);
     closedWos.forEach((wo) => {
       if (wo.plan_year) {
@@ -168,7 +172,7 @@ export const AssetDetailDrawer = ({
       }
     });
     return Array.from(yearSet).sort((a, b) => b - a);
-  }, [closedWos]);
+  }, [closedWos, currentBangkokYear]);
 
   const filteredClosedWos = useMemo(() => {
     if (historyYearFilter === 'ALL') return sortedClosedWos;
@@ -190,14 +194,19 @@ export const AssetDetailDrawer = ({
         ? Number(String(wo.performed_at).slice(0, 4))
         : wo.due_date
         ? Number(String(wo.due_date).slice(0, 4))
-        : 2026;
+        : currentBangkokYear;
       if (!groups.has(year)) {
         groups.set(year, []);
       }
       groups.get(year).push(wo);
     });
     return Array.from(groups.entries()).sort((a, b) => b[0] - a[0]);
-  }, [filteredClosedWos]);
+  }, [filteredClosedWos, currentBangkokYear]);
+
+  const displayGroups = useMemo(() => {
+    if (historyYearFilter === 'ALL') return groupedByYear;
+    return [[Number(historyYearFilter), filteredClosedWos]];
+  }, [historyYearFilter, groupedByYear, filteredClosedWos]);
 
   if (!isActualOpen) return null;
   if (typeof document === 'undefined') return null;
@@ -470,199 +479,102 @@ export const AssetDetailDrawer = ({
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {historyYearFilter === 'ALL'
-                      ? groupedByYear.map(([year, wos]) => (
-                          <div key={year} className="space-y-2">
-                            <div className="flex items-center gap-2 pt-1 pb-1 text-xs font-bold text-slate-700 border-b border-slate-200">
-                              <span className="font-mono text-indigo-700">ปี {toBuddhistYear(year)} ({year})</span>
-                              <span className="text-slate-400">•</span>
-                              <span className="font-normal text-slate-500">{wos.length} รายการ</span>
-                            </div>
-                            <div className="space-y-2.5">
-                              {wos.map((wo) => {
-                                const isPass = wo.result_status === 'PASS';
-                                const isFail = wo.result_status === 'FAIL';
-                                return (
-                                  <div
-                                    key={wo.id}
-                                    className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/60 space-y-2 text-xs hover:border-slate-300 transition-colors"
-                                  >
-                                    <div className="flex flex-wrap items-center justify-between gap-2">
-                                      <div className="flex items-center gap-2 flex-wrap">
-                                        <span className="font-mono font-bold text-indigo-700">{wo.wo_code}</span>
-                                        {wo.plan_year || wo.planned_month ? (
-                                          <span className="text-[11px] text-slate-600 bg-white px-1.5 py-0.5 rounded border border-slate-200 font-medium">
-                                            แผนปี {wo.plan_year || ''} ด.{wo.planned_month || ''} {wo.planned_month ? `(${THAI_MONTHS_SHORT[wo.planned_month - 1]})` : ''}
-                                          </span>
-                                        ) : (
-                                          <span className="text-[11px] text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 font-medium">
-                                            นอกแผน (Ad-hoc)
-                                          </span>
-                                        )}
-                                        <span
-                                          className={`px-2 py-0.5 rounded-full font-bold text-[11px] border ${
-                                            isPass
-                                              ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
-                                              : isFail
-                                              ? 'bg-rose-100 text-rose-800 border-rose-200'
-                                              : 'bg-amber-100 text-amber-800 border-amber-200'
-                                          }`}
-                                        >
-                                          {isPass ? '✓ ผ่าน (PASS)' : isFail ? '✕ ไม่ผ่าน (FAIL)' : wo.result_status || 'รอผล'}
-                                        </span>
-                                      </div>
-                                      <span className="text-slate-500 font-medium">
-                                        วันที่ทำจริง: {formatVccDate(wo.performed_at || wo.due_date)}
+                    {displayGroups.map(([year, wos]) => (
+                      <div key={year} className="space-y-2">
+                        <div className="flex items-center gap-2 pt-1 pb-1 text-xs font-bold text-slate-700 border-b border-slate-200">
+                          <span className="font-mono text-indigo-700">ปี {toBuddhistYear(year)} ({year})</span>
+                          <span className="text-slate-400">•</span>
+                          <span className="font-normal text-slate-500">{wos.length} รายการ</span>
+                        </div>
+                        <div className="space-y-2.5">
+                          {wos.map((wo) => {
+                            const isPass = wo.result_status === 'PASS';
+                            const isFail = wo.result_status === 'FAIL';
+                            return (
+                              <div
+                                key={wo.id}
+                                className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/60 space-y-2 text-xs hover:border-slate-300 transition-colors"
+                              >
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="font-mono font-bold text-indigo-700">{wo.wo_code}</span>
+                                    {wo.plan_year || wo.planned_month ? (
+                                      <span className="text-[11px] text-slate-600 bg-white px-1.5 py-0.5 rounded border border-slate-200 font-medium">
+                                        แผนปี {wo.plan_year || ''} ด.{wo.planned_month || ''} {wo.planned_month ? `(${THAI_MONTHS_SHORT[Number(wo.planned_month) - 1]})` : ''}
                                       </span>
-                                    </div>
-
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-slate-700 pt-1.5 border-t border-slate-200/60">
-                                      <div>
-                                        <span className="text-slate-400 font-medium">ผลการวัดจริง:</span>{' '}
-                                        <span className="font-semibold text-slate-900">{wo.actual_result || wo.actual_measurement || '-'}</span>
-                                      </div>
-                                      <div>
-                                        <span className="text-slate-400 font-medium">เกณฑ์ยอมรับ:</span>{' '}
-                                        <span className="font-medium text-slate-800">{wo.acceptance_criteria || '-'}</span>
-                                      </div>
-                                      {wo.certificate_no && (
-                                        <div>
-                                          <span className="text-slate-400 font-medium">เลขที่ใบรับรอง:</span>{' '}
-                                          <span className="font-mono font-bold text-slate-900">{wo.certificate_no}</span>
-                                          {wo.certificate_file_name && (
-                                            <span className="ml-1 text-[10px] text-indigo-700 font-bold bg-indigo-50 px-1 rounded border border-indigo-200">
-                                              PDF v{wo.certificate_version || 1}
-                                            </span>
-                                          )}
-                                        </div>
-                                      )}
-                                      {wo.traceability_ref && (
-                                        <div>
-                                          <span className="text-slate-400 font-medium">เครื่องมือ Master:</span>{' '}
-                                          <span className="font-mono text-slate-800">{wo.traceability_ref}</span>
-                                        </div>
-                                      )}
-                                      {wo.provider_name && (
-                                        <div className="sm:col-span-2 text-slate-500">
-                                          <span className="text-slate-400 font-medium">ผู้ดำเนินการ:</span> {wo.provider_name}
-                                        </div>
-                                      )}
-                                    </div>
-
-                                    <div className="pt-2 flex justify-end">
-                                      <button
-                                        type="button"
-                                        onClick={() => setSelectedRecordWo(wo)}
-                                        aria-label={`ดูผล / ใบรับรอง ${wo.wo_code}`}
-                                        title="ดูผล / ใบรับรอง (Digital Record & PDF)"
-                                        className="min-h-[32px] h-8 inline-flex items-center gap-1.5 px-3 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 text-xs font-semibold hover:bg-indigo-100 transition-colors cursor-pointer motion-safe:active:scale-[0.98] select-none shadow-2xs"
-                                      >
-                                        <FileText size={13} className="text-indigo-600" />
-                                        <span>ดูผล / ใบรับรอง</span>
-                                      </button>
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        ))
-                      : (
-                          <div className="space-y-2">
-                            <div className="flex items-center gap-2 pt-1 pb-1 text-xs font-bold text-slate-700 border-b border-slate-200">
-                              <span className="font-mono text-indigo-700">ปี {toBuddhistYear(historyYearFilter)} ({historyYearFilter})</span>
-                              <span className="text-slate-400">•</span>
-                              <span className="font-normal text-slate-500">{filteredClosedWos.length} รายการ</span>
-                            </div>
-                            <div className="space-y-2.5">
-                              {filteredClosedWos.map((wo) => {
-                                const isPass = wo.result_status === 'PASS';
-                                const isFail = wo.result_status === 'FAIL';
-                                return (
-                                  <div
-                                    key={wo.id}
-                                    className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/60 space-y-2 text-xs hover:border-slate-300 transition-colors"
-                                  >
-                                    <div className="flex flex-wrap items-center justify-between gap-2">
-                                      <div className="flex items-center gap-2 flex-wrap">
-                                        <span className="font-mono font-bold text-indigo-700">{wo.wo_code}</span>
-                                        {wo.plan_year || wo.planned_month ? (
-                                          <span className="text-[11px] text-slate-600 bg-white px-1.5 py-0.5 rounded border border-slate-200 font-medium">
-                                            แผนปี {wo.plan_year || ''} ด.{wo.planned_month || ''} {wo.planned_month ? `(${THAI_MONTHS_SHORT[wo.planned_month - 1]})` : ''}
-                                          </span>
-                                        ) : (
-                                          <span className="text-[11px] text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 font-medium">
-                                            นอกแผน (Ad-hoc)
-                                          </span>
-                                        )}
-                                        <span
-                                          className={`px-2 py-0.5 rounded-full font-bold text-[11px] border ${
-                                            isPass
-                                              ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
-                                              : isFail
-                                              ? 'bg-rose-100 text-rose-800 border-rose-200'
-                                              : 'bg-amber-100 text-amber-800 border-amber-200'
-                                          }`}
-                                        >
-                                          {isPass ? '✓ ผ่าน (PASS)' : isFail ? '✕ ไม่ผ่าน (FAIL)' : wo.result_status || 'รอผล'}
-                                        </span>
-                                      </div>
-                                      <span className="text-slate-500 font-medium">
-                                        วันที่ทำจริง: {formatVccDate(wo.performed_at || wo.due_date)}
+                                    ) : (
+                                      <span className="text-[11px] text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 font-medium">
+                                        นอกแผน (Ad-hoc)
                                       </span>
-                                    </div>
-
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-slate-700 pt-1.5 border-t border-slate-200/60">
-                                      <div>
-                                        <span className="text-slate-400 font-medium">ผลการวัดจริง:</span>{' '}
-                                        <span className="font-semibold text-slate-900">{wo.actual_result || wo.actual_measurement || '-'}</span>
-                                      </div>
-                                      <div>
-                                        <span className="text-slate-400 font-medium">เกณฑ์ยอมรับ:</span>{' '}
-                                        <span className="font-medium text-slate-800">{wo.acceptance_criteria || '-'}</span>
-                                      </div>
-                                      {wo.certificate_no && (
-                                        <div>
-                                          <span className="text-slate-400 font-medium">เลขที่ใบรับรอง:</span>{' '}
-                                          <span className="font-mono font-bold text-slate-900">{wo.certificate_no}</span>
-                                          {wo.certificate_file_name && (
-                                            <span className="ml-1 text-[10px] text-indigo-700 font-bold bg-indigo-50 px-1 rounded border border-indigo-200">
-                                              PDF v{wo.certificate_version || 1}
-                                            </span>
-                                          )}
-                                        </div>
-                                      )}
-                                      {wo.traceability_ref && (
-                                        <div>
-                                          <span className="text-slate-400 font-medium">เครื่องมือ Master:</span>{' '}
-                                          <span className="font-mono text-slate-800">{wo.traceability_ref}</span>
-                                        </div>
-                                      )}
-                                      {wo.provider_name && (
-                                        <div className="sm:col-span-2 text-slate-500">
-                                          <span className="text-slate-400 font-medium">ผู้ดำเนินการ:</span> {wo.provider_name}
-                                        </div>
-                                      )}
-                                    </div>
-
-                                    <div className="pt-2 flex justify-end">
-                                      <button
-                                        type="button"
-                                        onClick={() => setSelectedRecordWo(wo)}
-                                        aria-label={`ดูผล / ใบรับรอง ${wo.wo_code}`}
-                                        title="ดูผล / ใบรับรอง (Digital Record & PDF)"
-                                        className="min-h-[32px] h-8 inline-flex items-center gap-1.5 px-3 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 text-xs font-semibold hover:bg-indigo-100 transition-colors cursor-pointer motion-safe:active:scale-[0.98] select-none shadow-2xs"
-                                      >
-                                        <FileText size={13} className="text-indigo-600" />
-                                        <span>ดูผล / ใบรับรอง</span>
-                                      </button>
-                                    </div>
+                                    )}
+                                    <span
+                                      className={`px-2 py-0.5 rounded-full font-bold text-[11px] border ${
+                                        isPass
+                                          ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                                          : isFail
+                                          ? 'bg-rose-100 text-rose-800 border-rose-200'
+                                          : 'bg-amber-100 text-amber-800 border-amber-200'
+                                      }`}
+                                    >
+                                      {isPass ? '✓ ผ่าน (PASS)' : isFail ? '✕ ไม่ผ่าน (FAIL)' : wo.result_status || 'รอผล'}
+                                    </span>
                                   </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        )}
+                                  <span className="text-slate-500 font-medium">
+                                    วันที่ทำจริง: {formatVccDate(wo.performed_at || wo.due_date)}
+                                  </span>
+                                </div>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-slate-700 pt-1.5 border-t border-slate-200/60">
+                                  <div>
+                                    <span className="text-slate-400 font-medium">ผลการวัดจริง:</span>{' '}
+                                    <span className="font-semibold text-slate-900">{wo.actual_result || wo.actual_measurement || '-'}</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-slate-400 font-medium">เกณฑ์ยอมรับ:</span>{' '}
+                                    <span className="font-medium text-slate-800">{wo.acceptance_criteria || '-'}</span>
+                                  </div>
+                                  {wo.certificate_no && (
+                                    <div>
+                                      <span className="text-slate-400 font-medium">เลขที่ใบรับรอง:</span>{' '}
+                                      <span className="font-mono font-bold text-slate-900">{wo.certificate_no}</span>
+                                      {wo.certificate_file_name && (
+                                        <span className="ml-1 text-[10px] text-indigo-700 font-bold bg-indigo-50 px-1 rounded border border-indigo-200">
+                                          PDF v{wo.certificate_version || 1}
+                                        </span>
+                                      )}
+                                    </div>
+                                  )}
+                                  {wo.traceability_ref && (
+                                    <div>
+                                      <span className="text-slate-400 font-medium">เครื่องมือ Master:</span>{' '}
+                                      <span className="font-mono text-slate-800">{wo.traceability_ref}</span>
+                                    </div>
+                                  )}
+                                  {wo.provider_name && (
+                                    <div className="sm:col-span-2 text-slate-500">
+                                      <span className="text-slate-400 font-medium">ผู้ดำเนินการ:</span> {wo.provider_name}
+                                    </div>
+                                  )}
+                                </div>
+
+                                <div className="pt-2 flex justify-end">
+                                  <button
+                                    type="button"
+                                    onClick={() => setSelectedRecordWo(wo)}
+                                    aria-label={`ดูผล / ใบรับรอง ${wo.wo_code}`}
+                                    title="ดูผล / ใบรับรอง (Digital Record & PDF)"
+                                    className="min-h-[32px] h-8 inline-flex items-center gap-1.5 px-3 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 text-xs font-semibold hover:bg-indigo-100 transition-colors cursor-pointer motion-safe:active:scale-[0.98] select-none shadow-2xs"
+                                  >
+                                    <FileText size={13} className="text-indigo-600" />
+                                    <span>ดูผล / ใบรับรอง</span>
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>

@@ -377,25 +377,39 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
   const activeTabWorkOrders = useMemo(() => {
     let list = rawWosByTab[activeTab] || [];
 
-    // Filter by Year
-    if (filterYear !== 'ALL') {
-      const selectedYear = Number(filterYear);
-      list = list.filter((wo) => {
-        const planYear = wo.plan_year ? Number(wo.plan_year) : null;
-        const dueYear = wo.due_date ? Number(String(wo.due_date).slice(0, 4)) : null;
-        const perfYear = wo.performed_at ? Number(String(wo.performed_at).slice(0, 4)) : null;
-        return planYear === selectedYear || dueYear === selectedYear || perfYear === selectedYear;
-      });
-    }
+    // Filter by Year and Month (correlated by date source to prevent cross-field false matches)
+    const hasYear = filterYear !== 'ALL';
+    const hasMonth = filterMonth !== 'ALL';
+    const selectedYear = hasYear ? Number(filterYear) : null;
+    const selectedMonth = hasMonth ? Number(filterMonth) : null;
 
-    // Filter by Month
-    if (filterMonth !== 'ALL') {
-      const selectedMonth = Number(filterMonth);
+    if (hasYear || hasMonth) {
       list = list.filter((wo) => {
-        const planMonth = wo.planned_month ? Number(wo.planned_month) : null;
-        const dueMonth = wo.due_date ? Number(String(wo.due_date).slice(5, 7)) : null;
-        const perfMonth = wo.performed_at ? Number(String(wo.performed_at).slice(5, 7)) : null;
-        return planMonth === selectedMonth || dueMonth === selectedMonth || perfMonth === selectedMonth;
+        // Source 1: Annual Plan
+        const planY = wo.plan_year ? Number(wo.plan_year) : null;
+        const planM = wo.planned_month ? Number(wo.planned_month) : null;
+        const matchPlan = (!hasYear || planY === selectedYear) && (!hasMonth || planM === selectedMonth);
+
+        // Source 2: Due Date
+        const dueY = wo.due_date ? Number(String(wo.due_date).slice(0, 4)) : null;
+        const dueM = wo.due_date ? Number(String(wo.due_date).slice(5, 7)) : null;
+        const matchDue = (!hasYear || dueY === selectedYear) && (!hasMonth || dueM === selectedMonth);
+
+        // Source 3: Performed Date
+        const perfY = wo.performed_at ? Number(String(wo.performed_at).slice(0, 4)) : null;
+        const perfM = wo.performed_at ? Number(String(wo.performed_at).slice(5, 7)) : null;
+        const matchPerf = (!hasYear || perfY === selectedYear) && (!hasMonth || perfM === selectedMonth);
+
+        if (hasYear && hasMonth) {
+          return Boolean((planY && matchPlan) || (dueY && matchDue) || (perfY && matchPerf));
+        }
+        if (hasYear) {
+          return Boolean(matchPlan || matchDue || matchPerf);
+        }
+        if (hasMonth) {
+          return Boolean((planM && matchPlan) || (dueM && matchDue) || (perfM && matchPerf));
+        }
+        return true;
       });
     }
 
@@ -413,8 +427,9 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
       const matchAssetCode = (wo.asset_code || '').toLowerCase().includes(query);
       const matchAssetName = (wo.asset_name || '').toLowerCase().includes(query);
       const matchCertNo = (wo.certificate_no || '').toLowerCase().includes(query);
+      const matchTraceability = (wo.traceability_ref || '').toLowerCase().includes(query);
       const matchProvider = (wo.provider_name || '').toLowerCase().includes(query);
-      return matchWoCode || matchAssetCode || matchAssetName || matchCertNo || matchProvider;
+      return matchWoCode || matchAssetCode || matchAssetName || matchCertNo || matchTraceability || matchProvider;
     });
   }, [rawWosByTab, activeTab, filterYear, filterMonth, filterResult, searchTerm]);
 
@@ -802,7 +817,8 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
     const csvCell = (val) => {
       if (val === null || val === undefined) return '""';
       let str = String(val);
-      if (/^[=+\-@]/.test(str)) str = `'${str}`;
+      // Formula injection protection (CWE-1236): sanitize formulas starting with =, +, -, @, \t, \r
+      if (/^[=+\-@\t\r]/.test(str)) str = `'${str}`;
       return `"${str.replace(/"/g, '""')}"`;
     };
 
@@ -820,6 +836,7 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
       'ผลการตรวจ',
       'ค่าที่วัดได้จริง',
       'เลขที่ใบรับรอง',
+      'เครื่องมือ Master (Traceability)',
       'เกณฑ์ยอมรับ',
       'สถานะใบสั่งงาน',
       'สถานะระงับใช้ (NC)',
@@ -840,6 +857,7 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
       getResultStatusLabel(wo.result_status || 'PENDING'),
       wo.actual_result || wo.actual_measurement || '',
       wo.certificate_no || '',
+      wo.traceability_ref || '',
       wo.acceptance_criteria || '',
       getWorkOrderStatusLabel(wo.status),
       wo.nc_status === 'OPEN' ? 'ระงับใช้ (ON_HOLD)' : 'ปกติ',

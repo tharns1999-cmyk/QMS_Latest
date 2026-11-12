@@ -89,6 +89,28 @@ describe('VCC Multi-Year Filtering, Pagination, UI Polish, and Asset Calibration
       expect(rawText).not.toMatch(/\(\s*\)/);
     });
 
+    it('does NOT render empty parens () or stray "วันเดิม:" when original_due_date is missing/null', () => {
+      const mockWoNullOrigDate = {
+        ...mockWoNoReason,
+        id: 'wo-resched-null-orig-date',
+        original_due_date: null,
+        due_date: '2026-07-15'
+      };
+
+      const { container } = render(
+        <WorkOrderTable
+          workOrders={[mockWoNullOrigDate]}
+          activeTab="OPEN"
+          thresholds={{ required_approver_level: 5 }}
+          onRowClick={vi.fn()}
+        />
+      );
+
+      expect(screen.queryByText(/วันเดิม:/i)).not.toBeInTheDocument();
+      const rawText = container.textContent;
+      expect(rawText).not.toMatch(/\(\s*\)/);
+    });
+
     it('renders ({reschedule_reason}) when reschedule_reason is present', () => {
       render(
         <WorkOrderTable
@@ -328,7 +350,65 @@ describe('VCC Multi-Year Filtering, Pagination, UI Polish, and Asset Calibration
       });
     });
 
-    it('triggers CSV download with UTF-8 BOM and formula safety when clicking [ส่งออกประวัติ (CSV)]', async () => {
+    it('correctly correlates Year and Month so that cross-field false matches do not occur', async () => {
+      // wo-cross: Plan is 2025 Month 5, but due date is 2026-01-15
+      const crossFieldWo = {
+        id: 'wo-cross-yr-m',
+        wo_code: 'WO-CROSS-01',
+        plan_year: 2025,
+        planned_month: 5,
+        due_date: '2026-01-15',
+        original_due_date: '2026-01-15',
+        asset_code: 'AST-CROSS',
+        asset_name: 'Cross Field Tool',
+        department: 'QC',
+        provider_name: 'Lab',
+        status: 'CLOSED',
+        result_status: 'PASS',
+        performed_at: '2026-01-10'
+      };
+
+      vi.spyOn(vccWorkOrderApi, 'fetchVccWorkOrders').mockImplementation(async ({ status }) => {
+        if (status === 'CLOSED') return [...sampleWorkOrders, crossFieldWo];
+        return [];
+      });
+
+      render(
+        <MemoryRouter>
+          <WorkOrderSection activeDepartments={[{ code: 'QC', nameTh: 'ควบคุมคุณภาพ' }]} />
+        </MemoryRouter>
+      );
+
+      const closedTab = screen.getByRole('tab', { name: /ปิดงานแล้ว/i });
+      fireEvent.click(closedTab);
+
+      await waitFor(() => {
+        expect(screen.getByText('WO-CROSS-01')).toBeInTheDocument();
+      });
+
+      // Filter to Year: 2026 and Month: 5 (May)
+      // WO-CROSS-01 has due_date in 2026, BUT its month is Jan (1).
+      // Its planned_month is 5, BUT its plan_year is 2025.
+      // Therefore, it MUST NOT match Year 2026 + Month 5!
+      const yearFilter = screen.getByLabelText(/กรองตามปี/i);
+      fireEvent.change(yearFilter, { target: { value: '2026' } });
+
+      const monthFilter = screen.getByLabelText(/กรองตามเดือน/i);
+      fireEvent.change(monthFilter, { target: { value: '5' } });
+
+      await waitFor(() => {
+        expect(screen.getByText('WO-2026-005')).toBeInTheDocument();
+        expect(screen.queryByText('WO-CROSS-01')).not.toBeInTheDocument();
+      });
+    });
+
+    it('triggers CSV download with UTF-8 BOM, formula safety, and Master traceability column', async () => {
+      let createdBlob = null;
+      vi.spyOn(URL, 'createObjectURL').mockImplementation((blob) => {
+        createdBlob = blob;
+        return 'blob:mock-csv-url';
+      });
+
       render(
         <MemoryRouter>
           <WorkOrderSection activeDepartments={[{ code: 'QC', nameTh: 'ควบคุมคุณภาพ' }]} />
@@ -350,6 +430,19 @@ describe('VCC Multi-Year Filtering, Pagination, UI Polish, and Asset Calibration
 
       expect(URL.createObjectURL).toHaveBeenCalled();
       expect(appendChildSpy).toHaveBeenCalled();
+
+      // Verify Blob contents: UTF-8 BOM bytes are 0xEF, 0xBB, 0xBF
+      expect(createdBlob).toBeInstanceOf(Blob);
+      const arrayBuffer = await createdBlob.arrayBuffer();
+      const uint8 = new Uint8Array(arrayBuffer);
+      expect(uint8[0]).toBe(0xEF);
+      expect(uint8[1]).toBe(0xBB);
+      expect(uint8[2]).toBe(0xBF);
+
+      const csvText = await createdBlob.text();
+      expect(csvText).toContain('เลขที่ใบสั่งงาน');
+      expect(csvText).toContain('เครื่องมือ Master (Traceability)');
+      expect(csvText).toContain('WO-2025-001');
     });
   });
 
@@ -489,6 +582,53 @@ describe('VCC Multi-Year Filtering, Pagination, UI Polish, and Asset Calibration
       await waitFor(() => {
         expect(screen.getByTestId('digital-record-modal')).toBeInTheDocument();
       });
+    });
+
+    it('excludes CANCELLED work orders but includes SUSPENDED/FAIL work orders in logbook', async () => {
+      const wosWithCancelled = [
+        ...multiYearWos,
+        {
+          id: 'wo-cancelled-01',
+          wo_code: 'WO-CANCELLED-999',
+          plan_year: 2026,
+          planned_month: 3,
+          due_date: '2026-03-31',
+          performed_at: '2026-03-15',
+          status: 'CANCELLED',
+          result_status: null
+        },
+        {
+          id: 'wo-suspended-01',
+          wo_code: 'WO-SUSPENDED-888',
+          plan_year: 2026,
+          planned_month: 4,
+          due_date: '2026-04-30',
+          performed_at: '2026-04-20',
+          status: 'SUSPENDED',
+          result_status: 'FAIL',
+          actual_result: 'เกินเกณฑ์ยอมรับ'
+        }
+      ];
+
+      vi.spyOn(vccWorkOrderApi, 'fetchVccWorkOrders').mockResolvedValue(wosWithCancelled);
+
+      render(
+        <AssetDetailDrawer
+          isOpen={true}
+          onClose={vi.fn()}
+          data={{ asset: sampleAsset, history: [] }}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('WO-2026-010')).toBeInTheDocument();
+      });
+
+      // WO-CANCELLED-999 should NOT appear
+      expect(screen.queryByText('WO-CANCELLED-999')).not.toBeInTheDocument();
+
+      // WO-SUSPENDED-888 SHOULD appear
+      expect(screen.getByText('WO-SUSPENDED-888')).toBeInTheDocument();
     });
   });
 });

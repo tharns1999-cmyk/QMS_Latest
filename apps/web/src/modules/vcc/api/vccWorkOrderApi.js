@@ -350,7 +350,7 @@ export const fetchVccWorkOrders = async ({ status = 'OPEN', nc_status = '', depa
     .filter((w) => {
       if (nc_status) return w.nc_status === nc_status;
       if (status === 'OPEN') return w.status === 'OPEN' || w.status === 'SCHEDULED' || w.status === 'RETURNED' || w.status === 'REJECTED';
-      if (status === 'CLOSED') return w.status === 'CLOSED' || w.status === 'PENDING_REVIEW' || w.status === 'PENDING_VERIFY';
+      if (status === 'CLOSED') return w.status === 'CLOSED' || w.status === 'PENDING_REVIEW' || w.status === 'PENDING_VERIFY' || w.status === 'SUSPENDED';
       return w.status === status;
     })
     .filter((w) => (!plan_id ? true : w.plan_id === plan_id))
