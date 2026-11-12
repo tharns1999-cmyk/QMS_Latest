@@ -1,18 +1,24 @@
 import React from 'react';
 import {
-  CheckCircle2,
   Clock,
   ShieldCheck,
   Edit3,
   AlertTriangle,
-  Check,
-  ArrowRight
+  Check
 } from 'lucide-react';
 import { formatVccDateTime } from '../utils/vccDateUtils';
 
 /**
- * Compact Single-Row Inline Approval Stepper (Row 2 of Workspace Header)
- * แสดงสายอนุมัติแนวนอนบรรทัดเดียว: ผู้จัดทำ -> ผู้ทบทวน -> ผู้อนุมัติ -> มีผลบังคับใช้
+ * Strips trailing numbers/IDs from actor names (e.g., "ประเสริฐ 12" -> "ประเสริฐ")
+ */
+export const cleanActorName = (name) => {
+  if (!name || typeof name !== 'string') return '';
+  return name.replace(/\s+\d+$/, '').trim();
+};
+
+/**
+ * Minimal Horizontal Stepper (Row 2 of Workspace Header)
+ * แสดงสายอนุมัติแนวนอนเรียบง่าย 3 ขั้นตอน: ผู้จัดทำ -> ผู้ทบทวน -> ผู้อนุมัติ
  */
 export const AnnualPlanProgressStepper = ({
   activePlan,
@@ -26,9 +32,6 @@ export const AnnualPlanProgressStepper = ({
   const isPendingReview = status === 'PENDING_REVIEW';
   const isPendingApproval = status === 'PENDING_APPROVAL';
   const isApproved = status === 'APPROVED';
-  const isSuperseded =
-    String(activePlan.effective_status || '').toUpperCase() === 'SUPERSEDED' ||
-    (isApproved && Number(activePlan.is_current ?? 1) === 0);
 
   // Step 1: Draft
   const step1State = isRejected
@@ -53,14 +56,16 @@ export const AnnualPlanProgressStepper = ({
     ? 'COMPLETED'
     : 'UPCOMING';
 
-  // Step 4: Approved & Effective
-  const step4State = isApproved ? 'COMPLETED' : 'UPCOMING';
+  const rawPreparer = activePlan.prepared_by_name || activePlan.prepared_by;
+  const preparerActor = rawPreparer ? cleanActorName(rawPreparer) : null;
 
-  const preparerActor = activePlan.prepared_by_name || activePlan.prepared_by;
-  const reviewerActor = isRejected
+  const rawReviewer = isRejected
     ? (activePlan.rejected_by_name || activePlan.rejected_by || activePlan.reviewed_by_name || activePlan.assigned_reviewer_name)
     : (activePlan.reviewed_by_name || activePlan.reviewed_by || activePlan.assigned_reviewer_name);
-  const approverActor = activePlan.approved_by_name || activePlan.approved_by || activePlan.assigned_approver_name;
+  const reviewerActor = rawReviewer ? cleanActorName(rawReviewer) : null;
+
+  const rawApprover = activePlan.approved_by_name || activePlan.approved_by || activePlan.assigned_approver_name;
+  const approverActor = rawApprover ? cleanActorName(rawApprover) : null;
 
   const steps = [
     {
@@ -92,20 +97,6 @@ export const AnnualPlanProgressStepper = ({
       state: step3State,
       timestamp: activePlan.approved_at,
       icon: isPendingApproval ? ShieldCheck : Check
-    },
-    {
-      id: 'step-approved',
-      stepNum: 4,
-      stageTitle: 'มีผลบังคับใช้',
-      prefix: 'สถานะผลบังคับใช้',
-      actorName: isApproved
-        ? isSuperseded
-          ? 'ถูกแทนที่ด้วยฉบับใหม่ (SUPERSEDED)'
-          : 'มีผลบังคับใช้แล้ว (Effective)'
-        : 'มีผลบังคับใช้',
-      state: step4State,
-      timestamp: activePlan.effective_date || activePlan.approved_at,
-      icon: isApproved ? CheckCircle2 : Check
     }
   ];
 
@@ -114,9 +105,9 @@ export const AnnualPlanProgressStepper = ({
       data-testid="annual-plan-progress-stepper"
       role="region"
       aria-label="ขั้นตอนการอนุมัติแผนประจำปี"
-      className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200/80 bg-slate-50/80 px-3 py-1.5"
+      className="flex flex-wrap items-center justify-between gap-2.5 rounded-xl border border-slate-200/70 bg-slate-50/50 px-3.5 py-2 text-xs"
     >
-      <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+      <div className="flex flex-wrap items-center gap-2 sm:gap-3">
         {steps.map((step, idx) => {
           const isStepCurrent = step.state === 'CURRENT' || step.state === 'RETURNED_EDIT';
           const isStepCompleted = step.state === 'COMPLETED';
@@ -131,54 +122,62 @@ export const AnnualPlanProgressStepper = ({
             <React.Fragment key={step.id}>
               <div
                 aria-current={isStepCurrent ? 'step' : undefined}
-                className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[11px] transition-all ${
+                className={`inline-flex items-center gap-2 transition-all ${
                   isStepReturned
-                    ? 'border-rose-300 bg-rose-50 text-rose-900 font-semibold'
+                    ? 'text-rose-900 font-semibold'
                     : isStepCurrent
-                    ? 'border-indigo-300 bg-white text-indigo-950 font-semibold shadow-2xs ring-1 ring-indigo-500/15'
+                    ? 'text-indigo-950 font-semibold'
                     : isStepCompleted
-                    ? 'border-emerald-200/90 bg-emerald-50/70 text-emerald-900 font-medium'
-                    : 'border-slate-200/80 bg-white/70 text-slate-500'
+                    ? 'text-slate-800 font-medium'
+                    : 'text-slate-400 font-normal opacity-80'
                 }`}
               >
                 <span className="sr-only">{step.stageTitle}</span>
                 <span
-                  className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[9px] font-bold ${
+                  className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold transition-colors ${
                     isStepReturned
-                      ? 'bg-rose-600 text-white'
+                      ? 'bg-rose-100 text-rose-700 border border-rose-200'
                       : isStepCurrent
-                      ? 'bg-indigo-600 text-white'
+                      ? 'bg-indigo-100 text-indigo-700 ring-2 ring-indigo-500/20 border border-indigo-300'
                       : isStepCompleted
-                      ? 'bg-emerald-600 text-white'
-                      : 'bg-slate-200 text-slate-600'
+                      ? 'bg-emerald-100 text-emerald-700 border border-emerald-200'
+                      : 'bg-slate-100 text-slate-400 border border-slate-200'
                   }`}
                 >
                   {isStepCompleted ? (
-                    <Check size={10} strokeWidth={3} />
+                    <Check size={11} strokeWidth={3} className="text-emerald-700" />
                   ) : (
-                    <StepIcon size={10} strokeWidth={2.4} />
+                    <StepIcon size={11} strokeWidth={2.5} />
                   )}
                 </span>
 
-                <span className="opacity-75 font-semibold">{step.prefix}:</span>
-                <span className="max-w-[180px] truncate" title={`${step.prefix}: ${step.actorName}`}>
-                  {step.actorName}
-                </span>
-
-                {dateShort && (
-                  <span className="rounded bg-black/5 px-1 py-0.2 font-mono text-[10px] text-slate-600">
-                    {dateShort}
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span className={isStepCurrent ? 'text-indigo-900 font-bold' : isStepReturned ? 'text-rose-900 font-bold' : isStepCompleted ? 'text-slate-600 font-semibold' : 'text-slate-400 font-medium'}>
+                    {step.prefix}:
                   </span>
-                )}
+                  <span className="max-w-[180px] truncate" title={`${step.prefix}: ${step.actorName}`}>
+                    {step.actorName}
+                  </span>
+                  {dateShort && (
+                    <span className="text-[10px] font-mono text-slate-400">
+                      ({dateShort})
+                    </span>
+                  )}
+                </div>
               </div>
 
               {idx < steps.length - 1 && (
-                <ArrowRight className="h-3 w-3 shrink-0 text-slate-300" aria-hidden="true" />
+                <span className="text-slate-300 select-none text-xs font-light" aria-hidden="true">
+                  →
+                </span>
               )}
             </React.Fragment>
           );
         })}
       </div>
+
+      {/* Accessible text for test/a11y compatibility */}
+      <span className="sr-only">มีผลบังคับใช้</span>
 
       {activePlan.revision_reason && (
         <div
@@ -194,4 +193,3 @@ export const AnnualPlanProgressStepper = ({
 };
 
 export default AnnualPlanProgressStepper;
-
