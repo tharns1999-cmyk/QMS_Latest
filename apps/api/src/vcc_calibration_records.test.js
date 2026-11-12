@@ -167,8 +167,10 @@ describe('VCC Phase 3.2: Calibration Execution, Digital Certificates & Controlle
     });
 
     expect(submitRes.status).toBe(200);
+    // Legacy review flow test on PENDING_REVIEW work order
+    await env.DB.prepare("UPDATE vcc_work_orders SET status = 'PENDING_REVIEW' WHERE id = ?").bind(woId).run();
     const wo = submitRes.body.workOrder;
-    expect(wo.status).toBe('PENDING_REVIEW');
+    expect(wo.status).toBe('CLOSED');
     expect(wo.result_status).toBe('PASS');
     expect(wo.certificate_no).toBe('CERT-M1-2026-001');
     expect(wo.calibration_provider_name).toBe('ห้องปฏิบัติการสอบเทียบมาตรฐาน ISO/IEC 17025');
@@ -244,7 +246,8 @@ describe('VCC Phase 3.2: Calibration Execution, Digital Certificates & Controlle
     });
     expect(missingAssessment.status).toBe(400);
 
-    // The FAIL result has not been reviewed yet, so even an L5 cannot release the hold
+    // The FAIL result has not been reviewed yet (simulated via PENDING_REVIEW), so even an L5 cannot release the hold
+    await env.DB.prepare("UPDATE vcc_work_orders SET status = 'PENDING_REVIEW' WHERE id = ?").bind(woId).run();
     const unreviewedRelease = await call('POST', `/api/vcc/work-orders/${woId}/release-hold`, 'M1-APP5', {
       release_reason: 'แก้ไขสาเหตุและสอบเทียบซ้ำผ่านแล้ว',
       impact_assessment: 'ประเมินแล้ว'
@@ -416,7 +419,14 @@ describe('VCC Phase 3.2: Calibration Execution, Digital Certificates & Controlle
       ) VALUES (?, ?, ?, 'ทวนสอบภายใน', 1, '2026-01-15', '2026-01-15', '2026-01-15', '2026-01-15', '2026-01-15', 'OPEN', 'PENDING', 'M1-PERF', 'M1-PERF')
     `).bind(woId, 'WO-2026-01-AMEND01', assetId).run();
 
-    // 2. Submit result
+    // 2. Amendment rejected before CLOSE (work order is still OPEN)
+    const amendBeforeClose = await call('POST', `/api/vcc/work-orders/${woId}/amendment-requests`, 'M1-REV4', {
+      amendment_reason: 'พยายามแก้ไขก่อนปิดงาน',
+      result_remarks: 'แก้ก่อนปิด'
+    });
+    expect(amendBeforeClose.status).toBe(409);
+
+    // 3. Submit result -> closes work order directly
     await call('POST', `/api/vcc/work-orders/${woId}/submit-result`, 'M1-PERF', {
       performed_at: '2026-01-12',
       result_status: 'PASS',
@@ -424,13 +434,6 @@ describe('VCC Phase 3.2: Calibration Execution, Digital Certificates & Controlle
       acceptance_criteria: '± 0.5 °C',
       result_remarks: 'ค่าแรกเริ่มผ่านเกณฑ์'
     });
-
-    // 3. Amendment rejected before CLOSE
-    const amendBeforeClose = await call('POST', `/api/vcc/work-orders/${woId}/amendment-requests`, 'M1-REV4', {
-      amendment_reason: 'พยายามแก้ไขก่อนปิดงาน',
-      result_remarks: 'แก้ก่อนปิด'
-    });
-    expect(amendBeforeClose.status).toBe(409);
 
     // 4. Reviewer approves -> work order becomes CLOSED
     const approveRes = await call('POST', `/api/vcc/work-orders/${woId}/approve`, 'M1-REV4', {
@@ -614,6 +617,25 @@ describe('VCC Phase 3.2: Calibration Execution, Digital Certificates & Controlle
     expect(detailRes.body.amendments[1].snapshot.wo_code).toBe('WO-2026-01-AMEND01');
     expect(Array.isArray(detailRes.body.amendmentRequests)).toBe(true);
     expect(detailRes.body.amendmentRequests.length).toBe(2);
+
+    // 16. Direct Amendment workflow (Direct Completion & correction by responsible user)
+    const upAmend = await uploadCert(woId, 'M1-PERF', SAMPLE_PDF, '?amendment=1&filename=cert-amended-direct.pdf');
+    expect(upAmend.status).toBe(200);
+
+    const directAmendRes = await call('POST', `/api/vcc/work-orders/${woId}/amend`, 'M1-PERF', {
+      direct: true,
+      reason: 'แก้ไขตัวสะกดและปรับปรุงไฟล์ใบรับรองดิจิทัลฉบับทางการ',
+      certificate_no: 'CERT-AMEND-FINAL',
+      actual_result: 'ผ่านเกณฑ์ 100.0 °C'
+    });
+    expect(directAmendRes.status).toBe(200);
+    expect(directAmendRes.body.workOrder.certificate_no).toBe('CERT-AMEND-FINAL');
+    expect(directAmendRes.body.workOrder.actual_result).toBe('ผ่านเกณฑ์ 100.0 °C');
+
+    const auditDirectRes = await env.DB.prepare(
+      "SELECT action, details FROM audit_log WHERE action = 'VCC_WO_RESULT_AMENDED' AND details LIKE ?"
+    ).bind(`%${woId}%`).all();
+    expect(auditDirectRes.results.length).toBeGreaterThanOrEqual(1);
   });
 
   it('generates VCC_CALIBRATION_REVIEW tasks in GET /api/vcc/tasks when result is submitted, enforcing Segregation of Duties', async () => {
@@ -644,6 +666,8 @@ describe('VCC Phase 3.2: Calibration Execution, Digital Certificates & Controlle
       result_remarks: 'ผลการสอบเทียบเป็นไปตามเกณฑ์ยอมรับ'
     });
     expect(submitRes.status).toBe(200);
+    // Legacy review flow test on PENDING_REVIEW work order
+    await env.DB.prepare("UPDATE vcc_work_orders SET status = 'PENDING_REVIEW' WHERE id = ?").bind(woId).run();
 
     // 3. Performer (M1-PERF) queries tasks -> must NOT see review task (SoD)
     const perfTasksRes = await call('GET', '/api/vcc/tasks', 'M1-PERF');

@@ -241,26 +241,22 @@ describe('VCC Pre-UAT Product Hardening UI Tests (DEC-01 to DEC-04)', () => {
     });
   });
 
-  describe('DEC-03: Qualitative Verification UI', () => {
-    it('allows toggling between Quantitative and Qualitative verification types', () => {
+  describe('DEC-03: Single-View Smart Form UI', () => {
+    it('displays Segmented Pill for PASS/FAIL and side-by-side Acceptance Criteria & Actual Result', () => {
       render(<RecordResultHarness />);
 
-      // Verify Verification Type buttons exist
-      const quantBtn = screen.getByText(/การวัดเชิงปริมาณ \(Quantitative\)/i);
-      const qualBtn = screen.getByText(/การตรวจสอบเชิงคุณภาพ \(Qualitative\)/i);
+      // Verify Segmented Pill buttons exist
+      expect(screen.getByRole('button', { name: /ผ่านเกณฑ์ \(PASS\)/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /ไม่ผ่านเกณฑ์ \(FAIL\)/i })).toBeInTheDocument();
 
-      expect(quantBtn).toBeInTheDocument();
-      expect(qualBtn).toBeInTheDocument();
-
-      // Click Qualitative button
-      fireEvent.click(qualBtn);
-
-      // Verify qualitative explanation appears
-      expect(screen.getByText(/การทวนสอบเชิงคุณภาพ \(เช่น ตรวจสอบด้วยสายตา, Go\/No-Go Gauge, Leak Test\)/i)).toBeInTheDocument();
-
-      // Verify Actual Result field is present
+      // Verify Row 2: Acceptance Criteria and Actual Result
+      const criteriaInput = screen.getByLabelText(/เกณฑ์ยอมรับ/i);
       const actualResultInput = screen.getByLabelText(/ผลการตรวจสอบจริง/i);
+      expect(criteriaInput).toBeInTheDocument();
       expect(actualResultInput).toBeInTheDocument();
+
+      // Verify submit button has new direct completion label
+      expect(screen.getByRole('button', { name: /บันทึกผลและปิดใบงาน/i })).toBeInTheDocument();
     });
   });
 

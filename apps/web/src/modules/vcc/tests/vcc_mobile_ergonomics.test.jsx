@@ -356,7 +356,7 @@ describe('VCC Mobile Ergonomics Suite (Round D3)', () => {
       );
 
       const cancelBtn = screen.getByRole('button', { name: /^ยกเลิก$/i });
-      const submitBtn = screen.getByRole('button', { name: /ส่งผลให้ผู้ตรวจรับพิจารณา/i });
+      const submitBtn = screen.getByRole('button', { name: /บันทึกผลและปิดใบงาน/i });
 
       expect(cancelBtn.className).toContain('order-1');
       expect(submitBtn.className).toContain('order-2');

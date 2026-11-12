@@ -5,8 +5,13 @@ import {
   ShieldAlert,
   History,
   FileCheck2,
-  Layers
+  Layers,
+  Upload,
+  FileText,
+  CheckCircle2,
+  Trash2
 } from 'lucide-react';
+import { getCalibrationMethodLabel } from '../utils/statusLabels';
 import { useVccModalAccessibility } from '../hooks/useVccModalAccessibility';
 import { useVccMobileViewport } from '../hooks/useVccMobileViewport';
 import { VccDiscardConfirmDialog } from './VccDiscardConfirmDialog';
@@ -22,8 +27,44 @@ export const AmendmentModal = ({
   criteriaOptions = []
 }) => {
   const [activeTab, setActiveTab] = useState('MAIN');
+  const [fileError, setFileError] = useState('');
 
-  const isDirty = Boolean((form?.amendment_reason || '').trim());
+  const isDirty = Boolean((form?.amendment_reason || '').trim() || form?.certificate_file);
+
+  const handleFileChange = async (e) => {
+    const file = e.target.files?.[0];
+    setFileError('');
+    if (!file) {
+      setForm?.((prev) => ({ ...prev, certificate_file: null }));
+      return;
+    }
+    if (file.size > 25 * 1024 * 1024) {
+      setFileError('ไฟล์ PDF ต้องมีขนาดไม่เกิน 25 MB');
+      e.target.value = '';
+      return;
+    }
+    try {
+      const headerBytes = await file.slice(0, 5).arrayBuffer();
+      const headerStr = new TextDecoder().decode(headerBytes);
+      if (headerStr !== '%PDF-') {
+        setFileError('รูปแบบไฟล์ไม่ถูกต้อง ต้องเป็นเอกสาร PDF เท่านั้น (%PDF-)');
+        e.target.value = '';
+        return;
+      }
+      setForm?.((prev) => ({
+        ...prev,
+        certificate_file: file,
+        certificate_file_name: file.name
+      }));
+    } catch {
+      setFileError('เกิดข้อผิดพลาดในการตรวจสอบไฟล์ กรุณาลองใหม่อีกครั้ง');
+    }
+  };
+
+  const handleRemoveFile = () => {
+    setForm?.((prev) => ({ ...prev, certificate_file: null, certificate_file_name: '' }));
+    setFileError('');
+  };
 
   const {
     dialogRef,
@@ -91,7 +132,7 @@ export const AmendmentModal = ({
                 <span className="text-xs text-amber-800 font-medium">({workOrder.asset_code} — {workOrder.asset_name})</span>
               </div>
               <h2 id="amendment-dialog-title" className="text-base sm:text-lg font-bold text-slate-900 tracking-tight mt-1">
-                ขอแก้ไขผลการสอบเทียบที่ปิดงานแล้ว (Controlled Amendment)
+                แก้ไขผลการสอบเทียบที่ปิดงานแล้ว (Amend Closed Result)
               </h2>
             </div>
             <button
@@ -146,6 +187,13 @@ export const AmendmentModal = ({
             <div role="alert" className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-sm font-semibold flex items-center gap-2">
               <AlertTriangle size={17} className="text-rose-600 shrink-0" />
               <span>{error}</span>
+            </div>
+          )}
+
+          {fileError && (
+            <div role="alert" className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-sm font-semibold flex items-center gap-2">
+              <AlertTriangle size={17} className="text-amber-600 shrink-0" />
+              <span>{fileError}</span>
             </div>
           )}
 
@@ -208,28 +256,111 @@ export const AmendmentModal = ({
                 </div>
               )}
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wide">
-                  เกณฑ์ยอมรับ (Acceptance Criteria)
-                </label>
-                <input
-                  type="text"
-                  value={form.acceptance_criteria || ''}
-                  onChange={(e) => setForm({ ...form, acceptance_criteria: e.target.value })}
-                  className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium focus:outline-none focus:border-amber-600 shadow-2xs"
-                />
-                {criteriaOptions.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 mt-2">
-                    {criteriaOptions.map((c) => (
-                      <button
-                        key={c}
-                        type="button"
-                        onClick={() => setForm({ ...form, acceptance_criteria: c })}
-                        className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-700 cursor-pointer"
-                      >
-                        {c}
-                      </button>
-                    ))}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wide">
+                    เกณฑ์ยอมรับ (Acceptance Criteria)
+                  </label>
+                  <input
+                    type="text"
+                    value={form.acceptance_criteria || ''}
+                    onChange={(e) => setForm({ ...form, acceptance_criteria: e.target.value })}
+                    className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium focus:outline-none focus:border-amber-600 shadow-2xs"
+                  />
+                  {criteriaOptions.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      {criteriaOptions.map((c) => (
+                        <button
+                          key={c}
+                          type="button"
+                          onClick={() => setForm({ ...form, acceptance_criteria: c })}
+                          className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-700 cursor-pointer"
+                        >
+                          {c}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wide">
+                    ผลที่ตรวจวัดได้จริง (Actual Result)
+                  </label>
+                  <input
+                    type="text"
+                    value={form.actual_result || ''}
+                    onChange={(e) => setForm({ ...form, actual_result: e.target.value })}
+                    placeholder="เช่น ค่าที่วัดได้ หรือสภาพสมบูรณ์"
+                    className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium focus:outline-none focus:border-amber-600 shadow-2xs"
+                  />
+                </div>
+              </div>
+
+              {/* Digital PDF Attachment */}
+              <div className="p-4 rounded-xl border-2 border-dashed border-amber-200 bg-amber-50/30 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <FileText size={18} className="text-amber-700" />
+                    <span className="text-xs font-bold text-slate-800 uppercase tracking-wide">
+                      แนบ/เปลี่ยนไฟล์ใบรับรองฉบับแก้ไข (PDF ไม่เกิน 25 MB)
+                    </span>
+                  </div>
+                </div>
+
+                {!form.certificate_file && !workOrder?.certificate_file_name && (
+                  <label className="flex flex-col items-center justify-center p-3.5 border border-slate-200 rounded-xl bg-white hover:bg-amber-50/50 cursor-pointer transition-colors group">
+                    <Upload size={20} className="text-slate-400 group-hover:text-amber-600 mb-1" />
+                    <span className="text-xs font-bold text-slate-700 group-hover:text-amber-700">
+                      คลิกเพื่อเลือกไฟล์ หรือลากไฟล์ PDF มาวางที่นี่
+                    </span>
+                    <input
+                      type="file"
+                      accept=".pdf,application/pdf"
+                      onChange={handleFileChange}
+                      className="hidden"
+                      aria-label="อัปโหลดไฟล์ใบรับรอง PDF ฉบับแก้ไข"
+                    />
+                  </label>
+                )}
+
+                {form.certificate_file && (
+                  <div className="p-3 rounded-xl bg-white border border-amber-200 flex items-center justify-between">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+                      <span className="text-xs font-bold text-slate-900 truncate">
+                        {form.certificate_file.name}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleRemoveFile}
+                      className="p-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 cursor-pointer"
+                      title="นำไฟล์ออก"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                )}
+
+                {!form.certificate_file && workOrder?.certificate_file_name && (
+                  <div className="p-3 rounded-xl bg-white border border-slate-200 flex items-center justify-between">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <FileText size={16} className="text-amber-700 shrink-0" />
+                      <span className="text-xs font-bold text-slate-900 truncate">
+                        {workOrder.certificate_file_name} (ไฟล์ปัจจุบัน)
+                      </span>
+                    </div>
+                    <label className="text-xs font-bold text-amber-700 hover:underline cursor-pointer">
+                      เปลี่ยนไฟล์
+                      <input
+                        type="file"
+                        accept=".pdf,application/pdf"
+                        onChange={handleFileChange}
+                        className="hidden"
+                        aria-label="เปลี่ยนไฟล์ใบรับรอง PDF"
+                      />
+                    </label>
                   </div>
                 )}
               </div>
@@ -270,7 +401,7 @@ export const AmendmentModal = ({
                   </label>
                   <input
                     type="text"
-                    value={form.calibration_method || ''}
+                    value={getCalibrationMethodLabel(form.calibration_method)}
                     onChange={(e) => setForm({ ...form, calibration_method: e.target.value })}
                     className="w-full h-10 px-3.5 rounded-xl border border-slate-300 text-sm font-medium focus:outline-none focus:border-amber-600 shadow-2xs"
                   />
@@ -348,7 +479,7 @@ export const AmendmentModal = ({
                 className="order-2 sm:order-2 w-full sm:w-auto min-h-[44px] h-11 sm:h-10 px-5 rounded-xl bg-amber-600 text-white text-sm font-semibold hover:bg-amber-700 disabled:opacity-50 transition-colors cursor-pointer shadow-2xs flex items-center justify-center gap-2 motion-safe:active:scale-[0.98] select-none"
               >
                 {saving && <span className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" />}
-                <span>{saving ? 'กำลังบันทึกการแก้ไข...' : 'บันทึกการขอแก้ไข (Amendment)'}</span>
+                <span>{saving ? 'กำลังบันทึก...' : '✓ บันทึกแก้ไขผล'}</span>
               </button>
             </div>
           </div>

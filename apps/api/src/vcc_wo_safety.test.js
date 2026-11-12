@@ -62,7 +62,8 @@ describe('VCC work-order safety (atomic transitions, INCONCLUSIVE, cancellation,
     performed_at: yesterday,
     result_status,
     certificate_no,
-    acceptance_criteria: '± 1.0 g'
+    acceptance_criteria: '± 1.0 g',
+    result_remarks: result_status === 'FAIL' ? 'ค่าคลาดเคลื่อนเกินเกณฑ์กำหนด' : ''
   });
   const release = { release_reason: 'ปรับตั้งและสอบเทียบซ้ำผ่านแล้ว', impact_assessment: 'ตรวจย้อนหลังแล้วไม่กระทบผลิตภัณฑ์' };
 
@@ -98,6 +99,8 @@ describe('VCC work-order safety (atomic transitions, INCONCLUSIVE, cancellation,
   it('B1: concurrent approvals and approve-vs-reject leave exactly one outcome and one matching audit row', async () => {
     const { woId } = await newWorkOrder('APPROVE');
     expect((await call('POST', `/api/vcc/work-orders/${woId}/submit-result`, 'SF-L2', result('PASS'))).status).toBe(200);
+    // Put in PENDING_REVIEW to test atomic race condition on approval
+    await env.DB.prepare("UPDATE vcc_work_orders SET status = 'PENDING_REVIEW' WHERE id = ?").bind(woId).run();
 
     const [a, b] = await Promise.all([
       call('POST', `/api/vcc/work-orders/${woId}/approve`, 'SF-REV4', { comment: 'ตรวจรับ' }),
@@ -108,6 +111,7 @@ describe('VCC work-order safety (atomic transitions, INCONCLUSIVE, cancellation,
 
     const { woId: raceId } = await newWorkOrder('RACE');
     await call('POST', `/api/vcc/work-orders/${raceId}/submit-result`, 'SF-L2', result('PASS'));
+    await env.DB.prepare("UPDATE vcc_work_orders SET status = 'PENDING_REVIEW' WHERE id = ?").bind(raceId).run();
     const [approve, reject] = await Promise.all([
       call('POST', `/api/vcc/work-orders/${raceId}/approve`, 'SF-REV4', { comment: 'ตรวจรับ' }),
       call('POST', `/api/vcc/work-orders/${raceId}/reject`, 'SF-REV4B', { reason: 'แนบใบรับรองผิด' })

@@ -40,13 +40,13 @@ describe('VCC task inbox — work-order tasks', () => {
     let tasks = await fetchVccWorkTasks();
     expect(kindsFor(tasks, 'wo-open')).toEqual(['RECORD_RESULT']);
     expect(kindsFor(tasks, 'wo-far')).toEqual([]); // scheduled far ahead: not work yet
-    expect(kindsFor(tasks, 'wo-rejected')).toEqual(['REVISE_RESULT']);
-    expect(kindsFor(tasks, 'wo-pending')).toEqual([]); // the performer cannot review their own result
+    expect(kindsFor(tasks, 'wo-rejected')).toEqual([]); // direct completion workflow: no revise task
+    expect(kindsFor(tasks, 'wo-pending')).toEqual([]);
     expect(kindsFor(tasks, 'wo-hold')).toEqual([]);
 
     useStore.setState({ currentUser: user('qc4', 4) });
     tasks = await fetchVccWorkTasks();
-    expect(kindsFor(tasks, 'wo-pending')).toEqual(['REVIEW_RESULT']);
+    expect(kindsFor(tasks, 'wo-pending')).toEqual([]); // direct completion workflow: no review task
     expect(kindsFor(tasks, 'wo-rejected')).toEqual([]);
     expect(kindsFor(tasks, 'wo-hold')).toEqual([]); // below the approver level
 
@@ -80,13 +80,11 @@ describe('VCC task inbox — work-order tasks', () => {
     const tab = (id) => screen.findByTestId(`vcc-inbox-tab-${id}`);
     await waitFor(async () => expect(within(await tab('RECORD_RESULT')).getByText('1')).toBeInTheDocument());
     expect(screen.getByTestId('vcc-work-task-RECORD_RESULT:wo-open')).toBeInTheDocument();
-    expect(screen.getByTestId('vcc-work-task-REVIEW_RESULT:wo-pending')).toBeInTheDocument();
     expect(screen.getByTestId('vcc-work-task-RELEASE_HOLD:wo-hold')).toBeInTheDocument();
     expect(screen.queryByTestId('vcc-work-task-RECORD_RESULT:wo-far')).not.toBeInTheDocument();
 
     fireEvent.click(await tab('PENDING_APPROVAL'));
     expect(screen.getByTestId('vcc-work-task-RELEASE_HOLD:wo-hold')).toBeInTheDocument();
-    expect(screen.queryByTestId('vcc-work-task-REVIEW_RESULT:wo-pending')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId('vcc-work-task-open-RELEASE_HOLD:wo-hold'));
     // the drawer of that very work order opens (on the tab it belongs to)
@@ -102,6 +100,6 @@ describe('VCC task inbox — work-order tasks', () => {
       </MemoryRouter>
     );
     await waitFor(() => expect(screen.getAllByText('WO-T-PEND').length).toBeGreaterThan(1)); // table row + drawer
-    expect(screen.getByRole('tab', { name: /รอตรวจรับ/ })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tab', { name: /ปิดงานแล้ว/ })).toHaveAttribute('aria-selected', 'true');
   });
 });

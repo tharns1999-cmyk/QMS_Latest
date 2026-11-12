@@ -29,6 +29,14 @@ export const NOTIFICATION_STATUS_LABELS = {
   RESOLVED: 'ปิดจบแล้ว'
 };
 
+export const CALIBRATION_METHOD_LABELS = {
+  EXTERNAL_LAB: 'ห้องปฏิบัติการภายนอก (External Lab)',
+  IN_HOUSE: 'ทวนสอบภายใน (In-House)',
+  MANUFACTURER: 'ผู้ผลิต/ตัวแทนจำหน่าย (Manufacturer)',
+  ON_SITE: 'สอบเทียบนอกสถานที่ (On-Site Calibration)'
+};
+
 export const getWorkOrderStatusLabel = (status) => WORK_ORDER_STATUS_LABELS[status] || status || '-';
 export const getResultStatusLabel = (status) => RESULT_STATUS_LABELS[status] || status || '-';
 export const getAssetStatusLabel = (status) => ASSET_STATUS_LABELS[status] || status || '-';
+export const getCalibrationMethodLabel = (method) => CALIBRATION_METHOD_LABELS[method] || method || '-';

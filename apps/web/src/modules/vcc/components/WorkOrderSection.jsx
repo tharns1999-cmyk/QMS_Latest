@@ -46,28 +46,18 @@ import { WORK_ORDER_STATUS_LABELS, RESULT_STATUS_LABELS } from '../utils/statusL
 const WO_TABS = [
   {
     key: 'OPEN',
-    shortLabel: WORK_ORDER_STATUS_LABELS.OPEN,
+    shortLabel: 'เปิดงาน',
     fullLabel: 'เปิดงาน / รอบันทึกผล'
   },
   {
-    key: 'PENDING_REVIEW',
-    shortLabel: WORK_ORDER_STATUS_LABELS.PENDING_REVIEW,
-    fullLabel: WORK_ORDER_STATUS_LABELS.PENDING_REVIEW
-  },
-  {
-    key: 'REJECTED',
-    shortLabel: WORK_ORDER_STATUS_LABELS.REJECTED,
-    fullLabel: WORK_ORDER_STATUS_LABELS.REJECTED
-  },
-  {
     key: 'CLOSED',
-    shortLabel: WORK_ORDER_STATUS_LABELS.CLOSED,
-    fullLabel: WORK_ORDER_STATUS_LABELS.CLOSED
+    shortLabel: 'ปิดงานแล้ว',
+    fullLabel: 'ปิดงานแล้ว'
   },
   {
     key: 'ON_HOLD',
-    shortLabel: WORK_ORDER_STATUS_LABELS.ON_HOLD,
-    fullLabel: WORK_ORDER_STATUS_LABELS.ON_HOLD
+    shortLabel: 'ระงับใช้',
+    fullLabel: 'ระงับใช้'
   }
 ];
 
@@ -100,8 +90,6 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
   // Raw work orders by tab
   const [rawWosByTab, setRawWosByTab] = useState({
     OPEN: [],
-    PENDING_REVIEW: [],
-    REJECTED: [],
     CLOSED: [],
     ON_HOLD: []
   });
@@ -224,12 +212,26 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
         fetchVccPlans({ status: 'APPROVED' })
       ]);
 
+      // Backward compatibility: PENDING_VERIFY/PENDING_REVIEW -> CLOSED, RETURNED/REJECTED -> OPEN
+      const openMap = new Map();
+      (openWos || []).concat(rejectedWos || []).forEach((w) => {
+        if (w?.id) openMap.set(w.id, w);
+      });
+
+      const closedMap = new Map();
+      (closedWos || []).concat(pendingWos || []).forEach((w) => {
+        if (w?.id) closedMap.set(w.id, w);
+      });
+
+      const holdMap = new Map();
+      (holdWos || []).forEach((w) => {
+        if (w?.id) holdMap.set(w.id, w);
+      });
+
       setRawWosByTab({
-        OPEN: openWos || [],
-        PENDING_REVIEW: pendingWos || [],
-        REJECTED: rejectedWos || [],
-        CLOSED: closedWos || [],
-        ON_HOLD: holdWos || []
+        OPEN: Array.from(openMap.values()),
+        CLOSED: Array.from(closedMap.values()),
+        ON_HOLD: Array.from(holdMap.values())
       });
 
       setWoSettings(settingsRes.settings);
@@ -325,12 +327,18 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
   // Tab counts
   const tabCounts = useMemo(() => {
     return {
-      OPEN: rawWosByTab.OPEN.length,
-      PENDING_REVIEW: rawWosByTab.PENDING_REVIEW.length,
-      REJECTED: rawWosByTab.REJECTED.length,
-      CLOSED: rawWosByTab.CLOSED.length,
-      ON_HOLD: rawWosByTab.ON_HOLD.length
+      OPEN: (rawWosByTab.OPEN || []).length,
+      CLOSED: (rawWosByTab.CLOSED || []).length,
+      ON_HOLD: (rawWosByTab.ON_HOLD || []).length
     };
+  }, [rawWosByTab]);
+
+  const allWorkOrders = useMemo(() => {
+    const map = new Map();
+    Object.values(rawWosByTab).flat().forEach((w) => {
+      if (w?.id) map.set(w.id, w);
+    });
+    return Array.from(map.values());
   }, [rawWosByTab]);
 
   // Filtered work orders for currently active tab
@@ -423,13 +431,28 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
   const openRecordResult = (wo) => {
     setResultWo(wo);
     setResultError('');
+
+    // Match criteria based on instrument type
+    const typeStr = `${wo.asset_type || ''} ${wo.asset_name || ''}`.toLowerCase();
+    const isTherm = typeStr.includes('เทอร์โม') || typeStr.includes('thermo') || typeStr.includes('temp');
+    const isScale = typeStr.includes('เครื่องชั่ง') || typeStr.includes('scale') || typeStr.includes('ตุ้มน้ำหนัก') || typeStr.includes('weight');
+    const isVernier = typeStr.includes('เวอร์เนียร์') || typeStr.includes('vernier') || typeStr.includes('caliper');
+
+    const matchingPreset = (woSettings.default_acceptance_criteria || []).find((c) => {
+      const text = c.toLowerCase();
+      if (isTherm) return text.includes('°c') || text.includes('อุณหภูมิ');
+      if (isScale) return text.includes(' g') || text.includes('กรัม') || text.includes('เครื่องชั่ง');
+      if (isVernier) return text.includes('mm') || text.includes('มม') || text.includes('เวอร์เนียร์');
+      return true;
+    });
+
     setResultForm({
       performed_at: wo.performed_at || getBangkokDate(),
       result_status: wo.result_status === 'PENDING' ? 'PASS' : wo.result_status,
       verification_type: wo.verification_type || 'QUANTITATIVE',
       actual_result: wo.actual_result || '',
       certificate_no: wo.certificate_no || '',
-      acceptance_criteria: wo.acceptance_criteria || woSettings.default_acceptance_criteria?.[0] || '',
+      acceptance_criteria: wo.acceptance_criteria || matchingPreset || woSettings.default_acceptance_criteria?.[0] || '',
       result_remarks: wo.result_remarks || '',
       calibration_provider_name: wo.calibration_provider_name || wo.provider_name || '',
       calibration_method: wo.calibration_method || 'EXTERNAL_LAB',
@@ -455,12 +478,16 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
       }
       const { certificate_file: _cf, certificate_name: _cn, ...payload } = resultForm;
       const updated = await submitVccWorkOrderResult(resultWo.id, payload);
-      toast.success(`ส่งผลใบสั่งงาน ${updated.wo_code} เข้าสู่คิวตรวจรับแล้ว`);
+      toast.success(
+        payload.result_status === 'FAIL'
+          ? `บันทึกผลและระงับใช้เครื่องมือ ${updated.wo_code} แล้ว`
+          : `บันทึกผลและปิดใบงาน ${updated.wo_code} เรียบร้อยแล้ว`
+      );
       setResultWo(null);
       if (selectedDrawerWo?.id === resultWo.id) {
         handleCloseDrawer();
       }
-      setActiveTab('PENDING_REVIEW');
+      setActiveTab(payload.result_status === 'FAIL' ? 'ON_HOLD' : 'CLOSED');
       await loadData();
     } catch (err) {
       setResultError(err.message || 'ไม่สามารถส่งผลการทวนสอบได้');
@@ -476,6 +503,7 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
       result_status: wo.result_status || 'PASS',
       certificate_no: wo.certificate_no || '',
       acceptance_criteria: wo.acceptance_criteria || woSettings.default_acceptance_criteria?.[0] || '',
+      actual_result: wo.actual_result || '',
       result_remarks: wo.result_remarks || '',
       calibration_provider_name: wo.calibration_provider_name || wo.provider_name || '',
       calibration_method: wo.calibration_method || 'EXTERNAL_LAB',
@@ -495,10 +523,10 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
     setAmendError('');
     try {
       if (amendForm.certificate_file) {
-        await uploadVccWorkOrderCertificate(amendWo.id, amendForm.certificate_file);
+        await uploadVccWorkOrderCertificate(amendWo.id, amendForm.certificate_file, { amendment: true });
       }
       const { certificate_file: _cf, ...payload } = amendForm;
-      const updated = await amendVccWorkOrder(amendWo.id, payload);
+      const updated = await amendVccWorkOrder(amendWo.id, { ...payload, direct: true });
       toast.success(
         updated?.request
           ? 'ส่งคำขอแก้ไขผลแล้ว รอผู้อนุมัติที่ไม่ใช่ผู้ขอตรวจสอบและอนุมัติ'
@@ -613,7 +641,7 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
         if (selectedDrawerWo?.id === workOrder.id) {
           handleCloseDrawer();
         }
-        setActiveTab('REJECTED');
+        setActiveTab('OPEN');
         await loadData();
       } else if (mode === 'RELEASE_HOLD') {
         await releaseVccWorkOrderHold(workOrder.id, actionForm.text, actionForm.reason);
@@ -880,6 +908,7 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
         individualAssets={individualAssets}
         providers={providers}
         currentUser={currentUser}
+        workOrders={allWorkOrders}
       />
 
       <RecordResultModal

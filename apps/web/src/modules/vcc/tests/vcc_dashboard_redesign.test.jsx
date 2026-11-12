@@ -40,9 +40,9 @@ describe('VCC Dashboard Redesign — Enterprise UX/UI Components', () => {
       // Highlighted Overdue count
       expect(screen.getByTestId('kpi-overdue-count').textContent).toBe('3');
 
-      // Due 30 and Pending review
+      // Due 30 and Cert status
       expect(screen.getByTestId('kpi-due-30-count').textContent).toBe('5');
-      expect(screen.getByTestId('kpi-pending-review-count').textContent).toBe('1');
+      expect(screen.getByTestId('kpi-cert-status')).toBeInTheDocument();
 
       // Completed with on-time rate
       expect(screen.getByTestId('kpi-completed-count').textContent).toContain('8');

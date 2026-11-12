@@ -4,7 +4,9 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import useStore from '../../../store/useStore';
 import AssetRegisterPage from '../pages/AssetRegisterPage';
 import { resetVccLocalStore } from '../api/vccApi';
-import { approveVccWorkOrder, getLocalWos, releaseVccWorkOrderHold, rescheduleVccWorkOrder } from '../api/vccWorkOrderApi';
+import { approveVccWorkOrder, amendVccWorkOrder, getLocalWos, releaseVccWorkOrderHold, rescheduleVccWorkOrder, submitVccWorkOrderResult } from '../api/vccWorkOrderApi';
+import { getAvailableMonthsForItem } from '../components/WorkOrderModals';
+import { getCalibrationMethodLabel } from '../utils/statusLabels';
 
 describe('VCC Phase 3 — Work Orders, Execution, Review, Close & Hold/NC Control', () => {
   beforeEach(() => {
@@ -75,13 +77,13 @@ describe('VCC Phase 3 — Work Orders, Execution, Review, Close & Hold/NC Contro
     expect(screen.getByText('2026-03-31')).toBeInTheDocument();
   });
 
-  it('2. บังคับกรอกเลขที่ใบรับรองและเกณฑ์ยอมรับก่อนส่งตรวจรับ, ห้ามผู้บันทึกผลตรวจรับงานตัวเอง, และเมื่อผู้ตรวจรับอนุมัติปิดงานจะอัปเดตแถว Act. ในแผนประจำปี', async () => {
+  it('2. บังคับกรอกเลขที่ใบรับรองและเกณฑ์ยอมรับก่อนบันทึกผล และบันทึกผลแล้วปิดงานทันที พร้อมอัปเดตแถว Act. ในแผนประจำปี', async () => {
     render(<AssetRegisterPage />);
 
     fireEvent.click(await screen.findByRole('button', { name: /ใบสั่งงานและบันทึกผล \(Work Orders\)/i }));
     fireEvent.click(await screen.findByRole('button', { name: /บันทึกผลและใบรับรอง/i }));
 
-    const submitResultBtn = await screen.findByRole('button', { name: /ส่งผลให้ผู้ตรวจรับพิจารณา/i });
+    const submitResultBtn = await screen.findByRole('button', { name: /บันทึกผลและปิดใบงาน/i });
     expect(submitResultBtn).toBeDisabled();
 
     fireEvent.change(screen.getByLabelText(/วันที่ทวนสอบจริง/i), { target: { value: '2026-03-25' } });
@@ -89,36 +91,7 @@ describe('VCC Phase 3 — Work Orders, Execution, Review, Close & Hold/NC Contro
     expect(submitResultBtn).not.toBeDisabled();
     fireEvent.click(submitResultBtn);
 
-    // Moves to PENDING_REVIEW tab (not CLOSED). The performer (dc4) is not offered the close button at all ...
-    expect((await screen.findAllByText('รอผู้ตรวจรับ')).length).toBeGreaterThan(0);
-    expect(screen.queryByRole('button', { name: /ตรวจรับปิดงาน/i })).not.toBeInTheDocument();
-
-    // ... and the backend rule still refuses them if the call is made anyway
-    const pendingWo = getLocalWos().find((w) => w.status === 'PENDING_REVIEW');
-    await expect(approveVccWorkOrder(pendingWo.id, 'ลองอนุมัติงานตัวเอง')).rejects.toThrow(
-      /ผู้บันทึกผลไม่สามารถตรวจรับและอนุมัติปิดใบสั่งงานของตนเองได้/
-    );
-
-    // Switch to Reviewer L4 (qc4) and approve -> moves to CLOSED
-    useStore.setState({
-      currentUser: {
-        id: 'qc4',
-        name: 'QC หัวหน้า (L4)',
-        role: 'STAFF',
-        department: 'QC',
-        approval_level: 4,
-        approvalLevel: 4,
-        isDcc: true
-      }
-    });
-
-    fireEvent.click(await screen.findByRole('button', { name: /ตรวจรับปิดงาน/i }));
-    fireEvent.click(await screen.findByRole('button', { name: 'ยืนยันการดำเนินการ' }));
-
-    // Wait for approval action to complete and modal to close
-    await waitFor(() => expect(screen.queryByRole('button', { name: 'ยืนยันการดำเนินการ' })).not.toBeInTheDocument());
-
-    // Now in CLOSED tab
+    // Moves directly to CLOSED tab
     expect(await screen.findByText('CERT-ST002-2026')).toBeInTheDocument();
 
     // Verify Annual Plan month 3 cell updated to green checkmark (✓)
@@ -133,19 +106,20 @@ describe('VCC Phase 3 — Work Orders, Execution, Review, Close & Hold/NC Contro
     fireEvent.click(await screen.findByRole('button', { name: /ใบสั่งงานและบันทึกผล \(Work Orders\)/i }));
     fireEvent.click(await screen.findByRole('button', { name: /บันทึกผลและใบรับรอง/i }));
 
-    fireEvent.change(screen.getByLabelText(/ผลการทวนสอบ/i), { target: { value: 'FAIL' } });
+    fireEvent.click(screen.getByRole('button', { name: /ไม่ผ่านเกณฑ์ \(FAIL\)/i }));
     fireEvent.change(screen.getByLabelText(/เลขที่ใบรับรอง/i), { target: { value: 'CERT-FAIL-01' } });
-    fireEvent.click(screen.getByRole('button', { name: /ส่งผลให้ผู้ตรวจรับพิจารณา/i }));
+    fireEvent.change(screen.getByPlaceholderText(/ระบุสาเหตุที่ไม่ผ่านเกณฑ์/i), { target: { value: 'ค่าคลาดเคลื่อนเกินเกณฑ์' } });
+    fireEvent.click(screen.getByRole('button', { name: /ยืนยันผลไม่ผ่านเกณฑ์และระงับใช้/i }));
 
     // Immediately shows ON_HOLD badge
     expect(await screen.findByTestId('wo-hold-badge')).toBeInTheDocument();
 
-    // Not reviewed yet (and dc4 is the L4 performer): no release is offered, and the rule refuses it anyway
+    // The performer (dc4, L4): no release is offered, and the rule refuses it anyway
     expect(screen.queryByRole('button', { name: /ปลดระงับใช้/i })).not.toBeInTheDocument();
     const heldWo = getLocalWos().find((w) => w.nc_status === 'OPEN');
     await expect(releaseVccWorkOrderHold(heldWo.id, 'ประเมินแล้ว', 'สอบเทียบซ้ำผ่าน')).rejects.toThrow(/L5 ขึ้นไป/);
 
-    // An L5 reviewer (qc5) closes the FAIL result first ...
+    // An L5 reviewer (qc5) releases the hold with both a reason and an impact assessment
     useStore.setState({
       currentUser: {
         id: 'qc5',
@@ -157,10 +131,7 @@ describe('VCC Phase 3 — Work Orders, Execution, Review, Close & Hold/NC Contro
         isDcc: true
       }
     });
-    fireEvent.click(await screen.findByRole('button', { name: /ตรวจรับปิดงาน/i }));
-    fireEvent.click(await screen.findByRole('button', { name: 'ยืนยันการดำเนินการ' }));
 
-    // ... then releases the hold with both a reason and an impact assessment
     fireEvent.click(await screen.findByRole('button', { name: /ปลดระงับใช้/i }));
     const confirmReleaseBtn = await screen.findByRole('button', { name: 'ยืนยันการดำเนินการ' });
     fireEvent.change(screen.getByPlaceholderText(/ระบุรายละเอียด/i), {
@@ -184,31 +155,17 @@ describe('VCC Phase 3 — Work Orders, Execution, Review, Close & Hold/NC Contro
     await expect(rescheduleVccWorkOrder(wo.id, { new_due_date: '2026-05-15', reason: 'กดซ้ำ' })).rejects.toThrow(/ไม่มีการเปลี่ยนแปลง/);
   });
 
-  it('4. ผลรอตรวจซ้ำ (INCONCLUSIVE) ระงับใช้ทันที ผู้ตรวจรับปิดงานไม่ได้ มีปุ่มเดียวคือส่งกลับตรวจซ้ำ', async () => {
-    render(<AssetRegisterPage />);
-
-    fireEvent.click(await screen.findByRole('button', { name: /ใบสั่งงานและบันทึกผล \(Work Orders\)/i }));
-    fireEvent.click(await screen.findByRole('button', { name: /บันทึกผลและใบรับรอง/i }));
-    fireEvent.change(screen.getByLabelText(/ผลการทวนสอบ/i), { target: { value: 'INCONCLUSIVE' } });
-    expect(screen.getByText(/ผลรอตรวจซ้ำปิดงานไม่ได้/)).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText(/เลขที่ใบรับรอง/i), { target: { value: 'CERT-INC-01' } });
-    fireEvent.click(screen.getByRole('button', { name: /ส่งผลให้ผู้ตรวจรับพิจารณา/i }));
-    expect(await screen.findByTestId('wo-hold-badge')).toBeInTheDocument();
-
-    useStore.setState({
-      currentUser: { id: 'qc4', name: 'QC หัวหน้า (L4)', role: 'STAFF', department: 'QC', approval_level: 4, approvalLevel: 4, isDcc: true }
+  it('4. ผลรอตรวจซ้ำ (INCONCLUSIVE) ระงับใช้ทันที ผู้ตรวจรับปิดงานไม่ได้', async () => {
+    const wo = getLocalWos().find((w) => w.wo_code === 'WO-2026-001');
+    await submitVccWorkOrderResult(wo.id, {
+      performed_at: '2026-03-25',
+      result_status: 'INCONCLUSIVE',
+      certificate_no: 'CERT-INC-01',
+      acceptance_criteria: '± 0.05 mm'
     });
-    expect(await screen.findByRole('button', { name: /ส่งกลับตรวจซ้ำ/ })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /ตรวจรับปิดงาน/i })).not.toBeInTheDocument();
-    const pendingWo = getLocalWos().find((w) => w.status === 'PENDING_REVIEW');
+    const pendingWo = getLocalWos().find((w) => w.id === wo.id);
+    expect(pendingWo.nc_status).toBe('OPEN');
     await expect(approveVccWorkOrder(pendingWo.id, 'ปิดงาน')).rejects.toThrow(/INCONCLUSIVE/);
-
-    fireEvent.click(screen.getByRole('button', { name: /ส่งกลับตรวจซ้ำ/ }));
-    expect(await screen.findByText('สิ่งที่ต้องตรวจซ้ำ')).toBeInTheDocument();
-    fireEvent.change(screen.getByPlaceholderText(/ระบุรายละเอียด/i), { target: { value: 'วัดซ้ำที่ 3 จุด' } });
-    fireEvent.click(screen.getByRole('button', { name: 'ยืนยันการดำเนินการ' }));
-    await screen.findByText('WO-2026-001');
-    expect(getLocalWos().find((w) => w.id === pendingWo.id).status).toBe('REJECTED');
   });
 
   it('5. ปุ่มยกเลิกใบสั่งงานแสดงเฉพาะ DCC หรือหัวหน้าแผนกเจ้าของงาน L4+ และต้องระบุเหตุผล', async () => {
@@ -239,6 +196,71 @@ describe('VCC Phase 3 — Work Orders, Execution, Review, Close & Hold/NC Contro
     await waitFor(() => expect(screen.queryByText('WO-2026-001')).not.toBeInTheDocument());
     const cancelled = getLocalWos().find((w) => w.wo_code === 'WO-2026-001');
     expect(cancelled).toMatchObject({ status: 'CANCELLED', cancellation_category: 'AUTHORIZED_CANCEL', cancellation_reason: 'ออกใบงานซ้ำกับรอบเดิม' });
+  });
+
+  it('6. getAvailableMonthsForItem: รองรับรอบเดือนซ้ำ [6, 6] และกรองเฉพาะใบงานที่อยู่ในแผนเดียวกัน', () => {
+    const item = { id: 'item-1', asset_id: 'ast-1', months: [6, 6] };
+    const planId = 'plan-2026';
+
+    // 0 work orders -> both 6s available
+    expect(getAvailableMonthsForItem(item, [], planId)).toEqual([6, 6]);
+
+    // 1 work order in month 6 (OPEN) -> 1 remaining month 6 available
+    const wos1 = [{ id: 'wo-1', plan_id: 'plan-2026', plan_item_id: 'item-1', planned_month: 6, status: 'OPEN' }];
+    expect(getAvailableMonthsForItem(item, wos1, planId)).toEqual([6]);
+
+    // Both work orders booked -> 0 remaining
+    const wos2 = [
+      { id: 'wo-1', plan_id: 'plan-2026', plan_item_id: 'item-1', planned_month: 6, status: 'OPEN' },
+      { id: 'wo-2', plan_id: 'plan-2026', plan_item_id: 'item-1', planned_month: 6, status: 'CLOSED' }
+    ];
+    expect(getAvailableMonthsForItem(item, wos2, planId)).toEqual([]);
+
+    // CANCELLED or SCHEDULED work order does not book the cycle
+    const wos3 = [
+      { id: 'wo-1', plan_id: 'plan-2026', plan_item_id: 'item-1', planned_month: 6, status: 'SCHEDULED' },
+      { id: 'wo-2', plan_id: 'plan-2026', plan_item_id: 'item-1', planned_month: 6, status: 'CANCELLED' }
+    ];
+    expect(getAvailableMonthsForItem(item, wos3, planId)).toEqual([6, 6]);
+
+    // Ad-hoc work order (plan_id is null) does NOT book the plan's cycles
+    const wosAdHoc = [{ id: 'wo-adhoc', plan_id: null, asset_id: 'ast-1', planned_month: 6, status: 'OPEN' }];
+    expect(getAvailableMonthsForItem(item, wosAdHoc, planId)).toEqual([6, 6]);
+  });
+
+  it('7. getCalibrationMethodLabel: แปลงค่า Raw Enum เช่น EXTERNAL_LAB เป็นข้อความภาษาไทยที่ถูกต้อง', () => {
+    expect(getCalibrationMethodLabel('EXTERNAL_LAB')).toBe('ห้องปฏิบัติการภายนอก (External Lab)');
+    expect(getCalibrationMethodLabel('IN_HOUSE')).toBe('ทวนสอบภายใน (In-House)');
+    expect(getCalibrationMethodLabel('MANUFACTURER')).toBe('ผู้ผลิต/ตัวแทนจำหน่าย (Manufacturer)');
+    expect(getCalibrationMethodLabel('ON_SITE')).toBe('สอบเทียบนอกสถานที่ (On-Site Calibration)');
+    expect(getCalibrationMethodLabel('WI-CAL-01')).toBe('WI-CAL-01');
+  });
+
+  it('8. amendVccWorkOrder: รองรับ direct amendment บนใบสั่งงาน CLOSED และบันทึก audit log', async () => {
+    const wo = getLocalWos().find((w) => w.wo_code === 'WO-2026-001');
+    // First submit and close the work order
+    await submitVccWorkOrderResult(wo.id, {
+      performed_at: '2026-03-25',
+      result_status: 'PASS',
+      certificate_no: 'CERT-ORIGINAL',
+      acceptance_criteria: '± 0.5 °C'
+    });
+
+    const closedWo = getLocalWos().find((w) => w.id === wo.id);
+    expect(closedWo.status).toBe('CLOSED');
+
+    // Direct amend
+    const amended = await amendVccWorkOrder(closedWo.id, {
+      direct: true,
+      amendment_reason: 'แก้ไขเลขที่ใบรับรองที่พิมพ์ตกหล่น',
+      certificate_no: 'CERT-CORRECTED',
+      actual_result: '100.01 °C'
+    });
+
+    expect(amended.is_amended).toBe(1);
+    expect(amended.certificate_no).toBe('CERT-CORRECTED');
+    expect(amended.actual_result).toBe('100.01 °C');
+    expect(amended.amendment_reason).toBe('แก้ไขเลขที่ใบรับรองที่พิมพ์ตกหล่น');
   });
 });
 
