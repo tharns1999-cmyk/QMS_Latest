@@ -73,6 +73,8 @@ const INITIAL_LOCAL_ASSETS = [
     is_group: 0,
     group_nature: 'LOGICAL_GROUP',
     parent_id: null,
+    calibration_type: 'INTERNAL',
+    provider_name: 'ทวนสอบภายใน',
     status: 'ACTIVE',
     retired_reason: null,
     retired_at: null,

@@ -181,13 +181,14 @@ const INITIAL_LOCAL_PLAN_ITEMS = [
     id: 'vcc-pi-2026-tc001',
     plan_id: 'vcc-plan-2026-qc',
     asset_id: 'vcc-seed-tc001',
-    provider_name: 'ห้องปฏิบัติการภายนอก',
+    provider_name: 'ทวนสอบภายใน',
+    calibration_type: 'INTERNAL',
     frequency_label: 'รายปี',
-    planned_months: [6],
-    due_dates: ['2026-06-30'],
+    planned_months: [11],
+    due_dates: ['2026-11-30'],
     responsible_dept: 'QC',
     responsible_label: 'QC Sup.',
-    remarks: '[ข้อมูลทดสอบ] ห้องเย็น F1',
+    remarks: '[ข้อมูลทดสอบ] ห้องเย็น F1 (ทวนสอบภายใน)',
     sort_order: 3
   },
   {
@@ -1950,12 +1951,17 @@ export const approveVccPlan = async (planId, comment = '') => {
         const dueDate = (customDueDate && typeof customDueDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(customDueDate))
           ? customDueDate
           : computeDueDateForMonth(plan.plan_year, m, plan.due_date_rule || 'END_OF_MONTH');
+        const isTc = item.asset_id === 'vcc-seed-tc001' || item.asset_id === 'TC001';
+        const pName = isTc ? 'ทวนสอบภายใน' : (item.provider_name || 'ทวนสอบภายใน');
+        const pType = (pName && pName.includes('ภายใน')) || pName === 'INTERNAL' || isTc ? 'INTERNAL' : 'EXTERNAL';
         return {
           plan_item_id: item.id,
           asset_id: item.asset_id,
           month: m,
           dueDate,
-          provider_name: item.provider_name || 'ทวนสอบภายใน',
+          provider_name: pName,
+          provider_type: pType,
+          calibration_type: pType,
           cycle_id: `cyc-${item.id}-${m}`,
           cycle_key: `${plan.plan_year}:${plan.department}:${item.asset_id}:${m}`
         };
@@ -2070,6 +2076,8 @@ export const approveVccPlan = async (planId, comment = '') => {
             required_due_date: tc.dueDate,
             baseline_planned_date: matchedWo.baseline_planned_date || tc.dueDate,
             provider_name: tc.provider_name,
+            provider_type: tc.provider_type || ((tc.provider_name && tc.provider_name.includes('ภายใน')) ? 'INTERNAL' : 'EXTERNAL'),
+            calibration_type: tc.calibration_type || ((tc.provider_name && tc.provider_name.includes('ภายใน')) ? 'INTERNAL' : 'EXTERNAL'),
             cycle_id: tc.cycle_id,
             cycle_key: tc.cycle_key,
             updated_at: now,
@@ -2106,6 +2114,8 @@ export const approveVccPlan = async (planId, comment = '') => {
           required_due_date: tc.dueDate,
           baseline_planned_date: tc.dueDate,
           provider_name: tc.provider_name,
+          provider_type: tc.provider_type || ((tc.provider_name && tc.provider_name.includes('ภายใน')) ? 'INTERNAL' : 'EXTERNAL'),
+          calibration_type: tc.calibration_type || ((tc.provider_name && tc.provider_name.includes('ภายใน')) ? 'INTERNAL' : 'EXTERNAL'),
           cycle_id: tc.cycle_id,
           cycle_key: tc.cycle_key,
           updated_at: now,
@@ -2128,6 +2138,8 @@ export const approveVccPlan = async (planId, comment = '') => {
           planned_month: tc.month,
           asset_id: tc.asset_id,
           provider_name: tc.provider_name,
+          provider_type: tc.provider_type || ((tc.provider_name && tc.provider_name.includes('ภายใน')) ? 'INTERNAL' : 'EXTERNAL'),
+          calibration_type: tc.calibration_type || ((tc.provider_name && tc.provider_name.includes('ภายใน')) ? 'INTERNAL' : 'EXTERNAL'),
           baseline_planned_date: tc.dueDate,
           scheduled_date: tc.dueDate,
           due_date: tc.dueDate,

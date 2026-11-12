@@ -8,6 +8,29 @@ import { getUserDeptCodes, canReadAllVccDepartments } from '../utils/departmentS
 import useStore from '../../../store/useStore';
 import { SearchableSelect } from '../../../shared/components/ui/SearchableSelect';
 
+export const parseRevisionNo = (plan) => {
+  if (plan?.revision_no !== undefined && plan?.revision_no !== null) {
+    const n = Number(plan.revision_no);
+    if (!isNaN(n)) return n;
+  }
+  if (plan?.revision !== undefined && plan?.revision !== null) {
+    const n = parseInt(String(plan.revision).replace(/\D/g, ''), 10);
+    if (!isNaN(n)) return n;
+  }
+  return 0;
+};
+
+export const formatRevisionLabel = (plan) => {
+  if (plan?.revision) {
+    const revStr = String(plan.revision).trim();
+    return revStr.toUpperCase().startsWith('REV') ? revStr : `Rev.${revStr.padStart(2, '0')}`;
+  }
+  if (plan?.revision_no !== undefined && plan?.revision_no !== null) {
+    return `Rev.${String(plan.revision_no).padStart(2, '0')}`;
+  }
+  return 'Rev.01';
+};
+
 export const getItemPlannedMonths = (item) => {
   if (Array.isArray(item?.planned_months) && item.planned_months.length > 0) {
     return item.planned_months.map(Number);
@@ -91,30 +114,50 @@ export const CreateWorkOrderModal = ({
   }, [individualAssets, canReadAll, userDepts]);
 
   const filteredApprovedPlans = useMemo(() => {
-    return (approvedPlans || []).filter((p) => {
+    const accessible = (approvedPlans || []).filter((p) => {
+      if (p.status && p.status !== 'APPROVED') return false;
+      if (p.is_current === false || p.is_current === 0) return false;
+      if (p.effective_status === 'SUPERSEDED') return false;
+
       if (canReadAll) return true;
       const dept = String(p.department || '').trim().toUpperCase();
       return userDepts.includes(dept);
     });
+
+    const planMap = new Map();
+    for (const p of accessible) {
+      const year = p.plan_year || '';
+      const dept = String(p.department || '').trim().toUpperCase();
+      const key = `${year}-${dept}`;
+      const revNum = parseRevisionNo(p);
+      const existing = planMap.get(key);
+      if (!existing || revNum > parseRevisionNo(existing)) {
+        planMap.set(key, p);
+      }
+    }
+    return Array.from(planMap.values());
   }, [approvedPlans, canReadAll, userDepts]);
 
   const approvedPlanOptions = useMemo(() => {
-    return filteredApprovedPlans.map((p) => ({
-      value: p.id,
-      label: `ปี ${p.plan_year} • ${p.department} (${p.title})`,
-      subLabel: p.document_code || '',
-      badge: p.department,
-      keywords: [p.plan_year, p.department, p.title, p.document_code].filter(Boolean)
-    }));
+    return filteredApprovedPlans.map((p) => {
+      const revLabel = formatRevisionLabel(p);
+      return {
+        value: p.id,
+        label: `ปี ${p.plan_year} • ${p.department} (${p.title || p.document_code})${revLabel ? ` [${revLabel}]` : ''}`,
+        subLabel: `${p.document_code || ''} ${revLabel ? `(${revLabel})` : ''}`.trim(),
+        badge: `${p.department} • ${revLabel}`,
+        keywords: [p.plan_year, p.department, p.title, p.document_code, revLabel].filter(Boolean)
+      };
+    });
   }, [filteredApprovedPlans]);
 
   const availablePlanItems = useMemo(() => {
-    if (!form.plan_id) return [];
+    if (!form?.plan_id) return [];
     return (planItems || []).filter((it) => {
       const avail = getAvailableMonthsForItem(it, workOrders, form.plan_id);
       return avail.length > 0;
     });
-  }, [planItems, workOrders, form.plan_id]);
+  }, [planItems, workOrders, form?.plan_id]);
 
   const planItemOptions = useMemo(() => {
     return availablePlanItems.map((it) => {
@@ -441,14 +484,14 @@ export const CreateWorkOrderModal = ({
             <button
               type="button"
               onClick={requestClose}
-              className="order-1 sm:order-1 w-full sm:w-auto min-h-[44px] h-11 sm:h-10 px-4 rounded-xl border border-slate-300 text-sm font-semibold hover:bg-slate-50 transition-colors cursor-pointer motion-safe:active:scale-[0.98] select-none"
+              className="order-1 sm:order-1 w-full sm:w-auto min-h-[44px] h-11 sm:h-10 px-4 rounded-xl border border-slate-300 text-sm font-semibold hover:bg-slate-50 transition-colors cursor-pointer motion-safe:active:scale-[0.98] select-none whitespace-nowrap shrink-0"
             >
               ยกเลิก
             </button>
             <button
               type="submit"
               disabled={saving || (form.mode === 'PLAN' && (!form.plan_item_id || availablePlanItems.length === 0))}
-              className="order-2 sm:order-2 w-full sm:w-auto min-h-[44px] h-11 sm:h-10 px-5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 transition-colors cursor-pointer shadow-2xs motion-safe:active:scale-[0.98] select-none"
+              className="order-2 sm:order-2 w-full sm:w-auto min-h-[44px] h-11 sm:h-10 px-5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 transition-colors cursor-pointer shadow-2xs motion-safe:active:scale-[0.98] select-none whitespace-nowrap shrink-0"
             >
               {saving ? 'กำลังสร้าง...' : 'ยืนยันสร้างใบสั่งงาน'}
             </button>
@@ -744,7 +787,7 @@ export const WorkOrderActionModal = ({
                 <button
                   type="button"
                   onClick={requestClose}
-                  className="order-1 sm:order-1 w-full sm:w-auto min-h-[44px] h-11 sm:h-10 px-4 rounded-xl border border-slate-300 text-sm font-semibold hover:bg-slate-50 transition-colors cursor-pointer motion-safe:active:scale-[0.98] select-none"
+                  className="order-1 sm:order-1 w-full sm:w-auto min-h-[44px] h-11 sm:h-10 px-4 rounded-xl border border-slate-300 text-sm font-semibold hover:bg-slate-50 transition-colors cursor-pointer motion-safe:active:scale-[0.98] select-none whitespace-nowrap shrink-0"
                 >
                   ปิด
                 </button>
@@ -752,7 +795,7 @@ export const WorkOrderActionModal = ({
                   type="button"
                   disabled={saving || !form.text?.trim()}
                   onClick={(e) => onRejectReschedule ? onRejectReschedule(e, workOrder, form.text) : onConfirm(e, 'REJECT')}
-                  className="order-2 sm:order-2 w-full sm:w-auto min-h-[44px] h-11 sm:h-10 px-4 rounded-xl bg-rose-50 border border-rose-300 text-rose-700 text-sm font-semibold hover:bg-rose-100 disabled:opacity-50 transition-colors cursor-pointer motion-safe:active:scale-[0.98] select-none"
+                  className="order-2 sm:order-2 w-full sm:w-auto min-h-[44px] h-11 sm:h-10 px-4 rounded-xl bg-rose-50 border border-rose-300 text-rose-700 text-sm font-semibold hover:bg-rose-100 disabled:opacity-50 transition-colors cursor-pointer motion-safe:active:scale-[0.98] select-none whitespace-nowrap shrink-0"
                 >
                   {saving ? 'กำลังประมวลผล...' : 'ไม่อนุมัติ (ปฏิเสธ)'}
                 </button>
@@ -761,7 +804,7 @@ export const WorkOrderActionModal = ({
                   disabled={saving || isSelfRequester}
                   title={isSelfRequester ? 'ไม่สามารถอนุมัติตนเองได้ (Segregation of Duties)' : 'อนุมัติการขอเลื่อนกำหนด'}
                   onClick={(e) => onApproveReschedule ? onApproveReschedule(e, workOrder, form.text) : onConfirm(e, 'APPROVE')}
-                  className="order-3 sm:order-3 w-full sm:w-auto min-h-[44px] h-11 sm:h-10 px-5 rounded-xl bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer shadow-2xs motion-safe:active:scale-[0.98] select-none"
+                  className="order-3 sm:order-3 w-full sm:w-auto min-h-[44px] h-11 sm:h-10 px-5 rounded-xl bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer shadow-2xs motion-safe:active:scale-[0.98] select-none whitespace-nowrap shrink-0"
                 >
                   {saving ? 'กำลังบันทึก...' : 'อนุมัติการเลื่อนกำหนด'}
                 </button>
@@ -771,14 +814,14 @@ export const WorkOrderActionModal = ({
                 <button
                   type="button"
                   onClick={requestClose}
-                  className="order-1 sm:order-1 w-full sm:w-auto min-h-[44px] h-11 sm:h-10 px-4 rounded-xl border border-slate-300 text-sm font-semibold hover:bg-slate-50 transition-colors cursor-pointer motion-safe:active:scale-[0.98] select-none"
+                  className="order-1 sm:order-1 w-full sm:w-auto min-h-[44px] h-11 sm:h-10 px-4 rounded-xl border border-slate-300 text-sm font-semibold hover:bg-slate-50 transition-colors cursor-pointer motion-safe:active:scale-[0.98] select-none whitespace-nowrap shrink-0"
                 >
                   ปิด
                 </button>
                 <button
                   type="submit"
                   disabled={saving || (requiresText && !form.text.trim()) || missingReason}
-                  className="order-2 sm:order-2 w-full sm:w-auto min-h-[44px] h-11 sm:h-10 px-5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 transition-colors cursor-pointer shadow-2xs motion-safe:active:scale-[0.98] select-none"
+                  className="order-2 sm:order-2 w-full sm:w-auto min-h-[44px] h-11 sm:h-10 px-5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 transition-colors cursor-pointer shadow-2xs motion-safe:active:scale-[0.98] select-none whitespace-nowrap shrink-0"
                 >
                   {saving ? 'กำลังบันทึก...' : 'ยืนยันการดำเนินการ'}
                 </button>
@@ -940,7 +983,7 @@ export const WorkOrderSettingsModal = ({
             <button
               type="button"
               onClick={requestClose}
-              className="order-1 sm:order-1 w-full sm:w-auto min-h-[44px] h-11 sm:h-10 px-4 rounded-xl border border-slate-300 text-sm font-semibold hover:bg-slate-50 transition-colors cursor-pointer motion-safe:active:scale-[0.98] select-none"
+              className="order-1 sm:order-1 w-full sm:w-auto min-h-[44px] h-11 sm:h-10 px-4 rounded-xl border border-slate-300 text-sm font-semibold hover:bg-slate-50 transition-colors cursor-pointer motion-safe:active:scale-[0.98] select-none whitespace-nowrap shrink-0"
             >
               ยกเลิก
             </button>
@@ -948,7 +991,7 @@ export const WorkOrderSettingsModal = ({
               type="button"
               disabled={saving}
               onClick={onSave}
-              className="order-2 sm:order-2 w-full sm:w-auto min-h-[44px] h-11 sm:h-10 px-5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 transition-colors cursor-pointer shadow-2xs motion-safe:active:scale-[0.98] select-none"
+              className="order-2 sm:order-2 w-full sm:w-auto min-h-[44px] h-11 sm:h-10 px-5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 transition-colors cursor-pointer shadow-2xs motion-safe:active:scale-[0.98] select-none whitespace-nowrap shrink-0"
             >
               {saving ? 'กำลังบันทึก...' : 'บันทึกการตั้งค่า'}
             </button>

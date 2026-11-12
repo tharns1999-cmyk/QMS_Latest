@@ -446,6 +446,14 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
       return true;
     });
 
+    const isInternal =
+      wo.asset_code === 'TC001' ||
+      wo.asset_id === 'vcc-seed-tc001' ||
+      wo.asset_id === 'TC001' ||
+      String(wo.provider_type || wo.calibration_type || '').toUpperCase() === 'INTERNAL' ||
+      String(wo.provider_name || '').includes('ภายใน') ||
+      String(wo.provider_name || '').toUpperCase() === 'INTERNAL';
+
     setResultForm({
       performed_at: wo.performed_at || getBangkokDate(),
       result_status: wo.result_status === 'PENDING' ? 'PASS' : wo.result_status,
@@ -454,8 +462,8 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
       certificate_no: wo.certificate_no || '',
       acceptance_criteria: wo.acceptance_criteria || matchingPreset || woSettings.default_acceptance_criteria?.[0] || '',
       result_remarks: wo.result_remarks || '',
-      calibration_provider_name: wo.calibration_provider_name || wo.provider_name || '',
-      calibration_method: wo.calibration_method || 'EXTERNAL_LAB',
+      calibration_provider_name: wo.calibration_provider_name || wo.provider_name || (isInternal ? 'ทวนสอบภายใน' : ''),
+      calibration_method: wo.calibration_method || (isInternal ? 'IN_HOUSE' : 'EXTERNAL_LAB'),
       traceability_ref: wo.traceability_ref || '',
       environmental_conditions: wo.environmental_conditions || '',
       uncertainty_value: wo.uncertainty_value || '',
@@ -477,6 +485,26 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
         await uploadVccWorkOrderCertificate(resultWo.id, resultForm.certificate_file);
       }
       const { certificate_file: _cf, certificate_name: _cn, ...payload } = resultForm;
+      const isInternal =
+        resultWo.asset_code === 'TC001' ||
+        resultWo.asset_id === 'vcc-seed-tc001' ||
+        resultWo.asset_id === 'TC001' ||
+        String(resultWo.provider_type || resultWo.calibration_type || '').toUpperCase() === 'INTERNAL' ||
+        String(resultWo.provider_name || '').includes('ภายใน') ||
+        String(resultWo.provider_name || '').toUpperCase() === 'INTERNAL';
+
+      if (isInternal) {
+        if (!payload.certificate_no?.trim()) {
+          payload.certificate_no = resultWo.wo_code;
+        }
+        if (!payload.calibration_method) {
+          payload.calibration_method = 'IN_HOUSE';
+        }
+        if (!payload.calibration_provider_name) {
+          payload.calibration_provider_name = resultWo.provider_name || 'ทวนสอบภายใน';
+        }
+      }
+
       const updated = await submitVccWorkOrderResult(resultWo.id, payload);
       toast.success(
         payload.result_status === 'FAIL'
@@ -921,6 +949,7 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
         onSubmit={handleResultSubmit}
         criteriaOptions={woSettings.default_acceptance_criteria}
         providers={providers}
+        masterAssets={individualAssets}
       />
 
       <AmendmentModal
