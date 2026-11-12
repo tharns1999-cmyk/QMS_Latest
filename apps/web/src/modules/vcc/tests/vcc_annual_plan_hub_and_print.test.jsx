@@ -271,8 +271,8 @@ describe('VCC Annual Plan Hub & Spoke Architecture and ISO Print View', () => {
     });
   });
 
-  describe('2. AnnualPlanPrintView (ISO Controlled Document & Signatures)', () => {
-    it('แสดงหัวกระดาษเอกสารควบคุม, รหัสแบบฟอร์ม DCC, Revision และตาราง Matrix 12 เดือน', () => {
+  describe('2. AnnualPlanPrintView (Corporate Banner, Dual-Row Matrix & Clean Signatures)', () => {
+    it('แสดงหัวกระดาษแบนเนอร์ บริษัท เศรษฐชล จำกัด 3 ภาษา และไม่แสดงรหัสเอกสาร/Rev/วันที่มีผล', () => {
       const onClose = vi.fn();
       render(
         <AnnualPlanPrintView
@@ -282,20 +282,116 @@ describe('VCC Annual Plan Hub & Spoke Architecture and ISO Print View', () => {
         />
       );
 
-      expect(screen.getByText(/บริษัท ควอลิตี้ แมนูแฟคเจอริ่ง ซิสเต็มส์ จำกัด/)).toBeInTheDocument();
-      expect(screen.getByText('FM-QC-42')).toBeInTheDocument();
-      expect(screen.getByText('Rev.01')).toBeInTheDocument();
-      expect(screen.getByText('2026-01-15')).toBeInTheDocument();
+      // โลโก้และหัวกระดาษแบนเนอร์ 3 ภาษา
+      expect(screen.getByAltText('Sethachon Logo')).toBeInTheDocument();
+      expect(screen.getByText(/บริษัท เศรษฐชล จำกัด.*SETHACHON CO\., LTD\..*勝豐有限公司/)).toBeInTheDocument();
+      expect(screen.getByText(/225 หมู่ 12 ถนนเทพารักษ์/)).toBeInTheDocument();
+      expect(screen.getByText(/225 MOO 12 TEPARAK ROAD/)).toBeInTheDocument();
+
+      // ชื่อเรื่องเอกสาร
+      expect(screen.getByText('แผนการทวนสอบและสอบเทียบเครื่องมือวัด ประจำปี 2026 (พ.ศ. 2569)')).toBeInTheDocument();
+      expect(screen.getByText('Annual Equipment Verification & Calibration Plan')).toBeInTheDocument();
+      expect(screen.getByText('หน่วยงาน / แผนก: ฝ่ายควบคุมคุณภาพ')).toBeInTheDocument();
+
+      // แถบหัว Modal (ตัวอย่างก่อนพิมพ์: แผนการทวนสอบและสอบเทียบประจำปี 2569)
+      expect(screen.getByText('ตัวอย่างก่อนพิมพ์: แผนการทวนสอบและสอบเทียบประจำปี 2569')).toBeInTheDocument();
+
+      // ตัด Metadata และข้อความผูกมัดออกทั้งหมด (Audit-Safe Clean-up)
+      expect(screen.queryByText('FM-QC-42')).not.toBeInTheDocument();
+      expect(screen.queryByText('Rev.01')).not.toBeInTheDocument();
+      expect(screen.queryByText('2026-01-15')).not.toBeInTheDocument();
+      expect(screen.queryByText(/เกณฑ์วันครบกำหนด/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/จำนวนเครื่องมือทั้งหมดในแผน/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/ISO 9001:2015 Clause 7.1.5/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/เอกสารควบคุมฉบับอิเล็กทรอนิกส์/)).not.toBeInTheDocument();
 
       // รายการเครื่องมือ
       expect(screen.getByText('CAL-001')).toBeInTheDocument();
       expect(screen.getByText('Digital Caliper 150mm')).toBeInTheDocument();
       expect(screen.getByText('MIC-002')).toBeInTheDocument();
 
+      // ตาราง Matrix แยกแถวย่อย Plan / Act. และสัญลักษณ์ P
+      expect(screen.getAllByText('Plan').length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText('Act.').length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText('P').length).toBeGreaterThanOrEqual(1);
+      expect(screen.getByText(/สัญลักษณ์: P \(Plan\) = เดือนที่กำหนดตามแผน/)).toBeInTheDocument();
+
       // ตารางลงนาม 3 ช่อง
       expect(screen.getByText('ผู้จัดทำ (Prepared By)')).toBeInTheDocument();
       expect(screen.getByText('ผู้ทบทวน (Reviewed By)')).toBeInTheDocument();
       expect(screen.getByText('ผู้อนุมัติ (Approved By)')).toBeInTheDocument();
+    });
+
+    it('ไม่แสดงคำว่า "ฝ่ายฝ่าย..." ซ้ำซ้อน หากชื่อแผนกมีคำว่า "ฝ่าย" นำหน้าอยู่แล้ว และจัดการคำว่า "แผนก" อย่างถูกต้อง', () => {
+      const { unmount } = render(
+        <AnnualPlanPrintView
+          plan={{
+            ...mockPlans[0],
+            department_name_th: 'ฝ่ายฝ่ายควบคุมคุณภาพ'
+          }}
+          items={mockItems}
+        />
+      );
+
+      expect(screen.getByText('หน่วยงาน / แผนก: ฝ่ายควบคุมคุณภาพ')).toBeInTheDocument();
+      expect(screen.queryByText(/ฝ่ายฝ่าย/)).not.toBeInTheDocument();
+      unmount();
+
+      // เมื่อชื่อเป็น "แผนกวิจัยและพัฒนา" ต้องไม่เติม "ฝ่าย" กลายเป็น "ฝ่ายแผนก..."
+      render(
+        <AnnualPlanPrintView
+          plan={{
+            ...mockPlans[0],
+            department_name_th: 'แผนกวิจัยและพัฒนา'
+          }}
+          items={mockItems}
+        />
+      );
+      expect(screen.getByText('หน่วยงาน / แผนก: แผนกวิจัยและพัฒนา')).toBeInTheDocument();
+      expect(screen.queryByText(/ฝ่ายแผนก/)).not.toBeInTheDocument();
+    });
+
+    it('แสดงค่าเกณฑ์ยอมรับที่เป็นตัวเลข 0 ได้อย่างถูกต้อง และแปลค่า INTERNAL/EXTERNAL เป็นภาษาไทยเต็ม', () => {
+      const edgeItems = [
+        {
+          id: 'item-edge-1',
+          asset_code: 'GAUGE-001',
+          asset_name: 'Pin Gauge 5.0mm',
+          brand: 'Eisen',
+          model: 'EP-5',
+          serial_no: 'SN-001',
+          acceptance_criteria: 0,
+          provider_name: 'INTERNAL',
+          frequency_label: 'ปีละ 1 ครั้ง',
+          planned_months: '[1, 6]',
+          actual_months: '[1]'
+        },
+        {
+          id: 'item-edge-2',
+          asset_code: 'TORQUE-002',
+          asset_name: 'Torque Wrench',
+          mpe: '±1.0 Nm',
+          provider_name: 'EXTERNAL',
+          frequency_label: 'ปีละ 1 ครั้ง',
+          planned_months: [4],
+          actual_months: []
+        }
+      ];
+
+      render(
+        <AnnualPlanPrintView
+          plan={mockPlans[0]}
+          items={edgeItems}
+        />
+      );
+
+      // เกณฑ์ยอมรับที่เป็น 0 ต้องไม่ถูกกลืนเป็น '-'
+      expect(screen.getByText('0')).toBeInTheDocument();
+      expect(screen.getByText('±1.0 Nm')).toBeInTheDocument();
+
+      // แปลค่าผู้ให้บริการเป็นคำเต็มภาษาไทย
+      expect(screen.getByText('ทวนสอบภายใน')).toBeInTheDocument();
+      expect(screen.getByText('ห้องปฏิบัติการภายนอก')).toBeInTheDocument();
     });
 
     it('สำหรับแผนที่ยังไม่อนุมัติ (DRAFT) จะแสดงลายน้ำฉบับร่าง ห้ามใช้ปฏิบัติงาน และไม่แสดงภาพลายเซ็น', () => {
@@ -315,7 +411,7 @@ describe('VCC Annual Plan Hub & Spoke Architecture and ISO Print View', () => {
       expect(unsignedNotes.length).toBeGreaterThanOrEqual(1);
     });
 
-    it('สำหรับแผนที่อนุมัติแล้ว (APPROVED) จะแสดงบล็อกลายเซ็นจริงของผู้ลงนาม', () => {
+    it('สำหรับแผนที่อนุมัติแล้ว (APPROVED) จะแสดงบล็อกลายเซ็นจริง และไม่มีป้ายดิจิทัลสีเขียว ทบทวนแล้ว/อนุมัติแล้ว', () => {
       useStore.setState({
         masterUsers: [
           {
@@ -346,10 +442,12 @@ describe('VCC Annual Plan Hub & Spoke Architecture and ISO Print View', () => {
         />
       );
 
-      // มีป้ายกำกับอนุมัติแล้ว
+      // มีป้ายกำกับอนุมัติแล้วใน Toolbar
       expect(screen.getByText('มีผลบังคับใช้ (พร้อมลายเซ็น)')).toBeInTheDocument();
-      expect(screen.getByText('ทบทวนแล้ว')).toBeInTheDocument();
-      expect(screen.getByText('อนุมัติแล้ว')).toBeInTheDocument();
+
+      // เอาป้ายสีเขียวดิจิทัลในช่องลายเซ็นออกตาม requirement
+      expect(screen.queryByText('ทบทวนแล้ว')).not.toBeInTheDocument();
+      expect(screen.queryByText('อนุมัติแล้ว')).not.toBeInTheDocument();
 
       // ลายเซ็นต์ของผู้ลงนามต้องถูกเรนเดอร์ในรูป img
       const sigImages = screen.getAllByRole('img');
@@ -442,7 +540,7 @@ describe('VCC Annual Plan Hub & Spoke Architecture and ISO Print View', () => {
   });
 
   describe('4. Multi-sheet Excel Export Utility', () => {
-    it('exportAnnualPlansMultiSheet สร้างโครงสร้างไฟล์ 2 แท็บ (ภาพรวมสถานะรายแผนก และ รายการเครื่องมือรวมทุกแผนก)', () => {
+    it('exportAnnualPlansMultiSheet สร้างโครงสร้างไฟล์ 2 แท็บ หัวบริษัท เศรษฐชล จำกัด ไม่มีรหัสเอกสาร/Rev และแยกแถว Plan (P) / Act. (✓)', () => {
       exportAnnualPlansMultiSheet(mockPlans, mockItems, 2026);
 
       expect(XLSX.utils.book_new).toHaveBeenCalled();
@@ -456,7 +554,48 @@ describe('VCC Annual Plan Hub & Spoke Architecture and ISO Print View', () => {
         expect.anything(),
         'รายการเครื่องมือรวมทุกแผนก'
       );
+
+      // ตรวจสอบข้อมูล Sheet 1: หัวบริษัท และไม่มีคอลัมน์รหัสเอกสาร/Rev
+      const sheet1Calls = XLSX.utils.aoa_to_sheet.mock.calls;
+      const sheet1Rows = sheet1Calls[sheet1Calls.length - 2][0];
+      expect(sheet1Rows[0][0]).toContain('บริษัท เศรษฐชล จำกัด');
+      expect(sheet1Rows[3]).not.toContain('รหัสแบบฟอร์มควบคุม (DCC)');
+      expect(sheet1Rows[3]).not.toContain('แก้ไขครั้งที่ (Rev)');
+
+      // ตรวจสอบข้อมูล Sheet 2: หัวบริษัท และแยกแถว Plan (P) และ Act. (✓)
+      const sheet2Rows = sheet1Calls[sheet1Calls.length - 1][0];
+      expect(sheet2Rows[0][0]).toContain('บริษัท เศรษฐชล จำกัด');
+      expect(sheet2Rows[3]).toContain('Plan / Act.');
+      const dataRows = sheet2Rows.slice(4);
+      expect(dataRows.some((r) => r.includes('Plan'))).toBe(true);
+      expect(dataRows.some((r) => r.includes('Act.'))).toBe(true);
+      expect(dataRows.some((r) => r.includes('P'))).toBe(true);
+
       expect(XLSX.writeFile).toHaveBeenCalled();
+    });
+
+    it('exportAnnualPlansMultiSheet รองรับรายการว่าง และ JSON เดือนที่ผิดปกติโดยไม่ throw error', () => {
+      // 1. ทดสอบกรณีไม่มีข้อมูลรายการเครื่องมือ (Empty List)
+      expect(() => exportAnnualPlansMultiSheet([], [], 2026)).not.toThrow();
+
+      // 2. ทดสอบกรณี planned_months / actual_months เป็น JSON String ผิดรูปแบบ
+      const corruptedItem = {
+        asset_code: 'BROKEN-01',
+        asset_name: 'Test Corrupt',
+        planned_months: '{invalid_json',
+        actual_months: null,
+        acceptance_criteria: 0,
+        provider_name: 'INTERNAL'
+      };
+
+      expect(() => exportAnnualPlansMultiSheet(mockPlans, [corruptedItem], 2026)).not.toThrow();
+
+      const sheetCalls = XLSX.utils.aoa_to_sheet.mock.calls;
+      const lastSheet2 = sheetCalls[sheetCalls.length - 1][0];
+      const planRow = lastSheet2.find((r) => r.includes('Plan') && r.includes('BROKEN-01'));
+      expect(planRow).toBeDefined();
+      expect(planRow).toContain(0); // เกณฑ์ยอมรับ 0 ไม่หาย
+      expect(planRow).toContain('ทวนสอบภายใน'); // แปลง INTERNAL เป็น ทวนสอบภายใน
     });
   });
 });
