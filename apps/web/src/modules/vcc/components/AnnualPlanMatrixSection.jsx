@@ -1,6 +1,6 @@
 import { getUserDeptCodes } from '../utils/departmentScope';
 import useVccPolicyUser from '../hooks/useVccPolicyUser';
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSearchParams, useLocation } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { AlertTriangle, Plus } from 'lucide-react';
@@ -165,6 +165,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [], currentUser: propUser
 
   const [plans, setPlans] = useState([]);
   const [planRevisions, setPlanRevisions] = useState([]);
+  const pendingPreferredPlanIdRef = useRef('');
   const [selectedPlanId, setSelectedPlanId] = useState('');
   const [viewMode, setViewMode] = useState('MATRIX');
   const [planDetail, setPlanDetail] = useState(null);
@@ -309,7 +310,9 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [], currentUser: propUser
   }, [statusTab, filterYear, filterDept, canReadAll, userDept, loadPlanWorkOrders, viewState, queryId]);
 
   useEffect(() => {
-    loadPlansAndMeta(queryId || '');
+    const prefId = pendingPreferredPlanIdRef.current || queryId || '';
+    pendingPreferredPlanIdRef.current = '';
+    loadPlansAndMeta(prefId);
   }, [loadPlansAndMeta, queryId]);
 
   const handleSelectPlan = async (planId) => {
@@ -318,7 +321,15 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [], currentUser: propUser
     try {
       const detail = await fetchVccPlanDetail(planId);
       setPlanDetail(detail);
+      setSearchParams((prev) => {
+        if (!prev.get('id') && !prev.get('planId')) return prev;
+        const next = new URLSearchParams(prev);
+        next.set('id', planId);
+        next.delete('planId');
+        return next;
+      }, { replace: true });
       if (detail?.plan?.status && detail.plan.status !== statusTab) {
+        pendingPreferredPlanIdRef.current = planId;
         setStatusTab(detail.plan.status);
       }
       await loadPlanWorkOrders(planId, detail?.plan?.parent_plan_id || '');
@@ -746,8 +757,20 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [], currentUser: propUser
       const created = await createVccPlanRevision(activePlan.id, { revision_reason: revisionReason.trim() });
       toast.success(`สร้างแผนปี ${created.plan_year} Rev.${created.revision} (ฉบับร่าง) แล้ว`);
       setRevisionOpen(false);
-      if (statusTab !== 'DRAFT') setStatusTab('DRAFT');
-      await loadPlansAndMeta(created.id);
+      setRevisionReason('');
+      setSearchParams((prev) => {
+        if (!prev.get('id') && !prev.get('planId')) return prev;
+        const next = new URLSearchParams(prev);
+        next.set('id', created.id);
+        next.delete('planId');
+        return next;
+      }, { replace: true });
+      pendingPreferredPlanIdRef.current = created.id;
+      if (statusTab !== 'DRAFT') {
+        setStatusTab('DRAFT');
+      } else {
+        await loadPlansAndMeta(created.id);
+      }
     } catch (err) {
       setRevisionError(err.message || 'ไม่สามารถสร้างฉบับแก้ไขได้');
     } finally {
@@ -802,9 +825,10 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [], currentUser: propUser
     setPlanSubmitError('');
     setWorkflowBannerError('');
     try {
-      await submitVccPlan(planDetail.plan.id, reviewerId, approverId);
+      const updated = await submitVccPlan(planDetail.plan.id, reviewerId, approverId);
       toast.success('ส่งแผนประจำปีเข้าสู่ขั้นตอนรอทบทวน แล้ว');
       setPlanSubmitModalOpen(false);
+      pendingPreferredPlanIdRef.current = updated?.id || planDetail.plan.id;
       setStatusTab('PENDING_REVIEW');
     } catch (err) {
       const msg = err.message || 'ไม่สามารถส่งทบทวนแผนได้';

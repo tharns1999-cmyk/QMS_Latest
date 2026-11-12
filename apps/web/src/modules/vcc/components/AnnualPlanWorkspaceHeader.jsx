@@ -129,16 +129,15 @@ export const AnnualPlanWorkspaceHeader = ({
   const samePlanRevisions = useMemo(() => {
     const sourceRevisions = planRevisions.length > 0 ? planRevisions : rawPlans;
     const map = new Map();
-    effectivePlans.forEach((p) => {
-      if (p && p.id) map.set(p.id, p);
-    });
     if (activePlan) {
+      const activeDeptNorm = String(activePlan.department || '').toUpperCase();
+      const activeYearNorm = String(activePlan.plan_year || '');
       sourceRevisions
         .filter(
           (p) =>
             p &&
-            p.department === activePlan.department &&
-            String(p.plan_year) === String(activePlan.plan_year)
+            String(p.department || '').toUpperCase() === activeDeptNorm &&
+            String(p.plan_year || '') === activeYearNorm
         )
         .forEach((p) => {
           if (p.id) map.set(p.id, p);
@@ -146,6 +145,11 @@ export const AnnualPlanWorkspaceHeader = ({
       if (activePlan.id && !map.has(activePlan.id)) {
         map.set(activePlan.id, activePlan);
       }
+    }
+    if (map.size === 0) {
+      effectivePlans.forEach((p) => {
+        if (p && p.id) map.set(p.id, p);
+      });
     }
     const list = Array.from(map.values());
     return list.sort((a, b) => {

@@ -937,13 +937,170 @@ export const fetchVccPlanDetail = async (id) => {
   return { plan, items, thresholds, history };
 };
 
-// New revision of an approved plan. Only the server holds the plan data, so the demo (local) mode cannot do it.
+// New revision of an approved plan. Supports both server API and local storage mode.
 export const createVccPlanRevision = async (planId, { revision_reason, title } = {}) => {
-  if (!isApiMode) throw new Error('การสร้าง Revision ใช้ได้เมื่อเชื่อมต่อเซิร์ฟเวอร์เท่านั้น');
-  const { plan } = await apiPost(`/api/vcc/plans/${encodeURIComponent(planId)}/revisions`, { revision_reason, title });
-  await syncVccTasks().catch(() => {});
-  return plan;
+  if (isApiMode) {
+    const { plan } = await apiPost(`/api/vcc/plans/${encodeURIComponent(planId)}/revisions`, { revision_reason, title });
+    await syncVccTasks().catch(() => {});
+    return plan;
+  }
+
+  const user = assertLocalVccAccess();
+  if (!isVccAuthorized(user)) {
+    throw new Error('เฉพาะผู้ใช้งานแผนก DCC, QC, QA, MGT และ LB เท่านั้นที่สามารถเข้าใช้งานส่วนนี้ได้');
+  }
+
+  const allPlans = getLocalPlans();
+  const sourcePlan = allPlans.find((p) => p.id === planId);
+  if (!sourcePlan) {
+    throw new Error('ไม่พบแผนการสอบเทียบประจำปี');
+  }
+
+  if (!isUserAuthorizedForPlanDept(user, sourcePlan.department)) {
+    throw new Error('ไม่มีสิทธิ์จัดการแผนของแผนกนี้');
+  }
+
+  if (sourcePlan.status !== 'APPROVED') {
+    throw new Error('สร้าง Revision ใหม่ได้เฉพาะจากแผนที่ได้รับอนุมัติแล้ว (APPROVED) เท่านั้น');
+  }
+
+  if (Number(sourcePlan.is_current ?? 1) === 0 || sourcePlan.effective_status === 'SUPERSEDED') {
+    throw new Error('สร้าง Revision ใหม่ได้จากแผนฉบับที่มีผลใช้งาน (CURRENT) เท่านั้น');
+  }
+
+  const cleanReason = String(revision_reason || '').trim();
+  if (!cleanReason) {
+    throw new Error('กรุณาระบุเหตุผลการขอปรับปรุงแผน (Revision Reason)');
+  }
+
+  // Check for in-flight active draft/review/approval revision for the same year and department
+  const inFlight = allPlans.find(
+    (p) =>
+      Number(p.plan_year) === Number(sourcePlan.plan_year) &&
+      String(p.department).toUpperCase() === String(sourcePlan.department).toUpperCase() &&
+      ['DRAFT', 'PENDING_REVIEW', 'PENDING_APPROVAL'].includes(p.status)
+  );
+  if (inFlight) {
+    throw new Error(
+      `มีแผนประจำปี ${sourcePlan.plan_year} แผนก ${sourcePlan.department} (Rev.${inFlight.revision}) อยู่ในสถานะ ${inFlight.status} แล้ว กรุณาดำเนินการแผนฉบับนั้นให้เสร็จสิ้นก่อนสร้าง Revision ใหม่`
+    );
+  }
+
+  // Calculate next revision
+  const samePlans = allPlans.filter(
+    (p) =>
+      Number(p.plan_year) === Number(sourcePlan.plan_year) &&
+      String(p.department).toUpperCase() === String(sourcePlan.department).toUpperCase()
+  );
+  const revNumbers = samePlans
+    .map((p) => parseInt(p.revision, 10))
+    .filter((n) => Number.isInteger(n) && n >= 0);
+  const nextRevNum = Math.max(...revNumbers, parseInt(sourcePlan.revision, 10) || 0) + 1;
+  const nextRevision = String(nextRevNum).padStart(2, '0');
+
+  if (samePlans.some((p) => p.revision === nextRevision)) {
+    throw new Error(`Revision ${nextRevision} มีอยู่ในระบบแล้ว`);
+  }
+
+  const planTitle =
+    (typeof title === 'string' && title.trim()) ||
+    sourcePlan.title ||
+    `แผนการทวนสอบเครื่องมือประจำปี ${sourcePlan.plan_year}`;
+  const newPlanId = `local-plan-${Date.now()}`;
+  const now = new Date().toISOString();
+
+  const newPlan = {
+    ...sourcePlan,
+    id: newPlanId,
+    plan_code: sourcePlan.plan_code || sourcePlan.document_code,
+    document_code: sourcePlan.document_code,
+    plan_year: sourcePlan.plan_year,
+    department: sourcePlan.department,
+    revision: nextRevision,
+    title: planTitle,
+    status: 'DRAFT',
+    is_current: 0,
+    effective_status: 'DRAFT',
+    due_date_rule: sourcePlan.due_date_rule || 'END_OF_MONTH',
+    parent_plan_id: sourcePlan.id,
+    revision_reason: cleanReason,
+    prepared_by: user.id || null,
+    prepared_by_name: user.name || null,
+    prepared_by_position: user.position || 'DCC',
+    prepared_at: null,
+    assigned_reviewer_id: sourcePlan.assigned_reviewer_id || null,
+    assigned_reviewer_name: sourcePlan.assigned_reviewer_name || null,
+    assigned_reviewer_position: sourcePlan.assigned_reviewer_position || null,
+    assigned_approver_id: sourcePlan.assigned_approver_id || null,
+    assigned_approver_name: sourcePlan.assigned_approver_name || null,
+    assigned_approver_position: sourcePlan.assigned_approver_position || null,
+    reviewed_by: null,
+    reviewed_by_name: null,
+    reviewed_at: null,
+    review_comment: null,
+    approved_by: null,
+    approved_by_name: null,
+    approved_at: null,
+    approval_comment: null,
+    rejected_by: null,
+    rejected_by_name: null,
+    rejected_at: null,
+    rejected_reason: null,
+    workflow_round: 1,
+    superseded_by: null,
+    superseded_at: null,
+    created_at: now,
+    created_by: user.id || null,
+    updated_at: now,
+    updated_by: user.id || null
+  };
+
+  // Clone items from source plan with new IDs
+  const allPlanItems = getLocalPlanItems();
+  const sourceItems = allPlanItems.filter((i) => i.plan_id === sourcePlan.id);
+  const clonedItems = sourceItems.map((item, idx) => {
+    const newItemId = `local-item-${Date.now()}-${idx + 1}-${Math.random().toString(36).slice(2, 6)}`;
+    const plannedMonths = Array.isArray(item.planned_months) ? [...item.planned_months] : [];
+    const dueDates = Array.isArray(item.due_dates) && item.due_dates.length > 0
+      ? [...item.due_dates]
+      : computeDueDates(newPlan.plan_year, plannedMonths, newPlan.due_date_rule);
+    return {
+      ...item,
+      id: newItemId,
+      plan_id: newPlanId,
+      planned_months: plannedMonths,
+      due_dates: dueDates,
+      calibration_types: Array.isArray(item.calibration_types)
+        ? [...item.calibration_types]
+        : item.calibration_types
+        ? [item.calibration_types]
+        : undefined,
+      created_at: now,
+      created_by: user.id || null,
+      updated_at: now,
+      updated_by: user.id || null
+    };
+  });
+
+  setLocalPlans([...allPlans, newPlan]);
+  setLocalPlanItems([...allPlanItems, ...clonedItems]);
+
+  appendLocalAudit('VCC_PLAN_REVISED', {
+    plan_id: newPlanId,
+    parent_plan_id: sourcePlan.id,
+    plan_year: sourcePlan.plan_year,
+    department: sourcePlan.department,
+    revision: nextRevision,
+    parent_revision: sourcePlan.revision,
+    revision_reason: cleanReason,
+    items_cloned: clonedItems.length
+  });
+
+  await syncVccTasks(user).catch(() => {});
+  return enrichLocalPlan(newPlan, getLocalPlanItems(), getDepartmentMap());
 };
+
+export const reviseVccPlan = createVccPlanRevision;
 
 export const createVccPlan = async (payload) => {
   if (isApiMode) {
@@ -1723,6 +1880,8 @@ export const approveVccPlan = async (planId, comment = '') => {
   const updated = {
     ...plan,
     status: 'APPROVED',
+    is_current: 1,
+    effective_status: 'EFFECTIVE',
     approved_by: user.id,
     approved_by_name: user.name,
     approved_by_position: user.position || '',
@@ -1731,8 +1890,39 @@ export const approveVccPlan = async (planId, comment = '') => {
     updated_at: now,
     updated_by: user.id
   };
-  const next = [...allPlans];
-  next[idx] = updated;
+  const next = allPlans.map((p) => {
+    if (p.id === planId) {
+      return updated;
+    }
+    const isTargetPrevious = (
+      p.id !== planId &&
+      (
+        (plan.parent_plan_id && p.id === plan.parent_plan_id) ||
+        (
+          Number(p.plan_year) === Number(plan.plan_year) &&
+          String(p.department).toUpperCase() === String(plan.department).toUpperCase()
+        )
+      ) &&
+      (
+        Number(p.is_current ?? 0) === 1 ||
+        p.effective_status === 'EFFECTIVE' ||
+        p.effective_status === 'CURRENT'
+      ) &&
+      p.effective_status !== 'SUPERSEDED'
+    );
+    if (isTargetPrevious) {
+      return {
+        ...p,
+        is_current: 0,
+        effective_status: 'SUPERSEDED',
+        superseded_by: plan.id,
+        superseded_at: now,
+        updated_at: now,
+        updated_by: user.id
+      };
+    }
+    return p;
+  });
   setLocalPlans(next);
 
   // Auto-generate local work orders for all calibratable planned cycles

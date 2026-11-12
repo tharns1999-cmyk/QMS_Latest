@@ -20,6 +20,8 @@ const PLAN_AUDIT_LABELS = {
   VCC_PLAN_APPROVED: { label: 'อนุมัติแผนประจำปี (Approve)', badge: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
   VCC_PLAN_REJECTED: { label: 'ส่งกลับแก้ไข (Reject)', badge: 'bg-rose-50 text-rose-700 border-rose-200' },
   VCC_PLAN_GROUP_CONVERTED: { label: 'แปลงรายการกลุ่มเดิมเป็นรายตัว', badge: 'bg-purple-50 text-purple-700 border-purple-200' },
+  VCC_PLAN_REVISED: { label: 'สร้างแผนฉบับแก้ไข (Revision)', badge: 'bg-purple-50 text-purple-700 border-purple-200' },
+  VCC_PLAN_REVISION_CREATED: { label: 'สร้างแผนฉบับแก้ไข (Revision)', badge: 'bg-purple-50 text-purple-700 border-purple-200' },
   VCC_PLAN_SETTINGS_UPDATED: { label: 'แก้ไขตั้งค่าแผนประจำปี', badge: 'bg-slate-100 text-slate-700 border-slate-200' }
 };
 

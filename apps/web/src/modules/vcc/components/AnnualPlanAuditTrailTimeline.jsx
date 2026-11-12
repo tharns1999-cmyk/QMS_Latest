@@ -88,6 +88,12 @@ export const PLAN_ACTION_META = {
     category: 'DATA',
     badgeClass: 'bg-purple-50 text-purple-800 border-purple-300',
     dotClass: 'bg-purple-500'
+  },
+  VCC_PLAN_REVISED: {
+    label: 'จัดทำแผนฉบับปรับปรุง (Revision)',
+    category: 'DATA',
+    badgeClass: 'bg-purple-50 text-purple-800 border-purple-300',
+    dotClass: 'bg-purple-500'
   }
 };
 
