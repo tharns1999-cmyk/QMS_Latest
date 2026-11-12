@@ -264,6 +264,25 @@ describe('VCC: Work Order Modals, Plan Deduplication & Internal Verification Tes
 
   describe('4. TC001 Synchronization to Internal Verification and Month 11', () => {
     it('WO-2026-001 สำหรับ TC001 ซิงค์รอบเดือนเป็นเดือน 11 และประเภทเป็น ทวนสอบภายใน / INTERNAL', async () => {
+      // Setup a legacy open work order for TC001 stuck at Month 6 with External Lab
+      const STORAGE_WO_KEY = 'qms-vcc-local-work-orders-v1';
+      window.localStorage.setItem(STORAGE_WO_KEY, JSON.stringify([
+        {
+          id: 'vcc-wo-legacy-tc001',
+          wo_code: 'WO-2026-001',
+          plan_id: 'vcc-plan-2026-qc',
+          plan_item_id: 'vcc-pi-2026-tc001',
+          asset_id: 'vcc-seed-tc001',
+          planned_month: 6,
+          due_date: '2026-06-30',
+          provider_name: 'ห้องปฏิบัติการภายนอก',
+          provider_type: 'EXTERNAL',
+          calibration_type: 'EXTERNAL',
+          status: 'OPEN',
+          result_status: 'PENDING'
+        }
+      ]));
+
       const wos = await getLocalWos();
       const tc001Wo = wos.find((w) => w.asset_code === 'TC001' || w.wo_code === 'WO-2026-001');
 
