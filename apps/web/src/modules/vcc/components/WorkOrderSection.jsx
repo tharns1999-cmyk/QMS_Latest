@@ -8,8 +8,12 @@ import {
   SlidersHorizontal,
   Search,
   X,
-  FilterX
+  FilterX,
+  Download
 } from 'lucide-react';
+import { useTablePagination } from '../../../shared/hooks/useTablePagination';
+import { TablePagination } from '../../../shared/components/common/TablePagination';
+import { toBuddhistYear, THAI_MONTHS_SHORT } from '../utils/vccDateUtils';
 import { fetchVccAssets } from '../api/vccApi';
 import { fetchVccPlanSettings, fetchVccPlans, fetchVccPlanDetail } from '../api/vccPlanApi';
 import {
@@ -41,7 +45,12 @@ import {
 import WorkOrderInfoBar from './WorkOrderInfoBar';
 import WorkOrderSideDrawer from './WorkOrderSideDrawer';
 import WorkOrderTable from './WorkOrderTable';
-import { WORK_ORDER_STATUS_LABELS, RESULT_STATUS_LABELS } from '../utils/statusLabels';
+import {
+  WORK_ORDER_STATUS_LABELS,
+  RESULT_STATUS_LABELS,
+  getWorkOrderStatusLabel,
+  getResultStatusLabel
+} from '../utils/statusLabels';
 
 const WO_TABS = [
   {
@@ -84,6 +93,8 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
   const [activeTab, setActiveTab] = useState('OPEN');
   const [filterDept, setFilterDept] = useState('');
   const [filterResult, setFilterResult] = useState('');
+  const [filterYear, setFilterYear] = useState('ALL');
+  const [filterMonth, setFilterMonth] = useState('ALL');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedDrawerWo, setSelectedDrawerWo] = useState(null);
 
@@ -341,9 +352,66 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
     return Array.from(map.values());
   }, [rawWosByTab]);
 
+  // Dynamic available years extracted from work orders + current Bangkok year
+  const availableYears = useMemo(() => {
+    const currentBangkokYear = Number(getBangkokDate().split('-')[0]) || new Date().getFullYear();
+    const yearSet = new Set([currentBangkokYear]);
+    Object.values(rawWosByTab).flat().forEach((wo) => {
+      if (wo.plan_year) {
+        const y = Number(wo.plan_year);
+        if (!isNaN(y) && y > 2000 && y < 2200) yearSet.add(y);
+      }
+      if (wo.due_date) {
+        const y = Number(String(wo.due_date).slice(0, 4));
+        if (!isNaN(y) && y > 2000 && y < 2200) yearSet.add(y);
+      }
+      if (wo.performed_at) {
+        const y = Number(String(wo.performed_at).slice(0, 4));
+        if (!isNaN(y) && y > 2000 && y < 2200) yearSet.add(y);
+      }
+    });
+    return Array.from(yearSet).sort((a, b) => b - a);
+  }, [rawWosByTab]);
+
   // Filtered work orders for currently active tab
   const activeTabWorkOrders = useMemo(() => {
     let list = rawWosByTab[activeTab] || [];
+
+    // Filter by Year and Month (correlated by date source to prevent cross-field false matches)
+    const hasYear = filterYear !== 'ALL';
+    const hasMonth = filterMonth !== 'ALL';
+    const selectedYear = hasYear ? Number(filterYear) : null;
+    const selectedMonth = hasMonth ? Number(filterMonth) : null;
+
+    if (hasYear || hasMonth) {
+      list = list.filter((wo) => {
+        // Source 1: Annual Plan
+        const planY = wo.plan_year ? Number(wo.plan_year) : null;
+        const planM = wo.planned_month ? Number(wo.planned_month) : null;
+        const matchPlan = (!hasYear || planY === selectedYear) && (!hasMonth || planM === selectedMonth);
+
+        // Source 2: Due Date
+        const dueY = wo.due_date ? Number(String(wo.due_date).slice(0, 4)) : null;
+        const dueM = wo.due_date ? Number(String(wo.due_date).slice(5, 7)) : null;
+        const matchDue = (!hasYear || dueY === selectedYear) && (!hasMonth || dueM === selectedMonth);
+
+        // Source 3: Performed Date
+        const perfY = wo.performed_at ? Number(String(wo.performed_at).slice(0, 4)) : null;
+        const perfM = wo.performed_at ? Number(String(wo.performed_at).slice(5, 7)) : null;
+        const matchPerf = (!hasYear || perfY === selectedYear) && (!hasMonth || perfM === selectedMonth);
+
+        if (hasYear && hasMonth) {
+          return Boolean((planY && matchPlan) || (dueY && matchDue) || (perfY && matchPerf));
+        }
+        if (hasYear) {
+          return Boolean(matchPlan || matchDue || matchPerf);
+        }
+        if (hasMonth) {
+          return Boolean((planM && matchPlan) || (dueM && matchDue) || (perfM && matchPerf));
+        }
+        return true;
+      });
+    }
 
     // Filter by Result Status (PASS / FAIL / PENDING)
     if (filterResult) {
@@ -359,10 +427,19 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
       const matchAssetCode = (wo.asset_code || '').toLowerCase().includes(query);
       const matchAssetName = (wo.asset_name || '').toLowerCase().includes(query);
       const matchCertNo = (wo.certificate_no || '').toLowerCase().includes(query);
+      const matchTraceability = (wo.traceability_ref || '').toLowerCase().includes(query);
       const matchProvider = (wo.provider_name || '').toLowerCase().includes(query);
-      return matchWoCode || matchAssetCode || matchAssetName || matchCertNo || matchProvider;
+      return matchWoCode || matchAssetCode || matchAssetName || matchCertNo || matchTraceability || matchProvider;
     });
-  }, [rawWosByTab, activeTab, searchTerm, filterResult]);
+  }, [rawWosByTab, activeTab, filterYear, filterMonth, filterResult, searchTerm]);
+
+  // Table Pagination hook (15 items per page)
+  const pagination = useTablePagination(activeTabWorkOrders, 15);
+
+  // Return to first page when tab or filters change
+  useEffect(() => {
+    pagination.setCurrentPage(1);
+  }, [activeTab, filterYear, filterMonth, filterDept, filterResult, searchTerm]);
 
   const openCreateModal = () => {
     setCreateError('');
@@ -723,9 +800,86 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
     setSearchTerm('');
     setFilterDept('');
     setFilterResult('');
+    setFilterYear('ALL');
+    setFilterMonth('ALL');
   };
 
-  const isFiltered = Boolean(searchTerm || filterDept || filterResult);
+  const isFiltered = Boolean(
+    searchTerm || filterDept || filterResult || filterYear !== 'ALL' || filterMonth !== 'ALL'
+  );
+
+  const handleExportCsv = () => {
+    if (activeTabWorkOrders.length === 0) {
+      toast.error('ไม่มีข้อมูลสำหรับส่งออก CSV');
+      return;
+    }
+
+    const csvCell = (val) => {
+      if (val === null || val === undefined) return '""';
+      let str = String(val);
+      // Formula injection protection (CWE-1236): sanitize formulas starting with =, +, -, @, \t, \r
+      if (/^[=+\-@\t\r]/.test(str)) str = `'${str}`;
+      return `"${str.replace(/"/g, '""')}"`;
+    };
+
+    const headers = [
+      'เลขที่ใบสั่งงาน',
+      'แผนปี',
+      'รอบเดือน',
+      'รหัสเครื่องมือ',
+      'ชื่อเครื่องมือวัด',
+      'แผนก',
+      'หน่วยงานที่ทวนสอบ/สอบเทียบ',
+      'วันครบกำหนดเดิม',
+      'วันครบกำหนดปัจจุบัน',
+      'วันที่ปฏิบัติงานจริง',
+      'ผลการตรวจ',
+      'ค่าที่วัดได้จริง',
+      'เลขที่ใบรับรอง',
+      'เครื่องมือ Master (Traceability)',
+      'เกณฑ์ยอมรับ',
+      'สถานะใบสั่งงาน',
+      'สถานะระงับใช้ (NC)',
+      'เหตุผลการเลื่อนวัน'
+    ];
+
+    const rows = activeTabWorkOrders.map((wo) => [
+      wo.wo_code || '',
+      wo.plan_year ? String(wo.plan_year) : 'นอกแผน (Ad-hoc)',
+      wo.planned_month ? `ด.${wo.planned_month}` : '-',
+      wo.asset_code || '',
+      wo.asset_name || '',
+      wo.department || '',
+      wo.provider_name || wo.calibration_provider_name || '',
+      wo.original_due_date || '',
+      wo.due_date || '',
+      wo.performed_at || '',
+      getResultStatusLabel(wo.result_status || 'PENDING'),
+      wo.actual_result || wo.actual_measurement || '',
+      wo.certificate_no || '',
+      wo.traceability_ref || '',
+      wo.acceptance_criteria || '',
+      getWorkOrderStatusLabel(wo.status),
+      wo.nc_status === 'OPEN' ? 'ระงับใช้ (ON_HOLD)' : 'ปกติ',
+      wo.reschedule_reason || ''
+    ]);
+
+    const csvString =
+      '\uFEFF' +
+      [headers.map(csvCell).join(','), ...rows.map((r) => r.map(csvCell).join(','))].join('\r\n');
+    const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    const dateStr = getBangkokDate();
+    const tabName = activeTab.toLowerCase();
+    link.setAttribute('download', `vcc_work_orders_${tabName}_${dateStr}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    toast.success(`ส่งออกข้อมูล ${activeTabWorkOrders.length} รายการเป็น CSV เรียบร้อยแล้ว`);
+  };
 
   return (
     <div className="space-y-4 max-w-full" data-testid="vcc-work-order-section">
@@ -836,6 +990,36 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
 
         {/* Secondary Filters */}
         <div className="flex flex-wrap items-center gap-2">
+          {/* Year Filter */}
+          <select
+            aria-label="กรองตามปี"
+            value={filterYear}
+            onChange={(e) => setFilterYear(e.target.value)}
+            className="h-9 px-2.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-700 focus:outline-none focus:border-indigo-600 cursor-pointer shadow-2xs"
+          >
+            <option value="ALL">ทุกปี</option>
+            {availableYears.map((y) => (
+              <option key={y} value={y}>
+                ปี {toBuddhistYear(y)} ({y})
+              </option>
+            ))}
+          </select>
+
+          {/* Month Filter */}
+          <select
+            aria-label="กรองตามเดือน"
+            value={filterMonth}
+            onChange={(e) => setFilterMonth(e.target.value)}
+            className="h-9 px-2.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-700 focus:outline-none focus:border-indigo-600 cursor-pointer shadow-2xs"
+          >
+            <option value="ALL">ทุกเดือน</option>
+            {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+              <option key={m} value={m}>
+                ด.{m} ({THAI_MONTHS_SHORT[m - 1]})
+              </option>
+            ))}
+          </select>
+
           {/* Department Filter (Master Data) */}
           <select
             aria-label="กรองใบสั่งงานตามแผนก"
@@ -864,6 +1048,17 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
             <option value="PENDING">{RESULT_STATUS_LABELS.PENDING}</option>
           </select>
 
+          {/* Export CSV button */}
+          <button
+            type="button"
+            onClick={handleExportCsv}
+            title="ส่งออกรายการที่กรองเป็นไฟล์ CSV"
+            className="h-9 inline-flex items-center gap-1.5 px-3 rounded-lg border border-slate-200 bg-white text-slate-700 text-xs font-semibold hover:bg-slate-50 hover:text-slate-900 transition-colors cursor-pointer shadow-2xs shrink-0 select-none"
+          >
+            <Download size={14} className="text-slate-500" />
+            <span>ส่งออกประวัติ (CSV)</span>
+          </button>
+
           {/* Reset Filters button */}
           {isFiltered && (
             <button
@@ -886,12 +1081,14 @@ const WorkOrderSection = ({ activeDepartments = [] }) => {
 
       {/* 4. Professional Data Grid (Comfortable Row Density, Single Primary Action) */}
       <WorkOrderTable
-        workOrders={activeTabWorkOrders}
+        workOrders={pagination.paginatedData}
+        pagination={pagination}
         loading={loading}
         error={fetchError}
         activeTab={activeTab}
         searchTerm={searchTerm}
         filterDept={filterDept}
+        isFiltered={isFiltered}
         thresholds={thresholds}
         onRowClick={handleOpenDrawer}
         onRecordResult={openRecordResult}

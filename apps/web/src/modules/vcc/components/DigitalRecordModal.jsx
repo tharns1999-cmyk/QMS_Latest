@@ -343,6 +343,7 @@ export const DigitalRecordModal = ({
       <div
         ref={dialogRef}
         role="dialog"
+        data-testid="digital-record-modal"
         aria-modal="true"
         aria-labelledby="digital-record-title"
         tabIndex="-1"
