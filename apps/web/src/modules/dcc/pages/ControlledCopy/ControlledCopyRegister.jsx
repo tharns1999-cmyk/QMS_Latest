@@ -984,9 +984,6 @@ const ControlledCopyRegister = () => {
             <h1 className="text-xl font-bold text-slate-900 tracking-tight">
               ทะเบียนสำเนาควบคุม
             </h1>
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold font-mono bg-blue-50 text-[#0D99FF] border border-blue-100">
-              ISO 9001 / FSSC 22000
-            </span>
           </div>
         </div>
 
@@ -2007,10 +2004,6 @@ const ControlledCopyRegister = () => {
                   {filteredDispositionRecords.length}
                 </span>
               </button>
-            </div>
-            
-            <div className="pb-2 text-[11px] text-slate-400 font-mono hidden md:block">
-              ISO 9001: 7.5.3.2 Retention &amp; Disposition
             </div>
           </div>
 

@@ -1853,7 +1853,7 @@ const MasterDataHub = () => {
               <div className="flex items-center gap-2">
                 <Clock size={15} className="text-sky-600" />
                 <h2 className="text-xs font-semibold text-slate-800 uppercase tracking-wide">ส่วนที่ 1: กำหนดกรอบเวลาการปฏิบัติงาน (SLA Timelines)</h2>
-                <span className="text-[11px] text-slate-400 font-normal">จำนวนวันทำการสูงสุดตามมาตรฐาน ISO 9001</span>
+                <span className="text-[11px] text-slate-400 font-normal">จำนวนวันทำการสูงสุด</span>
               </div>
 
               {/* Compact SLA Metric Cards with Stepper Controls */}
@@ -2594,7 +2594,7 @@ const MasterDataHub = () => {
                     ยืนยันการระงับการใช้งานฝ่าย {deactivatingDept.nameTh || deactivatingDept.name} ({deactivatingDept.id})
                   </h3>
                   <p className="text-xs text-amber-100 mt-0.5">
-                    Department Deactivation & User Re-assignment (ISO 9001)
+                    Department Deactivation & User Re-assignment
                   </p>
                 </div>
               </div>

@@ -209,7 +209,7 @@ describe('VCC Phase 3.2 — Calibration Records & Execution UI Tests', () => {
     // Verify modal header & standard compliance tags
     expect(screen.getByText(/DIGITAL RECORD: WO-2026-099/i)).toBeInTheDocument();
     expect(screen.getByText(/ใบบันทึกผลการทวนสอบ \/ สอบเทียบดิจิทัล/i)).toBeInTheDocument();
-    expect(screen.getByText(/ISO 9001:2015 ข้อ 7.1.5 และ ISO\/IEC 17025:2017 ข้อ 7.8/i)).toBeInTheDocument();
+    expect(screen.getByText(/เอกสารบันทึกตามแนวทางการควบคุมเครื่องมือวัด/i)).toBeInTheDocument();
 
     // Verify instrument & result
     expect(screen.getByText('CAL-TH-001')).toBeInTheDocument();

@@ -1468,7 +1468,7 @@ const DocumentDetailModal = ({
 
       const reasonText = (reasonInfo.value && reasonInfo.value !== '-') 
         ? reasonInfo.value 
-        : (dar.reason || dar.requestReason || dar.changeReason || dar.otherReason || 'ปรับปรุงระเบียบปฏิบัติงานและเอกสารคุณภาพให้สอดคล้องกับมาตรฐาน ISO 9001:2015');
+        : (dar.reason || dar.requestReason || dar.changeReason || dar.otherReason || 'ปรับปรุงระเบียบปฏิบัติงานและเอกสารคุณภาพ');
 
       const detailText = (detailInfo.value && detailInfo.value !== '-') 
         ? detailInfo.value 
@@ -2062,7 +2062,7 @@ const DocumentDetailModal = ({
                           </span>
                           <div>
                             <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2">
-                              ทะเบียนเรียกคืนและทำลายสำเนาฉบับเดิมแยกตามฉบับ — สำหรับงาน Audit (ISO 9001:2015 Clause 7.5.3)
+                              ทะเบียนเรียกคืนและทำลายสำเนาฉบับเดิมแยกตามฉบับ — สำหรับงาน Audit
                             </h3>
                             <p className="text-xs text-slate-500 mt-0.5">
                               หลักฐานการเรียกคืนและทำลายสำเนาควบคุมฉบับที่ถูกยกเลิก/แทนที่ เพื่อป้องกันการนำไปใช้โดยไม่ได้ตั้งใจ
@@ -2222,7 +2222,7 @@ const DocumentDetailModal = ({
                           </span>
                           <div>
                             <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2">
-                              ทะเบียนบันทึกการเรียกคืนและทำลาย (ทุกฉบับ) — สำหรับงาน Audit (ISO 9001:2015 Clause 7.5.3)
+                              ทะเบียนบันทึกการเรียกคืนและทำลาย (ทุกฉบับ) — สำหรับงาน Audit
                             </h3>
                             <p className="text-xs text-slate-500 mt-0.5">
                               หลักฐานการเรียกคืนและทำลายสำเนาควบคุม "ทั้งหมด" เนื่องจากเอกสารรหัสนี้ถูกยกเลิกการใช้งานถาวร
@@ -2363,7 +2363,7 @@ const DocumentDetailModal = ({
 
                           const reasonText = (reasonInfo.value && reasonInfo.value !== '-')
                             ? reasonInfo.value
-                            : (dar.reason || dar.requestReason || dar.changeReason || dar.otherReason || 'ปรับปรุงระเบียบปฏิบัติงานและเอกสารคุณภาพให้สอดคล้องกับมาตรฐาน ISO 9001:2015');
+                            : (dar.reason || dar.requestReason || dar.changeReason || dar.otherReason || 'ปรับปรุงระเบียบปฏิบัติงานและเอกสารคุณภาพ');
 
                           const detailText = (detailInfo.value && detailInfo.value !== '-')
                             ? detailInfo.value

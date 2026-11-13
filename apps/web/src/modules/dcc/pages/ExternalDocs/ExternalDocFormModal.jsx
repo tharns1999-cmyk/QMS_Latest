@@ -404,7 +404,7 @@ const ExternalDocFormModal = ({ isOpen, onClose, documentToEdit = null, resubmit
                                (currentUserEmpId && (formData.approverId === currentUserEmpId || formData.approverId === currentUserId));
 
     if (isRequesterReviewer || isRequesterApprover) {
-      toast.error('ผู้ยื่นคำร้องไม่สามารถเป็นผู้ทบทวนหรือผู้อนุมัติเอกสารได้ (ISO 9001 SoD Violation)');
+      toast.error('ผู้ยื่นคำร้องไม่สามารถเป็นผู้ทบทวนหรือผู้อนุมัติเอกสารได้');
       return;
     }
 
@@ -489,7 +489,7 @@ const ExternalDocFormModal = ({ isOpen, onClose, documentToEdit = null, resubmit
       const isReqApp = (currentUserId && (payloadToSubmit.approverId === currentUserId || payloadToSubmit.approverId === currentUserEmpId)) ||
                        (currentUserEmpId && (payloadToSubmit.approverId === currentUserEmpId || payloadToSubmit.approverId === currentUserId));
       if (isReqRev || isReqApp) {
-        toast.error('ผู้ยื่นคำร้องไม่สามารถเป็นผู้ทบทวนหรือผู้อนุมัติเอกสารได้ (ISO 9001 SoD Violation)');
+        toast.error('ผู้ยื่นคำร้องไม่สามารถเป็นผู้ทบทวนหรือผู้อนุมัติเอกสารได้');
         return;
       }
       if (payloadToSubmit.reviewerId === payloadToSubmit.approverId) {
@@ -678,7 +678,7 @@ const ExternalDocFormModal = ({ isOpen, onClose, documentToEdit = null, resubmit
                     )}
                   </div>
                   <p className="text-slate-500 text-xs mt-0.5 font-medium truncate">
-                    ระบบควบคุมเอกสารภายนอกและกฎหมายตามมาตรฐาน ISO 9001 / FSSC 22000
+                    ระบบควบคุมเอกสารภายนอกและกฎหมาย
                   </p>
                 </div>
               </div>

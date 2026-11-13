@@ -135,12 +135,12 @@ const ExternalDocObsoleteModal = ({ isOpen, onClose, documentToObsolete }) => {
     const isRequesterApprover = isMatchCurrentUser(formData.approverId);
 
     if (isRequesterReviewer || isRequesterApprover) {
-      toast.error('ผู้ยื่นคำร้องไม่สามารถเป็นผู้ทบทวนหรือผู้อนุมัติเอกสารได้ (ISO 9001 SoD Violation)');
+      toast.error('ผู้ยื่นคำร้องไม่สามารถเป็นผู้ทบทวนหรือผู้อนุมัติเอกสารได้');
       return;
     }
 
     if (formData.reviewerId === formData.approverId) {
-      toast.error('ผู้ทบทวนและผู้อนุมัติต้องไม่เป็นบุคคลเดียวกัน (ISO 9001 SoD Violation)');
+      toast.error('ผู้ทบทวนและผู้อนุมัติต้องไม่เป็นบุคคลเดียวกัน');
       return;
     }
 
@@ -261,7 +261,7 @@ const ExternalDocObsoleteModal = ({ isOpen, onClose, documentToObsolete }) => {
                       </span>
                     </div>
                     <p className="text-amber-800 leading-relaxed">
-                      พบสำเนาควบคุมที่กำลังใช้งานอยู่ประจำจุดปฏิบัติงานจำนวน <strong>{activeCopiesToRecall.length} เล่ม</strong> เมื่อคำร้องขอยกเลิกนี้ได้รับการอนุมัติ สำเนาทั้งหมดจะถูกปรับสถานะเป็น <strong className="text-amber-900 font-mono">"รอเรียกคืน (PENDING_RECALL)"</strong> โดยอัตโนมัติ เพื่อส่งมอบให้เจ้าหน้าที่ DCC ดำเนินการเรียกคืนและทำลายตามข้อกำหนด ISO 9001
+                      พบสำเนาควบคุมที่กำลังใช้งานอยู่ประจำจุดปฏิบัติงานจำนวน <strong>{activeCopiesToRecall.length} เล่ม</strong> เมื่อคำร้องขอยกเลิกนี้ได้รับการอนุมัติ สำเนาทั้งหมดจะถูกปรับสถานะเป็น <strong className="text-amber-900 font-mono">"รอเรียกคืน (PENDING_RECALL)"</strong> โดยอัตโนมัติ เพื่อส่งมอบให้เจ้าหน้าที่ DCC ดำเนินการเรียกคืนและทำลาย
                     </p>
                     <div className="flex items-center gap-1.5 flex-wrap pt-1">
                       {activeCopiesToRecall.slice(0, 5).map((c, i) => (

@@ -621,7 +621,7 @@ export const INITIAL_NOTIFICATIONS = [
   {
     id: 'noti-init-sys-01',
     title: 'ยินดีต้อนรับสู่ระบบ QMS Portal',
-    message: 'ระบบศูนย์ควบคุมเอกสารคุณภาพและบันทึกพร้อมให้บริการตามมาตรฐาน ISO 9001:2015',
+    message: 'ระบบศูนย์ควบคุมเอกสารคุณภาพและบันทึกพร้อมให้บริการ',
     link: '/portal',
     type: 'INFO',
     category: 'SYSTEM',

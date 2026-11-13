@@ -6,7 +6,6 @@ import {
   Clock, 
   Eye, 
   Download, 
-  ShieldCheck, 
   Building2,
   FileCheck
 } from 'lucide-react';
@@ -105,10 +104,6 @@ const ExternalDocSupersededModal = ({
                     )}
                   </>
                 )}
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium bg-slate-100 text-slate-600 border border-slate-200">
-                  <ShieldCheck size={12} className="text-slate-500" />
-                  ISO 9001:2015 §7.5.3
-                </span>
               </div>
 
               <h2 id="superseded-modal-title" className="text-base font-bold text-slate-800 truncate" title={docTitle}>

@@ -1,7 +1,6 @@
 import React from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import useStore from '../../store/useStore';
-import { ShieldCheck } from 'lucide-react';
 import NotificationPopover from './NotificationPopover';
 
 const ROUTE_METADATA = {
@@ -47,12 +46,6 @@ const Topbar = () => {
 
       {/* Right: Quick Actions & User Profile Chip */}
       <div className="flex items-center gap-3 sm:gap-4 shrink-0">
-        {/* ISO Standard Badge */}
-        <div className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-50 border border-slate-200 text-[10.5px] font-mono font-medium text-slate-600">
-          <ShieldCheck size={12} className="text-emerald-600" />
-          <span>ISO 9001:2015</span>
-        </div>
-
         {/* System Notifications Popover */}
         <NotificationPopover compact />
 

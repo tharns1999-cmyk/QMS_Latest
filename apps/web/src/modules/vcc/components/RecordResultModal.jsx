@@ -840,11 +840,11 @@ export const RecordResultModal = ({
                 onClick={() => setIsAccordionOpen(!isAccordionOpen)}
                 className="w-full px-4 py-3 flex items-center justify-between text-left text-xs font-bold text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer select-none"
                 aria-expanded={isAccordionOpen}
-                aria-label="ข้อมูลเพิ่มเติมทางเทคนิคและการสอบกลับได้ (ISO/IEC 17025)"
+                aria-label="ข้อมูลเพิ่มเติมทางเทคนิคและการสอบกลับได้"
               >
                 <div className="flex items-center gap-2">
                   <Layers size={16} className="text-indigo-600" />
-                  <span>ข้อมูลเพิ่มเติมทางเทคนิคและการสอบกลับได้ (ISO/IEC 17025)</span>
+                  <span>ข้อมูลเพิ่มเติมทางเทคนิคและการสอบกลับได้</span>
                 </div>
                 <ChevronDown
                   size={16}
@@ -859,7 +859,7 @@ export const RecordResultModal = ({
                   <div className="p-3 rounded-lg bg-indigo-50/50 border border-indigo-100 text-xs text-indigo-900 flex items-start gap-2">
                     <Info size={16} className="text-indigo-600 shrink-0 mt-0.5" />
                     <span>
-                      ข้อมูลในส่วนนี้รองรับการตรวจสอบย้อนกลับ (Measurement Traceability) ตามข้อกำหนด ISO 9001 และ ISO/IEC 17025
+                      ข้อมูลในส่วนนี้รองรับการตรวจสอบย้อนกลับ (Measurement Traceability)
                     </span>
                   </div>
 

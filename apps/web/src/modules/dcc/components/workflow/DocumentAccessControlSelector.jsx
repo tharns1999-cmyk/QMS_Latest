@@ -247,7 +247,7 @@ const DocumentAccessControlSelector = ({
               ระดับการเข้าถึงและความลับของเอกสาร (Digital Access Scope)
             </h3>
             <p className="text-xs text-slate-400 mt-0.5">
-              กำหนดขอบเขตสิทธิ์การเปิดอ่านไฟล์ดิจิทัลตามมาตรฐาน ISO 9001
+              กำหนดขอบเขตสิทธิ์การเปิดอ่านไฟล์ดิจิทัล
             </p>
           </div>
         </div>
@@ -290,7 +290,7 @@ const DocumentAccessControlSelector = ({
         {/* Micro Helper Subtitle */}
         <p className="text-xs text-slate-400 mt-2 flex items-center gap-1.5">
           <Info size={13} className="text-slate-400 shrink-0" />
-          <span>{scopeDescriptions[currentScope] || 'กำหนดขอบเขตสิทธิ์การเปิดอ่านไฟล์ดิจิทัลตามมาตรฐาน ISO 9001'}</span>
+          <span>{scopeDescriptions[currentScope] || 'กำหนดขอบเขตสิทธิ์การเปิดอ่านไฟล์ดิจิทัล'}</span>
         </p>
       </div>
 

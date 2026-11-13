@@ -428,7 +428,7 @@ const DarNewForm = () => {
           <FileText className="w-5 h-5 text-slate-700 shrink-0" strokeWidth={1.75} />
           <div>
             <h1 className="text-xl font-bold text-slate-900 tracking-tight">ยื่นคำร้องสร้างเอกสารใหม่ (New Document DAR)</h1>
-            <p className="text-xs text-slate-500 mt-0.5">ออกรหัสเอกสารฉบับใหม่และกำหนดสายการอนุมัติตามมาตรฐาน ISO 9001</p>
+            <p className="text-xs text-slate-500 mt-0.5">ออกรหัสเอกสารฉบับใหม่และกำหนดสายการอนุมัติ</p>
           </div>
         </div>
         <button onClick={() => navigate('/dar/new')} className="h-9 px-3 text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors inline-flex items-center gap-1 cursor-pointer">

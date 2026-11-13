@@ -235,15 +235,6 @@ export const createFallbackPdfBlob = async (record = {}) => {
       color: rgb(0.9, 0.95, 1)
     });
 
-    // Subheader
-    page.drawText('ISO 9001:2015 Clause 7.1.5 / ISO/IEC 17025:2017 Clause 7.8 Standard Evidence', {
-      x: 40,
-      y: 785,
-      size: 8.5,
-      font,
-      color: rgb(0.4, 0.45, 0.55)
-    });
-
     // Title
     page.drawText('CALIBRATION & VERIFICATION CERTIFICATE', {
       x: 40,

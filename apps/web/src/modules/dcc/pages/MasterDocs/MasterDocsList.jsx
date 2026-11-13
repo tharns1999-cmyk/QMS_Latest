@@ -83,7 +83,7 @@ export const MasterDocsList = () => {
             คลังเอกสารแม่บท (Master Document Library)
           </h1>
           <p className="text-xs text-slate-500 mt-1">
-            ศูนย์กลางจัดเก็บและเผยแพร่เอกสารควบคุมคุณภาพ มาตรฐาน ISO 9001
+            ศูนย์กลางจัดเก็บและเผยแพร่เอกสารควบคุมคุณภาพ
           </p>
         </div>
       </div>

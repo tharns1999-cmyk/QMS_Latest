@@ -408,7 +408,7 @@ export default function ModuleGovernancePage() {
       code: 'CAPA',
       name: 'ระบบจัดการข้อบกพร่อง · CAPA',
       searchQuery: 'ระบบจัดการข้อบกพร่อง capa car par',
-      desc: 'บันทึกและติดตามข้อบกพร่อง NC/CAR/PAR ตามมาตรฐาน ISO 9001:2015 ข้อ 10.2',
+      desc: 'บันทึกและติดตามข้อบกพร่อง NC/CAR/PAR',
       badgeText: 'เร็วๆ นี้',
       badgeStyle: 'bg-purple-50 text-purple-700 border border-purple-200',
       icon: ShieldAlert,
@@ -420,7 +420,7 @@ export default function ModuleGovernancePage() {
       code: 'TRAINING',
       name: 'ระบบฝึกอบรมและทักษะ · Training',
       searchQuery: 'ระบบฝึกอบรมและทักษะ training skill matrix',
-      desc: 'ทะเบียนประวัติการฝึกอบรมและแผนผังทักษะบุคลากร (Skill Matrix) ข้อ 7.2',
+      desc: 'ทะเบียนประวัติการฝึกอบรมและแผนผังทักษะบุคลากร (Skill Matrix)',
       badgeText: 'เร็วๆ นี้',
       badgeStyle: 'bg-purple-50 text-purple-700 border border-purple-200',
       icon: GraduationCap,
@@ -446,7 +446,7 @@ export default function ModuleGovernancePage() {
           </Link>
           <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">จัดการระบบย่อย</h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-            ระบบบริหารจัดการสิทธิ์โมดูลและสายการอนุมัติดิจิทัล (ISO 9001:2015 Clause 7.5 Digital Records)
+            ระบบบริหารจัดการสิทธิ์โมดูลและสายการอนุมัติดิจิทัล (Digital Records)
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -721,7 +721,7 @@ export default function ModuleGovernancePage() {
                         <div>
                           <h2 className="text-lg font-bold text-slate-900">การเปิดรับงานของแผนก</h2>
                           <p className="mt-0.5 text-xs text-slate-500">
-                            เปิดสิทธิ์การใช้งานรายแผนกเพื่อจัดทำและลงนามแผนประจำปีดิจิทัลได้ทันที (ISO 9001:2015 Clause 7.5)
+                            เปิดสิทธิ์การใช้งานรายแผนกเพื่อจัดทำและลงนามแผนประจำปีดิจิทัลได้ทันที
                           </p>
                         </div>
                         <div className="flex items-center gap-2">
@@ -966,7 +966,7 @@ export default function ModuleGovernancePage() {
                               </span>
                             </div>
                             <p className="mt-1 text-sm text-slate-600">
-                              แกนกลางการควบคุมสารสนเทศเอกสารและระเบียบปฏิบัติงานขององค์กร ตามมาตรฐาน ISO 9001:2015 ข้อ 7.5
+                              แกนกลางการควบคุมสารสนเทศเอกสารและระเบียบปฏิบัติงานขององค์กร
                             </p>
                           </div>
                         </div>
@@ -1045,8 +1045,8 @@ export default function ModuleGovernancePage() {
                         </h2>
                         <p className="mt-2 text-sm text-slate-600 leading-relaxed">
                           {selectedModuleId === 'capa'
-                            ? 'โมดูลรองรับการเปิดประเด็นความไม่สอดคล้อง (CAR/PAR) การวิเคราะห์หาสาเหตุที่แท้จริง (Root Cause Analysis) และติดตามผลการแก้ไขป้องกัน ตามมาตรฐาน ISO 9001:2015 ข้อ 10.2'
-                            : 'โมดูลบันทึกและประเมินสมรรถนะบุคลากร ทะเบียนประวัติการอบรมรายบุคคล และแผนผังทักษะ (Skill Matrix) ตามมาตรฐาน ISO 9001:2015 ข้อ 7.2'}
+                            ? 'โมดูลรองรับการเปิดประเด็นความไม่สอดคล้อง (CAR/PAR) การวิเคราะห์หาสาเหตุที่แท้จริง (Root Cause Analysis) และติดตามผลการแก้ไขป้องกัน'
+                            : 'โมดูลบันทึกและประเมินสมรรถนะบุคลากร ทะเบียนประวัติการอบรมรายบุคคล และแผนผังทักษะ (Skill Matrix)'}
                         </p>
                       </div>
 

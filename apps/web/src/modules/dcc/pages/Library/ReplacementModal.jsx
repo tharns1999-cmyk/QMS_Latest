@@ -231,7 +231,7 @@ const ReplacementModal = ({ isOpen, onClose, instance }) => {
                   </div>
                   <div className="text-xs text-emerald-900 leading-relaxed space-y-0.5">
                     <div className="font-semibold text-emerald-950">
-                      กระบวนการควบคุมตามมาตรฐาน ISO 9001
+                      กระบวนการควบคุมการออกสำเนาทดแทน
                     </div>
                     <div>
                       {reasonType === 'DAMAGED' 

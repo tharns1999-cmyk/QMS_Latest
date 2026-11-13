@@ -133,7 +133,7 @@ export default function VccOnHoldTrackerTab({ onNavigateToWorkOrder }) {
                 ติดตามเครื่องมือวัดระงับใช้และ NC
               </h2>
               <p className="text-xs text-slate-500">
-                ระบบเฝ้าระวังเครื่องมือวัดที่ผลตรวจไม่ผ่านเกณฑ์ หรือเกิดข้อบกพร่องตามข้อกำหนด ISO 9001 / ISO/IEC 17025
+                ระบบเฝ้าระวังเครื่องมือวัดที่ผลตรวจไม่ผ่านเกณฑ์ หรือเกิดข้อบกพร่อง
               </p>
             </div>
           </div>
@@ -447,7 +447,7 @@ export default function VccOnHoldTrackerTab({ onNavigateToWorkOrder }) {
                     className="w-full rounded-xl border border-slate-300 p-3 text-xs text-slate-900 focus:outline-hidden focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 leading-relaxed"
                   />
                   <p className="text-xs text-slate-400 mt-1">
-                    ข้อกำหนด ISO 9001:2015 ข้อ 7.1.5.2 บังคับให้ประเมินความถูกต้องของผลการวัดที่ผ่านมาเมื่อพบว่าเครื่องมือไม่เป็นไปตามเกณฑ์
+                    ประเมินความถูกต้องของผลการวัดที่ผ่านมาเมื่อพบว่าเครื่องมือไม่เป็นไปตามเกณฑ์
                   </p>
                 </div>
 
