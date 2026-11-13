@@ -374,7 +374,7 @@ describe('VCC Annual Plan Hub & Spoke Architecture and ISO Print View', () => {
       expect(screen.getByText('±0.05 g')).toBeInTheDocument();
     });
 
-    it('ตัดแบ่งหน้ากระดาษ A4 แนวนอนอัตโนมัติ (4 รายการ/หน้า) พร้อมเลขหน้า หัวกระดาษ และกล่องลายเซ็น 3 ช่องครบทุกหน้า', () => {
+    it('ตัดแบ่งหน้ากระดาษ A4 แนวนอนอัตโนมัติ (10 รายการ/หน้า) พร้อมเลขหน้า หัวกระดาษ และกล่องลายเซ็น 3 ช่องครบทุกหน้า', () => {
       const fourteenItems = Array.from({ length: 14 }, (_, idx) => ({
         id: `multi-item-${idx + 1}`,
         asset_id: `ast-m-${idx + 1}`,
@@ -394,45 +394,29 @@ describe('VCC Annual Plan Hub & Spoke Architecture and ISO Print View', () => {
         />
       );
 
-      // 14 รายการ / 4 รายการต่อหน้า = 4 แผ่น A4 แนวนอน
+      // 14 รายการ / 10 รายการต่อหน้า = 2 แผ่น A4 แนวนอน
       const sheet1 = screen.getByTestId('a4-landscape-sheet-1');
       const sheet2 = screen.getByTestId('a4-landscape-sheet-2');
-      const sheet3 = screen.getByTestId('a4-landscape-sheet-3');
-      const sheet4 = screen.getByTestId('a4-landscape-sheet-4');
 
       expect(sheet1).toHaveClass('print:break-after-page');
-      expect(sheet2).toHaveClass('print:break-after-page');
-      expect(sheet3).toHaveClass('print:break-after-page');
-      expect(sheet4).toHaveClass('print:break-after-auto');
+      expect(sheet2).toHaveClass('print:break-after-auto');
 
-      // ตรวจสอบเลขหน้า 1 / 4, 2 / 4, 3 / 4, 4 / 4 และองค์ประกอบครบทั้ง 4 หน้า
-      expect(within(sheet1).getByText('1 / 4')).toBeInTheDocument();
-      expect(within(sheet2).getByText('2 / 4')).toBeInTheDocument();
-      expect(within(sheet3).getByText('3 / 4')).toBeInTheDocument();
-      expect(within(sheet4).getByText('4 / 4')).toBeInTheDocument();
+      // ตรวจสอบเลขหน้า 1 / 2, 2 / 2 และองค์ประกอบครบทั้ง 2 หน้า
+      expect(within(sheet1).getByText('1 / 2')).toBeInTheDocument();
+      expect(within(sheet2).getByText('2 / 2')).toBeInTheDocument();
 
-      // ตรวจสอบลำดับที่รันต่อเนื่องข้ามหน้า (หน้า 1: EQ-001..004, หน้า 2: EQ-005..008, หน้า 3: EQ-009..012, หน้า 4: EQ-013..014)
+      // ตรวจสอบลำดับที่รันต่อเนื่องข้ามหน้า (หน้า 1: EQ-001..010, หน้า 2: EQ-011..014)
       expect(within(sheet1).getByText('EQ-001')).toBeInTheDocument();
-      expect(within(sheet1).getByText('EQ-004')).toBeInTheDocument();
-      expect(within(sheet1).queryByText('EQ-005')).not.toBeInTheDocument();
+      expect(within(sheet1).getByText('EQ-010')).toBeInTheDocument();
+      expect(within(sheet1).queryByText('EQ-011')).not.toBeInTheDocument();
 
-      expect(within(sheet2).getByText('EQ-005')).toBeInTheDocument();
-      expect(within(sheet2).getByText('EQ-008')).toBeInTheDocument();
-      expect(within(sheet2).getByText('5')).toBeInTheDocument();
-      expect(within(sheet2).getByText('8')).toBeInTheDocument();
-
-      expect(within(sheet3).getByText('EQ-009')).toBeInTheDocument();
-      expect(within(sheet3).getByText('EQ-012')).toBeInTheDocument();
-      expect(within(sheet3).getByText('9')).toBeInTheDocument();
-      expect(within(sheet3).getByText('12')).toBeInTheDocument();
-
-      expect(within(sheet4).getByText('EQ-013')).toBeInTheDocument();
-      expect(within(sheet4).getByText('EQ-014')).toBeInTheDocument();
-      expect(within(sheet4).getByText('13')).toBeInTheDocument();
-      expect(within(sheet4).getByText('14')).toBeInTheDocument();
+      expect(within(sheet2).getByText('EQ-011')).toBeInTheDocument();
+      expect(within(sheet2).getByText('EQ-014')).toBeInTheDocument();
+      expect(within(sheet2).getByText('11')).toBeInTheDocument();
+      expect(within(sheet2).getByText('14')).toBeInTheDocument();
 
       // ทุกหน้าต้องมีแบนเนอร์และกล่องลายเซ็นครบ 3 ช่องเสมอ
-      [sheet1, sheet2, sheet3, sheet4].forEach((sheet) => {
+      [sheet1, sheet2].forEach((sheet) => {
         expect(within(sheet).getByAltText('บริษัท เศรษฐชล จำกัด (SETHACHON CO., LTD.)')).toBeInTheDocument();
         expect(within(sheet).getByText('ผู้จัดทำ (Prepared By)')).toBeInTheDocument();
         expect(within(sheet).getByText('ผู้ทบทวน (Reviewed By)')).toBeInTheDocument();
@@ -440,7 +424,7 @@ describe('VCC Annual Plan Hub & Spoke Architecture and ISO Print View', () => {
       });
     });
 
-    it('แผนที่มี 5 รายการ (ST002, SW001, TC001, V001, V002) จะถูกแบ่งเป็น 2 หน้าพอดี โดยหน้า 2 แสดงรายการที่ 5 (V002) ครบถ้วน', () => {
+    it('แผนที่มี 5 รายการ (ST002, SW001, TC001, V001, V002) จะแสดงครบใน 1 หน้าเดียว (1 / 1) เนื่องจาก ITEMS_PER_PAGE = 10', () => {
       const fiveItems = [
         { id: 'it-1', asset_code: 'ST002', asset_name: 'Vernier Caliper ST002', planned_months: [2] },
         { id: 'it-2', asset_code: 'SW001', asset_name: 'Stopwatch SW001', planned_months: [4] },
@@ -456,33 +440,24 @@ describe('VCC Annual Plan Hub & Spoke Architecture and ISO Print View', () => {
         />
       );
 
+      // 5 รายการ ≤ 10 รายการต่อหน้า → แสดงจบใน 1 หน้าเดียว
       const sheet1 = screen.getByTestId('a4-landscape-sheet-1');
-      const sheet2 = screen.getByTestId('a4-landscape-sheet-2');
+      expect(screen.queryByTestId('a4-landscape-sheet-2')).not.toBeInTheDocument();
 
-      expect(sheet1).toHaveClass('print:break-after-page');
-      expect(sheet2).toHaveClass('print:break-after-auto');
+      expect(sheet1).toHaveClass('print:break-after-auto');
+      expect(within(sheet1).getByText('1 / 1')).toBeInTheDocument();
 
-      expect(within(sheet1).getByText('1 / 2')).toBeInTheDocument();
-      expect(within(sheet2).getByText('2 / 2')).toBeInTheDocument();
-
-      // หน้าแรกมีรายการ 1-4
+      // หน้าเดียวมีรายการทั้ง 5 ครบ
       expect(within(sheet1).getByText('ST002')).toBeInTheDocument();
       expect(within(sheet1).getByText('SW001')).toBeInTheDocument();
       expect(within(sheet1).getByText('TC001')).toBeInTheDocument();
       expect(within(sheet1).getByText('V001')).toBeInTheDocument();
-      expect(within(sheet1).queryByText('V002')).not.toBeInTheDocument();
+      expect(within(sheet1).getByText('V002')).toBeInTheDocument();
 
-      // หน้าสองมีรายการที่ 5 (V002) ครบถ้วน
-      expect(within(sheet2).getByText('V002')).toBeInTheDocument();
-      expect(within(sheet2).getByText('5')).toBeInTheDocument();
-      expect(within(sheet2).queryByText('ST002')).not.toBeInTheDocument();
-
-      // ทั้งสองหน้ามีแบนเนอร์และกล่องลายเซ็นครบถ้วน
-      [sheet1, sheet2].forEach((sheet) => {
-        expect(within(sheet).getByAltText('บริษัท เศรษฐชล จำกัด (SETHACHON CO., LTD.)')).toBeInTheDocument();
-        expect(within(sheet).getByText('ผู้จัดทำ (Prepared By)')).toBeInTheDocument();
-        expect(within(sheet).getByText('ผู้อนุมัติ (Approved By)')).toBeInTheDocument();
-      });
+      // มีแบนเนอร์และกล่องลายเซ็นครบถ้วน
+      expect(within(sheet1).getByAltText('บริษัท เศรษฐชล จำกัด (SETHACHON CO., LTD.)')).toBeInTheDocument();
+      expect(within(sheet1).getByText('ผู้จัดทำ (Prepared By)')).toBeInTheDocument();
+      expect(within(sheet1).getByText('ผู้อนุมัติ (Approved By)')).toBeInTheDocument();
     });
 
     it('แสดงเครื่องหมาย ✓ ในแถว Act. เมื่อมีใบสั่งงานสถานะ CLOSED ในเดือนที่ทำจริง (performed_at หรือ planned_month)', () => {
@@ -898,7 +873,7 @@ describe('VCC Annual Plan Hub & Spoke Architecture and ISO Print View', () => {
       expect(styleTag).toBeInTheDocument();
       expect(styleTag.textContent).toContain('body > *:not(#vcc-print-portal)');
       expect(styleTag.textContent).toContain('size: A4 landscape');
-      expect(styleTag.textContent).toContain('margin: 0mm');
+      expect(styleTag.textContent).toContain('margin: 5mm');
       expect(styleTag.textContent).toContain('#vcc-print-portal .no-print');
       expect(styleTag.textContent).toContain('#vcc-print-portal .print-scroll-container');
       expect(styleTag.textContent).toContain('#vcc-print-portal .a4-landscape-sheet');
