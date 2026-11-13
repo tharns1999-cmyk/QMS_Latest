@@ -163,7 +163,7 @@ export const AmendmentModal = ({
         <div className="bg-amber-100/60 px-6 py-2.5 border-b border-amber-200/60 text-xs text-amber-950 flex items-center gap-2 shrink-0">
           <History size={16} className="text-amber-700 shrink-0" />
           <span>
-            ตามแนวทาง <strong>ISO/IEC 17025 ข้อ 7.8.8</strong> ระบบจะบันทึกภาพถ่ายสถานะเดิม (Snapshot) ไว้ในประวัติการตรวจสอบย้อนกลับอย่างถาวร
+            ระบบจะบันทึกข้อมูลสถานะเดิม (Snapshot) ไว้ในประวัติการตรวจสอบย้อนกลับอย่างถาวร
           </span>
         </div>
 

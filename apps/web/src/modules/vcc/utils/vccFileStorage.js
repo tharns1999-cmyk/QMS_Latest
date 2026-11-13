@@ -235,15 +235,6 @@ export const createFallbackPdfBlob = async (record = {}) => {
       color: rgb(0.9, 0.95, 1)
     });
 
-    // Subheader
-    page.drawText('ISO 9001:2015 Clause 7.1.5 / ISO/IEC 17025:2017 Clause 7.8 Standard Evidence', {
-      x: 40,
-      y: 785,
-      size: 8.5,
-      font,
-      color: rgb(0.4, 0.45, 0.55)
-    });
-
     // Title
     page.drawText('CALIBRATION & VERIFICATION CERTIFICATE', {
       x: 40,
@@ -270,7 +261,7 @@ export const createFallbackPdfBlob = async (record = {}) => {
       ['Certificate Number:', sanitizeForWinAnsi(record.certificate_no || 'CERT-NIMT-2026-001')],
       ['Date of Calibration:', sanitizeForWinAnsi(record.performed_at || '2026-03-25')],
       ['Calibration Provider:', sanitizeForWinAnsi(record.calibration_provider_name || record.provider_name || 'National Institute of Metrology Thailand (NIMT)')],
-      ['Calibration Method:', sanitizeForWinAnsi(record.calibration_method || 'EXTERNAL_LAB (ISO/IEC 17025 Accredited)')],
+      ['Calibration Method:', sanitizeForWinAnsi(record.calibration_method || 'EXTERNAL_LAB (External Lab)')],
       ['Acceptance Criteria:', sanitizeForWinAnsi(record.acceptance_criteria || '+/- 0.5 C Factory Specification')],
       ['Actual Measurement:', sanitizeForWinAnsi(record.actual_result || record.actual_measurement || '0.0 C -> 0.02 C, 100.0 C -> 100.04 C (Compliant)')],
       ['Conformity Status:', sanitizeForWinAnsi((record.result_status || 'PASS') + ' - WITHIN SPECIFICATION')],

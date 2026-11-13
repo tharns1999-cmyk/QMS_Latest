@@ -270,9 +270,6 @@ export const PlanFormModal = ({
                   <FileText size={14} className="text-indigo-600" />
                   <span>เอกสารดิจิทัลควบคุม (Digital Plan Preview)</span>
                 </div>
-                <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-2 py-0.5 rounded-full">
-                  <ShieldCheck size={11} className="text-emerald-600" /> ISO 9001:2015 Cl. 7.5
-                </span>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 border-t border-indigo-50">
@@ -736,7 +733,7 @@ export const PlanItemModal = ({
             </div>
           </div>
 
-          {/* Department-specific metrology fields (ISO 9001 Clause 7.1.5) */}
+          {/* Department-specific metrology fields */}
           <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 space-y-3">
             <div className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
               <FileText size={13} className="text-indigo-600 shrink-0" />

@@ -135,7 +135,7 @@ const DccCustodyActionModal = ({ isOpen, onClose, task }) => {
                   </h2>
                   <div className="flex items-center gap-2 mt-0.5">
                     <ShieldCheck size={11} className="text-white/70" />
-                    <p className="text-white/70 text-xs">ISO 9001 Clause 7.5.3 – Physical Verification</p>
+                    <p className="text-white/70 text-xs">Physical Verification</p>
                   </div>
                 </div>
               </div>

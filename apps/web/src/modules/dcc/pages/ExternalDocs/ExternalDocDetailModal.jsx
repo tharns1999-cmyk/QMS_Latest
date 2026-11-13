@@ -716,7 +716,7 @@ const ExternalDocDetailModal = ({
                             </div>
                           ) : (
                             <div className="p-3 bg-emerald-50/60 rounded-xl border border-emerald-200/70 text-emerald-800 text-[11px] leading-relaxed">
-                              เปิดให้ทุกแผนกและพนักงานทุกคนในระบบสามารถเปิดอ่านและอ้างอิงเอกสารนี้ได้ตามข้อกำหนด ISO 9001
+                              เปิดให้ทุกแผนกและพนักงานทุกคนในระบบสามารถเปิดอ่านและอ้างอิงเอกสารนี้ได้
                             </div>
                           )}
                         </div>

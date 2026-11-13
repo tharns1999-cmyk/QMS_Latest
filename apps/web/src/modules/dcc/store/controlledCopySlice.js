@@ -2676,7 +2676,7 @@ export const createControlledCopySlice = (set, get) => ({
         taskType: 'RECALL',
         task_type: 'RECALL',
         title: `เรียกคืนสำเนาชำรุด: ${docCode}${docOfficialTitle && docOfficialTitle !== docCode ? ` (${docOfficialTitle})` : ''} (${inst.copy_no ? (inst.copy_no.startsWith('Copy') ? inst.copy_no : `Copy ${inst.copy_no}`) : (inst.ccNumber || 'Copy 01')})`,
-        description: `แผนก ${copyDept || inst.department} แจ้งชำรุด ประจำจุด ${inst.location || inst.locationName || copyDept} เหตุผล: ${reason} (กรุณาเรียกคืนเล่มชำรุดมาทำลายตามระเบียบ ISO 9001)`,
+        description: `แผนก ${copyDept || inst.department} แจ้งชำรุด ประจำจุด ${inst.location || inst.locationName || copyDept} เหตุผล: ${reason} (กรุณาเรียกคืนเล่มชำรุดมาทำลายตามระเบียบการควบคุมเอกสาร)`,
         docId: inst.doc_id || inst.docId,
         doc_id: inst.doc_id || inst.docId,
         doc_code: docCode,

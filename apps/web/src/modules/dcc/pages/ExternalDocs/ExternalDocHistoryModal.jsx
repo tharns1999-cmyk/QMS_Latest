@@ -655,7 +655,7 @@ const ExternalDocHistoryModal = ({
                     </span>
                   </div>
                   <p className="text-xs text-rose-700 mt-0.5 leading-relaxed">
-                    ห้ามนำเอกสารฉบับนี้และฉบับย้อนหลังทั้งหมดไปใช้อ้างอิงในการปฏิบัติงานตามข้อกำหนดระบบบริหารคุณภาพ ISO 9001
+                    ห้ามนำเอกสารฉบับนี้และฉบับย้อนหลังทั้งหมดไปใช้อ้างอิงในการปฏิบัติงาน
                   </p>
                 </div>
               </div>
@@ -1051,7 +1051,7 @@ const ExternalDocHistoryModal = ({
           <div className="bg-slate-50 border-t border-slate-200 px-6 py-4 flex items-center justify-between rounded-b-3xl shrink-0">
             <div className="text-xs text-slate-500 flex items-center gap-2">
               <span className="inline-block w-2 h-2 rounded-full bg-emerald-500" />
-              <span>ระบบควบคุมการเข้าถึงเอกสารประวัติตามระเบียบปฏิบัติ QMS (ISO 9001:2015 Clause 7.5.3)</span>
+              <span>ระบบควบคุมการเข้าถึงเอกสารประวัติตามระเบียบปฏิบัติ QMS</span>
             </div>
 
             <button

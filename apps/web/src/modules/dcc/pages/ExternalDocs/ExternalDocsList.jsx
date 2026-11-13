@@ -1428,7 +1428,7 @@ const ExternalDocsList = () => {
               คลังเอกสารภายนอก (External Document Library)
             </h1>
             <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">
-              ทะเบียนควบคุมมาตรฐานสากล กฎหมาย และคู่มือผู้ผลิตภายนอกตามข้อกำหนด ISO 9001:2015 Clause 7.5.3.2
+              ทะเบียนควบคุมมาตรฐานสากล กฎหมาย และคู่มือผู้ผลิตภายนอก
             </p>
           </div>
         </div>

@@ -1279,11 +1279,11 @@ const DarRevisionForm = () => {
                   </span>
                 </div>
 
-                {/* ISO 9001 Recall Warning Banner */}
+                {/* Recall Warning Banner */}
                 <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2.5 text-xs text-amber-900">
                   <AlertTriangle size={16} className="text-amber-600 shrink-0 mt-0.5" />
                   <div className="leading-relaxed">
-                    <span className="font-bold">ข้อกำหนด ISO 9001 (Control of Documented Information): </span>
+                    <span className="font-bold">การควบคุมเอกสาร (Control of Documented Information): </span>
                     <span>เมื่อคำร้องนี้ได้รับการอนุมัติ สำเนาทั้งหมดในรายการนี้จะถูกเรียกคืนกลับสู่ฝ่าย DC</span>
                   </div>
                 </div>
@@ -1540,7 +1540,7 @@ const DarRevisionForm = () => {
                     สรุปผลกระทบการหมุนเวียนสำเนา (Circulation & Lifecycle Impact Summary)
                   </h3>
                   <p className="text-[11px] text-slate-500">
-                    เปรียบเทียบภาระงานเรียกคืนเล่มเดิม vs. การจัดพิมพ์ส่งมอบเล่มใหม่เมื่อคำร้องได้รับการอนุมัติ (ISO 9001: 7.5)
+                    เปรียบเทียบภาระงานเรียกคืนเล่มเดิม vs. การจัดพิมพ์ส่งมอบเล่มใหม่เมื่อคำร้องได้รับการอนุมัติ
                   </p>
                 </div>
               </div>

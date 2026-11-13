@@ -183,7 +183,7 @@ export const generatePlanPdfBuffer = async (plan, items = [], signatories = {}) 
       color: rgb(1, 1, 1)
     });
 
-    page.drawText('ISO 9001:2015 CONTROLLED RECORD', {
+    page.drawText('CONTROLLED RECORD', {
       x: 580,
       y: 554,
       size: 8.5,
@@ -380,8 +380,8 @@ export const generatePlanPdfBuffer = async (plan, items = [], signatories = {}) 
       page.drawText('State: APPROVED & AUTHORIZED', { x: 564, y: boxY + 5, size: 6.5, font: fontBold, color: rgb(0.08, 0.5, 0.2) });
     }
 
-    // Official Footer (ISO 9001 Clauses & WORM storage statement)
-    page.drawText('CONTROLLED ELECTRONIC DOCUMENT - QMS PORTAL VCC (ISO 9001:2015 Clause 7.1.5 & Clause 7.5.3)', {
+    // Official Footer (WORM storage statement)
+    page.drawText('CONTROLLED ELECTRONIC DOCUMENT - QMS PORTAL VCC', {
       x: 36,
       y: 28,
       size: 7.5,

@@ -78,7 +78,7 @@ export default function ModuleProfileEditor({ department, data, onReview, onClos
                 แบบฟอร์มและผู้รับผิดชอบ · {department}
               </h2>
               <p className="mt-0.5 text-xs text-slate-500">
-                กำหนดสายการอนุมัติดิจิทัลตามมาตรฐาน ISO 9001:2015 Clause 7.5
+                กำหนดสายการอนุมัติดิจิทัล
               </p>
             </div>
             <button
@@ -97,7 +97,7 @@ export default function ModuleProfileEditor({ department, data, onReview, onClos
             <div className="flex items-start gap-3 rounded-2xl border border-sky-200 bg-sky-50/80 p-4 text-xs text-sky-900 shadow-2xs">
               <ShieldCheck size={20} className="text-sky-600 shrink-0 mt-0.5" />
               <div>
-                <div className="font-semibold text-sky-950">หลักการควบคุมภายในตามมาตรฐานคุณภาพ (ISO 9001:2015 Clause 7.5)</div>
+                <div className="font-semibold text-sky-950">หลักการควบคุมภายในตามมาตรฐานคุณภาพ</div>
                 <p className="mt-1 text-sky-800 leading-relaxed">
                   บังคับใช้กฎ Segregation of Duties (SoD): ผู้จัดทำ ผู้ทบทวน และผู้อนุมัติ ต้องไม่ใช่บุคคลเดียวกัน เพื่อความโปร่งใสและตรวจสอบย้อนกลับได้สมบูรณ์
                 </p>

@@ -250,7 +250,7 @@ export const AnnualPlanPrintView = ({
 
             {/* Top Block: 1. Header + 2. Table + 3. Legend */}
             <div>
-              {/* 1. Unified ISO Header Box: Banner Left + 4-Row Plan Control Table Right + Title Bar Bottom */}
+              {/* 1. Unified Header Box: Banner Left + 4-Row Plan Control Table Right + Title Bar Bottom */}
               <div className="border border-slate-800 mb-2 bg-white">
                 {/* Upper: 2 Columns (Banner Left, Plan Control Table Right) */}
                 <div className="flex items-stretch border-b border-slate-800">

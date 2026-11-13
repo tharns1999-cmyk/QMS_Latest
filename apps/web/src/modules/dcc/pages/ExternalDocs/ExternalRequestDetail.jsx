@@ -717,7 +717,6 @@ const ExternalRequestDetail = () => {
                 <UserCheck size={15} className="text-emerald-600" />
                 <span>ผู้รับผิดชอบตามขั้นตอน (Workflow Signatories)</span>
               </h3>
-              <span className="text-xs text-slate-400 font-medium">ISO 9001 Clause 7.5.3</span>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">

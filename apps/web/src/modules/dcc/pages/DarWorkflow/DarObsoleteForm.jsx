@@ -734,7 +734,7 @@ const DarObsoleteForm = () => {
                   <div className="flex items-center gap-2">
                     <Layers size={16} className="text-[#0D99FF]" />
                     <h4 className="font-bold text-xs uppercase tracking-wider text-[#1E293B]">
-                      สำเนาควบคุมปัจจุบันในสายงานที่ต้องเรียกคืนและทำลาย (ตามข้อกำหนด ISO 9001)
+                      สำเนาควบคุมปัจจุบันในสายงานที่ต้องเรียกคืนและทำลาย
                     </h4>
                   </div>
                   <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
@@ -742,11 +742,11 @@ const DarObsoleteForm = () => {
                   </span>
                 </div>
 
-                {/* ISO 9001 Recall Warning Banner */}
+                {/* Recall Warning Banner */}
                 <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2.5 text-xs text-amber-900">
                   <AlertTriangle size={16} className="text-amber-600 shrink-0 mt-0.5" />
                   <div className="leading-relaxed">
-                    <span className="font-bold">ข้อกำหนด ISO 9001 (Control of Documented Information): </span>
+                    <span className="font-bold">การควบคุมเอกสาร (Control of Documented Information): </span>
                     <span>เมื่อคำร้องนี้ได้รับการอนุมัติ สำเนาทั้งหมดในรายการนี้จะถูกเรียกคืนกลับสู่ฝ่าย DC</span>
                   </div>
                 </div>

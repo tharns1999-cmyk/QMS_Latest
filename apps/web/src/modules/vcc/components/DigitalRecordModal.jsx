@@ -368,9 +368,6 @@ export const DigitalRecordModal = ({
             <span className="font-mono text-xs font-bold px-2.5 py-0.5 rounded-md bg-indigo-100 text-indigo-700">
               DIGITAL RECORD: {workOrder.wo_code}
             </span>
-            <span className="text-xs text-slate-500 font-medium hidden sm:inline">
-              (จัดทำตามแนวทางมาตรฐาน ISO 9001 & ISO/IEC 17025)
-            </span>
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -411,7 +408,7 @@ export const DigitalRecordModal = ({
                     ใบบันทึกผลการทวนสอบ / สอบเทียบดิจิทัล (Digital Calibration Record)
                   </h1>
                   <div className="text-xs text-slate-500 mt-0.5">
-                    เอกสารบันทึกตามแนวทางการควบคุมเครื่องมือวัด (อ้างอิงข้อกำหนด ISO 9001:2015 ข้อ 7.1.5 และ ISO/IEC 17025:2017 ข้อ 7.8)
+                    เอกสารบันทึกตามแนวทางการควบคุมเครื่องมือวัด
                   </div>
                 </div>
                 <div className="text-right sm:shrink-0 font-mono">
@@ -627,7 +624,7 @@ export const DigitalRecordModal = ({
                 </div>
               </div>
 
-              {/* Section 3: Measurement Traceability & Environmental Conditions (ISO/IEC 17025) */}
+              {/* Section 3: Measurement Traceability & Environmental Conditions */}
               <div className="space-y-2 vcc-print-section">
                 <h2 className="text-xs font-bold uppercase tracking-wider text-slate-900 flex items-center gap-1.5">
                   <Layers size={14} className="text-indigo-600" />
@@ -686,7 +683,7 @@ export const DigitalRecordModal = ({
                 <div className="space-y-2 vcc-print-section">
                   <h2 className="text-xs font-bold uppercase tracking-wider text-amber-900 flex items-center gap-1.5">
                     <History size={14} className="text-amber-700" />
-                    <span>5. ประวัติการแก้ไขผลอย่างควบคุม (Controlled Amendment Trail ISO/IEC 17025 clause 7.8.8)</span>
+                    <span>5. ประวัติการแก้ไขผลการบันทึก</span>
                   </h2>
                   <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-950 space-y-1">
                     <div className="font-bold">

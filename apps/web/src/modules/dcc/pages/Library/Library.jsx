@@ -138,7 +138,7 @@ const LibraryRowActions = ({
             <div className="py-1">
               <button
                 type="button"
-                title="ดาวน์โหลดไฟล์ต้นฉบับแท้โดยไม่มีการประทับลายน้ำ (Clean Master ISO 9001)"
+                title="ดาวน์โหลดไฟล์ต้นฉบับแท้โดยไม่มีการประทับลายน้ำ (Clean Master)"
                 onClick={(e) => {
                   onCloseMenu();
                   handleDownloadCleanMaster(primaryDoc, e);
@@ -1150,7 +1150,7 @@ const Library = () => {
           {
             userName: currentUser?.name || 'DCC Admin',
             userDept: currentUser?.department || 'DC',
-            reason: 'Clean Master Custodian Export (ISO 9001)',
+            reason: 'Clean Master Custodian Export',
             location: 'DCC Central Archive'
           },
           false

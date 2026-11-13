@@ -195,7 +195,7 @@ export default function VccComplianceReportTab() {
             </h2>
           </div>
           <p className="text-xs text-slate-500 mt-0.5">
-            สอดคล้องตามข้อกำหนด ISO 9001:2015 (ข้อ 7.1.5), ISO/IEC 17025:2017 (ข้อ 7.8) และ FSSC 22000
+            รายงานสรุปสถานะความสอดคล้องและการควบคุมเครื่องมือวัดสำหรับผู้ตรวจประเมิน
           </p>
         </div>
 
