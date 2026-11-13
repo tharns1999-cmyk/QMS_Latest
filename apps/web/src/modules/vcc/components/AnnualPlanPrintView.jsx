@@ -92,10 +92,10 @@ const parseMonthFromDateStr = (dateStr) => {
 
 // Format signatory position cleanly without outer parentheses
 const formatPosition = (pos) => {
-  if (!pos) return 'ตำแหน่ง';
+  if (!pos) return '-';
   const trimmed = String(pos).trim();
-  if (!trimmed || trimmed === '-') return 'ตำแหน่ง';
-  return trimmed.replace(/^\((.*)\)$/, '$1').trim() || 'ตำแหน่ง';
+  if (!trimmed || trimmed === '-' || trimmed === 'ตำแหน่ง') return '-';
+  return trimmed.replace(/^\((.*)\)$/, '$1').trim() || '-';
 };
 
 // Format signatory name cleanly (showing dots placeholder if unsigned)
@@ -103,7 +103,9 @@ const formatSignatoryName = (person) => {
   if (!person || !person.name || person.name === '-' || (!person.isSigned && (person.name === 'รอการทบทวน' || person.name === 'รอการอนุมัติ'))) {
     return '................................................';
   }
-  return person.name;
+  const s = String(person.name).trim();
+  const unparenthesized = s.replace(/^\((.*)\)$/, '$1').trim();
+  return unparenthesized || '................................................';
 };
 
 export const AnnualPlanPrintView = ({
@@ -131,12 +133,25 @@ export const AnnualPlanPrintView = ({
   const deptDisplayName = formatDepartment(rawDeptName);
 
   const planNo = plan.plan_code || resolvePlanCode(plan);
-  const revNumber = parseInt(plan.revision_no ?? plan.revision ?? 1, 10) || 1;
+  const rawRev = plan.revision_no ?? plan.revision;
+  let revNumber = 1;
+  if (rawRev != null && String(rawRev).trim() !== '') {
+    const cleaned = String(rawRev).replace(/\D+/g, '');
+    if (cleaned !== '') {
+      revNumber = parseInt(cleaned, 10);
+    }
+  }
   const revDisplay = `Rev.${String(revNumber).padStart(2, '0')}`;
   const isEffective = !plan.status || plan.status === 'APPROVED';
-  const effectiveDateDisplay = isEffective && plan.approved_at
-    ? formatVccDate(plan.approved_at, { style: 'slash' })
+  const effectiveDate = plan.approved_at || plan.effective_date;
+  const effectiveDateDisplay = isEffective && effectiveDate
+    ? formatVccDate(effectiveDate, { style: 'slash' })
     : '-';
+  const hasRevReason = Boolean(
+    plan.revision_reason &&
+    String(plan.revision_reason).trim() !== '' &&
+    (revNumber > 1 || (revNumber >= 1 && (plan.parent_plan_id || String(plan.revision || '').trim() !== '00')))
+  );
 
   const pages = chunkArray(items, ITEMS_PER_PAGE);
   const totalPages = pages.length;
@@ -213,7 +228,7 @@ export const AnnualPlanPrintView = ({
           <section
             key={pageIndex}
             data-testid={`a4-landscape-sheet-${pageIndex + 1}`}
-            className={`a4-landscape-sheet relative w-[297mm] min-h-[200mm] mx-auto bg-white rounded-xl border border-slate-300 shadow-xl p-[8mm_10mm] text-slate-900 mb-6 flex flex-col justify-between print:overflow-visible print:w-full print:max-w-none print:rounded-none print:border-0 print:shadow-none print:mb-0 ${
+            className={`a4-landscape-sheet relative w-[297mm] min-h-[208mm] mx-auto bg-white rounded-xl border border-slate-300 shadow-xl p-[8mm_10mm] text-slate-900 mb-6 flex flex-col justify-between print:overflow-visible print:w-full print:max-w-none print:rounded-none print:border-0 print:shadow-none print:mb-0 ${
               pageIndex < totalPages - 1 ? 'print:break-after-page' : 'print:break-after-auto'
             }`}
             style={{ fontFamily: "Sarabun, 'Noto Sans Thai', -apple-system, BlinkMacSystemFont, sans-serif" }}
@@ -247,10 +262,10 @@ export const AnnualPlanPrintView = ({
                     />
                   </div>
 
-                  <div className="w-[28%] border-l border-slate-800">
+                  <div className="w-[28%] border-l border-slate-800 flex flex-col justify-stretch">
                     <table className="w-full h-full border-collapse text-[10px] leading-tight">
                       <tbody>
-                        <tr className="border-b border-slate-800">
+                        <tr className="border-b border-slate-800 h-1/4">
                           <th className="py-1 px-2 text-left font-bold bg-slate-100 border-r border-slate-800 whitespace-nowrap w-[48%]">
                             เลขที่แผน (Plan No.)
                           </th>
@@ -258,7 +273,7 @@ export const AnnualPlanPrintView = ({
                             {planNo}
                           </td>
                         </tr>
-                        <tr className="border-b border-slate-800">
+                        <tr className="border-b border-slate-800 h-1/4">
                           <th className="py-1 px-2 text-left font-bold bg-slate-100 border-r border-slate-800 whitespace-nowrap">
                             แก้ไขครั้งที่ (Rev.)
                           </th>
@@ -266,7 +281,7 @@ export const AnnualPlanPrintView = ({
                             {revDisplay}
                           </td>
                         </tr>
-                        <tr className="border-b border-slate-800">
+                        <tr className="border-b border-slate-800 h-1/4">
                           <th className="py-1 px-2 text-left font-bold bg-slate-100 border-r border-slate-800 whitespace-nowrap">
                             วันที่บังคับใช้
                           </th>
@@ -274,7 +289,7 @@ export const AnnualPlanPrintView = ({
                             {effectiveDateDisplay}
                           </td>
                         </tr>
-                        <tr>
+                        <tr className="h-1/4">
                           <th className="py-1 px-2 text-left font-bold bg-slate-100 border-r border-slate-800 whitespace-nowrap">
                             แผ่นที่ (Page)
                           </th>
@@ -586,7 +601,7 @@ export const AnnualPlanPrintView = ({
                 <div>
                   สัญลักษณ์: P (Plan) = เดือนที่กำหนดตามแผน  |  ✓ (Act.) = เดือนที่ดำเนินการจริง
                 </div>
-                {revNumber > 1 && plan.revision_reason && (
+                {hasRevReason && (
                   <div className="inline-flex items-center gap-1 text-[9.5px] text-amber-900 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 font-normal">
                     <span className="font-bold">เหตุผลการแก้ไข ({revDisplay}):</span> {plan.revision_reason}
                   </div>
@@ -614,7 +629,12 @@ export const AnnualPlanPrintView = ({
                             className="max-h-9 max-w-full object-contain"
                           />
                         ) : showNameFallback || person.isSigned ? (
-                          <span className="font-cursive text-slate-700 text-xs italic">{person.name}</span>
+                          <span
+                            className="font-cursive text-slate-700 text-xs italic"
+                            style={{ fontFamily: "'Brush Script MT', 'Segoe Script', 'Caveat', cursive, sans-serif" }}
+                          >
+                            {person.name}
+                          </span>
                         ) : (
                           <span className="text-slate-300 text-[9.5px]">- ยังไม่มีการลงนาม -</span>
                         )}

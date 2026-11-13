@@ -1167,6 +1167,56 @@ describe('VCC Annual Plan Hub & Spoke Architecture and ISO Print View', () => {
 
       unmount();
     });
+
+    it('แสดง Rev.00 อย่างถูกต้องเมื่อ revision เป็น "00" หรือ 0 และแสดง Rev.02 เมื่อ revision เป็น "Rev.02" และจัดการตำแหน่งว่างเป็น "-" (ไม่แสดง "ตำแหน่ง: ตำแหน่ง")', () => {
+      const planRev0 = {
+        ...mockPlans[0],
+        plan_code: 'VCC-AP-QC-2026',
+        revision: '00',
+        approved_at: null,
+        effective_date: '2026-01-20',
+        status: 'APPROVED',
+        prepared_by_position: '-',
+        reviewed_by_position: '-',
+        approved_by_position: 'ตำแหน่ง'
+      };
+
+      const { unmount } = render(
+        <AnnualPlanPrintView
+          plan={planRev0}
+          items={mockItems}
+          assets={[]}
+          onClose={vi.fn()}
+        />
+      );
+
+      // 1. Revision ต้องแสดง Rev.00 อย่างถูกต้อง ไม่ถูกแปลงเป็น Rev.01
+      expect(screen.getByText('Rev.00')).toBeInTheDocument();
+
+      // 2. วันที่บังคับใช้ใช้ effective_date เมื่อ approved_at เป็น null
+      expect(screen.getByText('20/01/2569')).toBeInTheDocument();
+
+      // 3. ตำแหน่งที่ว่าง หรือ '-' หรือ 'ตำแหน่ง' ต้องแสดง 'ตำแหน่ง: -' (ไม่ใช่ 'ตำแหน่ง: ตำแหน่ง')
+      const posElements = screen.getAllByText('ตำแหน่ง: -');
+      expect(posElements.length).toBe(3);
+
+      unmount();
+
+      // 4. ทดสอบ revision ในรูปแบบ "Rev.02"
+      const planRevPrefixed = {
+        ...mockPlans[0],
+        revision: 'Rev.02'
+      };
+      const { unmount: unmount2 } = render(
+        <AnnualPlanPrintView
+          plan={planRevPrefixed}
+          items={mockItems}
+          assets={[]}
+        />
+      );
+      expect(screen.getByText('Rev.02')).toBeInTheDocument();
+      unmount2();
+    });
   });
 
   describe('3. Hub & Spoke Navigation & State Preservation in AnnualPlanMatrixSection', () => {
