@@ -166,7 +166,8 @@ describe('database contract', () => {
 
     it('undoes the whole batch, earlier statements included, when a guarded update changed nothing', async () => {
       await reset();
-      await expect(db.batch([before('DBC-STALE'), guard('not-the-current-value'), failIfUnchanged()])).rejects.toThrow();
+      // runTransition() and governanceBatch() recognise the guard by this wording and answer 409.
+      await expect(db.batch([before('DBC-STALE'), guard('not-the-current-value'), failIfUnchanged()])).rejects.toThrow(/malformed JSON/);
       expect(await exists('DBC-STALE')).toBe(false);
 
       await db.batch([before('DBC-STALE'), guard(''), failIfUnchanged()]);

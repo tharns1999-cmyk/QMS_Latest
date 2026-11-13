@@ -14,13 +14,15 @@
     "db:preflight": "node scripts/vcc-preflight.js",
     "deploy:production": "node scripts/deploy-guard.js production && wrangler deploy --env production",
     "db:seed:local": "node scripts/seed-local.js && wrangler d1 execute DB --local --file .wrangler/seed-marker.sql && wrangler d1 execute DB --local --file .wrangler/seed-local.sql",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:pg": "vitest run --config vitest.pg.config.js"
   },
   "dependencies": {
     "hono": "^4.13.17",
     "pdf-lib": "^1.17.1"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.16",
     "vitest": "^5.1.0",
     "wrangler": "^4.158.0"
   }
