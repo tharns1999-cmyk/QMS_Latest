@@ -513,15 +513,15 @@ describe('VCC Annual Plan Hub & Spoke Architecture and ISO Print View', () => {
       expect(within(sheet2).getByText('EQ-012')).toBeInTheDocument();
     });
 
-    it('ล้างคำว่า [ข้อมูลทดสอบ] ออกจาก asset_name และ remarks ทุกจุดก่อนแสดงผล', () => {
+    it('ล้างคำว่า [ข้อมูลทดสอบ] ออกจาก asset_name, remarks และ asset_code ทุกจุดก่อนแสดงผล (ทั้งต้นข้อความ กลางข้อความ หรือท้ายข้อความ)', () => {
       const testDataItems = [
         {
           id: 'test-seed-1',
-          asset_code: 'TEST-001',
-          asset_name: '[ข้อมูลทดสอบ] Vernier Caliper 150mm',
+          asset_code: '[ข้อมูลทดสอบ] TEST-001',
+          asset_name: '[ข้อมูลทดสอบ] Vernier Caliper 150mm [ข้อมูลทดสอบ]',
           model: 'CD-6',
           serial_no: 'SN001',
-          remarks: '[ข้อมูลทดสอบ] สอบเทียบภายในประจำปี'
+          remarks: 'ข้อความหมายเหตุ [ข้อมูลทดสอบ] สอบเทียบภายในประจำปี'
         }
       ];
 
@@ -533,9 +533,95 @@ describe('VCC Annual Plan Hub & Spoke Architecture and ISO Print View', () => {
       );
 
       // แสดงเฉพาะชื่อเครื่องมือและหมายเหตุที่ล้างคำว่า [ข้อมูลทดสอบ] แล้ว
+      expect(screen.getByText('TEST-001')).toBeInTheDocument();
       expect(screen.getByText('Vernier Caliper 150mm')).toBeInTheDocument();
-      expect(screen.getByText('สอบเทียบภายในประจำปี')).toBeInTheDocument();
+      expect(screen.getByText('ข้อความหมายเหตุ สอบเทียบภายในประจำปี')).toBeInTheDocument();
       expect(screen.queryByText(/\[ข้อมูลทดสอบ\]/)).not.toBeInTheDocument();
+    });
+
+    it('ดึงชื่อเครื่องมือ ยี่ห้อ/รุ่น หมายเลขเครื่อง และสถานที่ติดตั้ง จาก matchedAsset เมื่อ plan item มีเฉพาะรหัสเครื่องมือ', () => {
+      const plan = { ...mockPlans[0], id: 'plan-asset-fallback-test' };
+      const sparseItems = [
+        {
+          id: 'it-sparse-1',
+          asset_id: 'ast-rich-1',
+          asset_code: 'GAUGE-99',
+          planned_months: [4]
+        }
+      ];
+      const richAssets = [
+        {
+          id: 'ast-rich-1',
+          asset_code: 'GAUGE-99',
+          asset_name: 'Pressure Gauge 100 PSI',
+          brand: 'Ashcroft',
+          model: 'Type 1009',
+          serial_no: 'ASH-88219',
+          location: 'Production Line 2',
+          tolerance: '±1.0 PSI'
+        }
+      ];
+
+      render(
+        <AnnualPlanPrintView
+          plan={plan}
+          items={sparseItems}
+          assets={richAssets}
+        />
+      );
+
+      // ชื่อเครื่องมือ ยี่ห้อ รุ่น SN สถานที่ และเกณฑ์ยอมรับ ถูกดึงมาจาก matchedAsset โดยไม่เป็น '-'
+      expect(screen.getByText('GAUGE-99')).toBeInTheDocument();
+      expect(screen.getByText('Pressure Gauge 100 PSI')).toBeInTheDocument();
+      expect(screen.getByText(/รุ่น: Ashcroft Type 1009 • SN: ASH-88219 • สถานที่: Production Line 2/)).toBeInTheDocument();
+      expect(screen.getByText('±1.0 PSI')).toBeInTheDocument();
+    });
+
+    it('ดึงชื่อแผนกภาษาไทยจาก masterDepartments อัตโนมัติเมื่อ plan ไม่มีระบุ department_name_th', () => {
+      render(
+        <AnnualPlanPrintView
+          plan={{
+            id: 'plan-no-dept-th',
+            department: 'LB', // ห้องปฏิบัติการ ใน masterDepartments
+            plan_year: 2026
+          }}
+          items={mockItems}
+        />
+      );
+
+      // ดึง 'ห้องปฏิบัติการ' จาก masterDepartments แล้วจัดรูปแบบเป็น 'ฝ่ายห้องปฏิบัติการ'
+      expect(screen.getByText('หน่วยงาน / แผนก: ฝ่ายห้องปฏิบัติการ')).toBeInTheDocument();
+    });
+
+    it('แผนที่มี 11 รายการจะตัดแบ่งเป็น 2 หน้าพอดี (หน้าแรก 10 รายการ และหน้าที่สอง 1 รายการ)', () => {
+      const elevenItems = Array.from({ length: 11 }, (_, idx) => ({
+        id: `eleven-it-${idx + 1}`,
+        asset_code: `EQ-11-${String(idx + 1).padStart(2, '0')}`,
+        asset_name: `Machine ${idx + 1}`,
+        planned_months: [(idx % 12) + 1]
+      }));
+
+      render(
+        <AnnualPlanPrintView
+          plan={mockPlans[0]}
+          items={elevenItems}
+        />
+      );
+
+      const sheet1 = screen.getByTestId('a4-landscape-sheet-1');
+      const sheet2 = screen.getByTestId('a4-landscape-sheet-2');
+      expect(screen.queryByTestId('a4-landscape-sheet-3')).not.toBeInTheDocument();
+
+      expect(within(sheet1).getByText('1 / 2')).toBeInTheDocument();
+      expect(within(sheet2).getByText('2 / 2')).toBeInTheDocument();
+
+      // หน้า 1 มี EQ-11-01 ถึง EQ-11-10
+      expect(within(sheet1).getByText('EQ-11-01')).toBeInTheDocument();
+      expect(within(sheet1).getByText('EQ-11-10')).toBeInTheDocument();
+      expect(within(sheet1).queryByText('EQ-11-11')).not.toBeInTheDocument();
+
+      // หน้า 2 มี EQ-11-11
+      expect(within(sheet2).getByText('EQ-11-11')).toBeInTheDocument();
     });
 
     it('แสดงเครื่องหมาย ✓ ในแถว Act. เมื่อมีใบสั่งงานสถานะ CLOSED ในเดือนที่ทำจริง (performed_at หรือ planned_month)', () => {

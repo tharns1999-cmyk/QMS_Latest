@@ -114,7 +114,7 @@ export const AnnualPlanPrintView = ({
   onClose,
   onExportExcel
 }) => {
-  const { masterUsers } = useStore();
+  const { masterUsers, masterDepartments = [] } = useStore();
   const printRef = useRef(null);
 
   const { preparer, reviewer, approver, isApproved } = resolvePlanSignatories(plan, masterUsers);
@@ -126,7 +126,8 @@ export const AnnualPlanPrintView = ({
   const planYear = plan.plan_year || new Date().getFullYear();
   const buddhistYear = toBuddhistYear(planYear);
   const deptCode = plan.department || 'GEN';
-  const rawDeptName = plan.department_name_th || plan.department || deptCode;
+  const matchedDept = (masterDepartments || []).find((d) => d.code === deptCode || d.id === deptCode);
+  const rawDeptName = plan.department_name_th || matchedDept?.name_th || plan.department || deptCode;
   const deptDisplayName = formatDepartment(rawDeptName);
 
   const planNo = plan.plan_code || resolvePlanCode(plan);
@@ -149,7 +150,7 @@ export const AnnualPlanPrintView = ({
   const content = (
     <div
       id="vcc-print-portal"
-      className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex flex-col items-center justify-start p-2 sm:p-4 overflow-y-auto print:p-0 print:bg-white print:static print:inset-auto"
+      className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex flex-col items-center justify-start p-2 sm:p-4 overflow-auto print:p-0 print:bg-white print:static print:inset-auto"
     >
       {/* Action Toolbar (Hidden during print) */}
       <div className="no-print w-full max-w-[1120px] bg-white rounded-xl shadow-lg border border-slate-200 px-4 py-2.5 mb-4 flex items-center justify-between shrink-0 print:hidden">
@@ -206,13 +207,13 @@ export const AnnualPlanPrintView = ({
       <div
         id="vcc-plan-print-root"
         ref={printRef}
-        className="print-scroll-container w-full print:w-full"
+        className="print-scroll-container w-full overflow-x-auto print:overflow-visible print:w-full"
       >
         {pages.map((pageItems, pageIndex) => (
           <section
             key={pageIndex}
             data-testid={`a4-landscape-sheet-${pageIndex + 1}`}
-            className={`a4-landscape-sheet relative w-[297mm] min-h-[196mm] mx-auto bg-white rounded-xl border border-slate-300 shadow-xl p-[6mm_8mm] text-slate-900 mb-6 flex flex-col justify-between print:min-h-[195mm] print:overflow-visible print:w-full print:max-w-none print:rounded-none print:border-0 print:shadow-none print:p-0 print:mb-0 ${
+            className={`a4-landscape-sheet relative w-[297mm] min-h-[196mm] mx-auto bg-white rounded-xl border border-slate-300 shadow-xl p-[6mm_8mm] text-slate-900 mb-6 flex flex-col justify-between print:overflow-visible print:w-full print:max-w-none print:rounded-none print:border-0 print:shadow-none print:mb-0 ${
               pageIndex < totalPages - 1 ? 'print:break-after-page' : 'print:break-after-auto'
             }`}
             style={{ fontFamily: "Sarabun, 'Noto Sans Thai', -apple-system, BlinkMacSystemFont, sans-serif" }}
@@ -411,17 +412,24 @@ export const AnnualPlanPrintView = ({
                       const frequency = item.frequency_label || item.frequency || 'ปีละ 1 ครั้ง';
                       const responsible = item.responsible_name || item.responsible_person || item.responsible_label || '-';
                       const rawRemarks = item.remarks || item.remark || '-';
-                      const remarks = String(rawRemarks).replace(/^\[ข้อมูลทดสอบ\]\s*/g, '').trim() || '-';
+                      const remarks = String(rawRemarks).replace(/\[ข้อมูลทดสอบ\]\s*/g, '').trim() || '-';
 
-                      const rawAssetName = item.asset_name || item.name || '';
-                      const cleanAssetName = String(rawAssetName).replace(/^\[ข้อมูลทดสอบ\]\s*/g, '').trim();
+                      const rawAssetName = item.asset_name || item.name || matchedAsset?.asset_name || matchedAsset?.name || '';
+                      const cleanAssetName = String(rawAssetName).replace(/\[ข้อมูลทดสอบ\]\s*/g, '').trim();
 
-                      const brandModel = [item.brand, item.model]
+                      const rawAssetCode = item.asset_code || matchedAsset?.asset_code || '-';
+                      const cleanAssetCode = String(rawAssetCode).replace(/\[ข้อมูลทดสอบ\]\s*/g, '').trim() || '-';
+
+                      const brand = item.brand || matchedAsset?.brand;
+                      const model = item.model || matchedAsset?.model;
+                      const brandModel = [brand, model]
                         .map((v) => (typeof v === 'string' ? v.trim() : v))
                         .filter(Boolean)
-                        .join(' ') || item.model || '-';
-                      const serialNo = (item.serial_no && String(item.serial_no).trim()) || '-';
-                      const location = item.location || item.location_name || item.installation_location || '-';
+                        .join(' ') || model || brand || '-';
+                      const serialNo = (item.serial_no && String(item.serial_no).trim()) ||
+                        (matchedAsset?.serial_no && String(matchedAsset.serial_no).trim()) || '-';
+                      const location = item.location || item.location_name || item.installation_location ||
+                        matchedAsset?.location || matchedAsset?.location_name || matchedAsset?.installation_location || '-';
 
                       const targetPlanYear = Number(planYear);
 
@@ -476,7 +484,7 @@ export const AnnualPlanPrintView = ({
                               className="py-0.5 px-1 border-r border-slate-300 align-middle text-[10px] leading-tight break-words whitespace-normal"
                             >
                               <div className="text-[10px] leading-tight">
-                                <span className="font-bold text-slate-900 font-mono">{item.asset_code}</span>
+                                <span className="font-bold text-slate-900 font-mono">{cleanAssetCode}</span>
                                 {cleanAssetName ? (
                                   <span className="font-semibold text-slate-800 ml-1">{cleanAssetName}</span>
                                 ) : null}
@@ -630,7 +638,8 @@ export const AnnualPlanPrintView = ({
             margin: 5mm;
           }
           html, body {
-            width: 297mm !important;
+            width: 100% !important;
+            max-width: 100% !important;
             height: auto !important;
             min-height: 0 !important;
             overflow: visible !important;
@@ -694,6 +703,13 @@ export const AnnualPlanPrintView = ({
           }
           #vcc-print-portal .table-container {
             overflow: visible !important;
+          }
+          #vcc-print-portal thead {
+            display: table-header-group !important;
+          }
+          #vcc-print-portal tbody {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
           }
           #vcc-print-portal .a4-landscape-sheet:last-child {
             page-break-after: auto !important;
