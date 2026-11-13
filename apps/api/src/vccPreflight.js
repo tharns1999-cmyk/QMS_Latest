@@ -107,7 +107,7 @@ export async function validateVccMigrationPreflight(db) {
         FROM vcc_annual_plans
         WHERE is_current = 1 OR effective_status = 'CURRENT'
         GROUP BY plan_year, department
-        HAVING cnt > 1
+        HAVING COUNT(*) > 1
       `;
     } else if (hasEffectiveStatus) {
       duplicateQuery = `
@@ -115,7 +115,7 @@ export async function validateVccMigrationPreflight(db) {
         FROM vcc_annual_plans
         WHERE effective_status = 'CURRENT'
         GROUP BY plan_year, department
-        HAVING cnt > 1
+        HAVING COUNT(*) > 1
       `;
     } else if (hasIsCurrent) {
       duplicateQuery = `
@@ -123,7 +123,7 @@ export async function validateVccMigrationPreflight(db) {
         FROM vcc_annual_plans
         WHERE is_current = 1
         GROUP BY plan_year, department
-        HAVING cnt > 1
+        HAVING COUNT(*) > 1
       `;
     }
 

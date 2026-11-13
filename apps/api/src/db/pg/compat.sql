@@ -13,7 +13,13 @@ BEGIN
   t := CASE WHEN ts = 'now' THEN clock_timestamp() AT TIME ZONE 'UTC' ELSE replace(replace(ts, 'T', ' '), 'Z', '')::timestamp END;
   FOREACH m IN ARRAY mods LOOP
     IF m IS NULL THEN RETURN NULL; END IF;
-    t := t + m::interval;
+    IF m ~* '^\s*[+-]?\d+\s+(month|year)s?\s*$' THEN
+      -- SQLite moves the month or year and keeps the day number; a day the target month lacks rolls into the
+      -- following month (31 Jan + 1 month = 3 Mar), where PostgreSQL would stop at the month's last day.
+      t := date_trunc('month', t) + m::interval + ((extract(day FROM t)::int - 1) * interval '1 day') + (t - date_trunc('day', t));
+    ELSE
+      t := t + m::interval;
+    END IF;
   END LOOP;
   RETURN t;
 END $$;

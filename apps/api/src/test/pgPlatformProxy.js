@@ -103,10 +103,12 @@ const configuredVars = () => {
 // In-process PGlite answers without ever yielding, which would let one request finish before the other starts and
 // leave the concurrency tests exercising nothing.
 const hop = () => new Promise((resolve) => setTimeout(resolve, 0));
+// SUM()/AVG() come back as NUMERIC, which PGlite hands over as text; SQLite returns a number, so read them as numbers.
+const NUMERIC_OID = 1700;
 const overNetwork = (runner) => ({
   query: async (sql, params) => {
     await hop();
-    return runner.query(sql, params);
+    return runner.query(sql, params, { parsers: { [NUMERIC_OID]: (v) => Number(v) } });
   }
 });
 

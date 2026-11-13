@@ -195,6 +195,33 @@ describe('database contract', () => {
     });
   });
 
+  describe('dates', () => {
+    const shift = async (date, ...modifiers) => {
+      const args = modifiers.map(() => ', ?').join('');
+      return (await db.prepare(`SELECT date(?${args}) AS d`).bind(date, ...modifiers).first()).d;
+    };
+
+    // Next review dates are "effective date + N months": a day that does not exist in the target month
+    // rolls into the next month instead of stopping at its last day.
+    it('adds months by rolling an impossible day into the following month', async () => {
+      expect(await shift('2026-01-31', '+1 months')).toBe('2026-03-03');
+      expect(await shift('2024-02-29', '+12 months')).toBe('2025-03-01');
+      expect(await shift('2024-02-29', '+24 months')).toBe('2026-03-01');
+      expect(await shift('2026-08-31', '+6 months')).toBe('2027-03-03');
+      expect(await shift('2026-05-15', '+24 months')).toBe('2028-05-15');
+      expect(await shift('2026-03-31', '-1 months')).toBe('2026-03-03');
+    });
+
+    it('moves by hours and days, and by Thailand offset', async () => {
+      expect(await shift('2026-12-31 20:00:00', '+7 hours')).toBe('2027-01-01');
+      expect(await shift('2026-03-01', '-1 days')).toBe('2026-02-28');
+    });
+
+    it('reads stored timestamps in the T…Z form', async () => {
+      expect(await shift('2026-11-13T18:30:00.000Z', '+7 hours')).toBe('2026-11-14');
+    });
+  });
+
   describe('triggers without an API-level test', () => {
     it('refuses to approve an annual plan that is not waiting for approval', async () => {
       const id = 'DBC-PLAN-GUARD';

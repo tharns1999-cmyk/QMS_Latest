@@ -251,6 +251,15 @@ describe('VCC Pre-UAT Product Hardening & Refinement Decisions (DEC-01 to DEC-04
       expect(auditRow).toBeDefined();
     });
 
+    it('4b. Approving the same reschedule a second time is refused and leaves one audit row', async () => {
+      const again = await call('POST', `/api/vcc/work-orders/${testWoId}/approve-reschedule`, 'L4', { comment: 'กดซ้ำ' });
+      expect(again.status).toBe(409);
+      const { results } = await env.DB.prepare(`
+        SELECT id FROM audit_log WHERE action = 'VCC_WO_RESCHEDULE_APPROVED' AND json_extract(details, '$.wo_id') = ?
+      `).bind(testWoId).all();
+      expect(results).toHaveLength(1);
+    });
+
     it('5. Step 2B (Reject Reschedule): If rejected, due_date remains original and audit recorded', async () => {
       const woRejectId = 'wo-resched-reject-01';
       await env.DB.prepare(`
