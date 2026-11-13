@@ -70,3 +70,44 @@ CREATE OR REPLACE VIEW sqlite_master AS
   SELECT 'trigger', g.tgname::text, t.relname::text, pg_get_triggerdef(g.oid)
     FROM pg_trigger g JOIN pg_class t ON t.oid = g.tgrelid
     WHERE NOT g.tgisinternal AND t.relnamespace = 'public'::regnamespace;
+
+CREATE OR REPLACE FUNCTION sqlite_datetime(ts text, VARIADIC mods text[] DEFAULT '{}') RETURNS text LANGUAGE sql STABLE AS $$
+  SELECT to_char(sqlite_time(ts, mods), 'YYYY-MM-DD HH24:MI:SS')
+$$;
+
+-- CAST(text AS INTEGER) in SQLite: the leading integer, or 0 when there is none; it never fails.
+CREATE OR REPLACE FUNCTION sqlite_int(v text) RETURNS bigint LANGUAGE sql IMMUTABLE AS $$
+  SELECT CASE WHEN v IS NULL THEN NULL ELSE COALESCE(substring(v FROM '^\s*([+-]?\d+)'), '0')::bigint END
+$$;
+
+-- GLOB: * any run, ? one character, [...] a set; case-sensitive and matched against the whole value.
+CREATE OR REPLACE FUNCTION sqlite_glob(v text, pattern text) RETURNS boolean LANGUAGE plpgsql IMMUTABLE AS $$
+DECLARE
+  re text := '^';
+  ch text;
+  i int := 1;
+  close_at int;
+BEGIN
+  IF v IS NULL OR pattern IS NULL THEN RETURN NULL; END IF;
+  WHILE i <= length(pattern) LOOP
+    ch := substr(pattern, i, 1);
+    IF ch = '*' THEN re := re || '.*';
+    ELSIF ch = '?' THEN re := re || '.';
+    ELSIF ch = '[' AND position(']' IN substr(pattern, i + 2)) > 0 THEN
+      close_at := i + 1 + position(']' IN substr(pattern, i + 2));
+      re := re || '[' || replace(substr(pattern, i + 1, close_at - i - 1), '\', '\') || ']';
+      i := close_at;
+    ELSE re := re || regexp_replace(ch, '([\.^$|()\[\]{}*+?])', '\\1');
+    END IF;
+    i := i + 1;
+  END LOOP;
+  RETURN v ~ (re || '$');
+END $$;
+
+-- json_object('k', v, ...) with SQLite's compact output; the adapter passes the arguments as one JSON array.
+CREATE OR REPLACE FUNCTION sqlite_json_object(pairs json) RETURNS text LANGUAGE sql IMMUTABLE AS $$
+  SELECT '{' || COALESCE(string_agg(k.elem::text || ':' || v.elem::text, ',' ORDER BY k.ord), '') || '}'
+    FROM json_array_elements(pairs) WITH ORDINALITY AS k(elem, ord)
+    JOIN json_array_elements(pairs) WITH ORDINALITY AS v(elem, ord) ON v.ord = k.ord + 1
+   WHERE k.ord % 2 = 1
+$$;
