@@ -213,7 +213,7 @@ export const AnnualPlanPrintView = ({
           <section
             key={pageIndex}
             data-testid={`a4-landscape-sheet-${pageIndex + 1}`}
-            className={`a4-landscape-sheet relative w-[297mm] min-h-[196mm] mx-auto bg-white rounded-xl border border-slate-300 shadow-xl p-[6mm_8mm] text-slate-900 mb-6 flex flex-col justify-between print:overflow-visible print:w-full print:max-w-none print:rounded-none print:border-0 print:shadow-none print:mb-0 ${
+            className={`a4-landscape-sheet relative w-[297mm] min-h-[200mm] mx-auto bg-white rounded-xl border border-slate-300 shadow-xl p-[8mm_10mm] text-slate-900 mb-6 flex flex-col justify-between print:overflow-visible print:w-full print:max-w-none print:rounded-none print:border-0 print:shadow-none print:mb-0 ${
               pageIndex < totalPages - 1 ? 'print:break-after-page' : 'print:break-after-auto'
             }`}
             style={{ fontFamily: "Sarabun, 'Noto Sans Thai', -apple-system, BlinkMacSystemFont, sans-serif" }}
@@ -235,49 +235,50 @@ export const AnnualPlanPrintView = ({
 
             {/* Top Block: 1. Header + 2. Table + 3. Legend */}
             <div>
-              {/* 1. Corporate Header Section: Banner Left + 4-Row Plan Control Table Right */}
-              <div className="mb-1 bg-white">
-                <div className="flex flex-col sm:flex-row print:flex-row sm:items-stretch print:items-stretch justify-between gap-3 pb-1.5 border-b border-slate-900">
-                  <div className="flex-1 flex items-center min-w-0">
+              {/* 1. Unified ISO Header Box: Banner Left + 4-Row Plan Control Table Right + Title Bar Bottom */}
+              <div className="border border-slate-800 mb-2 bg-white">
+                {/* Upper: 2 Columns (Banner Left, Plan Control Table Right) */}
+                <div className="flex items-stretch border-b border-slate-800">
+                  <div className="w-[72%] p-2 flex items-center min-w-0">
                     <img
                       src="/banner.png"
                       alt="บริษัท เศรษฐชล จำกัด (SETHACHON CO., LTD.)"
-                      className="h-12 w-auto object-contain object-left"
+                      className="h-16 w-auto max-w-full object-contain object-left"
                     />
                   </div>
 
-                  <div className="shrink-0 w-full sm:w-64 print:w-64">
-                    <table className="w-full h-full border-collapse border border-slate-900 text-[9.5px] leading-tight">
+                  <div className="w-[28%] border-l border-slate-800">
+                    <table className="w-full h-full border-collapse text-[10px] leading-tight">
                       <tbody>
-                        <tr className="border-b border-slate-900">
-                          <th className="py-0.5 px-2 text-left font-bold bg-slate-100 border-r border-slate-900 whitespace-nowrap w-[48%]">
+                        <tr className="border-b border-slate-800">
+                          <th className="py-1 px-2 text-left font-bold bg-slate-100 border-r border-slate-800 whitespace-nowrap w-[48%]">
                             เลขที่แผน (Plan No.)
                           </th>
-                          <td className="py-0.5 px-2 font-mono font-bold text-slate-900 whitespace-nowrap">
+                          <td className="py-1 px-2 font-mono font-bold text-slate-900 whitespace-nowrap">
                             {planNo}
                           </td>
                         </tr>
-                        <tr className="border-b border-slate-900">
-                          <th className="py-0.5 px-2 text-left font-bold bg-slate-100 border-r border-slate-900 whitespace-nowrap">
+                        <tr className="border-b border-slate-800">
+                          <th className="py-1 px-2 text-left font-bold bg-slate-100 border-r border-slate-800 whitespace-nowrap">
                             แก้ไขครั้งที่ (Rev.)
                           </th>
-                          <td className="py-0.5 px-2 font-mono font-semibold text-slate-900 whitespace-nowrap">
+                          <td className="py-1 px-2 font-mono font-semibold text-slate-900 whitespace-nowrap">
                             {revDisplay}
                           </td>
                         </tr>
-                        <tr className="border-b border-slate-900">
-                          <th className="py-0.5 px-2 text-left font-bold bg-slate-100 border-r border-slate-900 whitespace-nowrap">
+                        <tr className="border-b border-slate-800">
+                          <th className="py-1 px-2 text-left font-bold bg-slate-100 border-r border-slate-800 whitespace-nowrap">
                             วันที่บังคับใช้
                           </th>
-                          <td className="py-0.5 px-2 font-mono text-slate-900 whitespace-nowrap">
+                          <td className="py-1 px-2 font-mono text-slate-900 whitespace-nowrap">
                             {effectiveDateDisplay}
                           </td>
                         </tr>
                         <tr>
-                          <th className="py-0.5 px-2 text-left font-bold bg-slate-100 border-r border-slate-900 whitespace-nowrap">
+                          <th className="py-1 px-2 text-left font-bold bg-slate-100 border-r border-slate-800 whitespace-nowrap">
                             แผ่นที่ (Page)
                           </th>
-                          <td className="py-0.5 px-2 font-mono font-bold text-slate-900 whitespace-nowrap">
+                          <td className="py-1 px-2 font-mono font-bold text-slate-900 whitespace-nowrap">
                             {pageIndex + 1} / {totalPages}
                           </td>
                         </tr>
@@ -286,23 +287,19 @@ export const AnnualPlanPrintView = ({
                   </div>
                 </div>
 
-                {/* Document Title (Centered under Corporate Banner) */}
-                <div className="text-center my-1">
-                  <div className="text-xs font-bold text-slate-900 leading-tight flex items-center justify-center gap-1.5 flex-wrap">
-                    <span>แผนการทวนสอบและสอบเทียบเครื่องมือวัด ประจำปี {planYear} (พ.ศ. {buddhistYear})</span>
-                    <span>—</span>
-                    <span>หน่วยงาน / แผนก: {deptDisplayName}</span>
-                    {revNumber > 1 && plan.revision_reason && (
-                      <span className="inline-flex items-center gap-1 text-[9.5px] text-amber-900 bg-amber-50 border border-amber-200 rounded px-1.5 py-0 font-normal">
-                        <span className="font-bold">เหตุผลการแก้ไข ({revDisplay}):</span> {plan.revision_reason}
-                      </span>
-                    )}
+                {/* Lower: Title Bar (Centered) */}
+                <div className="bg-slate-50/60 py-1.5 px-3 text-center">
+                  <div className="text-sm font-bold text-slate-900">
+                    แผนการทวนสอบและสอบเทียบเครื่องมือวัด ประจำปี {planYear} (พ.ศ. {buddhistYear})
+                  </div>
+                  <div className="text-xs font-semibold text-slate-700 mt-0.5">
+                    หน่วยงาน / แผนก: {deptDisplayName}
                   </div>
                 </div>
               </div>
 
               {/* 2. Matrix Table (table-fixed 100%, Plan & Act. Dual Row per Item) */}
-              <div className="table-container border border-slate-900 mb-1 overflow-visible print:overflow-visible">
+              <div className="table-container border border-slate-800 mb-1 overflow-visible print:overflow-visible">
                 <table className="table-fixed w-full text-left border-collapse text-[10px]">
                   <colgroup>
                     <col style={{ width: '3%' }} />
@@ -584,41 +581,58 @@ export const AnnualPlanPrintView = ({
                 </table>
               </div>
 
-              {/* 3. Legend under table */}
-              <div className="text-[10px] text-slate-600 mb-1 font-medium">
-                สัญลักษณ์: P (Plan) = เดือนที่กำหนดตามแผน  |  ✓ (Act.) = เดือนที่ดำเนินการจริง
+              {/* 3. Legend & Revision Reason under table */}
+              <div className="flex items-center justify-between text-[10px] text-slate-600 mb-1 font-medium">
+                <div>
+                  สัญลักษณ์: P (Plan) = เดือนที่กำหนดตามแผน  |  ✓ (Act.) = เดือนที่ดำเนินการจริง
+                </div>
+                {revNumber > 1 && plan.revision_reason && (
+                  <div className="inline-flex items-center gap-1 text-[9.5px] text-amber-900 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 font-normal">
+                    <span className="font-bold">เหตุผลการแก้ไข ({revDisplay}):</span> {plan.revision_reason}
+                  </div>
+                )}
               </div>
             </div>
 
             {/* Bottom Block: 4. Signatory Approval Block (3 Columns pushed to bottom of each A4 sheet) */}
-            <div className="mt-2 pt-1 shrink-0">
-              <div className="border border-slate-900 grid grid-cols-3 divide-x divide-slate-900 text-xs break-inside-avoid page-break-inside-avoid">
+            <div className="mt-4 shrink-0">
+              <div className="min-h-[105px] border border-slate-800 grid grid-cols-3 divide-x divide-slate-800 text-xs break-inside-avoid page-break-inside-avoid bg-white">
                 {signatoryBoxes.map(({ key, title, person, showNameFallback }) => (
-                  <div key={key} className="py-1.5 px-2.5 flex flex-col justify-between">
-                    <div>
-                      <div className="font-bold text-slate-800 border-b border-slate-300 pb-0.5 mb-1 text-center text-[9.5px] leading-tight">
-                        {title}
-                      </div>
-                      <div className="flex items-center justify-center max-h-5 overflow-hidden">
+                  <div key={key} className="flex flex-col justify-between">
+                    {/* 1. แถบหัวข้อ (Header Bar) */}
+                    <div className="bg-slate-100 border-b border-slate-800 py-1 px-2 text-center text-[10.5px] font-bold text-slate-900">
+                      {title}
+                    </div>
+
+                    {/* 2. พื้นที่ลงลายมือชื่อ (Signature Area) */}
+                    <div className="h-12 flex flex-col items-center justify-end pb-1 px-3">
+                      <div className="flex-1 flex items-center justify-center w-full min-h-0">
                         {person.signatureAsset ? (
                           <img
                             src={person.signatureAsset}
                             alt={`ลายเซ็น ${person.name}`}
-                            className="max-h-5 max-w-full object-contain"
+                            className="max-h-9 max-w-full object-contain"
                           />
                         ) : showNameFallback || person.isSigned ? (
-                          <span className="font-cursive text-slate-600 text-xs italic">{person.name}</span>
+                          <span className="font-cursive text-slate-700 text-xs italic">{person.name}</span>
                         ) : (
                           <span className="text-slate-300 text-[9.5px]">- ยังไม่มีการลงนาม -</span>
                         )}
                       </div>
+                      <div className="w-full text-center text-slate-400 text-[9px] tracking-widest leading-none mt-0.5 select-none overflow-hidden">
+                        .......................................................
+                      </div>
                     </div>
 
-                    <div className="text-[9.5px] leading-tight text-slate-700 border-t border-slate-200 pt-0.5 text-center space-y-0">
+                    {/* 3. รายละเอียดผู้ลงนาม (Footer Info — แยก 3 บรรทัดชัดเจน) */}
+                    <div className="py-1.5 px-2 text-center text-[10px] leading-snug">
                       <div className="font-semibold text-slate-900">
-                        ({formatSignatoryName(person)}) — {formatPosition(person.position)}
+                        ( {formatSignatoryName(person)} )
                       </div>
-                      <div className="text-slate-500 text-[9px]">
+                      <div className="text-slate-700">
+                        ตำแหน่ง: {formatPosition(person.position)}
+                      </div>
+                      <div className="text-slate-600">
                         วันที่: {person.date || '-'}
                       </div>
                     </div>
@@ -635,7 +649,7 @@ export const AnnualPlanPrintView = ({
         @media print {
           @page {
             size: A4 landscape;
-            margin: 5mm;
+            margin: 0mm !important;
           }
           html, body {
             width: 100% !important;
@@ -682,10 +696,10 @@ export const AnnualPlanPrintView = ({
           }
           #vcc-print-portal .a4-landscape-sheet {
             width: 100% !important;
-            height: 198mm !important;
+            height: 208mm !important;
             min-height: 0 !important;
             max-width: none !important;
-            padding: 2mm 4mm !important;
+            padding: 8mm 10mm !important;
             margin: 0 !important;
             box-sizing: border-box !important;
             box-shadow: none !important;

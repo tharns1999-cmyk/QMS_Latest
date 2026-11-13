@@ -282,10 +282,11 @@ describe('VCC Annual Plan Hub & Spoke Architecture and ISO Print View', () => {
         />
       );
 
-      // แบนเนอร์ภาพทางการของ บริษัท เศรษฐชล จำกัด (/banner.png)
+      // แบนเนอร์ภาพทางการของ บริษัท เศรษฐชล จำกัด (/banner.png) ขนาดใหญ่คมชัด
       const bannerImg = screen.getByAltText('บริษัท เศรษฐชล จำกัด (SETHACHON CO., LTD.)');
       expect(bannerImg).toBeInTheDocument();
       expect(bannerImg).toHaveAttribute('src', '/banner.png');
+      expect(bannerImg).toHaveClass('h-16');
 
       // กล่องข้อมูลควบคุมแผน 4 แถวมุมขวาบน
       expect(screen.getByText('เลขที่แผน (Plan No.)')).toBeInTheDocument();
@@ -297,7 +298,7 @@ describe('VCC Annual Plan Hub & Spoke Architecture and ISO Print View', () => {
       expect(screen.getByText('แผ่นที่ (Page)')).toBeInTheDocument();
       expect(screen.getByText('1 / 1')).toBeInTheDocument();
 
-      // ชื่อเรื่องเอกสาร (แบบกะทัดรัด ไม่มีบรรทัดภาษาอังกฤษที่เปลืองพื้นที่)
+      // ชื่อเรื่องเอกสาร (แถบชื่อเรื่องกึ่งกลาง 2 บรรทัดชัดเจน)
       expect(screen.getByText('แผนการทวนสอบและสอบเทียบเครื่องมือวัด ประจำปี 2026 (พ.ศ. 2569)')).toBeInTheDocument();
       expect(screen.queryByText('Annual Equipment Verification & Calibration Plan')).not.toBeInTheDocument();
       expect(screen.getByText('หน่วยงาน / แผนก: ฝ่ายควบคุมคุณภาพ')).toBeInTheDocument();
@@ -327,10 +328,16 @@ describe('VCC Annual Plan Hub & Spoke Architecture and ISO Print View', () => {
       expect(screen.getAllByText('P').length).toBeGreaterThanOrEqual(1);
       expect(screen.getByText(/สัญลักษณ์: P \(Plan\) = เดือนที่กำหนดตามแผน/)).toBeInTheDocument();
 
-      // ตารางลงนาม 3 ช่อง
+      // ตารางลงนาม 3 ช่อง (ขนาดใหญ่ min-h-[105px] แยก 3 บรรทัด: (ชื่อ), ตำแหน่ง, วันที่)
       expect(screen.getByText('ผู้จัดทำ (Prepared By)')).toBeInTheDocument();
       expect(screen.getByText('ผู้ทบทวน (Reviewed By)')).toBeInTheDocument();
       expect(screen.getByText('ผู้อนุมัติ (Approved By)')).toBeInTheDocument();
+      expect(screen.getByText('( QC Staff )')).toBeInTheDocument();
+      expect(screen.getByText('( QC Supervisor )')).toBeInTheDocument();
+      expect(screen.getByText('( QC Manager )')).toBeInTheDocument();
+      expect(screen.getByText('ตำแหน่ง: Quality Manager')).toBeInTheDocument();
+      expect(screen.getByText('วันที่: 10 ม.ค. 2569')).toBeInTheDocument();
+      expect(screen.getAllByText(/\.{20,}/).length).toBeGreaterThanOrEqual(3);
     });
 
     it('แสดงเหตุผลการแก้ไขเมื่อเป็นฉบับปรับปรุง (revision_no > 1) และดึงเกณฑ์ยอมรับจากข้อมูลเครื่องมือ (tolerance)', () => {
@@ -372,6 +379,10 @@ describe('VCC Annual Plan Hub & Spoke Architecture and ISO Print View', () => {
       expect(screen.getByText(/เหตุผลการแก้ไข \(Rev\.02\):/)).toBeInTheDocument();
       expect(screen.getByText(/เพิ่มเครื่องมือใหม่เข้าสายการผลิต/)).toBeInTheDocument();
       expect(screen.getByText('±0.05 g')).toBeInTheDocument();
+
+      // เหตุผลการแก้ไขถูกย้ายออกจากหัวกระดาษมาอยู่ข้างคำอธิบายสัญลักษณ์ P / ✓
+      const legendContainer = screen.getByText(/สัญลักษณ์: P \(Plan\)/).parentElement;
+      expect(within(legendContainer).getByText(/เหตุผลการแก้ไข \(Rev\.02\):/)).toBeInTheDocument();
     });
 
     it('ตัดแบ่งหน้ากระดาษ A4 แนวนอนอัตโนมัติ (10 รายการ/หน้า) พร้อมเลขหน้า หัวกระดาษ และกล่องลายเซ็น 3 ช่องครบทุกหน้า', () => {
@@ -1000,6 +1011,18 @@ describe('VCC Annual Plan Hub & Spoke Architecture and ISO Print View', () => {
       // ลายเซ็นต์ของผู้ลงนามต้องถูกเรนเดอร์ในรูป img
       const sigImages = screen.getAllByRole('img');
       expect(sigImages.length).toBeGreaterThanOrEqual(1);
+
+      // มีเส้นประสำหรับลงนาม
+      expect(screen.getAllByText(/\.{20,}/).length).toBeGreaterThanOrEqual(3);
+
+      // รายละเอียดผู้ลงนาม 3 บรรทัดชัดเจน (( ชื่อ ), ตำแหน่ง:, วันที่:)
+      expect(screen.getByText('( QC Staff )')).toBeInTheDocument();
+      expect(screen.getByText('ตำแหน่ง: QC Technician')).toBeInTheDocument();
+      expect(screen.getByText('( QC Supervisor )')).toBeInTheDocument();
+      expect(screen.getByText('ตำแหน่ง: QC Supervisor')).toBeInTheDocument();
+      expect(screen.getByText('( QC Manager )')).toBeInTheDocument();
+      expect(screen.getByText('ตำแหน่ง: QC Manager')).toBeInTheDocument();
+      expect(screen.getAllByText(/วันที่:/).length).toBeGreaterThanOrEqual(3);
     });
 
     it('เรนเดอร์ผ่าน createPortal ไปยัง document.body ด้วย #vcc-print-portal, มีคลาส no-print, print-scroll-container, a4-landscape-sheet และสไตล์ตัดขอบพิมพ์ 0mm', () => {
@@ -1037,7 +1060,8 @@ describe('VCC Annual Plan Hub & Spoke Architecture and ISO Print View', () => {
       expect(styleTag).toBeInTheDocument();
       expect(styleTag.textContent).toContain('body > *:not(#vcc-print-portal)');
       expect(styleTag.textContent).toContain('size: A4 landscape');
-      expect(styleTag.textContent).toContain('margin: 5mm');
+      expect(styleTag.textContent).toContain('margin: 0mm !important');
+      expect(styleTag.textContent).toContain('padding: 8mm 10mm !important');
       expect(styleTag.textContent).toContain('#vcc-print-portal .no-print');
       expect(styleTag.textContent).toContain('#vcc-print-portal .print-scroll-container');
       expect(styleTag.textContent).toContain('#vcc-print-portal .a4-landscape-sheet');
@@ -1051,6 +1075,97 @@ describe('VCC Annual Plan Hub & Spoke Architecture and ISO Print View', () => {
       printSpy.mockRestore();
       unmount();
       expect(document.getElementById('vcc-print-portal')).toBeNull();
+    });
+
+    it('ตรวจสอบโครงสร้างเลย์เอาต์ Unified ISO Header Box และ Expanded Signature Box ตามมาตรฐาน ISO อย่างครบถ้วน', () => {
+      const planWithRev = {
+        ...mockPlans[0],
+        plan_code: 'VCC-AP-QC-2026',
+        revision_no: 3,
+        revision_reason: 'ปรับรอบการสอบเทียบประจำปีให้สอดคล้องกับมาตรฐาน ISO 9001:2015'
+      };
+
+      const { unmount } = render(
+        <AnnualPlanPrintView
+          plan={planWithRev}
+          items={mockItems}
+          assets={[]}
+          onClose={vi.fn()}
+        />
+      );
+
+      const portalEl = document.getElementById('vcc-print-portal');
+      expect(portalEl).toBeInTheDocument();
+
+      // 1. Unified ISO Header Box
+      // มีกรอบเส้นสีเทาเข้ม border-slate-800
+      const headerBox = portalEl.querySelector('.border-slate-800');
+      expect(headerBox).toBeInTheDocument();
+
+      // ส่วนบน 2 คอลัมน์ (ซ้าย w-[72%], ขวา w-[28%])
+      const bannerContainer = headerBox.querySelector('.w-\\[72\\%\\]');
+      expect(bannerContainer).toBeInTheDocument();
+      const bannerImg = bannerContainer.querySelector('img');
+      expect(bannerImg).toHaveClass('h-16');
+      expect(bannerImg).toHaveClass('object-contain');
+      expect(bannerImg).toHaveClass('object-left');
+
+      const planTableContainer = headerBox.querySelector('.w-\\[28\\%\\]');
+      expect(planTableContainer).toBeInTheDocument();
+      expect(planTableContainer).toHaveClass('border-l');
+      expect(planTableContainer).toHaveClass('border-slate-800');
+
+      // ส่วนล่าง แถบชื่อเรื่องกึ่งกลาง bg-slate-50/60
+      const titleBar = headerBox.querySelector('.bg-slate-50\\/60');
+      expect(titleBar).toBeInTheDocument();
+      expect(within(titleBar).getByText('แผนการทวนสอบและสอบเทียบเครื่องมือวัด ประจำปี 2026 (พ.ศ. 2569)')).toHaveClass('text-sm font-bold text-slate-900');
+      expect(within(titleBar).getByText('หน่วยงาน / แผนก: ฝ่ายควบคุมคุณภาพ')).toHaveClass('text-xs font-semibold text-slate-700 mt-0.5');
+
+      // เหตุผลการแก้ไขไม่ได้อยู่ใน titleBar แต่ย้ายไปอยู่ที่แถบคำอธิบายสัญลักษณ์
+      expect(within(titleBar).queryByText(/เหตุผลการแก้ไข/)).not.toBeInTheDocument();
+      const legendRow = portalEl.querySelector('.a4-landscape-sheet .flex.items-center.justify-between');
+      expect(legendRow).toBeInTheDocument();
+      expect(within(legendRow).getByText(/สัญลักษณ์: P \(Plan\)/)).toBeInTheDocument();
+      expect(within(legendRow).getByText(/เหตุผลการแก้ไข \(Rev\.03\):/)).toBeInTheDocument();
+
+      // 2. Expanded Signature Box
+      const sigBox = portalEl.querySelector('.min-h-\\[105px\\]');
+      expect(sigBox).toBeInTheDocument();
+      expect(sigBox).toHaveClass('grid', 'grid-cols-3', 'border', 'border-slate-800', 'divide-x', 'divide-slate-800');
+
+      // มี 3 คอลัมน์ครบถ้วน
+      const cols = sigBox.children;
+      expect(cols.length).toBe(3);
+
+      Array.from(cols).forEach((col) => {
+        // ส่วนที่ 1: แถบหัวข้อ
+        const headerBar = col.querySelector('.bg-slate-100');
+        expect(headerBar).toBeInTheDocument();
+        expect(headerBar).toHaveClass('border-b', 'border-slate-800', 'text-[10.5px]', 'font-bold', 'text-slate-900');
+
+        // ส่วนที่ 2: พื้นที่ลงลายมือชื่อ (h-12 พร้อมเส้นประ)
+        const sigArea = col.querySelector('.h-12');
+        expect(sigArea).toBeInTheDocument();
+        expect(sigArea).toHaveClass('flex', 'flex-col', 'items-center', 'justify-end');
+        expect(sigArea.textContent).toContain('.......................................................');
+
+        // ส่วนที่ 3: รายละเอียดผู้ลงนาม (3 บรรทัดชัดเจน text-[10px])
+        const footerInfo = col.querySelector('.py-1\\.5.px-2');
+        expect(footerInfo).toBeInTheDocument();
+        expect(footerInfo).toHaveClass('text-center', 'text-[10px]', 'leading-snug');
+        expect(footerInfo.children.length).toBe(3);
+        // บรรทัดที่ 1: ( ชื่อ )
+        expect(footerInfo.children[0]).toHaveClass('font-semibold', 'text-slate-900');
+        expect(footerInfo.children[0].textContent).toMatch(/^\(\s.+\s\)$/);
+        // บรรทัดที่ 2: ตำแหน่ง:
+        expect(footerInfo.children[1]).toHaveClass('text-slate-700');
+        expect(footerInfo.children[1].textContent).toMatch(/^ตำแหน่ง:/);
+        // บรรทัดที่ 3: วันที่:
+        expect(footerInfo.children[2]).toHaveClass('text-slate-600');
+        expect(footerInfo.children[2].textContent).toMatch(/^วันที่:/);
+      });
+
+      unmount();
     });
   });
 
