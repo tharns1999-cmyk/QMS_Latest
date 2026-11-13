@@ -81,6 +81,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [], currentUser: propUser
 
   const [printPlan, setPrintPlan] = useState(null);
   const [printPlanItems, setPrintPlanItems] = useState([]);
+  const [printWorkOrders, setPrintWorkOrders] = useState([]);
 
   const userDept = useMemo(() => {
     return String(currentUser?.department || currentUser?.dept || '').toUpperCase();
@@ -378,10 +379,29 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [], currentUser: propUser
       if (planDetail?.plan?.id === target.id && planDetail?.items) {
         setPrintPlan(target);
         setPrintPlanItems(planDetail.items);
+        setPrintWorkOrders(planWorkOrders);
       } else {
         const detail = await fetchVccPlanDetail(target.id);
         setPrintPlan(detail?.plan || target);
         setPrintPlanItems(detail?.items || []);
+        try {
+          const targetPlanIds = [target.id, detail?.plan?.parent_plan_id].filter(Boolean);
+          const statuses = ['DRAFT', 'SUBMITTED', 'PENDING_REVIEW', 'APPROVED', 'IN_PROGRESS', 'CLOSED', 'CANCELLED'];
+          const queries = [];
+          for (const pid of targetPlanIds) {
+            for (const st of statuses) {
+              queries.push(fetchVccWorkOrders({ plan_id: pid, status: st }).catch(() => []));
+            }
+          }
+          const results = await Promise.all(queries);
+          const map = new Map();
+          results.flat().forEach((w) => {
+            if (w && w.id) map.set(w.id, w);
+          });
+          setPrintWorkOrders(Array.from(map.values()));
+        } catch {
+          setPrintWorkOrders([]);
+        }
       }
     } catch (err) {
       toast.error('ไม่สามารถโหลดข้อมูลสำหรับพิมพ์ได้: ' + (err.message || ''));
@@ -1223,7 +1243,11 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [], currentUser: propUser
           plan={printPlan}
           items={printPlanItems}
           assets={activeAssets}
-          onClose={() => setPrintPlan(null)}
+          workOrders={printWorkOrders.length > 0 ? printWorkOrders : planWorkOrders}
+          onClose={() => {
+            setPrintPlan(null);
+            setPrintWorkOrders([]);
+          }}
           onExportExcel={() => handleExportPlanExcel(printPlan)}
         />
       )}

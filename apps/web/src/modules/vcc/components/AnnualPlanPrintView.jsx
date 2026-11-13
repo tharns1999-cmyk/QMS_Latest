@@ -6,7 +6,7 @@ import { toBuddhistYear, formatVccDate } from '../utils/vccDateUtils';
 import { resolvePlanCode } from '../utils/planLabels';
 import useStore from '../../../store/useStore';
 
-const ITEMS_PER_PAGE = 6;
+const ITEMS_PER_PAGE = 4;
 
 const MONTH_NAMES_TH = [
   'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.',
@@ -64,6 +64,17 @@ const parseMonths = (val) => {
   return [];
 };
 
+// Safe helper to parse month (1-12) from date string (YYYY-MM-DD or ISO)
+const parseMonthFromDateStr = (dateStr) => {
+  if (!dateStr) return null;
+  const s = String(dateStr).trim();
+  const match = s.match(/^\d{4}[-/](\d{1,2})/);
+  if (match) return Number(match[1]);
+  const d = new Date(s);
+  if (!isNaN(d.getTime())) return d.getMonth() + 1;
+  return null;
+};
+
 // Format signatory position cleanly inside parentheses without double parentheses
 const formatPosition = (pos) => {
   if (!pos) return '(ตำแหน่ง)';
@@ -84,6 +95,7 @@ export const AnnualPlanPrintView = ({
   plan = {},
   items = [],
   assets = [],
+  workOrders = [],
   onClose,
   onExportExcel
 }) => {
@@ -185,7 +197,7 @@ export const AnnualPlanPrintView = ({
           <section
             key={pageIndex}
             data-testid={`a4-landscape-sheet-${pageIndex + 1}`}
-            className={`a4-landscape-sheet relative w-full max-w-[1120px] mx-auto bg-white rounded-xl border border-slate-300 shadow-xl p-6 text-slate-900 mb-6 flex flex-col min-h-[750px] print:min-h-[190mm] print:w-full print:max-w-none print:rounded-none print:border-0 print:shadow-none print:p-0 print:mb-0 ${
+            className={`a4-landscape-sheet relative w-full max-w-[1120px] mx-auto bg-white rounded-xl border border-slate-300 shadow-xl p-6 text-slate-900 mb-6 flex flex-col min-h-[750px] print:min-h-[195mm] print:overflow-visible print:w-full print:max-w-none print:rounded-none print:border-0 print:shadow-none print:p-0 print:mb-0 ${
               pageIndex < totalPages - 1 ? 'print:break-after-page' : 'print:break-after-auto'
             }`}
             style={{ fontFamily: "Sarabun, 'Noto Sans Thai', -apple-system, BlinkMacSystemFont, sans-serif" }}
@@ -206,13 +218,13 @@ export const AnnualPlanPrintView = ({
             )}
 
             {/* 1. Corporate Header Section: Banner Left + 4-Row Plan Control Table Right */}
-            <div className="mb-3 bg-white shrink-0">
+            <div className="mb-2 bg-white shrink-0">
               <div className="flex flex-col sm:flex-row print:flex-row sm:items-stretch print:items-stretch justify-between gap-3 pb-2 border-b border-slate-900">
                 <div className="flex-1 flex items-center min-w-0">
                   <img
                     src="/banner.png"
                     alt="บริษัท เศรษฐชล จำกัด (SETHACHON CO., LTD.)"
-                    className="w-full max-h-20 sm:max-h-24 object-contain object-left"
+                    className="w-full max-h-16 object-contain object-left"
                   />
                 </div>
 
@@ -257,26 +269,26 @@ export const AnnualPlanPrintView = ({
               </div>
 
               {/* Document Title (Centered under Corporate Banner) */}
-              <div className="text-center pt-2 pb-0.5">
-                <h1 className="text-base sm:text-lg font-bold text-slate-900 leading-snug">
+              <div className="text-center my-1.5">
+                <h1 className="text-sm sm:text-base font-bold text-slate-900 leading-snug">
                   แผนการทวนสอบและสอบเทียบเครื่องมือวัด ประจำปี {planYear} (พ.ศ. {buddhistYear})
                 </h1>
-                <div className="text-xs font-medium text-slate-600 italic mt-0.5">
+                <div className="text-[11px] font-medium text-slate-600 italic mt-0.5">
                   Annual Equipment Verification &amp; Calibration Plan
                 </div>
-                <div className="text-xs sm:text-sm font-semibold text-slate-800 mt-1">
-                  หน่วยงาน / แผนก: {deptDisplayName}
+                <div className="text-xs sm:text-sm font-semibold text-slate-800 mt-1 flex items-center justify-center gap-2 flex-wrap">
+                  <span>หน่วยงาน / แผนก: {deptDisplayName}</span>
+                  {revNumber > 1 && plan.revision_reason && (
+                    <span className="inline-flex items-center gap-1 text-[11px] text-amber-900 bg-amber-50 border border-amber-200 rounded px-2 py-0.5 font-normal">
+                      <span className="font-bold">เหตุผลการแก้ไข ({revDisplay}):</span> {plan.revision_reason}
+                    </span>
+                  )}
                 </div>
-                {revNumber > 1 && plan.revision_reason && (
-                  <div className="mt-1 inline-block text-[10.5px] text-amber-900 bg-amber-50 border border-amber-200 rounded px-2.5 py-0.5">
-                    <span className="font-bold">เหตุผลการแก้ไข ({revDisplay}):</span> {plan.revision_reason}
-                  </div>
-                )}
               </div>
             </div>
 
             {/* 2. Matrix Table (table-fixed 100%, Plan & Act. Dual Row per Item) */}
-            <div className="border border-slate-900 mb-2 overflow-hidden">
+            <div className="table-container border border-slate-900 mb-1.5 overflow-visible print:overflow-visible">
               <table className="table-fixed w-full text-left border-collapse text-[10px]">
                 <colgroup>
                   <col style={{ width: '3%' }} />
@@ -293,36 +305,36 @@ export const AnnualPlanPrintView = ({
                 </colgroup>
                 <thead>
                   <tr className="bg-slate-100 border-b border-slate-900 text-slate-800">
-                    <th className="py-1.5 px-0.5 text-center font-bold border-r border-slate-900 text-[9px] leading-tight break-words">
+                    <th className="py-1 px-0.5 text-center font-bold border-r border-slate-900 text-[9px] leading-tight break-words">
                       ลำดับ
                     </th>
-                    <th className="py-1.5 px-1.5 font-bold border-r border-slate-900 text-[10px]">
+                    <th className="py-1 px-1.5 font-bold border-r border-slate-900 text-[10.5px]">
                       รายการเครื่องมือวัด
                     </th>
-                    <th className="py-1.5 px-1 font-bold border-r border-slate-900 text-center text-[10px]">
+                    <th className="py-1 px-1 font-bold border-r border-slate-900 text-center text-[10px]">
                       เกณฑ์ยอมรับ
                     </th>
-                    <th className="py-1.5 px-1 font-bold border-r border-slate-900 text-center text-[9.5px] leading-tight">
+                    <th className="py-1 px-1 font-bold border-r border-slate-900 text-center text-[9.5px] leading-tight">
                       หน่วยงานที่ทวนสอบ/สอบเทียบ
                     </th>
-                    <th className="py-1.5 px-0.5 text-center font-bold border-r border-slate-900 text-[9.5px] leading-tight">
+                    <th className="py-1 px-0.5 text-center font-bold border-r border-slate-900 text-[9.5px] leading-tight">
                       ความถี่
                     </th>
-                    <th className="py-1.5 px-0.5 text-center font-bold border-r border-slate-900 text-[9px] leading-tight">
+                    <th className="py-1 px-0.5 text-center font-bold border-r border-slate-900 text-[9px] leading-tight">
                       Plan / Act.
                     </th>
                     {MONTH_NAMES_TH.map((m, idx) => (
                       <th
                         key={idx}
-                        className="py-1.5 px-0 text-center font-bold border-r border-slate-900 whitespace-nowrap text-[9px]"
+                        className="py-1 px-0 text-center font-bold border-r border-slate-900 whitespace-nowrap text-[9px]"
                       >
                         {m}
                       </th>
                     ))}
-                    <th className="py-1.5 px-1 font-bold border-r border-slate-900 text-center text-[9.5px] leading-tight">
+                    <th className="py-1 px-1 font-bold border-r border-slate-900 text-center text-[9.5px] leading-tight">
                       ผู้รับผิดชอบ
                     </th>
-                    <th className="py-1.5 px-1.5 font-bold text-center text-[10px]">
+                    <th className="py-1 px-1.5 font-bold text-center text-[10px]">
                       หมายเหตุ
                     </th>
                   </tr>
@@ -345,13 +357,29 @@ export const AnnualPlanPrintView = ({
                       (a) => (item.asset_id && a.id === item.asset_id) || (item.asset_code && a.asset_code === item.asset_code)
                     );
 
+                    const matchedWorkOrders = (workOrders || []).filter(
+                      (w) =>
+                        (item.id && w.plan_item_id === item.id) ||
+                        (item.asset_id && w.asset_id === item.asset_id) ||
+                        (item.asset_code && w.asset_code === item.asset_code)
+                    );
+
+                    const latestWorkOrder = matchedWorkOrders.length > 0
+                      ? [...matchedWorkOrders].sort((a, b) => {
+                          const dateA = a.performed_at || a.due_date || a.created_at || '';
+                          const dateB = b.performed_at || b.due_date || b.created_at || '';
+                          return String(dateB).localeCompare(String(dateA));
+                        })[0]
+                      : null;
+
                     const criteria = resolveFirstValue(
                       item.acceptance_criteria,
                       item.tolerance,
                       item.mpe,
                       matchedAsset?.acceptance_criteria,
                       matchedAsset?.tolerance,
-                      matchedAsset?.mpe
+                      matchedAsset?.mpe,
+                      latestWorkOrder?.acceptance_criteria
                     );
                     const provider = formatProvider(item);
                     const frequency = item.frequency_label || item.frequency || 'ปีละ 1 ครั้ง';
@@ -365,6 +393,34 @@ export const AnnualPlanPrintView = ({
                     const serialNo = (item.serial_no && String(item.serial_no).trim()) || '-';
                     const location = item.location || item.location_name || item.installation_location || '-';
 
+                    const isMonthActual = (mNum) => {
+                      if (actualMonths.includes(mNum) || actualMonths.includes(String(mNum))) return true;
+                      return matchedWorkOrders.some((w) => {
+                        if (String(w.status || '').toUpperCase() !== 'CLOSED') return false;
+
+                        const isSamePlan = Boolean(w.plan_id && plan.id && w.plan_id === plan.id);
+                        if (!isSamePlan) {
+                          const woYear = w.plan_year
+                            ? Number(w.plan_year)
+                            : w.performed_at
+                              ? Number(String(w.performed_at).slice(0, 4))
+                              : w.due_date
+                                ? Number(String(w.due_date).slice(0, 4))
+                                : Number(planYear);
+                          if (woYear && woYear !== Number(planYear)) return false;
+                        }
+
+                        let woMonth = 0;
+                        const parsedPerformedMonth = parseMonthFromDateStr(w.performed_at);
+                        if (parsedPerformedMonth != null) {
+                          woMonth = parsedPerformedMonth;
+                        } else if (w.planned_month != null) {
+                          woMonth = Number(w.planned_month);
+                        }
+                        return woMonth === mNum;
+                      });
+                    };
+
                     return (
                       <tbody
                         key={item.id || globalIndex}
@@ -375,7 +431,7 @@ export const AnnualPlanPrintView = ({
                           {/* 1. ลำดับ */}
                           <td
                             rowSpan={2}
-                            className="py-1 px-0.5 text-center font-mono text-slate-700 border-r border-slate-300 align-middle"
+                            className="py-1 px-0.5 text-center font-mono text-slate-700 border-r border-slate-300 align-middle text-[11px]"
                           >
                             {globalIndex + 1}
                           </td>
@@ -383,7 +439,7 @@ export const AnnualPlanPrintView = ({
                           {/* 2. รายการเครื่องมือวัด */}
                           <td
                             rowSpan={2}
-                            className="py-1.5 px-1.5 border-r border-slate-300 align-top leading-tight break-words whitespace-normal"
+                            className="py-1 px-1.5 border-r border-slate-300 align-top text-[11px] leading-snug break-words whitespace-normal"
                           >
                             <div className="font-bold text-slate-900">
                               <span className="font-mono">{item.asset_code || '-'}</span>
@@ -391,7 +447,7 @@ export const AnnualPlanPrintView = ({
                                 <span className="ml-1.5">{item.asset_name || item.name}</span>
                               )}
                             </div>
-                            <div className="text-[9.5px] text-slate-600 mt-0.5 space-y-0.5 leading-normal">
+                            <div className="text-[10px] text-slate-600 mt-0.5 leading-snug space-y-0.5">
                               <div>
                                 <span className="text-slate-500">ยี่ห้อ/รุ่น: </span>
                                 <span>{brandModel}</span>
@@ -409,7 +465,7 @@ export const AnnualPlanPrintView = ({
                           {/* 3. เกณฑ์ยอมรับ */}
                           <td
                             rowSpan={2}
-                            className="py-1 px-1 text-center text-slate-700 border-r border-slate-300 align-middle whitespace-normal break-words"
+                            className="py-1 px-1.5 text-center text-slate-800 border-r border-slate-300 align-middle whitespace-normal break-words text-[11px] leading-snug font-medium"
                           >
                             {criteria}
                           </td>
@@ -417,7 +473,7 @@ export const AnnualPlanPrintView = ({
                           {/* 4. หน่วยงานที่ทวนสอบ/สอบเทียบ */}
                           <td
                             rowSpan={2}
-                            className="py-1 px-1 text-center text-slate-700 border-r border-slate-300 align-middle whitespace-normal break-words"
+                            className="py-1 px-1.5 text-center text-slate-700 border-r border-slate-300 align-middle whitespace-normal break-words text-[11px] leading-snug"
                           >
                             {provider}
                           </td>
@@ -425,7 +481,7 @@ export const AnnualPlanPrintView = ({
                           {/* 5. ความถี่ */}
                           <td
                             rowSpan={2}
-                            className="py-1 px-0.5 text-center text-slate-700 border-r border-slate-300 align-middle whitespace-normal break-words leading-tight"
+                            className="py-1 px-1 text-center text-slate-700 border-r border-slate-300 align-middle whitespace-normal break-words text-[11px] leading-tight"
                           >
                             {frequency}
                           </td>
@@ -437,12 +493,12 @@ export const AnnualPlanPrintView = ({
 
                           {/* 7. คอลัมน์เดือน 1-12 (แถวบน: P) */}
                           {Array.from({ length: 12 }, (_, i) => i + 1).map((mNum) => {
-                            const isPlanned = plannedMonths.includes(mNum);
+                            const isPlanned = plannedMonths.includes(mNum) || plannedMonths.includes(String(mNum));
                             return (
                               <td
                                 key={`plan-${mNum}`}
-                                className={`py-1 px-0 text-center font-bold border-r border-slate-300 whitespace-nowrap text-[10px] ${
-                                  isPlanned ? 'bg-indigo-50/80 font-black text-indigo-900' : 'text-slate-200'
+                                className={`py-1 px-0 text-center font-bold border-r border-slate-300 whitespace-nowrap text-[11px] ${
+                                  isPlanned ? 'bg-indigo-50/80 font-black text-indigo-900 print:text-black' : 'text-slate-200'
                                 }`}
                               >
                                 {isPlanned ? 'P' : ''}
@@ -453,7 +509,7 @@ export const AnnualPlanPrintView = ({
                           {/* 8. ผู้รับผิดชอบ */}
                           <td
                             rowSpan={2}
-                            className="py-1 px-1 text-center text-slate-700 border-r border-slate-300 align-middle whitespace-normal break-words"
+                            className="py-1 px-1.5 text-center text-slate-700 border-r border-slate-300 align-middle whitespace-normal break-words text-[11px] leading-snug"
                           >
                             {responsible}
                           </td>
@@ -461,7 +517,7 @@ export const AnnualPlanPrintView = ({
                           {/* 9. หมายเหตุ */}
                           <td
                             rowSpan={2}
-                            className="py-1 px-1.5 text-[9.5px] text-slate-600 align-middle whitespace-normal break-words"
+                            className="py-1 px-1.5 text-[10.5px] text-slate-600 align-middle whitespace-normal break-words leading-snug"
                           >
                             {remarks}
                           </td>
@@ -476,12 +532,12 @@ export const AnnualPlanPrintView = ({
 
                           {/* 7. คอลัมน์เดือน 1-12 (แถวล่าง: ✓) */}
                           {Array.from({ length: 12 }, (_, i) => i + 1).map((mNum) => {
-                            const isActual = actualMonths.includes(mNum);
+                            const isActual = isMonthActual(mNum);
                             return (
                               <td
                                 key={`act-${mNum}`}
-                                className={`py-1 px-0 text-center font-bold border-r border-slate-300 whitespace-nowrap text-[10px] ${
-                                  isActual ? 'bg-emerald-50/80 font-black text-emerald-800' : 'text-slate-200'
+                                className={`py-1 px-0 text-center font-bold border-r border-slate-300 whitespace-nowrap text-[11px] ${
+                                  isActual ? 'bg-emerald-50/80 font-black text-emerald-950 print:text-black' : 'text-slate-200'
                                 }`}
                               >
                                 {isActual ? '✓' : ''}
@@ -497,35 +553,35 @@ export const AnnualPlanPrintView = ({
             </div>
 
             {/* 3. Legend under table */}
-            <div className="text-[10.5px] text-slate-700 mb-3 font-medium shrink-0">
+            <div className="text-[10px] text-slate-600 mb-1.5 font-medium shrink-0">
               สัญลักษณ์: P (Plan) = เดือนที่กำหนดตามแผน  |  ✓ (Act.) = เดือนที่ดำเนินการจริง
             </div>
 
             {/* 4. Signatory Approval Block (3 Columns pushed to bottom of each A4 sheet) */}
-            <div className="mt-auto pt-2 shrink-0">
+            <div className="mt-auto pt-1.5 shrink-0">
               <div className="border border-slate-900 grid grid-cols-3 divide-x divide-slate-900 text-xs break-inside-avoid page-break-inside-avoid">
                 {signatoryBoxes.map(({ key, title, person, showNameFallback }) => (
-                  <div key={key} className="p-2.5 flex flex-col justify-between min-h-28">
+                  <div key={key} className="py-2 px-3 flex flex-col justify-between min-h-24">
                     <div>
-                      <div className="font-bold text-slate-800 border-b border-slate-300 pb-1 mb-1.5 text-center text-[11px]">
+                      <div className="font-bold text-slate-800 border-b border-slate-300 pb-0.5 mb-1 text-center text-[11px]">
                         {title}
                       </div>
-                      <div className="h-11 flex items-center justify-center">
+                      <div className="h-9 flex items-center justify-center">
                         {person.signatureAsset ? (
                           <img
                             src={person.signatureAsset}
                             alt={`ลายเซ็น ${person.name}`}
-                            className="max-h-10 max-w-full object-contain"
+                            className="max-h-8 max-w-full object-contain"
                           />
                         ) : showNameFallback || person.isSigned ? (
-                          <span className="font-cursive text-slate-600 text-sm italic">{person.name}</span>
+                          <span className="font-cursive text-slate-600 text-xs italic">{person.name}</span>
                         ) : (
-                          <span className="text-slate-300 text-xs">- ยังไม่มีการลงนาม -</span>
+                          <span className="text-slate-300 text-[11px]">- ยังไม่มีการลงนาม -</span>
                         )}
                       </div>
                     </div>
 
-                    <div className="text-[10px] text-slate-700 border-t border-slate-200 pt-1.5 text-center space-y-0.5">
+                    <div className="text-[10px] text-slate-700 border-t border-slate-200 pt-1 text-center space-y-0.5">
                       <div className="font-semibold text-slate-900">
                         ( {formatSignatoryName(person)} )
                       </div>
@@ -595,9 +651,9 @@ export const AnnualPlanPrintView = ({
           }
           #vcc-print-portal .a4-landscape-sheet {
             width: 297mm !important;
-            height: 210mm !important;
+            height: auto !important;
+            min-height: 195mm !important;
             max-width: 297mm !important;
-            max-height: 210mm !important;
             padding: 8mm 10mm !important;
             margin: 0 !important;
             box-sizing: border-box !important;
@@ -611,8 +667,11 @@ export const AnnualPlanPrintView = ({
             break-after: page !important;
             page-break-inside: avoid !important;
             break-inside: avoid !important;
-            overflow: hidden !important;
+            overflow: visible !important;
             background: #ffffff !important;
+          }
+          #vcc-print-portal .table-container {
+            overflow: visible !important;
           }
           #vcc-print-portal .a4-landscape-sheet:last-child {
             page-break-after: auto !important;
