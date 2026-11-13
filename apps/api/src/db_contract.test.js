@@ -2,8 +2,8 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { getPlatformProxy } from 'wrangler';
 
 // The database rules the application relies on, stated without going through the API.
-// Any database that replaces D1 has to pass this file unchanged (only the catalogue query below may differ),
-// so do not loosen an expectation here to make a port pass.
+// Any database that replaces D1 has to meet the same expectations: the SQL and the client calls here may be
+// reworded for it, the expected outcomes may not, so do not loosen one to make a port pass.
 describe('database contract', () => {
   let proxy;
   let db;
