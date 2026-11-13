@@ -1,4 +1,5 @@
 import React, { useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Printer, Download, X, AlertCircle, ShieldCheck } from 'lucide-react';
 import { resolvePlanSignatories } from '../utils/signatoryHelper';
 import { toBuddhistYear, formatVccDate } from '../utils/vccDateUtils';
@@ -118,10 +119,13 @@ export const AnnualPlanPrintView = ({
     { key: 'approver', title: 'ผู้อนุมัติ (Approved By)', person: approver, showNameFallback: false }
   ];
 
-  return (
-    <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex flex-col items-center justify-start p-2 sm:p-4 overflow-y-auto print:p-0 print:bg-white print:static print:inset-auto">
+  const content = (
+    <div
+      id="vcc-print-portal"
+      className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex flex-col items-center justify-start p-2 sm:p-4 overflow-y-auto print:p-0 print:bg-white print:static print:inset-auto"
+    >
       {/* Action Toolbar (Hidden during print) */}
-      <div className="w-full max-w-[1120px] bg-white rounded-xl shadow-lg border border-slate-200 px-4 py-2.5 mb-4 flex items-center justify-between shrink-0 print:hidden">
+      <div className="no-print w-full max-w-[1120px] bg-white rounded-xl shadow-lg border border-slate-200 px-4 py-2.5 mb-4 flex items-center justify-between shrink-0 print:hidden">
         <div className="flex items-center gap-2">
           <span className="text-sm font-bold text-slate-800">
             ตัวอย่างก่อนพิมพ์: แผนการทวนสอบและสอบเทียบประจำปี {buddhistYear}
@@ -172,7 +176,11 @@ export const AnnualPlanPrintView = ({
       </div>
 
       {/* Multi-Page A4 Landscape Container */}
-      <div id="vcc-plan-print-root" ref={printRef} className="w-full print:w-full">
+      <div
+        id="vcc-plan-print-root"
+        ref={printRef}
+        className="print-scroll-container w-full print:w-full"
+      >
         {pages.map((pageItems, pageIndex) => (
           <section
             key={pageIndex}
@@ -541,49 +549,81 @@ export const AnnualPlanPrintView = ({
         @media print {
           @page {
             size: A4 landscape;
-            margin: 8mm;
+            margin: 0mm;
           }
-          body {
-            background: white !important;
-            color: black !important;
+          html, body {
+            width: 297mm !important;
+            height: auto !important;
+            min-height: 0 !important;
+            overflow: visible !important;
+            background: #ffffff !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
           }
-          body * {
-            visibility: hidden;
+          /* ซ่อนแอปหลัก (#root) ทั้งหมดตอนพิมพ์ เหลือเฉพาะ Portal พิมพ์เอกสาร */
+          body > *:not(#vcc-print-portal) {
+            display: none !important;
           }
-          #vcc-plan-print-root, #vcc-plan-print-root * {
-            visibility: visible;
-          }
-          #vcc-plan-print-root {
-            position: absolute !important;
-            left: 0 !important;
-            top: 0 !important;
+          #vcc-print-portal {
+            position: static !important;
+            display: block !important;
             width: 100% !important;
-            max-width: none !important;
+            height: auto !important;
+            max-height: none !important;
+            overflow: visible !important;
+            background: #ffffff !important;
+            padding: 0 !important;
+            margin: 0 !important;
+          }
+          #vcc-print-portal .no-print {
+            display: none !important;
+          }
+          #vcc-print-portal .print-scroll-container {
+            position: static !important;
+            display: block !important;
+            width: 100% !important;
+            height: auto !important;
             max-height: none !important;
             overflow: visible !important;
             padding: 0 !important;
             margin: 0 !important;
-          }
-          .a4-landscape-sheet {
-            width: 100% !important;
-            max-width: none !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            border: 0 !important;
+            background: #ffffff !important;
+            border: none !important;
             box-shadow: none !important;
+          }
+          #vcc-print-portal .a4-landscape-sheet {
+            width: 297mm !important;
+            height: 210mm !important;
+            max-width: 297mm !important;
+            max-height: 210mm !important;
+            padding: 8mm 10mm !important;
+            margin: 0 !important;
+            box-sizing: border-box !important;
+            box-shadow: none !important;
+            border: none !important;
             border-radius: 0 !important;
-          }
-          thead {
-            display: table-header-group !important;
-          }
-          tbody {
-            break-inside: avoid !important;
+            display: flex !important;
+            flex-direction: column !important;
+            justify-content: space-between !important;
+            page-break-after: always !important;
+            break-after: page !important;
             page-break-inside: avoid !important;
+            break-inside: avoid !important;
+            overflow: hidden !important;
+            background: #ffffff !important;
+          }
+          #vcc-print-portal .a4-landscape-sheet:last-child {
+            page-break-after: auto !important;
+            break-after: auto !important;
           }
         }
       `}</style>
     </div>
   );
+
+  return typeof document !== 'undefined' ? createPortal(content, document.body) : content;
 };
 
 export default AnnualPlanPrintView;

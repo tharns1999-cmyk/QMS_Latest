@@ -563,6 +563,57 @@ describe('VCC Annual Plan Hub & Spoke Architecture and ISO Print View', () => {
       const sigImages = screen.getAllByRole('img');
       expect(sigImages.length).toBeGreaterThanOrEqual(1);
     });
+
+    it('เรนเดอร์ผ่าน createPortal ไปยัง document.body ด้วย #vcc-print-portal, มีคลาส no-print, print-scroll-container, a4-landscape-sheet และสไตล์ตัดขอบพิมพ์ 0mm', () => {
+      const printSpy = vi.spyOn(window, 'print').mockImplementation(() => {});
+      const { unmount } = render(
+        <AnnualPlanPrintView
+          plan={mockPlans[0]}
+          items={mockItems}
+          assets={[]}
+          onClose={vi.fn()}
+        />
+      );
+
+      // 1. ตรวจสอบว่ามี #vcc-print-portal อยู่ใต้ document.body โดยตรง
+      const portalEl = document.getElementById('vcc-print-portal');
+      expect(portalEl).toBeInTheDocument();
+      expect(portalEl.parentElement).toBe(document.body);
+
+      // 2. แถบ Toolbar มีคลาส no-print
+      const toolbar = portalEl.querySelector('.no-print');
+      expect(toolbar).toBeInTheDocument();
+      expect(within(toolbar).getByText(/ตัวอย่างก่อนพิมพ์/)).toBeInTheDocument();
+
+      // 3. กล่องครอบแผ่นกระดาษมีคลาส print-scroll-container
+      const scrollContainer = portalEl.querySelector('.print-scroll-container');
+      expect(scrollContainer).toBeInTheDocument();
+      expect(scrollContainer).toHaveAttribute('id', 'vcc-plan-print-root');
+
+      // 4. แผ่นกระดาษมีคลาส a4-landscape-sheet
+      const sheet = portalEl.querySelector('.a4-landscape-sheet');
+      expect(sheet).toBeInTheDocument();
+
+      // 5. สไตล์ @media print แยกตัวจาก #root และกำหนด margin 0mm ป้องกัน URL และหน้าขาว
+      const styleTag = portalEl.querySelector('style');
+      expect(styleTag).toBeInTheDocument();
+      expect(styleTag.textContent).toContain('body > *:not(#vcc-print-portal)');
+      expect(styleTag.textContent).toContain('size: A4 landscape');
+      expect(styleTag.textContent).toContain('margin: 0mm');
+      expect(styleTag.textContent).toContain('#vcc-print-portal .no-print');
+      expect(styleTag.textContent).toContain('#vcc-print-portal .print-scroll-container');
+      expect(styleTag.textContent).toContain('#vcc-print-portal .a4-landscape-sheet');
+      expect(styleTag.textContent).not.toContain('body * {');
+
+      // 6. คลิกปุ่มพิมพ์เอกสาร เรียก window.print()
+      const printBtn = screen.getByRole('button', { name: /พิมพ์เอกสาร \(Print\)/ });
+      fireEvent.click(printBtn);
+      expect(printSpy).toHaveBeenCalledTimes(1);
+
+      printSpy.mockRestore();
+      unmount();
+      expect(document.getElementById('vcc-print-portal')).toBeNull();
+    });
   });
 
   describe('3. Hub & Spoke Navigation & State Preservation in AnnualPlanMatrixSection', () => {
