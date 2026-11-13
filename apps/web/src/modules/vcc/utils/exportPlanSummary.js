@@ -7,10 +7,47 @@ const MONTH_NAMES = [
   'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'
 ];
 
+const COMPANY_HEADER = 'บริษัท เศรษฐชล จำกัด  |  SETHACHON CO., LTD.  |  勝豐有限公司';
+
+// Clean department name: prevent "ฝ่ายฝ่าย..." duplicate if name already starts with "ฝ่าย"
+const formatDepartment = (name) => {
+  if (!name || name === '-' || name === 'GEN') return '-';
+  let s = String(name).trim();
+  if (!s || s === '-') return '-';
+  s = s.replace(/^(?:ฝ่าย\s*)+/, 'ฝ่าย');
+  if (s.startsWith('ฝ่าย') || s.startsWith('แผนก')) return s;
+  return `ฝ่าย${s}`;
+};
+
+// Safe helper for provider name display (avoiding raw 'INTERNAL' / 'EXTERNAL')
+const formatProvider = (item) => {
+  const raw = item.provider_name || item.responsible_label || item.provider_type || item.calibration_type;
+  if (!raw) return '-';
+  const s = String(raw).trim();
+  const upper = s.toUpperCase();
+  if (upper === 'INTERNAL' || upper === 'INTERNAL_LAB' || upper === 'IN_HOUSE') return 'ทวนสอบภายใน';
+  if (upper === 'EXTERNAL' || upper === 'EXTERNAL_LAB') return 'ห้องปฏิบัติการภายนอก';
+  return s;
+};
+
+// Safe helper to parse month array without throwing SyntaxError on corrupt strings
+const parseMonths = (val) => {
+  if (Array.isArray(val)) return val;
+  if (typeof val === 'string' && val.trim()) {
+    try {
+      const parsed = JSON.parse(val);
+      if (Array.isArray(parsed)) return parsed;
+    } catch {
+      return [];
+    }
+  }
+  return [];
+};
+
 /**
- * Exports a multi-sheet Excel report for executive management and audit presentation
- * Sheet 1: ภาพรวมสถานะรายแผนก
- * Sheet 2: รายการเครื่องมือรวมทุกแผนก
+ * Exports a multi-sheet Excel report for Sethachon Co., Ltd.
+ * Sheet 1: ภาพรวมสถานะรายแผนก (Audit-Safe: No document code, no revision)
+ * Sheet 2: รายการเครื่องมือรวมทุกแผนก (Dual-row Plan [P] / Act. [✓])
  * 
  * @param {Array} plans - List of annual plans
  * @param {Array} allItems - List of all planned items across plans
@@ -18,17 +55,19 @@ const MONTH_NAMES = [
  */
 export const exportAnnualPlansMultiSheet = (plans = [], allItems = [], year = '') => {
   const wb = XLSX.utils.book_new();
+  const planYear = year || new Date().getFullYear();
 
   // ─────────────────────────────────────────────────────────────
   // SHEET 1: ภาพรวมสถานะรายแผนก
   // ─────────────────────────────────────────────────────────────
   const sheet1Data = [
+    [COMPANY_HEADER],
+    [`รายงานสรุปสถานะแผนการทวนสอบและสอบเทียบประจำปี ${planYear}`],
+    [],
     [
       'ปีแผนงาน',
       'รหัสแผนก',
       'ชื่อแผนก',
-      'รหัสแบบฟอร์มควบคุม (DCC)',
-      'แก้ไขครั้งที่ (Rev)',
       'สถานะเอกสาร',
       'จำนวนเครื่องมือที่วางแผน',
       'ผู้จัดทำ (Prepared By)',
@@ -38,16 +77,14 @@ export const exportAnnualPlansMultiSheet = (plans = [], allItems = [], year = ''
     ],
     ...plans.map((p) => {
       const dept = p.department || 'GEN';
-      const deptName = p.department_name_th || dept;
-      const docCode = p.document_code || `FM-${dept}-42`;
+      const rawDeptName = p.department_name_th || p.department || dept;
+      const deptName = formatDepartment(rawDeptName);
       const itemCount = Number(p.planned_items_count || p.item_count || 0);
 
       return [
-        p.plan_year || year || new Date().getFullYear(),
+        p.plan_year || planYear,
         dept,
         deptName,
-        docCode,
-        `Rev.${p.revision || '01'}`,
         getPlanStatusLabel(p.status),
         itemCount,
         p.prepared_by_name || p.prepared_by || '-',
@@ -64,11 +101,9 @@ export const exportAnnualPlansMultiSheet = (plans = [], allItems = [], year = ''
   ws1['!cols'] = [
     { wch: 10 }, // Year
     { wch: 10 }, // Dept code
-    { wch: 22 }, // Dept name
-    { wch: 24 }, // Doc code
-    { wch: 16 }, // Rev
+    { wch: 24 }, // Dept name
     { wch: 20 }, // Status
-    { wch: 22 }, // Item count
+    { wch: 24 }, // Item count
     { wch: 22 }, // Prepared by
     { wch: 22 }, // Reviewed by
     { wch: 22 }, // Approved by
@@ -87,34 +122,89 @@ export const exportAnnualPlansMultiSheet = (plans = [], allItems = [], year = ''
     'รหัสเครื่องมือ',
     'ชื่อเครื่องมือ',
     'ยี่ห้อ/รุ่น',
+    'Serial No.',
+    'สถานที่ใช้งาน',
+    'เกณฑ์ยอมรับ',
+    'หน่วยงานที่ทวนสอบ/สอบเทียบ',
     'ความถี่',
-    'ผู้ดำเนินการตรวจ',
+    'Plan / Act.',
     ...MONTH_NAMES,
+    'ผู้รับผิดชอบ',
     'หมายเหตุ'
   ];
 
-  const sheet2Rows = allItems.map((item, idx) => {
-    const months = Array.isArray(item.planned_months)
-      ? item.planned_months
-      : (typeof item.planned_months === 'string' ? JSON.parse(item.planned_months || '[]') : []);
+  const sheet2Rows = [];
+  allItems.forEach((item, idx) => {
+    const plannedMonths = parseMonths(item.planned_months);
+    const actualMonths = parseMonths(item.actual_months);
 
-    const monthChecks = Array.from({ length: 12 }, (_, i) => (months.includes(i + 1) ? '✓' : ''));
+    const planMonthChecks = Array.from({ length: 12 }, (_, i) => (plannedMonths.includes(i + 1) ? 'P' : ''));
+    const actMonthChecks = Array.from({ length: 12 }, (_, i) => (actualMonths.includes(i + 1) ? '✓' : ''));
 
-    return [
-      item.plan_year || year || new Date().getFullYear(),
-      item.department || item.dept || '-',
+    const brandModel = [item.brand, item.model]
+      .map((v) => (typeof v === 'string' ? v.trim() : v))
+      .filter(Boolean)
+      .join(' ') || item.model || '-';
+    const serialNo = (item.serial_no && String(item.serial_no).trim()) || '-';
+    const location = item.location || item.location_name || item.installation_location || '-';
+    const criteria = (item.acceptance_criteria != null && item.acceptance_criteria !== '')
+      ? item.acceptance_criteria
+      : ((item.mpe != null && item.mpe !== '') ? item.mpe : '-');
+    const provider = formatProvider(item);
+    const freq = item.frequency_label || item.frequency || 'ปีละ 1 ครั้ง';
+    const responsible = item.responsible_name || item.responsible_person || item.responsible_label || '-';
+    const remarks = item.remarks || item.remark || '-';
+    const yearVal = item.plan_year || planYear;
+    const deptVal = item.department || item.dept || '-';
+
+    // Row 1: Plan (P)
+    sheet2Rows.push([
+      yearVal,
+      deptVal,
       idx + 1,
       item.asset_code || '-',
       item.asset_name || item.name || '-',
-      item.model || item.serial_no ? `${item.model || ''} ${item.serial_no ? `(${item.serial_no})` : ''}`.trim() : '-',
-      item.frequency_label || 'รายปี',
-      item.provider_name || item.responsible_label || '-',
-      ...monthChecks,
-      item.remarks || '-'
-    ];
+      brandModel,
+      serialNo,
+      location,
+      criteria,
+      provider,
+      freq,
+      'Plan',
+      ...planMonthChecks,
+      responsible,
+      remarks
+    ]);
+
+    // Row 2: Act. (✓)
+    sheet2Rows.push([
+      yearVal,
+      deptVal,
+      idx + 1,
+      item.asset_code || '-',
+      item.asset_name || item.name || '-',
+      brandModel,
+      serialNo,
+      location,
+      criteria,
+      provider,
+      freq,
+      'Act.',
+      ...actMonthChecks,
+      responsible,
+      remarks
+    ]);
   });
 
-  const ws2 = XLSX.utils.aoa_to_sheet([sheet2Header, ...sheet2Rows]);
+  const sheet2Data = [
+    [COMPANY_HEADER],
+    [`แผนการทวนสอบและสอบเทียบเครื่องมือวัด ประจำปี ${planYear}`],
+    [],
+    sheet2Header,
+    ...sheet2Rows
+  ];
+
+  const ws2 = XLSX.utils.aoa_to_sheet(sheet2Data);
 
   // Column widths for Sheet 2
   ws2['!cols'] = [
@@ -122,11 +212,16 @@ export const exportAnnualPlansMultiSheet = (plans = [], allItems = [], year = ''
     { wch: 10 }, // Dept
     { wch: 6 },  // No.
     { wch: 16 }, // Asset code
-    { wch: 26 }, // Asset name
-    { wch: 18 }, // Model/Serial
+    { wch: 28 }, // Asset name
+    { wch: 18 }, // Brand/Model
+    { wch: 16 }, // Serial No.
+    { wch: 18 }, // Location
+    { wch: 20 }, // Criteria
+    { wch: 22 }, // Provider
     { wch: 12 }, // Freq
-    { wch: 16 }, // Provider
-    ...Array(12).fill({ wch: 5 }), // Months
+    { wch: 10 }, // Plan / Act.
+    ...Array(12).fill({ wch: 6 }), // Months
+    { wch: 18 }, // Responsible
     { wch: 24 }  // Remarks
   ];
 
@@ -135,6 +230,6 @@ export const exportAnnualPlansMultiSheet = (plans = [], allItems = [], year = ''
   // ─────────────────────────────────────────────────────────────
   // Save / Trigger Download
   // ─────────────────────────────────────────────────────────────
-  const fileName = `VCC_Annual_Plans_Summary_${year || new Date().getFullYear()}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+  const fileName = `Sethachon_Annual_Plans_Summary_${planYear}_${new Date().toISOString().slice(0, 10)}.xlsx`;
   XLSX.writeFile(wb, fileName);
 };
