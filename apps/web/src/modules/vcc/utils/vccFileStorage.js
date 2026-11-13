@@ -261,7 +261,7 @@ export const createFallbackPdfBlob = async (record = {}) => {
       ['Certificate Number:', sanitizeForWinAnsi(record.certificate_no || 'CERT-NIMT-2026-001')],
       ['Date of Calibration:', sanitizeForWinAnsi(record.performed_at || '2026-03-25')],
       ['Calibration Provider:', sanitizeForWinAnsi(record.calibration_provider_name || record.provider_name || 'National Institute of Metrology Thailand (NIMT)')],
-      ['Calibration Method:', sanitizeForWinAnsi(record.calibration_method || 'EXTERNAL_LAB (ISO/IEC 17025 Accredited)')],
+      ['Calibration Method:', sanitizeForWinAnsi(record.calibration_method || 'EXTERNAL_LAB (External Lab)')],
       ['Acceptance Criteria:', sanitizeForWinAnsi(record.acceptance_criteria || '+/- 0.5 C Factory Specification')],
       ['Actual Measurement:', sanitizeForWinAnsi(record.actual_result || record.actual_measurement || '0.0 C -> 0.02 C, 100.0 C -> 100.04 C (Compliant)')],
       ['Conformity Status:', sanitizeForWinAnsi((record.result_status || 'PASS') + ' - WITHIN SPECIFICATION')],

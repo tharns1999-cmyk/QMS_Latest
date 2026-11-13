@@ -468,7 +468,7 @@ export const WorkOrderSideDrawer = ({
                   </div>
                 )}
 
-                {/* Measurement Traceability & Environmental Conditions (ISO/IEC 17025) */}
+                {/* Measurement Traceability & Environmental Conditions */}
                 {(currentWo.calibration_provider_name || currentWo.calibration_method || currentWo.traceability_ref || currentWo.environmental_conditions || currentWo.uncertainty_value || currentWo.calibration_error_value) && (
                   <div className="p-3 rounded-xl bg-white border border-slate-200 space-y-2">
                     <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800">

@@ -139,7 +139,7 @@ describe('VCC Phase 3.2 — Calibration Records & Execution UI Tests', () => {
     expect(screen.getByText(/NIMT Primary Standard Block/i)).toBeInTheDocument();
   });
 
-  it('AmendmentModal_MandatoryReason: บังคับกรอกเหตุผลการแก้ไข (Controlled Amendment ISO/IEC 17025 clause 7.8.8)', () => {
+  it('AmendmentModal_MandatoryReason: บังคับกรอกเหตุผลการแก้ไข (Controlled Amendment Trail)', () => {
     let formState = {
       result_status: 'PASS',
       certificate_no: 'CERT-REVISED-001',
@@ -172,6 +172,7 @@ describe('VCC Phase 3.2 — Calibration Records & Execution UI Tests', () => {
     );
 
     expect(screen.getByText(/แก้ไขผลการสอบเทียบที่ปิดงานแล้ว/i)).toBeInTheDocument();
+    expect(screen.getByText(/ระบบจะบันทึกข้อมูลสถานะเดิม \(Snapshot\) ไว้ในประวัติการตรวจสอบย้อนกลับอย่างถาวร/i)).toBeInTheDocument();
     const submitBtn = screen.getByRole('button', { name: /บันทึกแก้ไขผล/i });
     // When amendment_reason is empty, submit button must be disabled
     expect(submitBtn).toBeDisabled();
