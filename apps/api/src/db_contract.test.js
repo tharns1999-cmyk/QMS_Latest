@@ -1,0 +1,202 @@
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { getPlatformProxy } from 'wrangler';
+
+// The database rules the application relies on, stated without going through the API.
+// Any database that replaces D1 has to pass this file unchanged (only the catalogue query below may differ),
+// so do not loosen an expectation here to make a port pass.
+describe('database contract', () => {
+  let proxy;
+  let db;
+  const ADMIN_A = 'DBC-ADMIN-A';
+  const ADMIN_B = 'DBC-ADMIN-B';
+  const DEPT = 'DBCT';
+
+  const insertUser = (id, email) =>
+    db
+      .prepare("INSERT INTO users (id, name, email, password_hash, primary_department) VALUES (?, ?, ?, 'x', ?)")
+      .bind(id, `[ข้อมูลทดสอบ] ${id}`, email, DEPT);
+
+  beforeAll(async () => {
+    proxy = await getPlatformProxy({ persist: { path: '.wrangler/test/v3' } });
+    db = proxy.env.DB;
+    await db.batch([
+      db.prepare("INSERT OR IGNORE INTO departments (code, name_th) VALUES (?, '[ข้อมูลทดสอบ] สัญญาฐานข้อมูล')").bind(DEPT),
+      insertUser(ADMIN_A, 'dbc-admin-a@contract.local'),
+      insertUser(ADMIN_B, 'dbc-admin-b@contract.local')
+    ]);
+  });
+
+  afterAll(async () => {
+    // Leave the shared test database as it was found; a row still referenced elsewhere simply stays.
+    for (const sql of [`DELETE FROM users WHERE id IN ('${ADMIN_A}', '${ADMIN_B}')`, `DELETE FROM departments WHERE code = '${DEPT}'`]) {
+      await db?.prepare(sql).run().catch(() => {});
+    }
+    await proxy?.dispose();
+  });
+
+  describe('inventory', () => {
+    it('has exactly the protective triggers the port must reproduce', async () => {
+      const { results } = await db.prepare("SELECT name, tbl_name FROM sqlite_master WHERE type = 'trigger' ORDER BY name").all();
+      expect(results.map((r) => `${r.tbl_name}.${r.name}`)).toEqual([
+        'audit_log.audit_log_no_delete',
+        'audit_log.audit_log_no_update',
+        'module_permission_grants.module_last_platform_admin',
+        'vcc_annual_plans.trg_guard_vcc_plan_approval',
+        'vcc_annual_plans.trg_prevent_delete_approved_annual_plan',
+        'vcc_annual_plan_items.trg_prevent_delete_approved_plan_item',
+        'vcc_plan_cycles.trg_prevent_delete_closed_plan_cycle',
+        'vcc_work_orders.trg_prevent_delete_closed_work_order',
+        'vcc_annual_plans.trg_prevent_tamper_approved_annual_plan',
+        'vcc_annual_plan_items.trg_prevent_update_approved_plan_item'
+      ]);
+    });
+
+    it('has exactly the tables the port must carry over', async () => {
+      const { results } = await db
+        .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' AND name != 'd1_migrations' ORDER BY name")
+        .all();
+      expect(results.map((r) => r.name)).toEqual([
+        'acknowledgements',
+        'approval_matrix',
+        'audit_log',
+        'controlled_copies',
+        'dars',
+        'departments',
+        'distribution_locations',
+        'documents',
+        'module_configuration',
+        'module_departments',
+        'module_permission_grants',
+        'periodic_reviews',
+        'recovery_codes',
+        'settings',
+        'user_signatures',
+        'users',
+        'vcc_annual_plan_items',
+        'vcc_annual_plans',
+        'vcc_assets',
+        'vcc_notifications',
+        'vcc_plan_cycles',
+        'vcc_work_order_amendment_requests',
+        'vcc_work_order_amendments',
+        'vcc_work_order_certificates',
+        'vcc_work_orders'
+      ]);
+    });
+  });
+
+  describe('constraints', () => {
+    it('rejects a row that points at a missing parent', async () => {
+      await expect(
+        db.prepare("INSERT INTO vcc_annual_plans (id, plan_year, department, title) VALUES ('DBC-PLAN-FK', 2000, 'DBC-NO-SUCH-DEPT', 't')").run()
+      ).rejects.toThrow(/FOREIGN KEY/i);
+    });
+
+    it('rejects a status outside the allowed list', async () => {
+      await expect(
+        db.prepare("INSERT INTO vcc_annual_plans (id, plan_year, department, title, status) VALUES ('DBC-PLAN-CHK', 2000, ?, 't', 'BOGUS')").bind(DEPT).run()
+      ).rejects.toThrow(/CHECK/i);
+    });
+
+    it('treats e-mail addresses as the same account whatever their letter case', async () => {
+      await expect(insertUser('DBC-ADMIN-A2', 'DBC-Admin-A@Contract.LOCAL').run()).rejects.toThrow(/UNIQUE/i);
+      const row = await db.prepare('SELECT id FROM users WHERE email = ?').bind('DBC-ADMIN-A@CONTRACT.LOCAL').first();
+      expect(row?.id).toBe(ADMIN_A);
+    });
+  });
+
+  describe('batches', () => {
+    it('applies none of a batch when one statement fails', async () => {
+      await expect(
+        db.batch([
+          db.prepare("INSERT INTO departments (code, name_th) VALUES ('DBC-ROLLBACK', '[ข้อมูลทดสอบ] ต้องไม่ถูกบันทึก')"),
+          db.prepare("INSERT INTO departments (code, name_th, status) VALUES ('DBC-ROLLBACK-2', 'x', 'BOGUS')")
+        ])
+      ).rejects.toThrow(/CHECK/i);
+      expect(await db.prepare("SELECT code FROM departments WHERE code LIKE 'DBC-ROLLBACK%'").first()).toBeNull();
+    });
+
+    // The approval handlers pair a guarded UPDATE with an audit INSERT in one batch; the audit row must exist
+    // exactly when the UPDATE changed a row, so a lost race leaves no false record.
+    const guardedUpdateWithAudit = (fromName, marker) =>
+      db.batch([
+        db.prepare("UPDATE departments SET name_en = 'changed' WHERE code = ? AND name_en = ?").bind(DEPT, fromName),
+        db.prepare("INSERT INTO audit_log (actor_id, action, details) SELECT NULL, 'DB_CONTRACT_TEST', ? WHERE changes() > 0").bind(marker)
+      ]);
+    const auditCount = async (marker) =>
+      (await db.prepare("SELECT count(*) AS n FROM audit_log WHERE action = 'DB_CONTRACT_TEST' AND details = ?").bind(marker).first()).n;
+
+    it('writes the audit row only when the guarded update took effect', async () => {
+      const marker = `[ข้อมูลทดสอบ] ${Date.now()}`;
+      await db.prepare("UPDATE departments SET name_en = '' WHERE code = ?").bind(DEPT).run();
+
+      await guardedUpdateWithAudit('not-the-current-value', marker);
+      expect(await auditCount(marker)).toBe(0);
+
+      await guardedUpdateWithAudit('', marker);
+      expect(await auditCount(marker)).toBe(1);
+
+      // Second caller of the same transition loses the race: no change, no second audit row.
+      await guardedUpdateWithAudit('', marker);
+      expect(await auditCount(marker)).toBe(1);
+    });
+  });
+
+  describe('triggers without an API-level test', () => {
+    it('refuses to approve an annual plan that is not waiting for approval', async () => {
+      const id = 'DBC-PLAN-GUARD';
+      await db.prepare("INSERT INTO vcc_annual_plans (id, plan_year, department, title, revision) VALUES (?, 2000, ?, '[ข้อมูลทดสอบ]', 'DBC')").bind(id, DEPT).run();
+      try {
+        for (const from of ['DRAFT', 'PENDING_REVIEW', 'REJECTED']) {
+          await db.prepare('UPDATE vcc_annual_plans SET status = ? WHERE id = ?').bind(from, id).run();
+          await expect(db.prepare("UPDATE vcc_annual_plans SET status = 'APPROVED' WHERE id = ?").bind(id).run()).rejects.toThrow(/PLAN_ALREADY_PROCESSED/);
+        }
+        expect((await db.prepare('SELECT status FROM vcc_annual_plans WHERE id = ?').bind(id).first()).status).toBe('REJECTED');
+      } finally {
+        await db.prepare('DELETE FROM vcc_annual_plans WHERE id = ?').bind(id).run();
+      }
+    });
+
+    it('keeps at least one active platform administrator', async () => {
+      const grant = (userId) =>
+        db.prepare("INSERT INTO module_permission_grants (user_id, permission, module_id) VALUES (?, 'PLATFORM_ADMIN', '*')").bind(userId);
+      const revoke = (userId) => db.prepare("DELETE FROM module_permission_grants WHERE user_id = ? AND permission = 'PLATFORM_ADMIN'").bind(userId);
+      const setStatus = (userId, status) => db.prepare('UPDATE users SET status = ? WHERE id = ?').bind(status, userId).run();
+
+      // Other test files leave their own administrators behind; set them aside so the count is ours, then put them back.
+      const { results: others } = await db
+        .prepare("SELECT user_id, permission, module_id, granted_by, granted_at FROM module_permission_grants WHERE permission = 'PLATFORM_ADMIN' AND user_id NOT IN (?, ?)")
+        .bind(ADMIN_A, ADMIN_B)
+        .all();
+      await db.batch([grant(ADMIN_A), grant(ADMIN_B)]);
+      try {
+        for (const o of others) await revoke(o.user_id).run();
+
+        await revoke(ADMIN_B).run();
+        await expect(revoke(ADMIN_A).run()).rejects.toThrow(/LAST_PLATFORM_ADMIN/);
+
+        // A deactivated administrator does not count as cover.
+        await grant(ADMIN_B).run();
+        await setStatus(ADMIN_B, 'INACTIVE');
+        await expect(revoke(ADMIN_A).run()).rejects.toThrow(/LAST_PLATFORM_ADMIN/);
+      } finally {
+        await setStatus(ADMIN_B, 'ACTIVE');
+        for (const o of others) {
+          await db
+            .prepare('INSERT OR IGNORE INTO module_permission_grants (user_id, permission, module_id, granted_by, granted_at) VALUES (?, ?, ?, ?, ?)')
+            .bind(o.user_id, o.permission, o.module_id, o.granted_by, o.granted_at)
+            .run();
+        }
+        await db.prepare("INSERT OR IGNORE INTO module_permission_grants (user_id, permission, module_id) VALUES (?, 'PLATFORM_ADMIN', '*')").bind(ADMIN_B).run();
+        await revoke(ADMIN_B).run();
+        // With no other active administrator the last grant cannot be removed, so the holder is deactivated instead.
+        await revoke(ADMIN_A).run().catch(() => setStatus(ADMIN_A, 'INACTIVE'));
+      }
+      const restored = await db
+        .prepare("SELECT count(*) AS n FROM module_permission_grants WHERE permission = 'PLATFORM_ADMIN' AND user_id NOT IN (?, ?)")
+        .bind(ADMIN_A, ADMIN_B)
+        .first();
+      expect(restored.n).toBe(others.length);
+    });
+  });
+});
