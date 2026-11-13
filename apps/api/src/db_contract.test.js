@@ -142,6 +142,58 @@ describe('database contract', () => {
     });
   });
 
+  describe('change counts', () => {
+    const guard = (fromName) => db.prepare("UPDATE departments SET name_en = 'changed' WHERE code = ? AND name_en = ?").bind(DEPT, fromName);
+    const reset = () => db.prepare("UPDATE departments SET name_en = '' WHERE code = ?").bind(DEPT).run();
+    const extra = (code) => db.prepare("INSERT INTO departments (code, name_th) SELECT ?, '[ข้อมูลทดสอบ] ลูกโซ่' WHERE changes() > 0").bind(code);
+    const exists = async (code) => Boolean(await db.prepare('SELECT 1 AS x FROM departments WHERE code = ?').bind(code).first());
+    const drop = (...codes) => Promise.all(codes.map((code) => db.prepare('DELETE FROM departments WHERE code = ?').bind(code).run()));
+
+    // Two-factor enrolment and document activation chain several follow-ups, each reading the statement before it.
+    it('carries a guarded update through a chain of follow-up statements', async () => {
+      await reset();
+      await db.batch([guard('not-the-current-value'), extra('DBC-CHAIN-1'), extra('DBC-CHAIN-2')]);
+      expect([await exists('DBC-CHAIN-1'), await exists('DBC-CHAIN-2')]).toEqual([false, false]);
+
+      await db.batch([guard(''), extra('DBC-CHAIN-1'), extra('DBC-CHAIN-2')]);
+      expect([await exists('DBC-CHAIN-1'), await exists('DBC-CHAIN-2')]).toEqual([true, true]);
+      await drop('DBC-CHAIN-1', 'DBC-CHAIN-2');
+    });
+
+    // VCC and module governance put this statement after a guarded update: no change means the whole batch is undone.
+    const failIfUnchanged = () => db.prepare("SELECT json(CASE WHEN changes() = 0 THEN 'stale' ELSE '1' END)");
+    const before = (code) => db.prepare("INSERT INTO departments (code, name_th) VALUES (?, '[ข้อมูลทดสอบ] ก่อนตัวกัน')").bind(code);
+
+    it('undoes the whole batch, earlier statements included, when a guarded update changed nothing', async () => {
+      await reset();
+      await expect(db.batch([before('DBC-STALE'), guard('not-the-current-value'), failIfUnchanged()])).rejects.toThrow();
+      expect(await exists('DBC-STALE')).toBe(false);
+
+      await db.batch([before('DBC-STALE'), guard(''), failIfUnchanged()]);
+      expect(await exists('DBC-STALE')).toBe(true);
+      await drop('DBC-STALE');
+    });
+
+    it('reports how many rows a statement changed, alone and inside a batch', async () => {
+      await reset();
+      expect((await guard('not-the-current-value').run()).meta.changes).toBe(0);
+      expect((await guard('').run()).meta.changes).toBe(1);
+
+      await reset();
+      const results = await db.batch([guard(''), guard('')]);
+      expect(results.map((r) => r.meta.changes)).toEqual([1, 0]);
+    });
+
+    it('lets the next statement in a batch find the row just inserted', async () => {
+      const marker = `[ข้อมูลทดสอบ] rowid ${Date.now()}`;
+      const [, found] = await db.batch([
+        db.prepare("INSERT INTO audit_log (actor_id, action, details) VALUES (NULL, 'DB_CONTRACT_TEST', ?)").bind(marker),
+        db.prepare('SELECT details FROM audit_log WHERE id = last_insert_rowid()')
+      ]);
+      expect(found.results[0].details).toBe(marker);
+    });
+  });
+
   describe('triggers without an API-level test', () => {
     it('refuses to approve an annual plan that is not waiting for approval', async () => {
       const id = 'DBC-PLAN-GUARD';
