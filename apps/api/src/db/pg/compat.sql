@@ -36,13 +36,24 @@ EXCEPTION WHEN others THEN
   RAISE EXCEPTION 'malformed JSON';
 END $$;
 
--- Only the '$.key' form is used.
+CREATE OR REPLACE FUNCTION json_valid(doc text) RETURNS boolean LANGUAGE plpgsql IMMUTABLE AS $$
+BEGIN
+  PERFORM doc::jsonb;
+  RETURN doc IS NOT NULL;
+EXCEPTION WHEN others THEN
+  RETURN false;
+END $$;
+
+-- Only the '$.key' form is used. Text that is not JSON gives NULL rather than an error: SQLite checks conditions
+-- left to right, so the statements rely on an earlier condition to keep such rows away, and PostgreSQL may reorder.
 CREATE OR REPLACE FUNCTION sqlite_json_extract(doc text, path text) RETURNS text LANGUAGE sql IMMUTABLE AS $$
-  SELECT doc::jsonb ->> substr(path, 3)
+  SELECT CASE WHEN json_valid(doc) THEN doc::jsonb ->> substr(path, 3) END
 $$;
 
 CREATE OR REPLACE FUNCTION sqlite_json_each(doc text) RETURNS TABLE (key text, value text) LANGUAGE sql IMMUTABLE AS $$
-  SELECT (ord - 1)::text, elem FROM jsonb_array_elements_text(doc::jsonb) WITH ORDINALITY AS t(elem, ord)
+  SELECT (ord - 1)::text, elem
+    FROM jsonb_array_elements_text(CASE WHEN json_valid(doc) AND jsonb_typeof(doc::jsonb) = 'array' THEN doc::jsonb ELSE '[]'::jsonb END)
+         WITH ORDINALITY AS t(elem, ord)
 $$;
 
 -- Only printf('%0Nd', number) is used (document, DAR and copy numbers).

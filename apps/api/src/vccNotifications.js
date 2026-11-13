@@ -301,10 +301,15 @@ export const runVccNotificationSweep = async (db, options = {}) => {
            wo.certificate_no, wo.certificate_valid_until, wo.id AS wo_id
     FROM vcc_assets a
     JOIN vcc_work_orders wo ON wo.asset_id = a.id
-    WHERE a.status != 'RETIRED' AND wo.status = 'CLOSED' AND wo.result_status = 'PASS'
-      AND wo.certificate_valid_until IS NOT NULL
-    GROUP BY a.id
-    HAVING wo.certificate_valid_until = MAX(wo.certificate_valid_until)
+    WHERE a.status != 'RETIRED'
+      -- One row per asset: its passed, closed work order whose certificate runs the longest.
+      AND wo.id = (
+        SELECT latest.id FROM vcc_work_orders latest
+        WHERE latest.asset_id = a.id AND latest.status = 'CLOSED' AND latest.result_status = 'PASS'
+          AND latest.certificate_valid_until IS NOT NULL
+        ORDER BY latest.certificate_valid_until DESC, latest.id DESC LIMIT 1
+      )
+    ORDER BY a.id
   `).all();
 
   for (const row of (certAssets || [])) {

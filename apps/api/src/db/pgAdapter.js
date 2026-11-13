@@ -57,6 +57,11 @@ const RENAME_RE = new RegExp(`(?<![\\w.])(${RENAMED.join('|')})\\(`, 'g');
 // Rewrites the SQLite spellings that have a mechanical PostgreSQL equivalent. `changes` is the row count of the
 // previous data-changing statement in the same batch, which is what SQLite's changes() returns.
 export const toPostgres = (sql, changes = 0) => {
+  const pragma = /^\s*PRAGMA table_info\((\w+)\)\s*;?\s*$/i.exec(sql);
+  if (pragma) {
+    return `SELECT ordinal_position - 1 AS cid, column_name AS name, data_type AS type FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = '${pragma[1].toLowerCase()}' ORDER BY ordinal_position`;
+  }
   const { masked, unmask } = mask(sql);
   let n = 0;
   let out = masked
@@ -67,11 +72,14 @@ export const toPostgres = (sql, changes = 0) => {
     .replace(/\bLIKE\b/g, 'ILIKE')
     // PostgreSQL cannot infer a type for a parameter that is only tested for NULL.
     .replace(/\?(\s+IS\s+(?:NOT\s+)?NULL\b)/gi, 'CAST(? AS TEXT)$1')
-    .replace(/\bIS \?/g, 'IS NOT DISTINCT FROM ?');
+    // SQLite's IS / IS NOT compare any two values, NULL included.
+    .replace(/\bIS\s+NOT\s+(?!NULL\b|TRUE\b|FALSE\b|DISTINCT\b)/gi, 'IS DISTINCT FROM ')
+    .replace(/\bIS\s+(?!NOT\b|NULL\b|TRUE\b|FALSE\b|DISTINCT\b)/gi, 'IS NOT DISTINCT FROM ');
   out = rewriteGlob(out);
   // SQLite reads the leading digits of a text value and never fails; PostgreSQL's CAST would.
   out = rewriteCalls(out, 'CAST', (args) => (/\sAS\s+INTEGER\s*$/i.test(args) ? `sqlite_int((${args.replace(/\sAS\s+INTEGER\s*$/i, '')})::text)` : null));
   out = rewriteCalls(out, 'json_object', (args) => `sqlite_json_object(json_build_array(${args}))`);
+  out = rewriteCalls(out, 'group_concat', (args) => `string_agg((${args})::text, ',')`);
   out = out.replace(RENAME_RE, 'sqlite_$1(');
   if (/\bINSERT OR IGNORE INTO\b/.test(out)) {
     out = out.replace(/\bINSERT OR IGNORE INTO\b/, 'INSERT INTO');
@@ -105,7 +113,7 @@ const toRow = (row) => {
 const CHANGES_ROWS = /^\s*(?:WITH\b[\s\S]*?\)\s*)?(INSERT|UPDATE|DELETE)\b/i;
 const REPLACE_RE = /^\s*INSERT OR REPLACE INTO\s+(\w+)\s*\(([^)]*)\)/i;
 
-export const createPgDatabase = (driver) => {
+export const createPgDatabase = (driver, { rewrite = (sql) => sql } = {}) => {
   // INSERT OR REPLACE swaps the whole row: listed columns take the new values, the rest go back to their defaults.
   const upserts = new Map();
   // The catalogue is read through the same runner: inside a batch the driver itself is busy until the batch ends.
@@ -130,7 +138,7 @@ export const createPgDatabase = (driver) => {
 
   const execute = async (runner, stmt, changes) => {
     try {
-      const res = await runner.query(toPostgres(await asUpsert(runner, stmt.sql), changes), stmt.params.map(toParam));
+      const res = await runner.query(toPostgres(await asUpsert(runner, rewrite(stmt.sql)), changes), stmt.params.map(toParam));
       const changed = CHANGES_ROWS.test(stmt.sql) ? res.affectedRows ?? 0 : null;
       return { results: res.rows.map(toRow), success: true, meta: { changes: changed ?? 0 }, changed };
     } catch (err) {

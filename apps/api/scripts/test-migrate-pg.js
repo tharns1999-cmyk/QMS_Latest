@@ -1,8 +1,8 @@
 import { execSync } from 'node:child_process';
-import { readFileSync, rmSync } from 'node:fs';
+import { cpSync, readFileSync, rmSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tableDdl, indexDdl, triggerDdl } from '../src/db/pg/fromSqlite.js';
-import { openPglite, PG_TEST_DIR } from '../src/test/pgPlatformProxy.js';
+import { openPglite, PG_PRISTINE_DIR, PG_TEST_DIR } from '../src/test/pgPlatformProxy.js';
 
 // Loaded by path: vitest.pg.config.js aliases the bare name 'wrangler' to the PostgreSQL stand-in.
 const { getPlatformProxy } = createRequire(import.meta.url)('wrangler');
@@ -60,4 +60,5 @@ export default async function setup() {
     await pg.close();
     await proxy.dispose();
   }
+  cpSync(PG_TEST_DIR, PG_PRISTINE_DIR, { recursive: true });
 }

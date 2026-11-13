@@ -104,7 +104,7 @@ describe('DAR workflow API', () => {
     // Only this test's own requests: other test files share the database.
     const ids = [id, rev.id, obs.id];
     const actions = (await env.DB.prepare(`SELECT action FROM audit_log WHERE (action LIKE 'DAR_%' OR action LIKE 'DOCUMENT_%')
-      AND CASE WHEN json_valid(details) THEN COALESCE(json_extract(details, '$.dar_id') IN (${ids.map(() => '?').join(',')}), 0) END`).bind(...ids).all()).results.map((r) => r.action);
+      AND CASE WHEN json_valid(details) THEN json_extract(details, '$.dar_id') END IN (${ids.map(() => '?').join(',')})`).bind(...ids).all()).results.map((r) => r.action);
     expect(actions.filter((a) => a === 'DAR_REVIEWED')).toHaveLength(3);
     expect(actions).toContain('DOCUMENT_OBSOLETED');
   });
