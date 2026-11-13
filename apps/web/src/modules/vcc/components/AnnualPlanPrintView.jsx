@@ -90,12 +90,12 @@ const parseMonthFromDateStr = (dateStr) => {
   return null;
 };
 
-// Format signatory position cleanly inside parentheses without double parentheses
+// Format signatory position cleanly without outer parentheses
 const formatPosition = (pos) => {
-  if (!pos) return '(ตำแหน่ง)';
+  if (!pos) return 'ตำแหน่ง';
   const trimmed = String(pos).trim();
-  if (!trimmed || trimmed === '-') return '(ตำแหน่ง)';
-  return trimmed.startsWith('(') && trimmed.endsWith(')') ? trimmed : `(${trimmed})`;
+  if (!trimmed || trimmed === '-') return 'ตำแหน่ง';
+  return trimmed.replace(/^\((.*)\)$/, '$1').trim() || 'ตำแหน่ง';
 };
 
 // Format signatory name cleanly (showing dots placeholder if unsigned)
@@ -232,358 +232,357 @@ export const AnnualPlanPrintView = ({
               </div>
             )}
 
-            {/* 1. Corporate Header Section: Banner Left + 4-Row Plan Control Table Right */}
-            <div className="mb-2 bg-white shrink-0">
-              <div className="flex flex-col sm:flex-row print:flex-row sm:items-stretch print:items-stretch justify-between gap-3 pb-2 border-b border-slate-900">
-                <div className="flex-1 flex items-center min-w-0">
-                  <img
-                    src="/banner.png"
-                    alt="บริษัท เศรษฐชล จำกัด (SETHACHON CO., LTD.)"
-                    className="h-12 w-auto object-contain object-left"
-                  />
+            {/* Top Block: 1. Header + 2. Table + 3. Legend */}
+            <div>
+              {/* 1. Corporate Header Section: Banner Left + 4-Row Plan Control Table Right */}
+              <div className="mb-1 bg-white">
+                <div className="flex flex-col sm:flex-row print:flex-row sm:items-stretch print:items-stretch justify-between gap-3 pb-1.5 border-b border-slate-900">
+                  <div className="flex-1 flex items-center min-w-0">
+                    <img
+                      src="/banner.png"
+                      alt="บริษัท เศรษฐชล จำกัด (SETHACHON CO., LTD.)"
+                      className="h-12 w-auto object-contain object-left"
+                    />
+                  </div>
+
+                  <div className="shrink-0 w-full sm:w-64 print:w-64">
+                    <table className="w-full h-full border-collapse border border-slate-900 text-[9.5px] leading-tight">
+                      <tbody>
+                        <tr className="border-b border-slate-900">
+                          <th className="py-0.5 px-2 text-left font-bold bg-slate-100 border-r border-slate-900 whitespace-nowrap w-[48%]">
+                            เลขที่แผน (Plan No.)
+                          </th>
+                          <td className="py-0.5 px-2 font-mono font-bold text-slate-900 whitespace-nowrap">
+                            {planNo}
+                          </td>
+                        </tr>
+                        <tr className="border-b border-slate-900">
+                          <th className="py-0.5 px-2 text-left font-bold bg-slate-100 border-r border-slate-900 whitespace-nowrap">
+                            แก้ไขครั้งที่ (Rev.)
+                          </th>
+                          <td className="py-0.5 px-2 font-mono font-semibold text-slate-900 whitespace-nowrap">
+                            {revDisplay}
+                          </td>
+                        </tr>
+                        <tr className="border-b border-slate-900">
+                          <th className="py-0.5 px-2 text-left font-bold bg-slate-100 border-r border-slate-900 whitespace-nowrap">
+                            วันที่บังคับใช้
+                          </th>
+                          <td className="py-0.5 px-2 font-mono text-slate-900 whitespace-nowrap">
+                            {effectiveDateDisplay}
+                          </td>
+                        </tr>
+                        <tr>
+                          <th className="py-0.5 px-2 text-left font-bold bg-slate-100 border-r border-slate-900 whitespace-nowrap">
+                            แผ่นที่ (Page)
+                          </th>
+                          <td className="py-0.5 px-2 font-mono font-bold text-slate-900 whitespace-nowrap">
+                            {pageIndex + 1} / {totalPages}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
 
-                <div className="shrink-0 w-full sm:w-64 print:w-64">
-                  <table className="w-full h-full border-collapse border border-slate-900 text-[9.5px] leading-tight">
+                {/* Document Title (Centered under Corporate Banner) */}
+                <div className="text-center my-1">
+                  <div className="text-xs font-bold text-slate-900 leading-tight flex items-center justify-center gap-1.5 flex-wrap">
+                    <span>แผนการทวนสอบและสอบเทียบเครื่องมือวัด ประจำปี {planYear} (พ.ศ. {buddhistYear})</span>
+                    <span>—</span>
+                    <span>หน่วยงาน / แผนก: {deptDisplayName}</span>
+                    {revNumber > 1 && plan.revision_reason && (
+                      <span className="inline-flex items-center gap-1 text-[9.5px] text-amber-900 bg-amber-50 border border-amber-200 rounded px-1.5 py-0 font-normal">
+                        <span className="font-bold">เหตุผลการแก้ไข ({revDisplay}):</span> {plan.revision_reason}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* 2. Matrix Table (table-fixed 100%, Plan & Act. Dual Row per Item) */}
+              <div className="table-container border border-slate-900 mb-1 overflow-visible print:overflow-visible">
+                <table className="table-fixed w-full text-left border-collapse text-[10px]">
+                  <colgroup>
+                    <col style={{ width: '3%' }} />
+                    <col style={{ width: '22%' }} />
+                    <col style={{ width: '8%' }} />
+                    <col style={{ width: '10%' }} />
+                    <col style={{ width: '5%' }} />
+                    <col style={{ width: '5%' }} />
+                    {MONTH_NAMES_TH.map((_, idx) => (
+                      <col key={`col-m-${idx}`} style={{ width: '2.2%' }} />
+                    ))}
+                    <col style={{ width: '7.6%' }} />
+                    <col style={{ width: '13%' }} />
+                  </colgroup>
+                  <thead>
+                    <tr className="bg-slate-100 border-b border-slate-900 text-slate-800">
+                      <th className="py-0.5 px-0.5 text-center font-bold border-r border-slate-900 text-[9px] leading-tight break-words">
+                        ลำดับ
+                      </th>
+                      <th className="py-0.5 px-1.5 font-bold border-r border-slate-900 text-[10px]">
+                        รายการเครื่องมือวัด
+                      </th>
+                      <th className="py-0.5 px-1 font-bold border-r border-slate-900 text-center text-[9.5px]">
+                        เกณฑ์ยอมรับ
+                      </th>
+                      <th className="py-0.5 px-1 font-bold border-r border-slate-900 text-center text-[9.5px] leading-tight">
+                        หน่วยงานที่ทวนสอบ/สอบเทียบ
+                      </th>
+                      <th className="py-0.5 px-0.5 text-center font-bold border-r border-slate-900 text-[9.5px] leading-tight">
+                        ความถี่
+                      </th>
+                      <th className="py-0.5 px-0.5 text-center font-bold border-r border-slate-900 text-[9px] leading-tight">
+                        Plan / Act.
+                      </th>
+                      {MONTH_NAMES_TH.map((m, idx) => (
+                        <th
+                          key={idx}
+                          className="py-0.5 px-0 text-center font-bold border-r border-slate-900 whitespace-nowrap text-[9px]"
+                        >
+                          {m}
+                        </th>
+                      ))}
+                      <th className="py-0.5 px-1 font-bold border-r border-slate-900 text-center text-[9.5px] leading-tight">
+                        ผู้รับผิดชอบ
+                      </th>
+                      <th className="py-0.5 px-1.5 font-bold text-center text-[9.5px]">
+                        หมายเหตุ
+                      </th>
+                    </tr>
+                  </thead>
+                  {pageItems.length === 0 ? (
                     <tbody>
-                      <tr className="border-b border-slate-900">
-                        <th className="py-0.5 px-2 text-left font-bold bg-slate-100 border-r border-slate-900 whitespace-nowrap w-[48%]">
-                          เลขที่แผน (Plan No.)
-                        </th>
-                        <td className="py-0.5 px-2 font-mono font-bold text-slate-900 whitespace-nowrap">
-                          {planNo}
-                        </td>
-                      </tr>
-                      <tr className="border-b border-slate-900">
-                        <th className="py-0.5 px-2 text-left font-bold bg-slate-100 border-r border-slate-900 whitespace-nowrap">
-                          แก้ไขครั้งที่ (Rev.)
-                        </th>
-                        <td className="py-0.5 px-2 font-mono font-semibold text-slate-900 whitespace-nowrap">
-                          {revDisplay}
-                        </td>
-                      </tr>
-                      <tr className="border-b border-slate-900">
-                        <th className="py-0.5 px-2 text-left font-bold bg-slate-100 border-r border-slate-900 whitespace-nowrap">
-                          วันที่บังคับใช้
-                        </th>
-                        <td className="py-0.5 px-2 font-mono text-slate-900 whitespace-nowrap">
-                          {effectiveDateDisplay}
-                        </td>
-                      </tr>
                       <tr>
-                        <th className="py-0.5 px-2 text-left font-bold bg-slate-100 border-r border-slate-900 whitespace-nowrap">
-                          แผ่นที่ (Page)
-                        </th>
-                        <td className="py-0.5 px-2 font-mono font-bold text-slate-900 whitespace-nowrap">
-                          {pageIndex + 1} / {totalPages}
+                        <td colSpan={20} className="py-6 text-center text-slate-400 font-medium">
+                          ไม่มีรายการเครื่องมือในแผนฉบับนี้
                         </td>
                       </tr>
                     </tbody>
-                  </table>
-                </div>
-              </div>
+                  ) : (
+                    pageItems.map((item, index) => {
+                      const globalIndex = pageIndex * ITEMS_PER_PAGE + index;
+                      const plannedMonths = parseMonths(item.planned_months);
+                      const actualMonths = parseMonths(item.actual_months);
 
-              {/* Document Title (Centered under Corporate Banner) */}
-              <div className="text-center my-1">
-                <h1 className="text-sm font-bold text-slate-900 leading-snug">
-                  แผนการทวนสอบและสอบเทียบเครื่องมือวัด ประจำปี {planYear} (พ.ศ. {buddhistYear})
-                </h1>
-                <div className="text-[10px] font-medium text-slate-600 italic mt-0">
-                  Annual Equipment Verification &amp; Calibration Plan
-                </div>
-                <div className="text-xs font-semibold text-slate-800 mt-0.5 flex items-center justify-center gap-2 flex-wrap">
-                  <span>หน่วยงาน / แผนก: {deptDisplayName}</span>
-                  {revNumber > 1 && plan.revision_reason && (
-                    <span className="inline-flex items-center gap-1 text-[9.5px] text-amber-900 bg-amber-50 border border-amber-200 rounded px-1.5 py-0 font-normal">
-                      <span className="font-bold">เหตุผลการแก้ไข ({revDisplay}):</span> {plan.revision_reason}
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
+                      const normCode = (code) => String(code || '').trim().toUpperCase();
 
-            {/* 2. Matrix Table (table-fixed 100%, Plan & Act. Dual Row per Item) */}
-            <div className="table-container border border-slate-900 mb-1.5 overflow-visible print:overflow-visible">
-              <table className="table-fixed w-full text-left border-collapse text-[10px]">
-                <colgroup>
-                  <col style={{ width: '3%' }} />
-                  <col style={{ width: '22%' }} />
-                  <col style={{ width: '8%' }} />
-                  <col style={{ width: '10%' }} />
-                  <col style={{ width: '5%' }} />
-                  <col style={{ width: '5%' }} />
-                  {MONTH_NAMES_TH.map((_, idx) => (
-                    <col key={`col-m-${idx}`} style={{ width: '2.2%' }} />
-                  ))}
-                  <col style={{ width: '7.6%' }} />
-                  <col style={{ width: '13%' }} />
-                </colgroup>
-                <thead>
-                  <tr className="bg-slate-100 border-b border-slate-900 text-slate-800">
-                    <th className="py-1 px-0.5 text-center font-bold border-r border-slate-900 text-[9px] leading-tight break-words">
-                      ลำดับ
-                    </th>
-                    <th className="py-1 px-1.5 font-bold border-r border-slate-900 text-[10.5px]">
-                      รายการเครื่องมือวัด
-                    </th>
-                    <th className="py-1 px-1 font-bold border-r border-slate-900 text-center text-[10px]">
-                      เกณฑ์ยอมรับ
-                    </th>
-                    <th className="py-1 px-1 font-bold border-r border-slate-900 text-center text-[9.5px] leading-tight">
-                      หน่วยงานที่ทวนสอบ/สอบเทียบ
-                    </th>
-                    <th className="py-1 px-0.5 text-center font-bold border-r border-slate-900 text-[9.5px] leading-tight">
-                      ความถี่
-                    </th>
-                    <th className="py-1 px-0.5 text-center font-bold border-r border-slate-900 text-[9px] leading-tight">
-                      Plan / Act.
-                    </th>
-                    {MONTH_NAMES_TH.map((m, idx) => (
-                      <th
-                        key={idx}
-                        className="py-1 px-0 text-center font-bold border-r border-slate-900 whitespace-nowrap text-[9px]"
-                      >
-                        {m}
-                      </th>
-                    ))}
-                    <th className="py-1 px-1 font-bold border-r border-slate-900 text-center text-[9.5px] leading-tight">
-                      ผู้รับผิดชอบ
-                    </th>
-                    <th className="py-1 px-1.5 font-bold text-center text-[10px]">
-                      หมายเหตุ
-                    </th>
-                  </tr>
-                </thead>
-                {pageItems.length === 0 ? (
-                  <tbody>
-                    <tr>
-                      <td colSpan={20} className="py-6 text-center text-slate-400 font-medium">
-                        ไม่มีรายการเครื่องมือในแผนฉบับนี้
-                      </td>
-                    </tr>
-                  </tbody>
-                ) : (
-                  pageItems.map((item, index) => {
-                    const globalIndex = pageIndex * ITEMS_PER_PAGE + index;
-                    const plannedMonths = parseMonths(item.planned_months);
-                    const actualMonths = parseMonths(item.actual_months);
+                      const matchedAsset = assets.find(
+                        (a) =>
+                          (item.asset_id && a.id === item.asset_id) ||
+                          (item.asset_code && a.asset_code && normCode(a.asset_code) === normCode(item.asset_code))
+                      );
 
-                    const normCode = (code) => String(code || '').trim().toUpperCase();
+                      const matchedWorkOrders = (workOrders || []).filter(
+                        (w) =>
+                          (item.id && w.plan_item_id === item.id) ||
+                          (item.asset_id && w.asset_id === item.asset_id) ||
+                          (item.asset_code && w.asset_code && normCode(w.asset_code) === normCode(item.asset_code))
+                      );
 
-                    const matchedAsset = assets.find(
-                      (a) =>
-                        (item.asset_id && a.id === item.asset_id) ||
-                        (item.asset_code && a.asset_code && normCode(a.asset_code) === normCode(item.asset_code))
-                    );
-
-                    const matchedWorkOrders = (workOrders || []).filter(
-                      (w) =>
-                        (item.id && w.plan_item_id === item.id) ||
-                        (item.asset_id && w.asset_id === item.asset_id) ||
-                        (item.asset_code && w.asset_code && normCode(w.asset_code) === normCode(item.asset_code))
-                    );
-
-                    const latestWorkOrderWithCriteria = [...matchedWorkOrders]
-                      .filter((w) => w.acceptance_criteria && String(w.acceptance_criteria).trim() !== '')
-                      .sort((a, b) => {
-                        const dateA = a.performed_at || a.due_date || a.created_at || '';
-                        const dateB = b.performed_at || b.due_date || b.created_at || '';
-                        return String(dateB).localeCompare(String(dateA));
-                      })[0];
-
-                    const latestWorkOrder = matchedWorkOrders.length > 0
-                      ? [...matchedWorkOrders].sort((a, b) => {
+                      const latestWorkOrderWithCriteria = [...matchedWorkOrders]
+                        .filter((w) => w.acceptance_criteria && String(w.acceptance_criteria).trim() !== '')
+                        .sort((a, b) => {
                           const dateA = a.performed_at || a.due_date || a.created_at || '';
                           const dateB = b.performed_at || b.due_date || b.created_at || '';
                           return String(dateB).localeCompare(String(dateA));
-                        })[0]
-                      : null;
+                        })[0];
 
-                    const criteria = resolveFirstValue(
-                      item.acceptance_criteria,
-                      item.tolerance,
-                      item.mpe,
-                      matchedAsset?.acceptance_criteria,
-                      matchedAsset?.tolerance,
-                      matchedAsset?.mpe,
-                      latestWorkOrderWithCriteria?.acceptance_criteria,
-                      latestWorkOrder?.acceptance_criteria
-                    );
-                    const provider = formatProvider(item);
-                    const frequency = item.frequency_label || item.frequency || 'ปีละ 1 ครั้ง';
-                    const responsible = item.responsible_name || item.responsible_person || item.responsible_label || '-';
-                    const rawRemarks = item.remarks || item.remark || '-';
-                    const remarks = String(rawRemarks).replace(/^\[ข้อมูลทดสอบ\]\s*/g, '');
+                      const latestWorkOrder = matchedWorkOrders.length > 0
+                        ? [...matchedWorkOrders].sort((a, b) => {
+                            const dateA = a.performed_at || a.due_date || a.created_at || '';
+                            const dateB = b.performed_at || b.due_date || b.created_at || '';
+                            return String(dateB).localeCompare(String(dateA));
+                          })[0]
+                        : null;
 
-                    const rawAssetName = item.asset_name || item.name || '';
-                    const cleanAssetName = rawAssetName.replace(/^\[ข้อมูลทดสอบ\]\s*/g, '');
+                      const criteria = resolveFirstValue(
+                        item.acceptance_criteria,
+                        item.tolerance,
+                        item.mpe,
+                        matchedAsset?.acceptance_criteria,
+                        matchedAsset?.tolerance,
+                        matchedAsset?.mpe,
+                        latestWorkOrderWithCriteria?.acceptance_criteria,
+                        latestWorkOrder?.acceptance_criteria
+                      );
+                      const provider = formatProvider(item);
+                      const frequency = item.frequency_label || item.frequency || 'ปีละ 1 ครั้ง';
+                      const responsible = item.responsible_name || item.responsible_person || item.responsible_label || '-';
+                      const rawRemarks = item.remarks || item.remark || '-';
+                      const remarks = String(rawRemarks).replace(/^\[ข้อมูลทดสอบ\]\s*/g, '').trim() || '-';
 
-                    const brandModel = [item.brand, item.model]
-                      .map((v) => (typeof v === 'string' ? v.trim() : v))
-                      .filter(Boolean)
-                      .join(' ') || item.model || '-';
-                    const serialNo = (item.serial_no && String(item.serial_no).trim()) || '-';
-                    const location = item.location || item.location_name || item.installation_location || '-';
+                      const rawAssetName = item.asset_name || item.name || '';
+                      const cleanAssetName = String(rawAssetName).replace(/^\[ข้อมูลทดสอบ\]\s*/g, '').trim();
 
-                    const targetPlanYear = Number(planYear);
+                      const brandModel = [item.brand, item.model]
+                        .map((v) => (typeof v === 'string' ? v.trim() : v))
+                        .filter(Boolean)
+                        .join(' ') || item.model || '-';
+                      const serialNo = (item.serial_no && String(item.serial_no).trim()) || '-';
+                      const location = item.location || item.location_name || item.installation_location || '-';
 
-                    const isMonthActual = (mNum) => {
-                      if (actualMonths.includes(mNum)) return true;
-                      return matchedWorkOrders.some((w) => {
-                        if (String(w.status || '').toUpperCase() !== 'CLOSED') return false;
+                      const targetPlanYear = Number(planYear);
 
-                        // Check that the closed work order belongs to the same plan year
-                        const performedYear = w.performed_at ? Number(String(w.performed_at).slice(0, 4)) : null;
-                        const woYear = w.plan_year
-                          ? Number(w.plan_year)
-                          : w.due_date
-                            ? Number(String(w.due_date).slice(0, 4))
-                            : targetPlanYear;
+                      const isMonthActual = (mNum) => {
+                        if (actualMonths.includes(mNum)) return true;
+                        return matchedWorkOrders.some((w) => {
+                          if (String(w.status || '').toUpperCase() !== 'CLOSED') return false;
 
-                        if (performedYear != null) {
-                          if (performedYear !== targetPlanYear) return false;
-                        } else {
-                          if (woYear !== targetPlanYear && (!w.plan_id || w.plan_id !== plan.id)) return false;
-                        }
+                          // Check that the closed work order belongs to the same plan year
+                          const performedYear = w.performed_at ? Number(String(w.performed_at).slice(0, 4)) : null;
+                          const woYear = w.plan_year
+                            ? Number(w.plan_year)
+                            : w.due_date
+                              ? Number(String(w.due_date).slice(0, 4))
+                              : targetPlanYear;
 
-                        let woMonth = 0;
-                        const parsedPerformedMonth = parseMonthFromDateStr(w.performed_at);
-                        if (parsedPerformedMonth != null) {
-                          woMonth = parsedPerformedMonth;
-                        } else if (w.planned_month != null) {
-                          woMonth = Number(w.planned_month);
-                        }
-                        return woMonth === mNum;
-                      });
-                    };
+                          if (performedYear != null) {
+                            if (performedYear !== targetPlanYear) return false;
+                          } else {
+                            if (woYear !== targetPlanYear && (!w.plan_id || w.plan_id !== plan.id)) return false;
+                          }
 
-                    return (
-                      <tbody
-                        key={item.id || globalIndex}
-                        className="border-b border-slate-400 break-inside-avoid page-break-inside-avoid"
-                      >
-                        {/* Row 1: Plan */}
-                        <tr className="border-b border-slate-300 hover:bg-slate-50/50">
-                          {/* 1. ลำดับ */}
-                          <td
-                            rowSpan={2}
-                            className="py-1 px-0.5 text-center font-mono text-slate-700 border-r border-slate-300 align-middle text-[11px]"
-                          >
-                            {globalIndex + 1}
-                          </td>
+                          let woMonth = 0;
+                          const parsedPerformedMonth = parseMonthFromDateStr(w.performed_at);
+                          if (parsedPerformedMonth != null) {
+                            woMonth = parsedPerformedMonth;
+                          } else if (w.planned_month != null) {
+                            woMonth = Number(w.planned_month);
+                          }
+                          return woMonth === mNum;
+                        });
+                      };
 
-                          {/* 2. รายการเครื่องมือวัด */}
-                          <td
-                            rowSpan={2}
-                            className="py-0.5 px-1 border-r border-slate-300 align-top text-[10px] leading-tight break-words whitespace-normal"
-                          >
-                            <div className="text-[10px] leading-tight">
-                              <span className="font-bold text-slate-900 font-mono">{item.asset_code || '-'}</span>
-                              {cleanAssetName && (
-                                <span className="font-semibold text-slate-800 ml-1">{cleanAssetName}</span>
-                              )}
-                            </div>
-                            <div className="text-[9px] text-slate-600 leading-tight mt-0.5">
-                              รุ่น: {brandModel} • SN: {serialNo} • สถานที่: {location}
-                            </div>
-                          </td>
+                      return (
+                        <tbody
+                          key={item.id || globalIndex}
+                          className="border-b border-slate-400 break-inside-avoid page-break-inside-avoid"
+                        >
+                          {/* Row 1: Plan */}
+                          <tr className="border-b border-slate-300 hover:bg-slate-50/50">
+                            {/* 1. ลำดับ */}
+                            <td
+                              rowSpan={2}
+                              className="py-0.5 px-1 text-center font-mono text-slate-700 border-r border-slate-300 align-middle text-[9.5px] leading-tight"
+                            >
+                              {globalIndex + 1}
+                            </td>
 
-                          {/* 3. เกณฑ์ยอมรับ */}
-                          <td
-                            rowSpan={2}
-                            className="py-0.5 px-1 text-center text-slate-800 border-r border-slate-300 align-middle whitespace-normal break-words text-[9.5px] leading-tight font-medium"
-                          >
-                            {criteria}
-                          </td>
+                            {/* 2. รายการเครื่องมือวัด */}
+                            <td
+                              rowSpan={2}
+                              className="py-0.5 px-1 border-r border-slate-300 align-middle text-[10px] leading-tight break-words whitespace-normal"
+                            >
+                              <div className="text-[10px] leading-tight">
+                                <span className="font-bold text-slate-900 font-mono">{item.asset_code}</span>
+                                {cleanAssetName ? (
+                                  <span className="font-semibold text-slate-800 ml-1">{cleanAssetName}</span>
+                                ) : null}
+                              </div>
+                              <div className="text-[9px] text-slate-600 leading-tight mt-0.5">
+                                รุ่น: {brandModel} • SN: {serialNo} • สถานที่: {location}
+                              </div>
+                            </td>
 
-                          {/* 4. หน่วยงานที่ทวนสอบ/สอบเทียบ */}
-                          <td
-                            rowSpan={2}
-                            className="py-0.5 px-1 text-center text-slate-700 border-r border-slate-300 align-middle whitespace-normal break-words text-[9.5px] leading-tight"
-                          >
-                            {provider}
-                          </td>
+                            {/* 3. เกณฑ์ยอมรับ */}
+                            <td
+                              rowSpan={2}
+                              className="py-0.5 px-1 text-center text-slate-800 border-r border-slate-300 align-middle whitespace-normal break-words text-[9.5px] leading-tight font-medium"
+                            >
+                              {criteria}
+                            </td>
 
-                          {/* 5. ความถี่ */}
-                          <td
-                            rowSpan={2}
-                            className="py-0.5 px-1 text-center text-slate-700 border-r border-slate-300 align-middle whitespace-normal break-words text-[9.5px] leading-tight"
-                          >
-                            {frequency}
-                          </td>
+                            {/* 4. หน่วยงานที่ทวนสอบ/สอบเทียบ */}
+                            <td
+                              rowSpan={2}
+                              className="py-0.5 px-1 text-center text-slate-700 border-r border-slate-300 align-middle whitespace-normal break-words text-[9.5px] leading-tight"
+                            >
+                              {provider}
+                            </td>
 
-                          {/* 6. Plan / Act. (แถวบน: Plan) */}
-                          <td className="h-[15px] py-0 px-0.5 text-center font-bold text-indigo-700 bg-indigo-50/50 border-r border-slate-300 whitespace-nowrap text-[9px] leading-none align-middle">
-                            Plan
-                          </td>
+                            {/* 5. ความถี่ */}
+                            <td
+                              rowSpan={2}
+                              className="py-0.5 px-1 text-center text-slate-700 border-r border-slate-300 align-middle whitespace-normal break-words text-[9.5px] leading-tight"
+                            >
+                              {frequency}
+                            </td>
 
-                          {/* 7. คอลัมน์เดือน 1-12 (แถวบน: P) */}
-                          {Array.from({ length: 12 }, (_, i) => i + 1).map((mNum) => {
-                            const isPlanned = plannedMonths.includes(mNum) || plannedMonths.includes(String(mNum));
-                            return (
-                              <td
-                                key={`plan-${mNum}`}
-                                className={`h-[15px] py-0 px-0.5 text-center font-bold border-r border-slate-300 whitespace-nowrap text-[9px] leading-none align-middle ${
-                                  isPlanned ? 'bg-indigo-50/80 font-black text-indigo-900 print:text-black' : 'text-slate-200'
-                                }`}
-                              >
-                                {isPlanned ? 'P' : ''}
-                              </td>
-                            );
-                          })}
+                            {/* 6. Plan / Act. (แถวบน: Plan) */}
+                            <td className="h-[15px] py-0 px-0.5 text-center font-bold text-indigo-700 bg-indigo-50/50 border-r border-slate-300 whitespace-nowrap text-[9px] leading-none align-middle">
+                              Plan
+                            </td>
 
-                          {/* 8. ผู้รับผิดชอบ */}
-                          <td
-                            rowSpan={2}
-                            className="py-0.5 px-1 text-center text-slate-700 border-r border-slate-300 align-middle whitespace-normal break-words text-[9.5px] leading-tight"
-                          >
-                            {responsible}
-                          </td>
+                            {/* 7. คอลัมน์เดือน 1-12 (แถวบน: P) */}
+                            {Array.from({ length: 12 }, (_, i) => i + 1).map((mNum) => {
+                              const isPlanned = plannedMonths.includes(mNum) || plannedMonths.includes(String(mNum));
+                              return (
+                                <td
+                                  key={`plan-${mNum}`}
+                                  className={`h-[15px] py-0 px-0.5 text-center font-bold border-r border-slate-300 whitespace-nowrap text-[9px] leading-none align-middle ${
+                                    isPlanned ? 'bg-indigo-50/80 font-black text-indigo-900 print:text-black' : 'text-slate-200'
+                                  }`}
+                                >
+                                  {isPlanned ? 'P' : ''}
+                                </td>
+                              );
+                            })}
 
-                          {/* 9. หมายเหตุ */}
-                          <td
-                            rowSpan={2}
-                            className="py-0.5 px-1 text-[9.5px] text-slate-600 align-middle whitespace-normal break-words leading-tight"
-                          >
-                            {remarks}
-                          </td>
-                        </tr>
+                            {/* 8. ผู้รับผิดชอบ */}
+                            <td
+                              rowSpan={2}
+                              className="py-0.5 px-1 text-center text-slate-700 border-r border-slate-300 align-middle whitespace-normal break-words text-[9.5px] leading-tight"
+                            >
+                              {responsible}
+                            </td>
 
-                        {/* Row 2: Act. */}
-                        <tr className="hover:bg-slate-50/50">
-                          {/* 6. Plan / Act. (แถวล่าง: Act.) */}
-                          <td className="h-[15px] py-0 px-0.5 text-center font-bold text-emerald-700 bg-emerald-50/50 border-r border-slate-300 whitespace-nowrap text-[9px] leading-none align-middle">
-                            Act.
-                          </td>
+                            {/* 9. หมายเหตุ */}
+                            <td
+                              rowSpan={2}
+                              className="py-0.5 px-1 text-[9.5px] text-slate-600 align-middle whitespace-normal break-words leading-tight"
+                            >
+                              {remarks}
+                            </td>
+                          </tr>
 
-                          {/* 7. คอลัมน์เดือน 1-12 (แถวล่าง: ✓) */}
-                          {Array.from({ length: 12 }, (_, i) => i + 1).map((mNum) => {
-                            const isActual = isMonthActual(mNum);
-                            return (
-                              <td
-                                key={`act-${mNum}`}
-                                className={`h-[15px] py-0 px-0.5 text-center font-bold border-r border-slate-300 whitespace-nowrap text-[9px] leading-none align-middle ${
-                                  isActual ? 'bg-emerald-50/80 font-black text-emerald-950 print:text-black' : 'text-slate-200'
-                                }`}
-                              >
-                                {isActual ? '✓' : ''}
-                              </td>
-                            );
-                          })}
-                        </tr>
-                      </tbody>
-                    );
-                  })
-                )}
-              </table>
+                          {/* Row 2: Act. */}
+                          <tr className="hover:bg-slate-50/50">
+                            {/* 6. Plan / Act. (แถวล่าง: Act.) */}
+                            <td className="h-[15px] py-0 px-0.5 text-center font-bold text-emerald-700 bg-emerald-50/50 border-r border-slate-300 whitespace-nowrap text-[9px] leading-none align-middle">
+                              Act.
+                            </td>
+
+                            {/* 7. คอลัมน์เดือน 1-12 (แถวล่าง: ✓) */}
+                            {Array.from({ length: 12 }, (_, i) => i + 1).map((mNum) => {
+                              const isActual = isMonthActual(mNum);
+                              return (
+                                <td
+                                  key={`act-${mNum}`}
+                                  className={`h-[15px] py-0 px-0.5 text-center font-bold border-r border-slate-300 whitespace-nowrap text-[9px] leading-none align-middle ${
+                                    isActual ? 'bg-emerald-50/80 font-black text-emerald-950 print:text-black' : 'text-slate-200'
+                                  }`}
+                                >
+                                  {isActual ? '✓' : ''}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        </tbody>
+                      );
+                    })
+                  )}
+                </table>
+              </div>
+
+              {/* 3. Legend under table */}
+              <div className="text-[10px] text-slate-600 mb-1 font-medium">
+                สัญลักษณ์: P (Plan) = เดือนที่กำหนดตามแผน  |  ✓ (Act.) = เดือนที่ดำเนินการจริง
+              </div>
             </div>
 
-            {/* 3. Legend under table */}
-            <div className="text-[10px] text-slate-600 mb-1.5 font-medium shrink-0">
-              สัญลักษณ์: P (Plan) = เดือนที่กำหนดตามแผน  |  ✓ (Act.) = เดือนที่ดำเนินการจริง
-            </div>
-
-            {/* 4. Signatory Approval Block (3 Columns pushed to bottom of each A4 sheet) */}
+            {/* Bottom Block: 4. Signatory Approval Block (3 Columns pushed to bottom of each A4 sheet) */}
             <div className="mt-2 pt-1 shrink-0">
               <div className="border border-slate-900 grid grid-cols-3 divide-x divide-slate-900 text-xs break-inside-avoid page-break-inside-avoid">
                 {signatoryBoxes.map(({ key, title, person, showNameFallback }) => (
@@ -609,7 +608,7 @@ export const AnnualPlanPrintView = ({
 
                     <div className="text-[9.5px] leading-tight text-slate-700 border-t border-slate-200 pt-0.5 text-center space-y-0">
                       <div className="font-semibold text-slate-900">
-                        ( {formatSignatoryName(person)} ) — {formatPosition(person.position)}
+                        ({formatSignatoryName(person)}) — {formatPosition(person.position)}
                       </div>
                       <div className="text-slate-500 text-[9px]">
                         วันที่: {person.date || '-'}

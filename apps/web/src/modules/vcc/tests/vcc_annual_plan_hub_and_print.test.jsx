@@ -297,9 +297,9 @@ describe('VCC Annual Plan Hub & Spoke Architecture and ISO Print View', () => {
       expect(screen.getByText('แผ่นที่ (Page)')).toBeInTheDocument();
       expect(screen.getByText('1 / 1')).toBeInTheDocument();
 
-      // ชื่อเรื่องเอกสาร
+      // ชื่อเรื่องเอกสาร (แบบกะทัดรัด ไม่มีบรรทัดภาษาอังกฤษที่เปลืองพื้นที่)
       expect(screen.getByText('แผนการทวนสอบและสอบเทียบเครื่องมือวัด ประจำปี 2026 (พ.ศ. 2569)')).toBeInTheDocument();
-      expect(screen.getByText('Annual Equipment Verification & Calibration Plan')).toBeInTheDocument();
+      expect(screen.queryByText('Annual Equipment Verification & Calibration Plan')).not.toBeInTheDocument();
       expect(screen.getByText('หน่วยงาน / แผนก: ฝ่ายควบคุมคุณภาพ')).toBeInTheDocument();
 
       // แถบหัว Modal (ตัวอย่างก่อนพิมพ์: แผนการทวนสอบและสอบเทียบประจำปี 2569)
@@ -458,6 +458,84 @@ describe('VCC Annual Plan Hub & Spoke Architecture and ISO Print View', () => {
       expect(within(sheet1).getByAltText('บริษัท เศรษฐชล จำกัด (SETHACHON CO., LTD.)')).toBeInTheDocument();
       expect(within(sheet1).getByText('ผู้จัดทำ (Prepared By)')).toBeInTheDocument();
       expect(within(sheet1).getByText('ผู้อนุมัติ (Approved By)')).toBeInTheDocument();
+    });
+
+    it('แผนที่มี 10 รายการจะแสดงครบในหน้าเดียว (1 / 1) และเมื่อมี 12 รายการจะตัดแบ่งเป็น 2 หน้า (1 / 2 และ 2 / 2)', () => {
+      const tenItems = Array.from({ length: 10 }, (_, idx) => ({
+        id: `ten-it-${idx + 1}`,
+        asset_code: `CAL-${String(idx + 1).padStart(3, '0')}`,
+        asset_name: `Caliper ${idx + 1}`,
+        planned_months: [(idx % 12) + 1]
+      }));
+
+      const { unmount } = render(
+        <AnnualPlanPrintView
+          plan={mockPlans[0]}
+          items={tenItems}
+        />
+      );
+
+      // 10 รายการ พอดี 1 หน้า A4 แนวนอน (1 / 1)
+      const page1 = screen.getByTestId('a4-landscape-sheet-1');
+      expect(screen.queryByTestId('a4-landscape-sheet-2')).not.toBeInTheDocument();
+      expect(within(page1).getByText('1 / 1')).toBeInTheDocument();
+      expect(within(page1).getByText('CAL-001')).toBeInTheDocument();
+      expect(within(page1).getByText('CAL-010')).toBeInTheDocument();
+      unmount();
+
+      // 12 รายการ ต้องตัดแบ่งเป็น 2 หน้า (หน้า 1: 10 รายการ, หน้า 2: 2 รายการ)
+      const twelveItems = Array.from({ length: 12 }, (_, idx) => ({
+        id: `twelve-it-${idx + 1}`,
+        asset_code: `EQ-${String(idx + 1).padStart(3, '0')}`,
+        asset_name: `Device ${idx + 1}`,
+        planned_months: [(idx % 12) + 1]
+      }));
+
+      render(
+        <AnnualPlanPrintView
+          plan={mockPlans[0]}
+          items={twelveItems}
+        />
+      );
+
+      const sheet1 = screen.getByTestId('a4-landscape-sheet-1');
+      const sheet2 = screen.getByTestId('a4-landscape-sheet-2');
+      expect(within(sheet1).getByText('1 / 2')).toBeInTheDocument();
+      expect(within(sheet2).getByText('2 / 2')).toBeInTheDocument();
+
+      // หน้า 1 มี EQ-001..EQ-010
+      expect(within(sheet1).getByText('EQ-001')).toBeInTheDocument();
+      expect(within(sheet1).getByText('EQ-010')).toBeInTheDocument();
+      expect(within(sheet1).queryByText('EQ-011')).not.toBeInTheDocument();
+
+      // หน้า 2 มี EQ-011..EQ-012
+      expect(within(sheet2).getByText('EQ-011')).toBeInTheDocument();
+      expect(within(sheet2).getByText('EQ-012')).toBeInTheDocument();
+    });
+
+    it('ล้างคำว่า [ข้อมูลทดสอบ] ออกจาก asset_name และ remarks ทุกจุดก่อนแสดงผล', () => {
+      const testDataItems = [
+        {
+          id: 'test-seed-1',
+          asset_code: 'TEST-001',
+          asset_name: '[ข้อมูลทดสอบ] Vernier Caliper 150mm',
+          model: 'CD-6',
+          serial_no: 'SN001',
+          remarks: '[ข้อมูลทดสอบ] สอบเทียบภายในประจำปี'
+        }
+      ];
+
+      render(
+        <AnnualPlanPrintView
+          plan={mockPlans[0]}
+          items={testDataItems}
+        />
+      );
+
+      // แสดงเฉพาะชื่อเครื่องมือและหมายเหตุที่ล้างคำว่า [ข้อมูลทดสอบ] แล้ว
+      expect(screen.getByText('Vernier Caliper 150mm')).toBeInTheDocument();
+      expect(screen.getByText('สอบเทียบภายในประจำปี')).toBeInTheDocument();
+      expect(screen.queryByText(/\[ข้อมูลทดสอบ\]/)).not.toBeInTheDocument();
     });
 
     it('แสดงเครื่องหมาย ✓ ในแถว Act. เมื่อมีใบสั่งงานสถานะ CLOSED ในเดือนที่ทำจริง (performed_at หรือ planned_month)', () => {
