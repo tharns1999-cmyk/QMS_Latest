@@ -44,6 +44,10 @@ describe('DAR workflow API', () => {
     const { users } = (await get('/api/users', 'R-REQ')).body;
     expect(users.find((u) => u.id === 'R-REV')).toMatchObject({ approval_level: 4, department: 'PD' });
     expect(JSON.stringify(users)).not.toMatch(/password|failed_logins/);
+    // Any signed-in person can read this list: no email or 2FA status, which only DCC sees via /api/admin/users.
+    expect(users.every((u) => !('email' in u) && !('twoFactorEnabled' in u))).toBe(true);
+    const asDcc = (await get('/api/admin/users', 'R-DCC')).body.users.find((u) => u.id === 'R-REV');
+    expect(asDcc).toMatchObject({ email: 'R-REV@test.local', twoFactorEnabled: false });
   });
 
   it('numbers a document in a department whose code has an ampersand, like HR&GA', async () => {

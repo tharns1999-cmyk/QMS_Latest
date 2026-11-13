@@ -252,7 +252,13 @@ app.post('/api/auth/change-password', requireAuth, async (c) => {
 // the pages offer only status ACTIVE for new routing, and the server refuses anyone else.
 app.get('/api/users', requireAuth, async (c) => {
   const { results } = await c.env.DB.prepare("SELECT * FROM users WHERE status IN ('ACTIVE', 'INACTIVE') ORDER BY name").all();
-  return c.json({ users: results.map((r) => ({ ...toPublicUser(r), status: r.status })) });
+  // Everyone signed in may read this, so no contact or security details: DCC reads the full list from /api/admin/users.
+  return c.json({
+    users: results.map((r) => {
+      const { email: _email, twoFactorEnabled: _twoFactor, ...person } = toPublicUser(r);
+      return { ...person, status: r.status };
+    })
+  });
 });
 
 app.get('/api/approval-matrix', requireAuth, async (c) => {

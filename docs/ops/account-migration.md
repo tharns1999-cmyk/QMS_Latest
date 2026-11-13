@@ -6,6 +6,7 @@
 |---|---|---|
 | `database_id` ของ D1 | [apps/api/wrangler.jsonc](../../apps/api/wrangler.jsonc) | ใส่ใน `env.production` (ไม่แตะบล็อก UAT) |
 | `ALLOWED_ORIGIN` และ `VITE_API_URL` | wrangler.jsonc และตอน build เว็บ | ที่อยู่ `*.workers.dev` ขึ้นกับชื่อบัญชี จึงเปลี่ยนแน่นอน |
+| ที่อยู่ API ใน `connect-src` | [apps/web/public/_headers](../../apps/web/public/_headers) | ใส่ที่อยู่ API บริษัทแทนที่อยู่ UAT ไม่เช่นนั้นเบราว์เซอร์บล็อกทุกคำขอ (`build:production` จะหยุดและแจ้งถ้าลืม) |
 | `CLOUDFLARE_ACCOUNT_ID`, token, คีย์ R2 | GitHub Secrets ของ Nightly backup | ใส่ค่าของบัญชีบริษัท |
 
 ชื่อ R2 bucket (`qms-files`) ใช้ซ้ำได้ เพราะชื่อ bucket แยกตามบัญชี
