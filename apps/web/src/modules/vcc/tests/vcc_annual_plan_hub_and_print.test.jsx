@@ -5,7 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 import useStore from '../../../store/useStore';
 import AnnualPlansHub, { resolveDigitalPlanCode, resolvePlanCode } from '../components/AnnualPlansHub';
 import { PLAN_STATUS_CONFIG, getPlanStatusBadgeLabel } from '../utils/planLabels';
-import AnnualPlanPrintView from '../components/AnnualPlanPrintView';
+import AnnualPlanPrintView, { parseMonths } from '../components/AnnualPlanPrintView';
 import AnnualPlanMatrixSection from '../components/AnnualPlanMatrixSection';
 import AnnualPlanWorkspaceHeader from '../components/AnnualPlanWorkspaceHeader';
 import { exportAnnualPlansMultiSheet } from '../utils/exportPlanSummary';
@@ -607,6 +607,128 @@ describe('VCC Annual Plan Hub & Spoke Architecture and ISO Print View', () => {
       expect(screen.getByText('± 0.5 °C')).toBeInTheDocument();
       expect(screen.getByText('± 0.05 bar')).toBeInTheDocument();
       expect(screen.getAllByText('-').length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('parseMonths จัดการข้อมูลเดือนได้ครบทุกรูปแบบ ทั้ง array, number, json string และ comma-separated string', () => {
+      expect(parseMonths([3, 5])).toEqual([3, 5]);
+      expect(parseMonths(4)).toEqual([4]);
+      expect(parseMonths('["3", 5]')).toEqual([3, 5]);
+      expect(parseMonths('7')).toEqual([7]);
+      expect(parseMonths('2, 6, 11')).toEqual([2, 6, 11]);
+      expect(parseMonths('')).toEqual([]);
+      expect(parseMonths(null)).toEqual([]);
+      expect(parseMonths(undefined)).toEqual([]);
+      expect(parseMonths([0, 13, -1])).toEqual([]);
+    });
+
+    it('ไม่แสดงเครื่องหมาย ✓ หากใบสั่งงานที่ CLOSED ดำเนินการคนละปีกับแผนประจำปี', () => {
+      const plan = {
+        ...mockPlans[0],
+        id: 'plan-2026-test',
+        plan_year: 2026
+      };
+      const items = [
+        {
+          id: 'it-prev-year',
+          asset_id: 'ast-prev',
+          asset_code: 'EQ-PREV',
+          planned_months: [12]
+        }
+      ];
+      const workOrders = [
+        {
+          id: 'wo-prev',
+          plan_id: 'plan-2026-test',
+          plan_item_id: 'it-prev-year',
+          asset_id: 'ast-prev',
+          status: 'CLOSED',
+          performed_at: '2025-12-25' // Done in 2025, not 2026!
+        }
+      ];
+
+      render(
+        <AnnualPlanPrintView
+          plan={plan}
+          items={items}
+          workOrders={workOrders}
+        />
+      );
+
+      // ต้องไม่มี ✓ ในช่องเดือนของแผนปี 2026
+      expect(screen.queryByText('✓')).not.toBeInTheDocument();
+    });
+
+    it('ดึงเกณฑ์ยอมรับจากใบสั่งงานที่มีข้อมูลเกณฑ์ แม้ใบสั่งงานล่าสุดจะเป็นค่าว่าง (ไม่ทำข้อมูลตกหล่น)', () => {
+      const plan = { ...mockPlans[0], id: 'plan-wo-crit-test', plan_year: 2026 };
+      const items = [
+        {
+          id: 'it-crit-multi',
+          asset_id: 'ast-multi',
+          asset_code: 'EQ-MULTI'
+        }
+      ];
+      const workOrders = [
+        {
+          id: 'wo-older',
+          plan_item_id: 'it-crit-multi',
+          asset_id: 'ast-multi',
+          performed_at: '2026-02-10',
+          acceptance_criteria: '± 0.02 mm' // Older WO has criteria
+        },
+        {
+          id: 'wo-newer',
+          plan_item_id: 'it-crit-multi',
+          asset_id: 'ast-multi',
+          performed_at: '2026-08-15',
+          acceptance_criteria: '' // Newer WO has empty criteria
+        }
+      ];
+
+      render(
+        <AnnualPlanPrintView
+          plan={plan}
+          items={items}
+          workOrders={workOrders}
+        />
+      );
+
+      expect(screen.getByText('± 0.02 mm')).toBeInTheDocument();
+    });
+
+    it('จับคู่เครื่องมือวัดกับ assets และ workOrders แบบ case-insensitive และตัดช่องว่างอย่างถูกต้อง', () => {
+      const plan = { ...mockPlans[0], id: 'plan-case-test', plan_year: 2026 };
+      const items = [
+        {
+          id: 'it-case',
+          asset_code: 'st002 ', // lowercase + trailing space
+          planned_months: [4]
+        }
+      ];
+      const assets = [
+        { id: 'ast-c', asset_code: 'ST002', tolerance: '± 0.05 mm' }
+      ];
+      const workOrders = [
+        {
+          id: 'wo-c',
+          asset_code: ' ST002',
+          status: 'CLOSED',
+          performed_at: '2026-04-10'
+        }
+      ];
+
+      render(
+        <AnnualPlanPrintView
+          plan={plan}
+          items={items}
+          assets={assets}
+          workOrders={workOrders}
+        />
+      );
+
+      // ดึง tolerance จาก asset ที่รหัสเครื่องมือตรงกันแบบ case-insensitive ได้
+      expect(screen.getByText('± 0.05 mm')).toBeInTheDocument();
+      // แสดงเครื่องหมาย ✓ จาก work order ที่รหัสเครื่องมือตรงกันแบบ case-insensitive ได้
+      expect(screen.getByText('✓')).toBeInTheDocument();
     });
 
     it('ไม่แสดงคำว่า "ฝ่ายฝ่าย..." ซ้ำซ้อน หากชื่อแผนกมีคำว่า "ฝ่าย" นำหน้าอยู่แล้ว และจัดการคำว่า "แผนก" อย่างถูกต้อง', () => {

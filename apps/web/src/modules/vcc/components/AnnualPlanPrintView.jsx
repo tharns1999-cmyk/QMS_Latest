@@ -50,16 +50,31 @@ const formatProvider = (item) => {
   return s;
 };
 
-// Safe helper to parse month array
-const parseMonths = (val) => {
-  if (Array.isArray(val)) return val;
-  if (typeof val === 'string' && val.trim()) {
+// Safe helper to parse month array (handles array, number, JSON string, or comma-separated string)
+export const parseMonths = (val) => {
+  if (val == null) return [];
+  if (Array.isArray(val)) {
+    return val.map((v) => Number(v)).filter((v) => !isNaN(v) && v >= 1 && v <= 12);
+  }
+  if (typeof val === 'number') {
+    return val >= 1 && val <= 12 ? [val] : [];
+  }
+  if (typeof val === 'string') {
+    const trimmed = val.trim();
+    if (!trimmed) return [];
     try {
-      const parsed = JSON.parse(val);
-      if (Array.isArray(parsed)) return parsed;
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) {
+        return parsed.map((v) => Number(v)).filter((v) => !isNaN(v) && v >= 1 && v <= 12);
+      }
+      if (typeof parsed === 'number' && parsed >= 1 && parsed <= 12) {
+        return [parsed];
+      }
     } catch {
-      return [];
+      // not JSON, fall through to delimited parsing
     }
+    const parts = trimmed.split(',').map((s) => Number(s.trim())).filter((v) => !isNaN(v) && v >= 1 && v <= 12);
+    if (parts.length > 0) return parts;
   }
   return [];
 };
@@ -353,16 +368,28 @@ export const AnnualPlanPrintView = ({
                     const plannedMonths = parseMonths(item.planned_months);
                     const actualMonths = parseMonths(item.actual_months);
 
+                    const normCode = (code) => String(code || '').trim().toUpperCase();
+
                     const matchedAsset = assets.find(
-                      (a) => (item.asset_id && a.id === item.asset_id) || (item.asset_code && a.asset_code === item.asset_code)
+                      (a) =>
+                        (item.asset_id && a.id === item.asset_id) ||
+                        (item.asset_code && a.asset_code && normCode(a.asset_code) === normCode(item.asset_code))
                     );
 
                     const matchedWorkOrders = (workOrders || []).filter(
                       (w) =>
                         (item.id && w.plan_item_id === item.id) ||
                         (item.asset_id && w.asset_id === item.asset_id) ||
-                        (item.asset_code && w.asset_code === item.asset_code)
+                        (item.asset_code && w.asset_code && normCode(w.asset_code) === normCode(item.asset_code))
                     );
+
+                    const latestWorkOrderWithCriteria = [...matchedWorkOrders]
+                      .filter((w) => w.acceptance_criteria && String(w.acceptance_criteria).trim() !== '')
+                      .sort((a, b) => {
+                        const dateA = a.performed_at || a.due_date || a.created_at || '';
+                        const dateB = b.performed_at || b.due_date || b.created_at || '';
+                        return String(dateB).localeCompare(String(dateA));
+                      })[0];
 
                     const latestWorkOrder = matchedWorkOrders.length > 0
                       ? [...matchedWorkOrders].sort((a, b) => {
@@ -379,6 +406,7 @@ export const AnnualPlanPrintView = ({
                       matchedAsset?.acceptance_criteria,
                       matchedAsset?.tolerance,
                       matchedAsset?.mpe,
+                      latestWorkOrderWithCriteria?.acceptance_criteria,
                       latestWorkOrder?.acceptance_criteria
                     );
                     const provider = formatProvider(item);
@@ -393,21 +421,25 @@ export const AnnualPlanPrintView = ({
                     const serialNo = (item.serial_no && String(item.serial_no).trim()) || '-';
                     const location = item.location || item.location_name || item.installation_location || '-';
 
+                    const targetPlanYear = Number(planYear);
+
                     const isMonthActual = (mNum) => {
-                      if (actualMonths.includes(mNum) || actualMonths.includes(String(mNum))) return true;
+                      if (actualMonths.includes(mNum)) return true;
                       return matchedWorkOrders.some((w) => {
                         if (String(w.status || '').toUpperCase() !== 'CLOSED') return false;
 
-                        const isSamePlan = Boolean(w.plan_id && plan.id && w.plan_id === plan.id);
-                        if (!isSamePlan) {
-                          const woYear = w.plan_year
-                            ? Number(w.plan_year)
-                            : w.performed_at
-                              ? Number(String(w.performed_at).slice(0, 4))
-                              : w.due_date
-                                ? Number(String(w.due_date).slice(0, 4))
-                                : Number(planYear);
-                          if (woYear && woYear !== Number(planYear)) return false;
+                        // Check that the closed work order belongs to the same plan year
+                        const performedYear = w.performed_at ? Number(String(w.performed_at).slice(0, 4)) : null;
+                        const woYear = w.plan_year
+                          ? Number(w.plan_year)
+                          : w.due_date
+                            ? Number(String(w.due_date).slice(0, 4))
+                            : targetPlanYear;
+
+                        if (performedYear != null) {
+                          if (performedYear !== targetPlanYear) return false;
+                        } else {
+                          if (woYear !== targetPlanYear && (!w.plan_id || w.plan_id !== plan.id)) return false;
                         }
 
                         let woMonth = 0;

@@ -240,11 +240,13 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [], currentUser: propUser
   const loadPlanWorkOrders = useCallback(async (planId, parentPlanId = '') => {
     if (!planId) {
       setPlanWorkOrders([]);
-      return;
+      return [];
     }
     try {
       const targetPlanIds = Array.from(new Set([planId, parentPlanId].filter(Boolean)));
-      const statuses = ['OPEN', 'PENDING_REVIEW', 'REJECTED', 'CLOSED', 'CANCELLED'];
+      // VALID_WO_STATUSES: SCHEDULED, OPEN, IN_PROGRESS, PENDING_REVIEW, REJECTED, CLOSED, CANCELLED
+      // Note: 'OPEN' covers OPEN, SCHEDULED, REJECTED, RETURNED; 'CLOSED' covers CLOSED, PENDING_REVIEW, PENDING_VERIFY
+      const statuses = ['OPEN', 'IN_PROGRESS', 'CLOSED', 'CANCELLED'];
       const queries = [];
       for (const pid of targetPlanIds) {
         for (const st of statuses) {
@@ -257,9 +259,12 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [], currentUser: propUser
       results.flat().forEach((w) => {
         if (w && w.id) map.set(w.id, w);
       });
-      setPlanWorkOrders(Array.from(map.values()));
+      const list = Array.from(map.values());
+      setPlanWorkOrders(list);
+      return list;
     } catch {
       setPlanWorkOrders([]);
+      return [];
     }
   }, []);
 
@@ -379,29 +384,19 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [], currentUser: propUser
       if (planDetail?.plan?.id === target.id && planDetail?.items) {
         setPrintPlan(target);
         setPrintPlanItems(planDetail.items);
-        setPrintWorkOrders(planWorkOrders);
+        if (planWorkOrders && planWorkOrders.length > 0) {
+          setPrintWorkOrders(planWorkOrders);
+        } else {
+          const wos = await loadPlanWorkOrders(target.id, target.parent_plan_id || '');
+          setPrintWorkOrders(wos);
+        }
       } else {
         const detail = await fetchVccPlanDetail(target.id);
-        setPrintPlan(detail?.plan || target);
+        const resolvedPlan = detail?.plan || target;
+        setPrintPlan(resolvedPlan);
         setPrintPlanItems(detail?.items || []);
-        try {
-          const targetPlanIds = [target.id, detail?.plan?.parent_plan_id].filter(Boolean);
-          const statuses = ['DRAFT', 'SUBMITTED', 'PENDING_REVIEW', 'APPROVED', 'IN_PROGRESS', 'CLOSED', 'CANCELLED'];
-          const queries = [];
-          for (const pid of targetPlanIds) {
-            for (const st of statuses) {
-              queries.push(fetchVccWorkOrders({ plan_id: pid, status: st }).catch(() => []));
-            }
-          }
-          const results = await Promise.all(queries);
-          const map = new Map();
-          results.flat().forEach((w) => {
-            if (w && w.id) map.set(w.id, w);
-          });
-          setPrintWorkOrders(Array.from(map.values()));
-        } catch {
-          setPrintWorkOrders([]);
-        }
+        const wos = await loadPlanWorkOrders(resolvedPlan.id, resolvedPlan.parent_plan_id || '');
+        setPrintWorkOrders(wos);
       }
     } catch (err) {
       toast.error('ไม่สามารถโหลดข้อมูลสำหรับพิมพ์ได้: ' + (err.message || ''));
