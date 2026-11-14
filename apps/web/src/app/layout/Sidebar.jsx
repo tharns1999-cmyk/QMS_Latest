@@ -28,14 +28,13 @@ import {
 import toast from 'react-hot-toast';
 import NotificationPopover from './NotificationPopover';
 import { isActionableTask, isAssignedToSomeoneElse, isSameDepartment } from '../../modules/dcc/utils/taskFilter';
-import { SearchableSelect } from '../../shared/components/ui/SearchableSelect';
 import { isSystemAdmin } from '../../modules/admin/adminAccess';
 import { isAdminPath, ADMIN_MASTER_DATA, ADMIN_AUDIT_LOG } from '../../modules/admin/adminRoutes';
 import { evaluateDocumentReviewStatus } from '../../modules/dcc/utils/documentUtils';
 import { extractDeptCode } from '../../modules/dcc/services/darService';
 import SystemTimeSimulatorWidget from '../../modules/dcc/components/common/SystemTimeSimulatorWidget';
 import { isApiMode } from '../../api/client';
-import TryoutUserSwitcher, { TRYOUT_SWITCHER } from '../auth/TryoutUserSwitcher';
+import { TRYOUT_SWITCHER } from '../auth/TryoutUserSwitcher';
 import { logout } from '../../api/session';
 import { createPortal } from 'react-dom';
 import ChangePasswordForm from '../auth/ChangePasswordForm';
@@ -137,29 +136,33 @@ const Sidebar = ({ isOpen = false, onClose = () => {} }) => {
   } = useStore();
   
   const switcherUsers = useMemo(() => {
+    const source = (masterUsers && masterUsers.length > 0) ? masterUsers : (MASTER_DATA_USER || []);
     const map = new Map();
-    (masterUsers || []).forEach((u) => {
+    source.forEach((u) => {
+      if (!u) return;
+      const statusUpper = String(u.status || 'ACTIVE').toUpperCase();
+      if (statusUpper !== 'ACTIVE') return;
       const key = u.id || u.empId;
       if (key) map.set(key, u);
     });
-    (MASTER_DATA_USER || []).forEach((u) => {
-      const key = u.id || u.empId;
-      if (key && !map.has(key)) {
-        map.set(key, u);
+    if (currentUser) {
+      const currentKey = currentUser.id || currentUser.empId;
+      if (currentKey && !map.has(currentKey)) {
+        map.set(currentKey, currentUser);
       }
+    }
+    return Array.from(map.values()).sort((a, b) => {
+      const deptA = String(a.department || a.primary_department || 'GEN').toUpperCase();
+      const deptB = String(b.department || b.primary_department || 'GEN').toUpperCase();
+      if (deptA !== deptB) return deptA.localeCompare(deptB);
+      const lvlA = Number(a.approval_level ?? a.approvalLevel ?? a.level ?? 1);
+      const lvlB = Number(b.approval_level ?? b.approvalLevel ?? b.level ?? 1);
+      if (lvlA !== lvlB) return lvlA - lvlB;
+      return String(a.name || '').localeCompare(String(b.name || ''), 'th');
     });
-    return Array.from(map.values());
-  }, [masterUsers]);
+  }, [masterUsers, currentUser]);
 
-  const switcherOptions = useMemo(() => {
-    return switcherUsers.map((user) => ({
-      value: user.id || user.empId,
-      label: `${user.name} (${user.department}) L${user.level}`,
-      subLabel: user.position || null,
-      badge: user.department,
-      keywords: [user.name, user.department, `L${user.level}`, user.position].filter(Boolean)
-    }));
-  }, [switcherUsers]);
+  const showQuickSwitcher = Boolean(import.meta.env.DEV || !isApiMode || TRYOUT_SWITCHER);
 
   const [isCleanSlateOpen, setIsCleanSlateOpen] = useState(false);
   const [changingPassword, setChangingPassword] = useState(false);
@@ -615,9 +618,51 @@ const Sidebar = ({ isOpen = false, onClose = () => {} }) => {
             </div>
           </div>
 
-          {isApiMode ? (
+          {showQuickSwitcher && !microsoftSignIn && (
+            <div className="space-y-1 pt-1 border-t border-slate-200/70">
+              <label
+                htmlFor="sidebar-quick-user-switcher"
+                className="block text-[10px] font-semibold text-slate-500 tracking-tight"
+              >
+                สลับผู้ใช้งาน (โหมดทดสอบ)
+              </label>
+              <select
+                id="sidebar-quick-user-switcher"
+                aria-label="สลับผู้ใช้งานทดสอบ"
+                title="สลับผู้ใช้งาน / บทบาทจำลอง"
+                value={currentUser?.id || currentUser?.empId || ''}
+                onChange={async (e) => {
+                  const nextId = e.target.value;
+                  if (!nextId || nextId === (currentUser?.id || currentUser?.empId)) return;
+                  const selected = switcherUsers.find((u) => (u.id || u.empId) === nextId);
+                  const fn = switchUser || setCurrentUser;
+                  await fn(nextId);
+                  if (selected) {
+                    const dept = selected.department || selected.primary_department || 'GEN';
+                    const level = selected.approval_level ?? selected.approvalLevel ?? selected.level ?? 1;
+                    toast?.success?.(`สลับผู้ใช้งานเป็น ${selected.name} (${dept} · L${level})`);
+                  }
+                }}
+                className="w-full h-8 px-2 text-xs font-medium text-slate-800 bg-white border border-slate-300 rounded-lg shadow-2xs hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 cursor-pointer truncate"
+              >
+                {switcherUsers.map((u) => {
+                  const uid = u.id || u.empId;
+                  const dept = u.department || u.primary_department || 'GEN';
+                  const lvl = u.approval_level ?? u.approvalLevel ?? u.level ?? 1;
+                  const isDccFlag = Boolean(u.isDcc || u.is_dcc || u.role === 'DCC_ADMIN');
+                  const isQmrFlag = Boolean(u.isQmr || u.is_qmr || u.role === 'QMR');
+                  return (
+                    <option key={uid} value={uid}>
+                      {`${u.name} — ${dept} (L${lvl}${isDccFlag ? ' • DCC' : ''}${isQmrFlag ? ' • QMR' : ''})`}
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+          )}
+
+          {isApiMode && (
             <div className="space-y-1.5">
-              {TRYOUT_SWITCHER && !microsoftSignIn && <TryoutUserSwitcher currentId={currentUser?.id} />}
               {/* No password of ours to change when people sign in with their company Microsoft account. */}
               {!microsoftSignIn && (
                 <button type="button" onClick={() => setChangingPassword(true)}
@@ -636,22 +681,6 @@ const Sidebar = ({ isOpen = false, onClose = () => {} }) => {
                 document.body
               )}
             </div>
-          ) : (
-          <div className="relative">
-            <SearchableSelect
-              size="sm"
-              value={currentUser?.id || ''}
-              onChange={(val) => {
-                const fn = switchUser || setCurrentUser;
-                fn(val);
-              }}
-              options={switcherOptions}
-              placeholder="สลับผู้ใช้งานจำลอง..."
-              ariaLabel="สลับผู้ใช้งาน / บทบาทจำลอง"
-              title="สลับผู้ใช้งาน / บทบาทจำลอง"
-              autoFlip={true}
-            />
-          </div>
           )}
         </div>
       </div>

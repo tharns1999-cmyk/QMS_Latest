@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import useStore, { MASTER_DATA_USER, MASTER_DEPARTMENTS, MASTER_DATA_DEPT } from '../../store/useStore';
@@ -46,27 +46,36 @@ describe('Task: Merge User Profiles and Set Department to DC (DCC Admin)', () =>
     expect(MASTER_DATA_DEPT).toBe(MASTER_DEPARTMENTS);
   });
 
-  it('3. User Switcher in Sidebar displays "ธนาวุฒิ สมควรกิจดำรง (DC) L4" with role DCC_ADMIN', () => {
+  it('3. User Switcher in Sidebar displays "ธนาวุฒิ สมควรกิจดำรง — DC (L4 • DCC)" and switches currentUser via Quick User Switcher', async () => {
     render(
       <MemoryRouter>
         <Sidebar />
       </MemoryRouter>
     );
 
-    // Option should be rendered with expected text
-    const select = screen.getByTitle('สลับผู้ใช้งาน / บทบาทจำลอง');
+    expect(screen.getByText('สลับผู้ใช้งาน (โหมดทดสอบ)')).toBeInTheDocument();
+
+    // Quick User Switcher select should be rendered with aria-label and expected option text
+    const select = screen.getByLabelText('สลับผู้ใช้งานทดสอบ');
     expect(select).toBeInTheDocument();
 
-    const expectedOption = screen.getByRole('option', { name: 'ธนาวุฒิ สมควรกิจดำรง (DC) L4' });
+    const expectedOption = screen.getByRole('option', { name: 'ธนาวุฒิ สมควรกิจดำรง — DC (L4 • DCC)' });
     expect(expectedOption).toBeInTheDocument();
     expect(expectedOption.value).toBe('EMP-001');
 
-    // Default or switched user has DCC_ADMIN
+    // Default user has DCC_ADMIN
     const state = useStore.getState();
     expect(state.currentUser.role).toBe('DCC_ADMIN');
     expect(state.currentUser.department).toBe('DC');
     expect(state.currentUser.isDcc).toBe(true);
     expect(state.currentUser.name).toBe('ธนาวุฒิ สมควรกิจดำรง');
+
+    // Switch user via Quick User Switcher dropdown
+    fireEvent.change(select, { target: { value: 'U003' } });
+    await waitFor(() => {
+      expect(useStore.getState().currentUser.id).toBe('U003');
+    });
+    expect(useStore.getState().currentUser.approvalLevel).toBeDefined();
   });
 
   it('4. Initial and switched currentUser resolves accurately by id and empId', () => {

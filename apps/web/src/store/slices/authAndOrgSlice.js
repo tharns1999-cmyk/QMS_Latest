@@ -18,7 +18,7 @@ import {
 import { STANDARD_STATIONS, cleanLocationName } from '../../modules/dcc/services/MasterDataService';
 import { saveFile, resolveRawFileBlob } from '../../modules/dcc/utils/fileStorage';
 import { isSameDepartment } from '../../modules/dcc/utils/taskFilter';
-import { isApiMode } from '../../api/client';
+import { isApiMode, apiUrl, setToken } from '../../api/client';
 
 export const createAuthAndOrgSlice = (set, get) => ({
   // State
@@ -110,6 +110,10 @@ export const createAuthAndOrgSlice = (set, get) => ({
       ? baseUser.permissions
       : ['DAR_CREATE', 'TASK_ACCESS', 'VIEW_REGISTER'];
 
+    const resolvedLevel = Number(baseUser.approval_level ?? baseUser.approvalLevel ?? baseUser.level ?? 1) || 1;
+    const resolvedIsDcc = Boolean(baseUser.isDcc ?? baseUser.is_dcc ?? (baseUser.role === 'DCC_ADMIN' || baseUser.role === 'DCC_STAFF'));
+    const resolvedIsQmr = Boolean(baseUser.isQmr ?? baseUser.is_qmr ?? (baseUser.role === 'QMR'));
+
     return { 
       currentUser: { 
         ...baseUser, 
@@ -121,6 +125,11 @@ export const createAuthAndOrgSlice = (set, get) => ({
         secondaryDepartments: Array.from(new Set(secondaryDepts)),
         affiliated_departments: affiliated,
         depts: Array.from(new Set(depts)),
+        level: resolvedLevel,
+        approval_level: resolvedLevel,
+        approvalLevel: resolvedLevel,
+        isDcc: resolvedIsDcc,
+        isQmr: resolvedIsQmr,
         permissions,
         canCreateDar: baseUser.canCreateDar !== undefined ? Boolean(baseUser.canCreateDar) : true,
         canAccessTasks: baseUser.canAccessTasks !== undefined ? Boolean(baseUser.canAccessTasks) : true,
@@ -130,8 +139,43 @@ export const createAuthAndOrgSlice = (set, get) => ({
     };
   }),
 
-  switchUser: (userId) => {
-    get().setCurrentUser(userId);
+  switchUser: async (userId) => {
+    const state = get();
+    const targetId = typeof userId === 'object' && userId !== null ? (userId.id || userId.empId) : userId;
+    const targetUser =
+      (state.masterUsers || []).find(u => u.id === targetId || u.empId === targetId) ||
+      MASTER_DATA_USER.find(u => u.id === targetId || u.empId === targetId) ||
+      (typeof userId === 'object' && userId !== null ? userId : null);
+    if (!targetUser) return null;
+
+    state.setCurrentUser(targetUser);
+
+    if (isApiMode && typeof fetch === 'function') {
+      try {
+        const email = targetUser.email || `${String(targetUser.id || targetId).toLowerCase()}@t.co`;
+        const res = await fetch(apiUrl('/api/auth/login'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password: '1234' })
+        });
+        if (res.ok) {
+          const result = await res.json().catch(() => ({}));
+          if (result?.token) {
+            setToken(result.token);
+            if (result.user) {
+              get().setCurrentUser({ ...targetUser, ...result.user });
+            }
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new Event('focus'));
+            }
+          }
+        }
+      } catch {
+        // Keep local store state if API dev login is unavailable
+      }
+    }
+
+    return get().currentUser;
   },
 
   getCurrentUser: () => get().currentUser,
