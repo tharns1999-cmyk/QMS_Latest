@@ -90,8 +90,6 @@ export const AnnualPlanWorkspaceHeader = ({
   selectedPlanId,
   onSelectPlan,
   activePlan,
-  planItems = [],
-  activeAssets = [],
   canEditPlan = false,
   canCreatePlan = true,
   canManageSettings,
@@ -102,7 +100,6 @@ export const AnnualPlanWorkspaceHeader = ({
   onOpenCreatePlan,
   onOpenEditPlan,
   onOpenHistory,
-  onOpenSmartImport,
   onOpenOfficialPdf,
   onBackToHub,
   onPrintPlan
@@ -159,22 +156,6 @@ export const AnnualPlanWorkspaceHeader = ({
       return Number(a.revision || 0) - Number(b.revision || 0);
     });
   }, [rawPlans, planRevisions, activePlan, effectivePlans]);
-
-  // Compare active calibratable instruments in Register vs. instruments currently in this plan
-  const unincludedRegisterSummary = useMemo(() => {
-    if (!activePlan || !Array.isArray(activeAssets) || activeAssets.length === 0) {
-      return { totalActiveInRegister: 0, unincludedAssets: [] };
-    }
-    const calibratableRegisterAssets = activeAssets.filter(
-      (a) => a.status === 'ACTIVE' && (Number(a.is_group) === 0 || a.group_nature === 'COMPOSITE_SET')
-    );
-    const planAssetIds = new Set(planItems.map((i) => i.asset_id).filter(Boolean));
-    const unincludedAssets = calibratableRegisterAssets.filter((a) => !planAssetIds.has(a.id));
-    return {
-      totalActiveInRegister: calibratableRegisterAssets.length,
-      unincludedAssets
-    };
-  }, [activePlan, activeAssets, planItems]);
 
   const isSuperseded = Boolean(
     activePlan &&
@@ -330,36 +311,6 @@ export const AnnualPlanWorkspaceHeader = ({
                         ประกาศใช้: {activePlan.form_issue_date}
                       </span>
                     </>
-                  )}
-
-                  {/* Unincluded register instruments notice */}
-                  {unincludedRegisterSummary.unincludedAssets.length > 0 && (
-                    <span
-                      data-testid="register-vs-plan-scope-note"
-                      className="inline-flex items-center gap-1 text-[11px] text-slate-500 bg-slate-100/80 border border-slate-200/80 px-2 py-0.5 rounded-md"
-                    >
-                      <span>
-                        (จากทะเบียนใช้งานปกติ {unincludedRegisterSummary.totalActiveInRegister} เครื่อง — อยู่นอกแผนนี้{' '}
-                        {unincludedRegisterSummary.unincludedAssets.length} เครื่อง:{' '}
-                        {unincludedRegisterSummary.unincludedAssets
-                          .map((a) =>
-                            a.department !== activePlan.department
-                              ? `${a.asset_code} สังกัดแผนก ${a.department}`
-                              : `${a.asset_code} ยังไม่ได้เพิ่มเข้าแผน`
-                          )
-                          .join(', ')}
-                        )
-                      </span>
-                      {canEditPlan && onOpenSmartImport && (
-                        <button
-                          type="button"
-                          onClick={onOpenSmartImport}
-                          className="text-indigo-700 hover:text-indigo-900 underline font-semibold cursor-pointer ml-1"
-                        >
-                          + เพิ่มเข้าแผนนี้
-                        </button>
-                      )}
-                    </span>
                   )}
                 </div>
               </>

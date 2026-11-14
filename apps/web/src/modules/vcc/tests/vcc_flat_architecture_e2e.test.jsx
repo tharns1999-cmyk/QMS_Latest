@@ -101,19 +101,22 @@ describe('VCC Flat Instrument Architecture — End-to-End Acceptance Criteria Su
     // Verify NO Category Chips or Category Overview appear on the Annual Planning page
     expect(screen.queryByRole('button', { name: /ทุกประเภท/i })).not.toBeInTheDocument();
 
-    // Header explains 6 active in Register vs 1 outside plan (SC-WH-001 in WH), while KPI cards show 5 in scope
+    // Header displays core plan metadata cleanly without the verbose register-vs-plan-scope-note
     const header = screen.getByTestId('annual-plan-workspace-header');
     expect(screen.getByText('เครื่องมือในขอบเขต')).toBeInTheDocument();
-    expect(within(header).getByTestId('register-vs-plan-scope-note')).toHaveTextContent(/จากทะเบียนใช้งานปกติ 6 เครื่อง/i);
-    expect(within(header).getByTestId('register-vs-plan-scope-note')).toHaveTextContent(/SC-WH-001 สังกัดแผนก WH/i);
+    expect(within(header).getByText('VCC-AP-QC-2026')).toBeInTheDocument();
+    expect(within(header).getByText('Rev.01')).toBeInTheDocument();
+    expect(within(header).getByText('ควบคุมคุณภาพ (QC)')).toBeInTheDocument();
+    expect(within(header).getByText('เกณฑ์: ครบกำหนดวันสิ้นเดือน')).toBeInTheDocument();
+    expect(within(header).queryByTestId('register-vs-plan-scope-note')).not.toBeInTheDocument();
     expect(screen.getByText('รอบวางแผนรวม')).toBeInTheDocument();
 
     // SW001 displays Composite Set badge in the clean row
     const swRow = screen.getByText('SW001').closest('tr');
     expect(within(swRow).getByText(/ชุดเครื่องมือ/i)).toBeInTheDocument();
 
-    // Clicking "+ เพิ่มเข้าแผนนี้" opens SmartAssetImportModal showing SC-WH-001 (WH) ready to be added to the QC plan if needed
-    fireEvent.click(within(header).getByRole('button', { name: /\+ เพิ่มเข้าแผนนี้/i }));
+    // Clicking "เพิ่มเข้าแผนจากทะเบียน" opens SmartAssetImportModal showing SC-WH-001 (WH) ready to be added to the QC plan if needed
+    fireEvent.click(screen.getAllByRole('button', { name: /เพิ่มเข้าแผนจากทะเบียน/i })[0]);
     expect(await screen.findByText(/เลือกเครื่องมือจากทะเบียนเข้าสู่แผนปี 2026/i)).toBeInTheDocument();
     expect(screen.getByText(/สังกัดแผนก WH \(นอกแผน QC\)/i)).toBeInTheDocument();
   });
