@@ -17,7 +17,7 @@
   // 00:05 Thailand time: approved documents whose effective date has come take effect.
   "triggers": { "crons": ["5 17 * * *"] },
   "observability": { "enabled": true },
-  "vars": { "ALLOWED_ORIGIN": "https://qms-web.qms-api.workers.dev" },
+  "vars": { "ALLOWED_ORIGIN": "https://qms-web.qms-api.workers.dev", "CLIENT_IP_HEADER": "cf-connecting-ip" },
 
   // The block above is the UAT stack on the personal Cloudflare account. Everything below is the company account's
   // production stack, used only with `--env production` (see docs/ops/account-migration.md). Wrangler does not inherit
@@ -37,7 +37,7 @@
       "r2_buckets": [{ "binding": "FILES", "bucket_name": "qms-files" }],
       "triggers": { "crons": ["5 17 * * *"] },
       "observability": { "enabled": true },
-      "vars": { "ALLOWED_ORIGIN": "REPLACE_WITH_COMPANY_WEB_ORIGIN" }
+      "vars": { "ALLOWED_ORIGIN": "REPLACE_WITH_COMPANY_WEB_ORIGIN", "CLIENT_IP_HEADER": "cf-connecting-ip" }
       // Company domain: add "routes": [{ "pattern": "qms-api.company.com", "custom_domain": true }] once the zone is on the company account.
     }
   }

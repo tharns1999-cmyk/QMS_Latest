@@ -326,7 +326,7 @@ describe('VCC Phase 3.4: Automated Notification & Escalation Engine Tests', () =
     // Run sweep on 2026-11-01 -> generates Due Soon 7d, Cert Expired, and NC On Hold Action
     await runVccNotificationSweep(env.DB, { nowDate: '2026-11-01' });
 
-    const woNotif = await env.DB.prepare("SELECT * FROM vcc_notifications WHERE work_order_id = 'WO-N4-CURR1' AND status = 'PENDING'").first();
+    const woNotif = await env.DB.prepare("SELECT * FROM vcc_notifications WHERE work_order_id = 'WO-N4-CURR1' AND status = 'PENDING' AND notification_type LIKE 'DUE_SOON_%'").first();
     expect(woNotif.notification_type).toBe('DUE_SOON_7');
 
     const certNotif = await env.DB.prepare("SELECT * FROM vcc_notifications WHERE asset_id = 'AST-N4-SEP1' AND notification_type = 'CERT_EXPIRED' AND status = 'PENDING'").first();
@@ -430,6 +430,31 @@ describe('VCC Phase 3.4: Automated Notification & Escalation Engine Tests', () =
   const pendingOf = (assetId, like) =>
     env.DB.prepare("SELECT * FROM vcc_notifications WHERE asset_id = ? AND notification_type LIKE ? AND status != 'RESOLVED'")
       .bind(assetId, like).all().then((r) => r.results);
+
+  it('9b. An instrument with several certificates is judged by the one that lasts longest, among passed and closed work orders only', async () => {
+    await insertAsset('AST-N4-CERT3', 'CERT-N4-003');
+    const certificate = (id, status, result, validUntil) => env.DB.prepare(`
+      INSERT INTO vcc_work_orders (
+        id, wo_code, asset_id, plan_year, cycle_id, status, provider_name, original_due_date, due_date,
+        result_status, nc_status, certificate_no, certificate_valid_until, performed_at
+      ) VALUES (?, ?, 'AST-N4-CERT3', 2026, ?, ?, 'แล็บ', '2026-01-01', '2026-01-01', ?, 'RELEASED', ?, ?, '2026-01-02')
+    `).bind(id, `${id}-C`, `CYC-${id}`, status, result, `CERT-${id}`, validUntil).run();
+
+    await certificate('WO-N4-C3A', 'CLOSED', 'PASS', '2026-11-20'); // nearly expired, but an older certificate
+    await certificate('WO-N4-C3B', 'CLOSED', 'PASS', '2027-12-31'); // the current one
+    await certificate('WO-N4-C3C', 'CLOSED', 'FAIL', '2026-11-10'); // failed: no certificate is valid
+    await certificate('WO-N4-C3D', 'IN_PROGRESS', 'PASS', '2026-11-05'); // not closed yet
+
+    await runVccNotificationSweep(env.DB, { nowDate: '2026-11-01' });
+    expect(await pendingOf('AST-N4-CERT3', 'CERT_%')).toEqual([]);
+
+    // Once the longest-lasting certificate nears its end, the alert is about that one.
+    await env.DB.prepare("UPDATE vcc_work_orders SET certificate_valid_until = '2026-12-01' WHERE id = 'WO-N4-C3B'").run();
+    await runVccNotificationSweep(env.DB, { nowDate: '2026-11-02' });
+    const alerts = await pendingOf('AST-N4-CERT3', 'CERT_EXPIRING_%');
+    expect(alerts).toHaveLength(1);
+    expect(JSON.stringify(alerts[0])).toContain('2026-12-01');
+  });
 
   it('9. P1-1 Certificate renewal: next expiry cycle re-alerts, old episode kept, no duplicates within an episode', async () => {
     await insertAsset('AST-N4-CERT2', 'CERT-N4-002');

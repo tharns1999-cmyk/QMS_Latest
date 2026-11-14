@@ -156,6 +156,19 @@ const recordFailedLogin = (db, user, details) => db.batch([
 ]);
 
 // Cloudflare always sets the IP header; it is absent only in local dev and tests, where the limit is skipped.
+// The address of the caller, taken from the one header the hosting platform sets (CLIENT_IP_HEADER). Any other header
+// can be forged by the caller, so with no setting there is no address and the per-address login limit is not applied.
+// A forwarding header lists every hop; the last entry is the one our own proxy appended, and may carry a port.
+export const clientIp = (c) => {
+  const name = String(c.env.CLIENT_IP_HEADER || '').trim().toLowerCase();
+  if (!name) return undefined;
+  const value = c.req.header(name);
+  if (!value) return undefined;
+  const hop = name === 'x-forwarded-for' ? value.split(',').pop().trim() : value.trim();
+  const v4 = /^(\d{1,3}(?:\.\d{1,3}){3})(?::\d+)?$/.exec(hop);
+  return (v4 ? v4[1] : hop) || undefined;
+};
+
 const tooManyFailures = async (db, ip) => {
   if (!ip) return false;
   const since = new Date(Date.now() - LOGIN_WINDOW_MS).toISOString();
@@ -170,7 +183,7 @@ app.post('/api/auth/login', async (c) => {
   if (!email || !password) return c.json({ error: 'กรุณากรอกอีเมลและรหัสผ่าน' }, 400);
 
   const db = c.env.DB;
-  const ip = c.req.header('cf-connecting-ip');
+  const ip = clientIp(c);
   // DISABLE_LOGIN_THROTTLE comes from .dev.vars only (local testing); the deploy guard refuses it in wrangler.jsonc.
   if (c.env.DISABLE_LOGIN_THROTTLE !== '1' && await tooManyFailures(db, ip)) return c.json(TOO_MANY_FAILURES, 429, { 'Retry-After': String(LOGIN_WINDOW_MS / 1000) });
   const user = await db.prepare('SELECT * FROM users WHERE email = ?').bind(email).first();
@@ -231,7 +244,7 @@ app.post('/api/auth/change-password', requireAuth, async (c) => {
   const user = await db.prepare('SELECT * FROM users WHERE id = ?').bind(c.get('user').id).first();
 
   if (!(await verifyPassword(current, user.password_hash))) {
-    await recordFailedLogin(db, user, { via: 'change-password', ip: c.req.header('cf-connecting-ip') });
+    await recordFailedLogin(db, user, { via: 'change-password', ip: clientIp(c) });
     return c.json({ error: 'รหัสผ่านปัจจุบันไม่ถูกต้อง' }, 400);
   }
   if (next.length < MIN_PASSWORD_LENGTH || next.length > MAX_PASSWORD_LENGTH) {
@@ -1276,7 +1289,7 @@ app.post('/api/auth/2fa/verify', async (c) => {
   const payload = typeof body.challenge === 'string' ? await verify(body.challenge, c.env.JWT_SECRET, 'HS256').catch(() => null) : null;
   if (payload?.purpose !== TWO_FACTOR_PURPOSE) return c.json({ error: 'หมดเวลายืนยันตัวตน กรุณาเข้าสู่ระบบใหม่' }, 401);
   const db = c.env.DB;
-  const ip = c.req.header('cf-connecting-ip');
+  const ip = clientIp(c);
   if (await tooManyFailures(db, ip)) return c.json(TOO_MANY_FAILURES, 429, { 'Retry-After': String(LOGIN_WINDOW_MS / 1000) });
   const user = await db.prepare('SELECT * FROM users WHERE id = ?').bind(payload.sub).first();
   if (!user || user.status !== 'ACTIVE' || !user.totp_confirmed_at) return c.json({ error: 'หมดเวลายืนยันตัวตน กรุณาเข้าสู่ระบบใหม่' }, 401);
@@ -1321,7 +1334,7 @@ app.post('/api/auth/2fa/confirm', requireAuth, async (c) => {
   if (!row.totp_secret) return c.json({ error: 'กรุณาเริ่มตั้งค่าใหม่' }, 409);
   const step = await verifyCode(row.totp_secret, body.code, 0);
   if (step === null) {
-    await recordFailedLogin(db, row, { ip: c.req.header('cf-connecting-ip'), via: '2fa-setup' });
+    await recordFailedLogin(db, row, { ip: clientIp(c), via: '2fa-setup' });
     return c.json({ error: 'รหัสไม่ถูกต้อง ตรวจสอบว่านาฬิกาเครื่องตรงและลองใหม่' }, 400);
   }
   const codes = Array.from({ length: RECOVERY_CODE_COUNT }, newRecoveryCode);
@@ -1548,25 +1561,26 @@ registerModuleGovernanceRoutes(app, { requireAuth, audit });
 app.use('/api/vcc/*', requireAuth, requireVccModuleState);
 registerVccRoutes(app, { requireAuth, audit });
 
-// Workers calls scheduled() from the cron in wrangler.jsonc; tests call request() directly.
+// The daily jobs, kept apart from any one platform's trigger: Workers calls scheduled() from the cron in wrangler.jsonc,
+// another host calls runScheduledJobs(env) from its own timer, and tests call request() directly.
+export const runScheduledJobs = async (env) => {
+  const jobs = [
+    ['activateDue', () => activateDue(env.DB)],
+    ['runVccNotificationSweep', () => runVccNotificationSweep(env.DB)]
+  ];
+  // One failing job must not stop the next one.
+  for (const [job, run] of jobs) {
+    try {
+      await run();
+      logEvent('info', 'cron_job_done', { job });
+    } catch (err) {
+      logEvent('error', 'cron_job_failed', { job, error: String(err?.message ?? err).slice(0, 500), stack: String(err?.stack ?? '').slice(0, 1000) });
+    }
+  }
+};
+
 export default {
   fetch: app.fetch,
   request: app.request,
-  scheduled: (event, env, ctx) =>
-    ctx.waitUntil(
-      (async () => {
-        try {
-          await activateDue(env.DB);
-          logEvent('info', 'cron_job_done', { job: 'activateDue' });
-        } catch (err) {
-          logEvent('error', 'cron_job_failed', { job: 'activateDue', error: String(err?.message ?? err).slice(0, 500), stack: String(err?.stack ?? '').slice(0, 2000) });
-        }
-        try {
-          await runVccNotificationSweep(env.DB);
-          logEvent('info', 'cron_job_done', { job: 'runVccNotificationSweep' });
-        } catch (err) {
-          logEvent('error', 'cron_job_failed', { job: 'runVccNotificationSweep', error: String(err?.message ?? err).slice(0, 500), stack: String(err?.stack ?? '').slice(0, 2000) });
-        }
-      })()
-    )
+  scheduled: (event, env, ctx) => ctx.waitUntil(runScheduledJobs(env))
 };

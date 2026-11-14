@@ -28,6 +28,8 @@ export const createMemoryBucket = () => {
     key,
     size: o.bytes.byteLength,
     uploaded: o.uploaded,
+    // R2 sends the entity tag in quotes; any value that changes with the content will do for a cache validator.
+    httpEtag: `"${o.version}"`,
     httpMetadata: o.httpMetadata,
     customMetadata: o.customMetadata,
     writeHttpMetadata: (headers) => {
@@ -36,7 +38,7 @@ export const createMemoryBucket = () => {
   });
   return {
     put: async (key, value, options = {}) => {
-      const o = { bytes: await bytesOf(value), uploaded: new Date(), httpMetadata: options.httpMetadata || {}, customMetadata: options.customMetadata || {} };
+      const o = { bytes: await bytesOf(value), version: crypto.randomUUID().replaceAll('-', ''), uploaded: new Date(), httpMetadata: options.httpMetadata || {}, customMetadata: options.customMetadata || {} };
       objects.set(key, o);
       return describe(key, o);
     },
