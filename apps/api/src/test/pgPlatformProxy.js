@@ -4,8 +4,17 @@ import { cpSync, existsSync, readFileSync, rmSync } from 'node:fs';
 import { basename, dirname, resolve } from 'node:path';
 import { PGlite } from '@electric-sql/pglite';
 import { citext } from '@electric-sql/pglite/contrib/citext';
+import pg from 'pg';
 import { createPgDatabase } from '../db/pgAdapter.js';
+import { createPgDriver } from '../db/pgDriver.js';
 import { triggerDdl } from '../db/pg/fromSqlite.js';
+
+// With QMS_TEST_PG_URL set (postgres://user:password@host:port) the suite runs against that real PostgreSQL server instead
+// of the in-process one, through the same pooled driver production uses.
+export const REAL_PG_URL = process.env.QMS_TEST_PG_URL;
+export const PRISTINE_DB = 'qms_pristine';
+export const SHARED_DB = 'qms_test';
+export const dbUrl = (name) => `${REAL_PG_URL.replace(/\/$/, '')}/${name}`;
 
 export const PG_TEST_DIR = '.wrangler/test-pg/data';
 // Untouched copy of the freshly built database, made by scripts/test-migrate-pg.js.
@@ -123,8 +132,23 @@ const dataDirFor = (persistPath) => {
   return dir;
 };
 
+const realProxy = async (persist) => {
+  let name = SHARED_DB;
+  if (persist?.path && resolve(persist.path) !== resolve(SHARED_D1_PATH)) {
+    name = `own_${basename(dirname(resolve(persist.path))).replace(/[^a-z0-9]/gi, '_').toLowerCase()}`;
+    const maintenance = new pg.Client({ connectionString: dbUrl('postgres') });
+    await maintenance.connect();
+    await maintenance.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`);
+    await maintenance.query(`CREATE DATABASE ${name} TEMPLATE ${PRISTINE_DB}`);
+    await maintenance.end();
+  }
+  const driver = createPgDriver({ connectionString: dbUrl(name), serializeWrites: process.env.QMS_TEST_PG_NO_LOCK !== '1' });
+  return { env: { ...configuredVars(), DB: createPgDatabase(driver, { rewrite: fixtureDdl }), FILES: createMemoryBucket() }, dispose: () => driver.close() };
+};
+
 export const getPlatformProxy = async ({ persist } = {}) => {
-  const pg = await openPglite(dataDirFor(persist?.path));
-  const driver = { ...overNetwork(pg), transaction: (fn) => pg.transaction((tx) => fn(overNetwork(tx))) };
-  return { env: { ...configuredVars(), DB: createPgDatabase(driver, { rewrite: fixtureDdl }), FILES: createMemoryBucket() }, dispose: () => pg.close() };
+  if (REAL_PG_URL) return realProxy(persist);
+  const pglite = await openPglite(dataDirFor(persist?.path));
+  const driver = { ...overNetwork(pglite), transaction: (fn) => pglite.transaction((tx) => fn(overNetwork(tx))) };
+  return { env: { ...configuredVars(), DB: createPgDatabase(driver, { rewrite: fixtureDdl }), FILES: createMemoryBucket() }, dispose: () => pglite.close() };
 };
