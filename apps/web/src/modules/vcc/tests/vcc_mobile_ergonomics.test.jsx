@@ -558,22 +558,22 @@ describe('VCC Mobile Ergonomics Suite (Round D3)', () => {
         acceptance_criteria: '±0.02 mm'
       };
 
-      const { container } = render(
+      const { baseElement } = render(
         <DigitalRecordModal
           workOrder={mockWo}
           onClose={onClose}
         />
       );
 
-      // Print container ID must be present
-      const printContainer = container.querySelector('#vcc-digital-record-print');
+      // Print container ID must be present (rendered via portal on document.body)
+      const printContainer = baseElement.querySelector('#vcc-digital-record-print');
       expect(printContainer).toBeInTheDocument();
       expect(printContainer.className).toContain('print:overflow-visible');
       expect(printContainer.className).toContain('print:h-auto');
       expect(printContainer.className).toContain('overscroll-y-contain');
 
       // Print sections must contain page-break avoidance class
-      const printSections = container.querySelectorAll('.vcc-print-section');
+      const printSections = baseElement.querySelectorAll('.vcc-print-section');
       expect(printSections.length).toBeGreaterThanOrEqual(4);
 
       // Mobile drag handle must be present and trigger dismissal on swipe

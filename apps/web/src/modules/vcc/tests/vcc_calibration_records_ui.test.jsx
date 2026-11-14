@@ -247,6 +247,81 @@ describe('VCC Phase 3.2 — Calibration Records & Execution UI Tests', () => {
     printSpy.mockRestore();
   });
 
+  it('DigitalRecordModal_PrintPortalAndTestTagClean: เรนเดอร์ผ่าน createPortal ที่ document.body, ซ่อนส่วน no-print, แสดงแบนเนอร์องค์กร และล้างคำว่า [ข้อมูลทดสอบ]', () => {
+    const printSpy = vi.spyOn(window, 'print').mockImplementation(() => {});
+
+    const internalTestWo = {
+      ...sampleWorkOrder,
+      id: 'wo-internal-test',
+      wo_code: 'WO-2026-105',
+      asset_code: 'TC001',
+      asset_name: '[ข้อมูลทดสอบ] เทอร์โมคัปเปิลมาตรฐาน',
+      status: 'CLOSED',
+      result_status: 'PASS',
+      calibration_type: 'INTERNAL_VERIFICATION',
+      calibration_method: 'IN_HOUSE',
+      provider_name: '[ข้อมูลทดสอบ] ห้องปฏิบัติการภายใน (Internal QC Lab)',
+      calibration_provider_name: '[ข้อมูลทดสอบ] ห้องปฏิบัติการภายใน (Internal QC Lab)',
+      master_reference: '[ข้อมูลทดสอบ] ตุ้มน้ำหนักมาตรฐาน F1',
+      traceability_ref: '',
+      group_nature: 'COMPOSITE_SET',
+      composite_details: '[ข้อมูลทดสอบ] ชุดหัววัดเทอร์โมคัปเปิล 2 จุด',
+      child_assets: [
+        { id: 'c1', asset_code: 'TC001-A', name: '[ข้อมูลทดสอบ] หัววัดจุดที่ 1', serial_no: 'SN-01', location: 'F1', status: 'ACTIVE' }
+      ],
+      certificate_file_name: null,
+      performed_by_name: 'สมชาย นักสอบเทียบ',
+      performed_at: '2026-05-15'
+    };
+
+    render(
+      <DigitalRecordModal
+        workOrder={internalTestWo}
+        onClose={vi.fn()}
+      />
+    );
+
+    // 1. Verify createPortal rendered #vcc-digital-record-portal directly under document.body
+    const portalRoot = document.getElementById('vcc-digital-record-portal');
+    expect(portalRoot).not.toBeNull();
+    expect(portalRoot.parentElement).toBe(document.body);
+
+    // 2. Verify @media print CSS uses margin: 0mm !important and body > *:not(#vcc-digital-record-portal) without visibility: hidden
+    const styleEl = portalRoot.querySelector('style');
+    expect(styleEl).not.toBeNull();
+    expect(styleEl.textContent).toContain('margin: 0mm !important;');
+    expect(styleEl.textContent).toContain('body > *:not(#vcc-digital-record-portal)');
+    expect(styleEl.textContent).toContain('#vcc-digital-record-portal .no-print');
+    expect(styleEl.textContent).not.toContain('visibility: hidden');
+
+    // 3. Verify banner image is rendered above document title
+    const bannerImg = screen.getByAltText('บริษัท เศรษฐชล จำกัด');
+    expect(bannerImg).toBeInTheDocument();
+    expect(bannerImg.getAttribute('src')).toBe('/banner.png');
+
+    // 4. Verify [ข้อมูลทดสอบ] is stripped from asset_name, provider_name, master_reference (both Section 2 & Summary Card), composite_details, and child.name
+    expect(screen.getByText('เทอร์โมคัปเปิลมาตรฐาน')).toBeInTheDocument();
+    expect(screen.getByText('ห้องปฏิบัติการภายใน (Internal QC Lab)')).toBeInTheDocument();
+    expect(screen.getAllByText('ตุ้มน้ำหนักมาตรฐาน F1').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText('ชุดหัววัดเทอร์โมคัปเปิล 2 จุด')).toBeInTheDocument();
+    expect(screen.getByText('หัววัดจุดที่ 1')).toBeInTheDocument();
+    expect(portalRoot.textContent).not.toContain('[ข้อมูลทดสอบ]');
+
+    // 5. Verify no-print class on header, right summary column, and footer
+    const printHeaderBtn = screen.getByRole('button', { name: /^พิมพ์เอกสาร$/i });
+    expect(printHeaderBtn.closest('.no-print')).not.toBeNull();
+
+    const printSummaryBtn = screen.getByRole('button', { name: /พิมพ์เอกสารสรุป/i });
+    expect(printSummaryBtn.closest('.no-print')).not.toBeNull();
+    fireEvent.click(printSummaryBtn);
+    expect(printSpy).toHaveBeenCalledTimes(1);
+
+    const closeFooterBtn = screen.getByRole('button', { name: /ปิดหน้าต่าง/i });
+    expect(closeFooterBtn.closest('.no-print')).not.toBeNull();
+
+    printSpy.mockRestore();
+  });
+
   it('AmendmentModal_DisplaysSoDAndUploadErrors: แสดงข้อความแจ้งเตือนเมื่อเกิดข้อผิดพลาด Segregation of Duties หรือ R2 Upload Error', () => {
     const errorMsg = 'การคัดแยกหน้าที่ (Segregation of Duties): ผู้บันทึกผลการสอบเทียบไม่สามารถอนุมัติการแก้ไข (Amendment) ของตนเองได้ แม้จะมีสิทธิ์ระดับ L5+ ขึ้นไป (ต้องให้ผู้อนุมัติอื่นเป็นผู้ดำเนินการ)';
     render(

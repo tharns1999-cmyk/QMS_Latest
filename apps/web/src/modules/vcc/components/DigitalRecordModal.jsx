@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import {
   X,
   Printer,
@@ -303,35 +304,78 @@ export const DigitalRecordModal = ({
   const verifiedByName = rawVerifierName || rawVerifierId || '';
   const verifiedAt = workOrder.verified_at || workOrder.reviewed_at || '';
 
-  return (
+  const cleanAssetName = String(workOrder.asset_name || '').replace(/\[ข้อมูลทดสอบ\]\s*/g, '').trim() || '-';
+  const cleanProviderName = String(workOrder.calibration_provider_name || workOrder.provider_name || '').replace(/\[ข้อมูลทดสอบ\]\s*/g, '').trim() || '-';
+  const cleanMasterRef = String(workOrder.master_reference || workOrder.traceability_ref || '').replace(/\[ข้อมูลทดสอบ\]\s*/g, '').trim() || '-';
+  const cleanTraceabilityRef = String(workOrder.traceability_ref || workOrder.master_reference || '').replace(/\[ข้อมูลทดสอบ\]\s*/g, '').trim() || 'ตามใบรับรองสถาบันมาตรวิทยา';
+  const cleanCompositeDetails = String(workOrder.composite_details || '').replace(/\[ข้อมูลทดสอบ\]\s*/g, '').trim();
+
+  const modalContent = (
     <div
-      className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-y-auto animate-in fade-in duration-150 print:p-0 print:bg-white print:static print:overflow-visible print:block"
+      id="vcc-digital-record-portal"
+      className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-y-auto animate-in fade-in duration-150 print:p-0 print:bg-white print:static print:overflow-visible print:block print:backdrop-blur-none"
       onClick={handleBackdropClick}
     >
       <style>{`
         @media print {
           @page {
             size: A4 portrait;
-            margin: 12mm 15mm 15mm 15mm;
+            margin: 0mm !important;
           }
-          body * {
-            visibility: hidden !important;
+          html, body {
+            width: 210mm !important;
+            height: auto !important;
+            min-height: 0 !important;
+            overflow: visible !important;
+            background: #ffffff !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
           }
-          #vcc-digital-record-print, #vcc-digital-record-print * {
-            visibility: visible !important;
+          body > *:not(#vcc-digital-record-portal) {
+            display: none !important;
           }
-          #vcc-digital-record-print {
-            position: absolute !important;
-            left: 0 !important;
-            top: 0 !important;
+          #vcc-digital-record-portal {
+            position: static !important;
+            display: block !important;
             width: 100% !important;
+            height: auto !important;
             max-height: none !important;
+            overflow: visible !important;
+            background: #ffffff !important;
+            padding: 0 !important;
+            margin: 0 !important;
+          }
+          #vcc-digital-record-portal .no-print {
+            display: none !important;
+          }
+          #vcc-digital-record-portal .print-modal-card {
+            position: static !important;
+            display: block !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            max-height: none !important;
+            height: auto !important;
             overflow: visible !important;
             box-shadow: none !important;
             border: none !important;
-            padding: 0 !important;
+            border-radius: 0 !important;
             margin: 0 !important;
-            background: white !important;
+            padding: 0 !important;
+          }
+          #vcc-digital-record-print {
+            position: static !important;
+            display: block !important;
+            width: 210mm !important;
+            max-width: 100% !important;
+            height: auto !important;
+            max-height: none !important;
+            overflow: visible !important;
+            padding: 12mm 14mm !important;
+            margin: 0 auto !important;
+            background: #ffffff !important;
+            box-sizing: border-box !important;
           }
           .vcc-print-section {
             break-inside: avoid !important;
@@ -348,12 +392,12 @@ export const DigitalRecordModal = ({
         aria-labelledby="digital-record-title"
         tabIndex="-1"
         style={isMobile && dragOffset > 0 ? { transform: `translateY(${dragOffset}px)` } : undefined}
-        className="bg-white rounded-t-3xl sm:rounded-2xl border-t sm:border border-slate-200 shadow-2xl max-w-5xl lg:max-w-6xl w-full max-h-[94dvh] sm:max-h-[92vh] my-0 sm:my-6 flex flex-col overflow-hidden outline-none animate-in slide-in-from-bottom-6 sm:slide-in-from-bottom-0 duration-200 transition-transform duration-100 ease-out print:m-0 print:border-none print:shadow-none print:max-w-none print:max-h-none print:overflow-visible print:rounded-none"
+        className="print-modal-card bg-white rounded-t-3xl sm:rounded-2xl border-t sm:border border-slate-200 shadow-2xl max-w-5xl lg:max-w-6xl w-full max-h-[94dvh] sm:max-h-[92vh] my-0 sm:my-6 flex flex-col overflow-hidden outline-none animate-in slide-in-from-bottom-6 sm:slide-in-from-bottom-0 duration-200 transition-transform duration-100 ease-out print:m-0 print:border-none print:shadow-none print:max-w-none print:max-h-none print:overflow-visible print:rounded-none print:transform-none"
       >
         {/* Mobile Drag Handle Bar */}
         <div
           data-testid="vcc-drag-handle"
-          className="sm:hidden pt-3 pb-1.5 flex justify-center cursor-grab active:cursor-grabbing select-none shrink-0 bg-slate-50 border-b border-slate-100 print:hidden"
+          className="no-print sm:hidden pt-3 pb-1.5 flex justify-center cursor-grab active:cursor-grabbing select-none shrink-0 bg-slate-50 border-b border-slate-100 print:hidden"
           aria-hidden="true"
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
@@ -363,7 +407,7 @@ export const DigitalRecordModal = ({
         </div>
 
         {/* Modal Header (Hidden during browser printing) */}
-        <div className="px-5 sm:px-6 py-3.5 sm:py-4 border-b border-slate-200 flex items-center justify-between shrink-0 bg-slate-50/80 print:hidden">
+        <div className="no-print px-5 sm:px-6 py-3.5 sm:py-4 border-b border-slate-200 flex items-center justify-between shrink-0 bg-slate-50/80 print:hidden">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-mono text-xs font-bold px-2.5 py-0.5 rounded-md bg-indigo-100 text-indigo-700">
               DIGITAL RECORD: {workOrder.wo_code}
@@ -391,16 +435,21 @@ export const DigitalRecordModal = ({
         </div>
 
         {/* Split-View Layout Container */}
-        <div className="flex-1 overflow-y-auto overscroll-y-contain print:overflow-visible print:h-auto">
-          <div className="grid grid-cols-1 lg:grid-cols-2 divide-y lg:divide-y-0 lg:divide-x divide-slate-200 min-h-full">
+        <div className="print-modal-card flex-1 overflow-y-auto overscroll-y-contain print:overflow-visible print:h-auto">
+          <div className="print-modal-card grid grid-cols-1 lg:grid-cols-2 divide-y lg:divide-y-0 lg:divide-x divide-slate-200 min-h-full">
             {/* COLUMN 1 (LEFT): Official Digital Certificate Document */}
             <div
               id="vcc-digital-record-print"
-              className="p-5 sm:p-6 lg:p-7 space-y-5 text-slate-800 text-sm overflow-visible overscroll-y-contain print:overflow-visible print:h-auto print:p-0"
+              className="p-5 sm:p-6 lg:p-7 space-y-5 text-slate-800 text-sm overflow-visible overscroll-y-contain print:overflow-visible print:h-auto"
             >
               {/* Document Title Banner */}
               <div className="border-b-2 border-slate-900 pb-3.5 flex flex-col sm:flex-row sm:items-end justify-between gap-3">
                 <div>
+                  <img
+                    src="/banner.png"
+                    alt="บริษัท เศรษฐชล จำกัด"
+                    className="h-12 w-auto object-contain object-left mb-2"
+                  />
                   <div className="text-xs font-mono font-bold tracking-wider text-slate-500 uppercase">
                     ศูนย์ทวนสอบและสอบเทียบเครื่องมือวัด (VCC) • ระบบบริหารคุณภาพ QMS
                   </div>
@@ -431,7 +480,7 @@ export const DigitalRecordModal = ({
                   </div>
                   <div>
                     <span className="text-slate-400 block text-xs">ชื่อเครื่องมือ:</span>
-                    <span className="font-semibold text-slate-900">{workOrder.asset_name || '-'}</span>
+                    <span className="font-semibold text-slate-900">{cleanAssetName}</span>
                     {workOrder.group_nature === 'COMPOSITE_SET' && (
                       <span className="inline-block mt-0.5 px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-200 text-[10px] font-bold">
                         ชุดเครื่องมือผสม (Composite Set)
@@ -444,7 +493,7 @@ export const DigitalRecordModal = ({
                   </div>
                   <div>
                     <span className="text-slate-400 block text-xs">หน่วยงานผู้สอบเทียบ:</span>
-                    <span className="font-semibold text-slate-900">{workOrder.calibration_provider_name || workOrder.provider_name || '-'}</span>
+                    <span className="font-semibold text-slate-900">{cleanProviderName}</span>
                   </div>
                 </div>
               </div>
@@ -463,10 +512,10 @@ export const DigitalRecordModal = ({
                         <span>ใบบันทึกนี้เป็นข้อมูลประวัติเดิมก่อนระบบจัดเก็บภาพถ่ายรายการเครื่องมือย่อย (Historical Record Predates Child Snapshot)</span>
                       </div>
                     )}
-                    {workOrder.composite_details && (
+                    {cleanCompositeDetails && (
                       <div className="p-2.5 rounded-lg bg-white border border-slate-200">
                         <span className="font-semibold text-slate-700 block mb-0.5">รายละเอียดรายการประกอบชุด:</span>
-                        <p className="text-slate-800 whitespace-pre-line leading-relaxed font-sans">{workOrder.composite_details}</p>
+                        <p className="text-slate-800 whitespace-pre-line leading-relaxed font-sans">{cleanCompositeDetails}</p>
                       </div>
                     )}
                     {Array.isArray(workOrder.child_assets) && workOrder.child_assets.length > 0 && (
@@ -485,7 +534,7 @@ export const DigitalRecordModal = ({
                             {workOrder.child_assets.map((child) => (
                               <tr key={child.id || child.asset_code} className="hover:bg-slate-50/60">
                                 <td className="py-1.5 px-2.5 font-mono font-bold text-indigo-700">{child.asset_code}</td>
-                                <td className="py-1.5 px-2.5 font-medium text-slate-800">{child.name}</td>
+                                <td className="py-1.5 px-2.5 font-medium text-slate-800">{String(child.name || '').replace(/\[ข้อมูลทดสอบ\]\s*/g, '').trim() || '-'}</td>
                                 <td className="py-1.5 px-2.5 text-slate-600 font-mono">{child.serial_no || child.model || '-'}</td>
                                 <td className="py-1.5 px-2.5 text-slate-600">{child.location || '-'}</td>
                                 <td className="py-1.5 px-2.5 text-center">
@@ -578,7 +627,7 @@ export const DigitalRecordModal = ({
                       <>
                         <div>
                           <span className="text-slate-400 block text-xs">เครื่องมือมาตรฐานที่ใช้เทียบ (Master Reference):</span>
-                          <span className="font-semibold text-slate-900">{workOrder.master_reference || workOrder.traceability_ref || '-'}</span>
+                          <span className="font-semibold text-slate-900">{cleanMasterRef}</span>
                         </div>
                         <div>
                           <span className="text-slate-400 block text-xs">เลขที่ใบบันทึกอ้างอิง:</span>
@@ -637,7 +686,7 @@ export const DigitalRecordModal = ({
                   </div>
                   <div>
                     <span className="text-slate-400 block text-xs">การสอบกลับได้สู่มาตรฐานแห่งชาติ (Traceability):</span>
-                    <span className="font-mono text-slate-800">{workOrder.traceability_ref || 'ตามใบรับรองสถาบันมาตรวิทยา'}</span>
+                    <span className="font-mono text-slate-800">{cleanTraceabilityRef}</span>
                   </div>
                   <div>
                     <span className="text-slate-400 block text-xs">สภาวะแวดล้อมขณะสอบเทียบ (Temp / Humidity):</span>
@@ -752,7 +801,7 @@ export const DigitalRecordModal = ({
             </div>
 
             {/* COLUMN 2 (RIGHT): Embedded PDF Viewer / Digital Verification Summary Card */}
-            <div className="p-5 sm:p-6 lg:p-7 flex flex-col justify-start space-y-3 bg-slate-50/50 print:hidden">
+            <div className="no-print p-5 sm:p-6 lg:p-7 flex flex-col justify-start space-y-3 bg-slate-50/50 print:hidden">
               <div className="flex items-center justify-between pb-2 border-b border-slate-200">
                 <div className="flex items-center gap-2">
                   <FileText size={16} className="text-indigo-600" />
@@ -856,7 +905,7 @@ export const DigitalRecordModal = ({
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-500">เครื่องมือมาตรฐาน:</span>
-                      <span className="font-medium text-slate-900">{workOrder.traceability_ref || '-'}</span>
+                      <span className="font-medium text-slate-900">{cleanMasterRef}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-500">ผลการตัดสิน:</span>
@@ -898,7 +947,7 @@ export const DigitalRecordModal = ({
         </div>
 
         {/* Modal Footer */}
-        <div className="px-5 sm:px-6 py-3.5 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500 print:hidden shrink-0 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] sm:pb-3.5">
+        <div className="no-print px-5 sm:px-6 py-3.5 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500 print:hidden shrink-0 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] sm:pb-3.5">
           <div className="flex items-center gap-2">
             <button
               type="button"
@@ -922,6 +971,8 @@ export const DigitalRecordModal = ({
       </div>
     </div>
   );
+
+  return typeof document !== 'undefined' ? createPortal(modalContent, document.body) : modalContent;
 };
 
 export default DigitalRecordModal;
