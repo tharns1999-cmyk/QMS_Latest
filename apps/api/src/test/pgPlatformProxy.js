@@ -2,12 +2,14 @@
 // 'wrangler' to this file), so the test files themselves stay the same for both databases.
 import { cpSync, existsSync, readFileSync, rmSync } from 'node:fs';
 import { basename, dirname, resolve } from 'node:path';
+import { BlobServiceClient } from '@azure/storage-blob';
 import { PGlite } from '@electric-sql/pglite';
 import { citext } from '@electric-sql/pglite/contrib/citext';
 import pg from 'pg';
 import { createPgDatabase } from '../db/pgAdapter.js';
 import { createPgDriver } from '../db/pgDriver.js';
 import { triggerDdl } from '../db/pg/fromSqlite.js';
+import { createBlobStore } from '../node/blobStore.js';
 
 // With QMS_TEST_PG_URL set (postgres://user:password@host:port) the suite runs against that real PostgreSQL server instead
 // of the in-process one, through the same pooled driver production uses.
@@ -143,12 +145,25 @@ const realProxy = async (persist) => {
     await maintenance.end();
   }
   const driver = createPgDriver({ connectionString: dbUrl(name), serializeWrites: process.env.QMS_TEST_PG_NO_LOCK !== '1' });
-  return { env: { ...configuredVars(), DB: createPgDatabase(driver, { rewrite: fixtureDdl }), FILES: createMemoryBucket() }, dispose: () => driver.close() };
+  const store = await openFiles();
+  return { env: { ...configuredVars(), DB: createPgDatabase(driver, { rewrite: fixtureDdl }), FILES: store.files }, dispose: async () => { await driver.close(); await store.dispose(); } };
+};
+
+// The files: an in-memory bucket, or Azure Blob Storage (Azurite) when QMS_TEST_BLOB_CONNECTION_STRING is set, so the
+// whole suite can be run against the real store. Each proxy gets a container of its own and removes it on dispose.
+const openFiles = async () => {
+  const connectionString = process.env.QMS_TEST_BLOB_CONNECTION_STRING;
+  if (!connectionString) return { files: createMemoryBucket(), dispose: async () => {} };
+  const service = BlobServiceClient.fromConnectionString(connectionString);
+  const container = `qms-t-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  await service.getContainerClient(container).create();
+  return { files: createBlobStore({ container, connectionString }), dispose: () => service.getContainerClient(container).deleteIfExists() };
 };
 
 export const getPlatformProxy = async ({ persist } = {}) => {
   if (REAL_PG_URL) return realProxy(persist);
   const pglite = await openPglite(dataDirFor(persist?.path));
   const driver = { ...overNetwork(pglite), transaction: (fn) => pglite.transaction((tx) => fn(overNetwork(tx))) };
-  return { env: { ...configuredVars(), DB: createPgDatabase(driver, { rewrite: fixtureDdl }), FILES: createMemoryBucket() }, dispose: () => pglite.close() };
+  const store = await openFiles();
+  return { env: { ...configuredVars(), DB: createPgDatabase(driver, { rewrite: fixtureDdl }), FILES: store.files }, dispose: async () => { await pglite.close(); await store.dispose(); } };
 };

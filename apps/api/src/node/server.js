@@ -4,6 +4,7 @@ import { serve } from '@hono/node-server';
 import worker, { runScheduledJobs } from '../index.js';
 import { createPgDatabase } from '../db/pgAdapter.js';
 import { createPgDriver } from '../db/pgDriver.js';
+import { createBlobStore } from './blobStore.js';
 import { createDiskStore } from './diskStore.js';
 import { createStaticHandler } from './staticFiles.js';
 
@@ -13,7 +14,7 @@ export const buildEnv = (config) => {
   return {
     env: {
       DB: createPgDatabase(driver),
-      FILES: createDiskStore(config.filesDir),
+      FILES: config.blob ? createBlobStore(config.blob) : createDiskStore(config.filesDir),
       JWT_SECRET: config.jwtSecret,
       ALLOWED_ORIGIN: config.allowedOrigin,
       CLIENT_IP_HEADER: config.clientIpHeader

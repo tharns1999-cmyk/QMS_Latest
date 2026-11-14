@@ -13,6 +13,15 @@ try {
 }
 
 const { env, close } = buildEnv(config);
+// A missing container or no access to it should stop the start, not show up on the first upload.
+try {
+  await env.FILES.ready?.();
+} catch (err) {
+  log('error', 'file_store_unavailable', { error: String(err?.message ?? err) });
+  await close();
+  process.exit(1);
+}
+if (!config.blob) log('warn', 'file_store_is_a_folder', { dir: config.filesDir, effect: 'files are kept on this host, not in Azure Blob Storage' });
 const server = await createNodeServer({
   env,
   port: config.port,
@@ -20,7 +29,7 @@ const server = await createNodeServer({
   scheduler: config.runScheduler,
   onError: (err) => log('error', 'scheduler_failed', { error: String(err?.message ?? err) })
 });
-log('info', 'api_started', { port: server.port, scheduler: config.runScheduler, web: Boolean(config.webDistDir), clientIpHeader: config.clientIpHeader || null });
+log('info', 'api_started', { port: server.port, scheduler: config.runScheduler, web: Boolean(config.webDistDir), files: config.blob ? `blob:${config.blob.container}` : 'folder', clientIpHeader: config.clientIpHeader || null });
 if (!config.clientIpHeader) log('warn', 'client_ip_header_not_set', { effect: 'the per-address limit on failed logins is not applied' });
 
 let stopping = false;

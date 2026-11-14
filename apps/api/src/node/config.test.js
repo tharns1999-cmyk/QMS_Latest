@@ -15,6 +15,7 @@ describe('settings for running the API as a service', () => {
       port: 8080,
       poolMax: 10,
       filesDir: './data/files',
+      blob: null,
       clientIpHeader: '',
       webDistDir: '',
       runScheduler: true
@@ -44,5 +45,17 @@ describe('settings for running the API as a service', () => {
     expect(() => readConfig({ ...good, PORT: 'abc' })).toThrow(/PORT/);
     expect(() => readConfig({ ...good, PORT: '70000' })).toThrow(/PORT/);
     expect(() => readConfig({ ...good, DATABASE_POOL_MAX: '0' })).toThrow(/DATABASE_POOL_MAX/);
+  });
+
+  it('keeps files in a folder unless Azure Blob Storage is configured, with a default container', () => {
+    expect(readConfig(good).blob).toBeNull();
+    expect(readConfig({ ...good, AZURE_STORAGE_ACCOUNT: 'qmsprod01' }).blob).toEqual({ container: 'qms-files', account: 'qmsprod01', connectionString: '' });
+    expect(readConfig({ ...good, AZURE_STORAGE_CONNECTION_STRING: 'UseDevelopmentStorage=true', AZURE_STORAGE_CONTAINER: 'pdf-1' }).blob).toMatchObject({ container: 'pdf-1', connectionString: 'UseDevelopmentStorage=true' });
+  });
+
+  it('refuses a storage setting that cannot be right, naming it', () => {
+    expect(() => readConfig({ ...good, AZURE_STORAGE_ACCOUNT: 'qmsprod01', AZURE_STORAGE_CONNECTION_STRING: 'x' })).toThrow(/not both/);
+    expect(() => readConfig({ ...good, AZURE_STORAGE_ACCOUNT: 'My_Account' })).toThrow(/AZURE_STORAGE_ACCOUNT/);
+    expect(() => readConfig({ ...good, AZURE_STORAGE_ACCOUNT: 'qmsprod01', AZURE_STORAGE_CONTAINER: 'Bad_Name' })).toThrow(/AZURE_STORAGE_CONTAINER/);
   });
 });
