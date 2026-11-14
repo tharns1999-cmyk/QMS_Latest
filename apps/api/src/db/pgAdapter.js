@@ -51,6 +51,44 @@ const rewriteGlob = (sql) => {
   return rewriteGlob(`${sql.slice(0, m.index)}sqlite_glob(${m[1]}, ${sql.slice(start, end).trim()})${sql.slice(end)}`);
 };
 
+// SQLite sorts NULL as the smallest value: first when ascending, last when descending. PostgreSQL does the reverse by
+// default, so every ORDER BY key states it. The key list ends at LIMIT / OFFSET / a set operator / the closing
+// parenthesis of the subquery it belongs to / the end of the statement.
+const ORDER_END = /^(LIMIT|OFFSET|FETCH|FOR|UNION|INTERSECT|EXCEPT|RETURNING|WINDOW)\b/i;
+const rewriteOrderBy = (sql) => {
+  const re = /\bORDER\s+BY\s+/gi;
+  let out = '';
+  let from = 0;
+  for (let m; (m = re.exec(sql)); ) {
+    const start = m.index + m[0].length;
+    const keys = [];
+    let keyStart = start;
+    let end = start;
+    for (let depth = 0; end < sql.length; end++) {
+      const ch = sql[end];
+      if (ch === '(') depth++;
+      else if (ch === ')') {
+        if (depth === 0) break;
+        depth--;
+      } else if (ch === ';' && depth === 0) break;
+      else if (ch === ',' && depth === 0) {
+        keys.push(sql.slice(keyStart, end));
+        keyStart = end + 1;
+      } else if (depth === 0 && /\s/.test(ch) && ORDER_END.test(sql.slice(end + 1, end + 12))) break;
+    }
+    keys.push(sql.slice(keyStart, end));
+    const stated = keys.map((key) => {
+      if (/\bNULLS\s+(FIRST|LAST)\s*$/i.test(key)) return key;
+      const trimmed = key.replace(/\s+$/, '');
+      return `${trimmed}${/\bDESC$/i.test(trimmed) ? ' NULLS LAST' : ' NULLS FIRST'}${key.slice(trimmed.length)}`;
+    });
+    out += sql.slice(from, start) + stated.join(',');
+    from = end;
+    re.lastIndex = end;
+  }
+  return out + sql.slice(from);
+};
+
 const RENAMED = ['json_each', 'json_extract', 'json', 'date', 'datetime', 'strftime', 'printf'];
 const RENAME_RE = new RegExp(`(?<![\\w.])(${RENAMED.join('|')})\\(`, 'g');
 
@@ -76,6 +114,7 @@ export const toPostgres = (sql, changes = 0) => {
     .replace(/\bIS\s+NOT\s+(?!NULL\b|TRUE\b|FALSE\b|DISTINCT\b)/gi, 'IS DISTINCT FROM ')
     .replace(/\bIS\s+(?!NOT\b|NULL\b|TRUE\b|FALSE\b|DISTINCT\b)/gi, 'IS NOT DISTINCT FROM ');
   out = rewriteGlob(out);
+  out = rewriteOrderBy(out);
   // SQLite reads the leading digits of a text value and never fails; PostgreSQL's CAST would.
   out = rewriteCalls(out, 'CAST', (args) => (/\sAS\s+INTEGER\s*$/i.test(args) ? `sqlite_int((${args.replace(/\sAS\s+INTEGER\s*$/i, '')})::text)` : null));
   out = rewriteCalls(out, 'json_object', (args) => `sqlite_json_object(json_build_array(${args}))`);

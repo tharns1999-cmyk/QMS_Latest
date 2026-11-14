@@ -223,6 +223,53 @@ describe('database contract', () => {
     });
   });
 
+  // SQLite treats NULL as the smallest value (first when ascending, last when descending) and compares text byte by byte
+  // (capital letters before small ones). PostgreSQL's defaults are the opposite for NULL and, with most collations,
+  // different for letters. Lists the application shows in a given order must not change when the database does.
+  describe('sorting', () => {
+    const S = ['DBC-S1', 'DBC-S2', 'DBC-S3', 'DBC-S4'];
+    const EMP = { 'DBC-S1': 'E-b', 'DBC-S2': 'E-A', 'DBC-S3': null, 'DBC-S4': 'E-a' };
+    const ids = `('${S.join("', '")}')`;
+
+    beforeAll(async () => {
+      await db.batch(
+        S.map((id) =>
+          db
+            .prepare("INSERT INTO users (id, emp_id, name, email, password_hash, primary_department) VALUES (?, ?, ?, ?, 'x', ?)")
+            .bind(id, EMP[id], `[ข้อมูลทดสอบ] ${id}`, `${id.toLowerCase()}@contract.local`, DEPT)
+        )
+      );
+    });
+    afterAll(async () => {
+      await db.prepare(`DELETE FROM users WHERE id IN ${ids}`).run().catch(() => {});
+    });
+
+    const order = async (clause) => (await db.prepare(`SELECT id FROM users WHERE id IN ${ids} ORDER BY ${clause}`).all()).results.map((r) => r.id);
+
+    it('puts NULL first when ascending and last when descending', async () => {
+      expect(await order('emp_id')).toEqual(['DBC-S3', 'DBC-S2', 'DBC-S4', 'DBC-S1']);
+      expect(await order('emp_id ASC, id')).toEqual(['DBC-S3', 'DBC-S2', 'DBC-S4', 'DBC-S1']);
+      expect(await order('emp_id DESC')).toEqual(['DBC-S1', 'DBC-S4', 'DBC-S2', 'DBC-S3']);
+    });
+
+    it('sorts text by bytes: capital letters before small ones', async () => {
+      expect(await order('emp_id, id')).toEqual(['DBC-S3', 'DBC-S2', 'DBC-S4', 'DBC-S1']); // E-A < E-a < E-b
+    });
+
+    it('keeps the same order inside a subquery with a limit, in several keys, and with an expression key', async () => {
+      const top = await db.prepare(`SELECT id FROM (SELECT id, emp_id FROM users WHERE id IN ${ids} ORDER BY emp_id LIMIT 2) ORDER BY id`).all();
+      expect(top.results.map((r) => r.id)).toEqual(['DBC-S2', 'DBC-S3']);
+      expect(await order("emp_id IS NULL, emp_id DESC")).toEqual(['DBC-S1', 'DBC-S4', 'DBC-S2', 'DBC-S3']);
+      const first = await db.prepare(`SELECT id FROM users WHERE id IN ${ids} ORDER BY emp_id DESC LIMIT 1`).first();
+      expect(first.id).toBe('DBC-S1');
+    });
+
+    it('takes the largest and smallest value ignoring NULL, as aggregates do', async () => {
+      const row = await db.prepare(`SELECT MIN(emp_id) AS lo, MAX(emp_id) AS hi FROM users WHERE id IN ${ids}`).first();
+      expect(row).toMatchObject({ lo: 'E-A', hi: 'E-b' });
+    });
+  });
+
   describe('triggers without an API-level test', () => {
     it('refuses to approve an annual plan that is not waiting for approval', async () => {
       const id = 'DBC-PLAN-GUARD';

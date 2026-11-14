@@ -1,6 +1,7 @@
 // Entry point for running the API as a service: `node src/node/main.js` with the settings in the environment.
 import { readConfig } from './config.js';
 import { buildEnv, createNodeServer } from './server.js';
+import { checkCollation } from './dbChecks.js';
 
 const log = (level, msg, extra = {}) => console[level === 'error' ? 'error' : 'log'](JSON.stringify({ level, msg, at: new Date().toISOString(), ...extra }));
 
@@ -13,6 +14,21 @@ try {
 }
 
 const { env, close } = buildEnv(config);
+// Lists must come out in the order people knew from SQLite (byte order), which a database created with a language
+// collation would change. ALLOW_ANY_COLLATION=1 is for a developer machine only.
+try {
+  const db = await checkCollation(env.DB);
+  if (!db.ok && process.env.ALLOW_ANY_COLLATION !== '1') {
+    log('error', 'database_set_up_wrong', { problems: db.problems, fix: 'create the database with LC_COLLATE C and ENCODING UTF8 (docs/ops/azure-database-setup.md)' });
+    await close();
+    process.exit(1);
+  }
+  if (!db.ok) log('warn', 'database_collation_ignored', { problems: db.problems });
+} catch (err) {
+  log('error', 'database_unreachable', { error: String(err?.message ?? err) });
+  await close();
+  process.exit(1);
+}
 // A missing container or no access to it should stop the start, not show up on the first upload.
 try {
   await env.FILES.ready?.();
