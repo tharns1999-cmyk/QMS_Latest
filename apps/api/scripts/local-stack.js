@@ -26,6 +26,8 @@ import { startFakeMicrosoft } from './fake-microsoft.js';
 
 const args = process.argv.slice(2);
 const reset = args.includes('--reset');
+const cleanVcc = args.includes('--clean-vcc');
+const withVcc = args.includes('--with-vcc');
 // --microsoft: sign in through a pretend Microsoft page instead of passwords, to try the button the company will use.
 const microsoft = args.includes('--microsoft');
 const port = Number(args.includes('--port') ? args[args.indexOf('--port') + 1] : 8787);
@@ -115,6 +117,42 @@ Start it again with --reset to copy the dev data afresh.`);
 const NUMERIC_OID = 1700; // SUM()/AVG() come back as text from PGlite; SQLite gave numbers
 const run = (runner) => ({ query: (sql, params) => runner.query(sql, params, { parsers: { [NUMERIC_OID]: (v) => Number(v) } }) });
 const driver = { ...run(lite), transaction: (fn) => lite.transaction((tx) => fn(run(tx))) };
+
+// Clean VCC mock/seed rows on --clean-vcc, or whenever seeded [ข้อมูลทดสอบ] VCC assets are still present (unless --with-vcc is requested)
+if (!withVcc) {
+  const hasSeedVcc = cleanVcc || (await driver.query("SELECT 1 FROM vcc_assets WHERE id LIKE 'vcc-seed-%' OR name LIKE '[ข้อมูลทดสอบ]%' OR asset_code IN ('ST002','SW001','TC001','GRP-SCALE','SC-WH-001','T-OLD-01','V001','V002') OR asset_code LIKE 'DEV-%' OR asset_code LIKE 'E2E-%' LIMIT 1")).rows.length > 0;
+  if (hasSeedVcc) {
+    await lite.exec(`
+      DROP TRIGGER IF EXISTS trg_prevent_delete_closed_work_order ON vcc_work_orders;
+      DROP TRIGGER IF EXISTS trg_prevent_delete_closed_plan_cycle ON vcc_plan_cycles;
+      DROP TRIGGER IF EXISTS trg_prevent_delete_approved_plan_item ON vcc_annual_plan_items;
+      DROP TRIGGER IF EXISTS trg_prevent_delete_approved_annual_plan ON vcc_annual_plans;
+      DROP TRIGGER IF EXISTS trg_prevent_tamper_approved_annual_plan ON vcc_annual_plans;
+      DROP TRIGGER IF EXISTS audit_log_no_delete ON audit_log;
+
+      DELETE FROM vcc_notifications;
+      DELETE FROM vcc_work_order_amendment_requests;
+      DELETE FROM vcc_work_order_amendments;
+      DELETE FROM vcc_work_order_certificates;
+      DELETE FROM vcc_work_orders;
+      DELETE FROM vcc_plan_cycles;
+      DELETE FROM vcc_annual_plan_items;
+      UPDATE vcc_annual_plans SET parent_plan_id = NULL WHERE parent_plan_id IS NOT NULL;
+      DELETE FROM vcc_annual_plans;
+      DELETE FROM vcc_assets WHERE parent_id IS NOT NULL;
+      DELETE FROM vcc_assets WHERE parent_id IS NULL;
+      DELETE FROM audit_log WHERE action LIKE 'VCC_%';
+
+      CREATE TRIGGER trg_prevent_delete_approved_annual_plan BEFORE DELETE ON vcc_annual_plans FOR EACH ROW EXECUTE FUNCTION trg_prevent_delete_approved_annual_plan_fn();
+      CREATE TRIGGER trg_prevent_tamper_approved_annual_plan BEFORE UPDATE ON vcc_annual_plans FOR EACH ROW EXECUTE FUNCTION trg_prevent_tamper_approved_annual_plan_fn();
+      CREATE TRIGGER trg_prevent_delete_approved_plan_item BEFORE DELETE ON vcc_annual_plan_items FOR EACH ROW EXECUTE FUNCTION trg_prevent_delete_approved_plan_item_fn();
+      CREATE TRIGGER trg_prevent_delete_closed_work_order BEFORE DELETE ON vcc_work_orders FOR EACH ROW EXECUTE FUNCTION trg_prevent_delete_closed_work_order_fn();
+      CREATE TRIGGER trg_prevent_delete_closed_plan_cycle BEFORE DELETE ON vcc_plan_cycles FOR EACH ROW EXECUTE FUNCTION trg_prevent_delete_closed_plan_cycle_fn();
+      CREATE TRIGGER audit_log_no_delete BEFORE DELETE ON audit_log FOR EACH ROW EXECUTE FUNCTION audit_log_no_delete_fn();
+    `);
+    console.log('Cleared VCC mock/test records (Clean VCC slate).');
+  }
+}
 
 // Tryout copy only: the dev accounts are named after their job ("QA หัวหน้า"); give each a person's name so the
 // tester sees people, as in the earlier demo. Same names every start, nothing else changes.
