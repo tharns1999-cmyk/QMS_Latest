@@ -35,6 +35,7 @@ import { evaluateDocumentReviewStatus } from '../../modules/dcc/utils/documentUt
 import { extractDeptCode } from '../../modules/dcc/services/darService';
 import SystemTimeSimulatorWidget from '../../modules/dcc/components/common/SystemTimeSimulatorWidget';
 import { isApiMode } from '../../api/client';
+import TryoutUserSwitcher, { TRYOUT_SWITCHER } from '../auth/TryoutUserSwitcher';
 import { logout } from '../../api/session';
 import { createPortal } from 'react-dom';
 import ChangePasswordForm from '../auth/ChangePasswordForm';
@@ -616,6 +617,7 @@ const Sidebar = ({ isOpen = false, onClose = () => {} }) => {
 
           {isApiMode ? (
             <div className="space-y-1.5">
+              {TRYOUT_SWITCHER && !microsoftSignIn && <TryoutUserSwitcher currentId={currentUser?.id} />}
               {/* No password of ours to change when people sign in with their company Microsoft account. */}
               {!microsoftSignIn && (
                 <button type="button" onClick={() => setChangingPassword(true)}

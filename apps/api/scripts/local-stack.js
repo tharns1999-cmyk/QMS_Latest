@@ -40,6 +40,8 @@ const FILES_DIR = resolve(ROOT, 'files');
 const WEB_DIR = resolve(ROOT, 'web');
 const WEB_MARKER = resolve(ROOT, 'web-built-for.txt');
 const address = `http://localhost:${port}`;
+// What the web build was made for: the address, and the tester's user switcher (see TryoutUserSwitcher.jsx).
+const buildTag = `${address}|user-switcher`;
 mkdirSync(ROOT, { recursive: true });
 
 const open = (dir) => PGlite.create(dir, { extensions: { citext } });
@@ -52,10 +54,10 @@ const newestSource = (dir) => readdirSync(dir, { withFileTypes: true }).reduce((
   return Math.max(newest, entry.isDirectory() ? newestSource(path) : statSync(path).mtimeMs);
 }, 0);
 const webChanged = existsSync(WEB_MARKER) && newestSource(resolve('../web/src')) > statSync(WEB_MARKER).mtimeMs;
-if (!existsSync(resolve(WEB_DIR, 'index.html')) || builtFor !== address || webChanged) {
+if (!existsSync(resolve(WEB_DIR, 'index.html')) || builtFor !== buildTag || webChanged) {
   console.log(`Building the web app for ${address} (takes a minute)...`);
-  execSync(`pnpm --dir ../web exec vite build --outDir "${WEB_DIR}" --emptyOutDir`, { stdio: 'inherit', env: { ...process.env, VITE_API_URL: address } });
-  writeFileSync(WEB_MARKER, address);
+  execSync(`pnpm --dir ../web exec vite build --outDir "${WEB_DIR}" --emptyOutDir`, { stdio: 'inherit', env: { ...process.env, VITE_API_URL: address, VITE_TRYOUT_SWITCHER: '1' } });
+  writeFileSync(WEB_MARKER, buildTag);
 }
 
 // 2. PostgreSQL, filled once from the local dev database.
@@ -113,6 +115,10 @@ Start it again with --reset to copy the dev data afresh.`);
 const NUMERIC_OID = 1700; // SUM()/AVG() come back as text from PGlite; SQLite gave numbers
 const run = (runner) => ({ query: (sql, params) => runner.query(sql, params, { parsers: { [NUMERIC_OID]: (v) => Number(v) } }) });
 const driver = { ...run(lite), transaction: (fn) => lite.transaction((tx) => fn(run(tx))) };
+
+// The people the tester can switch between (tryout builds only): written fresh at every start.
+const roster = (await driver.query("SELECT id, name, email, primary_department AS department, approval_level AS level, position FROM users WHERE status = 'ACTIVE' ORDER BY primary_department, approval_level, id")).rows;
+writeFileSync(resolve(WEB_DIR, 'tryout-users.json'), JSON.stringify(roster));
 
 const TENANT = '11111111-2222-4333-8444-555555555555';
 const CLIENT_ID = '66666666-7777-4888-8999-aaaaaaaaaaaa';
