@@ -9,6 +9,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import pg from 'pg';
 import { tableDdl, indexDdl, triggerDdl } from './fromSqlite.js';
+import { checksumOf, MIGRATIONS_TABLE_DDL } from './migrator.js';
 
 // Created by SQLite or Cloudflare, not by the application. d1_migrations only records which D1 migrations ran.
 const internal = (name) => name.startsWith('sqlite_') || name.startsWith('_cf_') || name === 'd1_migrations';
@@ -97,12 +98,35 @@ const resetIdentity = async (target, table) => {
 // way the source reader gives them, or the comparison would see "1" against 1.
 export const exactIntegers = { getTypeParser: (oid, format) => (oid === 20 ? (text) => BigInt(text) : pg.types.getTypeParser(oid, format)) };
 
+// The D1 migrations the source says it has run, in order. A source without the table (a plain SQLite file) has none.
+const readHistory = async (source) => {
+  try {
+    return await source.all('SELECT name, applied_at FROM d1_migrations ORDER BY id');
+  } catch {
+    return [];
+  }
+};
+
+// expectedMigrations (the file names in migrations/), when given, must be exactly what the source has run: a source that
+// lags would give a PostgreSQL schema the current code does not expect, one that is ahead has changes this code lacks.
+const checkHistory = (history, expectedMigrations) => {
+  if (!expectedMigrations) return;
+  const have = history.map((h) => h.name);
+  const missing = expectedMigrations.filter((n) => !have.includes(n));
+  const extra = have.filter((n) => !expectedMigrations.includes(n));
+  if (missing.length || extra.length || !have.length) {
+    throw new Error(`The source database is not at the schema this code expects. Not applied there: ${missing.join(', ') || 'none'}. Applied there but unknown here: ${extra.join(', ') || 'none'}. ${have.length ? '' : 'It has no migration history at all. '}Bring it to the same migrations first.`);
+  }
+};
+
 // source: { all(sql) -> rows }   target: { exec(sql), query(sql, params) -> { rows } }, one session, so the transaction holds.
 // Returns { tables: [{ table, rows, sha256 }], rows } or throws and leaves the target untouched.
-export const moveDatabase = async ({ source, target, compatSql = readFileSync(new URL('./compat.sql', import.meta.url), 'utf8'), log = () => {} }) => {
+export const moveDatabase = async ({ source, target, compatSql = readFileSync(new URL('./compat.sql', import.meta.url), 'utf8'), expectedMigrations, log = () => {} }) => {
   const objects = await readSchema(source);
   const tables = objects.filter((o) => o.type === 'table');
   if (!tables.length) throw new Error('The source holds no tables; refusing to continue.');
+  const history = await readHistory(source);
+  checkHistory(history, expectedMigrations);
 
   await target.exec('BEGIN');
   try {
@@ -113,6 +137,10 @@ export const moveDatabase = async ({ source, target, compatSql = readFileSync(ne
 
     await target.exec(compatSql);
     await createTables(target, tables);
+    // What the schema already contains is recorded, so later changes (src/db/pg/migrator.js) start from here.
+    await target.exec(MIGRATIONS_TABLE_DDL);
+    for (const h of history) await target.query("INSERT INTO schema_migrations (name, kind, applied_at) VALUES ($1, 'baseline', $2)", [h.name, String(h.applied_at)]);
+    await target.query("INSERT INTO schema_migrations (name, kind, checksum) VALUES ('compat.sql', 'compat', $1)", [checksumOf(compatSql)]);
     const keys = await takeOffForeignKeys(target);
 
     const expected = [];
@@ -144,7 +172,7 @@ export const moveDatabase = async ({ source, target, compatSql = readFileSync(ne
     if (mismatches.length) throw new Error(`The copy does not match the source; nothing was kept.\n- ${mismatches.join('\n- ')}`);
 
     await target.exec('COMMIT');
-    return { tables: report, rows: report.reduce((sum, t) => sum + t.rows, 0) };
+    return { tables: report, rows: report.reduce((sum, t) => sum + t.rows, 0), baselineMigrations: history.length };
   } catch (err) {
     await target.exec('ROLLBACK').catch(() => {});
     throw err;

@@ -9,8 +9,10 @@
 // The copy is all-or-nothing and nothing is written to the source. The report lists, per table, the row count and a
 // fingerprint, so it can be kept as the record that the move was complete.
 import { writeFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 import { exactIntegers, moveDatabase } from '../src/db/pg/dataMove.js';
+import { listD1Migrations } from '../src/db/pg/migrator.js';
 import { openSqliteSource } from '../src/db/pg/sqliteSource.js';
 
 const args = process.argv.slice(2);
@@ -33,6 +35,8 @@ try {
   await client.connect();
   const result = await moveDatabase({
     source,
+    // The source must have run every D1 migration of this version of the code, no more and no fewer.
+    expectedMigrations: listD1Migrations(fileURLToPath(new URL('../migrations/', import.meta.url))),
     target: { exec: (sql) => client.query(sql), query: (sql, params) => client.query(sql, params) },
     log: (line) => console.log(line)
   });

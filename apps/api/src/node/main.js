@@ -1,7 +1,10 @@
 // Entry point for running the API as a service: `node src/node/main.js` with the settings in the environment.
 import { readConfig } from './config.js';
 import { buildEnv, createNodeServer } from './server.js';
-import { checkCollation } from './dbChecks.js';
+import { checkCollation, checkMigrations } from './dbChecks.js';
+import { loadMigrations } from '../db/pg/migrator.js';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 const log = (level, msg, extra = {}) => console[level === 'error' ? 'error' : 'log'](JSON.stringify({ level, msg, at: new Date().toISOString(), ...extra }));
 
@@ -24,6 +27,17 @@ try {
     process.exit(1);
   }
   if (!db.ok) log('warn', 'database_collation_ignored', { problems: db.problems });
+  // The schema must match this version of the code; the deployment step is `pnpm run db:migrate:pg` (migrations-pg/README.md).
+  const schema = await checkMigrations(
+    env.DB,
+    loadMigrations(fileURLToPath(new URL('../../migrations-pg/', import.meta.url))),
+    readFileSync(new URL('../db/pg/compat.sql', import.meta.url), 'utf8')
+  );
+  if (!schema.ok) {
+    log('error', 'database_schema_not_current', { problems: schema.problems, fix: 'run: pnpm --dir apps/api run db:migrate:pg' });
+    await close();
+    process.exit(1);
+  }
 } catch (err) {
   log('error', 'database_unreachable', { error: String(err?.message ?? err) });
   await close();

@@ -1,8 +1,10 @@
 import { execSync } from 'node:child_process';
-import { cpSync, rmSync } from 'node:fs';
+import { cpSync, readFileSync, rmSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import pg from 'pg';
 import { exactIntegers, moveDatabase } from '../src/db/pg/dataMove.js';
+import { applyPending, listD1Migrations, loadMigrations } from '../src/db/pg/migrator.js';
 import { dbUrl, openPglite, PG_PRISTINE_DIR, PG_TEST_DIR, PRISTINE_DB, REAL_PG_URL, SHARED_DB } from '../src/test/pgPlatformProxy.js';
 
 // Loaded by path: vitest.pg.config.js aliases the bare name 'wrangler' to the PostgreSQL stand-in.
@@ -54,7 +56,17 @@ export default async function setup() {
     // The same code that moves the real data builds the test database, so every test run exercises it, including
     // the row-count and fingerprint comparison.
     const sqlite = proxy.env.DB;
-    await moveDatabase({ source: { all: async (sql) => (await sqlite.prepare(sql).all()).results }, target });
+    await moveDatabase({
+      source: { all: async (sql) => (await sqlite.prepare(sql).all()).results },
+      target,
+      expectedMigrations: listD1Migrations(fileURLToPath(new URL('../migrations/', import.meta.url)))
+    });
+    // The PostgreSQL migrations on top, exactly as a deployment applies them.
+    await applyPending({
+      target,
+      migrations: loadMigrations(fileURLToPath(new URL('../migrations-pg/', import.meta.url))),
+      compatSql: readFileSync(new URL('../src/db/pg/compat.sql', import.meta.url), 'utf8')
+    });
   } finally {
     await proxy.dispose();
   }

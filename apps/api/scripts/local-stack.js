@@ -13,9 +13,11 @@
 import { execSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { PGlite } from '@electric-sql/pglite';
 import { citext } from '@electric-sql/pglite/contrib/citext';
 import { moveDatabase } from '../src/db/pg/dataMove.js';
+import { adoptBaseline, applyPending, listD1Migrations, loadMigrations } from '../src/db/pg/migrator.js';
 import { openSqliteSource } from '../src/db/pg/sqliteSource.js';
 import { createPgDatabase } from '../src/db/pgAdapter.js';
 import { createDiskStore } from '../src/node/diskStore.js';
@@ -72,7 +74,8 @@ if (!existsSync(PG_DIR)) {
   const source = openSqliteSource(dump);
   const lite = await open(building);
   try {
-    const moved = await moveDatabase({ source, target: { exec: (sql) => lite.exec(sql), query: (sql, params) => lite.query(sql, params) } });
+    const target = { exec: (sql) => lite.exec(sql), query: (sql, params) => lite.query(sql, params) };
+    const moved = await moveDatabase({ source, target, expectedMigrations: listD1Migrations(fileURLToPath(new URL('../migrations/', import.meta.url))) });
     console.log(`Copied ${moved.tables.length} tables, ${moved.rows} rows; row counts and fingerprints match.`);
   } catch (err) {
     console.error(`Could not build the PostgreSQL copy: ${err.message}`);
@@ -89,6 +92,24 @@ if (!existsSync(PG_DIR)) {
 
 // 3. Start.
 const lite = await open(PG_DIR);
+// PostgreSQL migrations added since the copy was made (migrations-pg/), applied the way a deployment does.
+try {
+  const target = { exec: (sql) => lite.exec(sql), query: (sql, params) => lite.query(sql, params) };
+  const compatSql = readFileSync(new URL('../src/db/pg/compat.sql', import.meta.url), 'utf8');
+  // A copy made before the migration record existed was built from exactly these D1 migrations.
+  if (await adoptBaseline({ target, baselineNames: listD1Migrations(fileURLToPath(new URL('../migrations/', import.meta.url))), compatSql })) console.log('Recorded the migration history of the existing tryout copy.');
+  await applyPending({
+    target,
+    migrations: loadMigrations(fileURLToPath(new URL('../migrations-pg/', import.meta.url))),
+    compatSql,
+    log: (line) => console.log(line)
+  });
+} catch (err) {
+  console.error(`The tryout database is not up to date: ${err.message}
+Start it again with --reset to copy the dev data afresh.`);
+  await lite.close();
+  process.exit(1);
+}
 const NUMERIC_OID = 1700; // SUM()/AVG() come back as text from PGlite; SQLite gave numbers
 const run = (runner) => ({ query: (sql, params) => runner.query(sql, params, { parsers: { [NUMERIC_OID]: (v) => Number(v) } }) });
 const driver = { ...run(lite), transaction: (fn) => lite.transaction((tx) => fn(run(tx))) };

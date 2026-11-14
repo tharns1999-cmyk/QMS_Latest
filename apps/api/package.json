@@ -11,6 +11,8 @@
     "db:migrate:remote": "node scripts/vcc-migrate-safe.js --remote",
     "db:migrate:production": "node scripts/vcc-migrate-safe.js --remote --env production",
     "db:migrate:raw": "node scripts/vcc-migrate-raw.js",
+    "db:migrate:pg": "node scripts/db-migrate-pg.js",
+    "db:move:pg": "node scripts/migrate-data-to-pg.js",
     "db:preflight": "node scripts/vcc-preflight.js",
     "deploy:production": "node scripts/deploy-guard.js production && wrangler deploy --env production",
     "start:node": "node src/node/main.js",

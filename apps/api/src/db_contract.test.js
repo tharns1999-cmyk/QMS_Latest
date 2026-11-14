@@ -53,7 +53,7 @@ describe('database contract', () => {
 
     it('has exactly the tables the port must carry over', async () => {
       const { results } = await db
-        .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' AND name != 'd1_migrations' ORDER BY name")
+        .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' AND name NOT IN ('d1_migrations', 'schema_migrations') ORDER BY name")
         .all();
       expect(results.map((r) => r.name)).toEqual([
         'acknowledgements',
