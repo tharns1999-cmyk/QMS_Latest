@@ -309,6 +309,7 @@ export const DigitalRecordModal = ({
   const cleanMasterRef = String(workOrder.master_reference || workOrder.traceability_ref || '').replace(/\[ข้อมูลทดสอบ\]\s*/g, '').trim() || '-';
   const cleanTraceabilityRef = String(workOrder.traceability_ref || workOrder.master_reference || '').replace(/\[ข้อมูลทดสอบ\]\s*/g, '').trim() || 'ตามใบรับรองสถาบันมาตรวิทยา';
   const cleanCompositeDetails = String(workOrder.composite_details || '').replace(/\[ข้อมูลทดสอบ\]\s*/g, '').trim();
+  const compositeItems = Array.isArray(workOrder.child_assets) ? workOrder.child_assets : [];
 
   const modalContent = (
     <div
@@ -372,7 +373,7 @@ export const DigitalRecordModal = ({
             height: auto !important;
             max-height: none !important;
             overflow: visible !important;
-            padding: 12mm 14mm !important;
+            padding: 9mm 12mm !important;
             margin: 0 auto !important;
             background: #ffffff !important;
             box-sizing: border-box !important;
@@ -440,10 +441,10 @@ export const DigitalRecordModal = ({
             {/* COLUMN 1 (LEFT): Official Digital Certificate Document */}
             <div
               id="vcc-digital-record-print"
-              className="p-5 sm:p-6 lg:p-7 space-y-5 text-slate-800 text-sm overflow-visible overscroll-y-contain print:overflow-visible print:h-auto"
+              className="p-5 sm:p-6 lg:p-7 space-y-5 print:space-y-3 text-slate-800 text-sm overflow-visible overscroll-y-contain print:overflow-visible print:h-auto"
             >
               {/* Document Title Banner */}
-              <div className="border-b-2 border-slate-900 pb-3.5 flex flex-col sm:flex-row sm:items-end justify-between gap-3">
+              <div className="border-b-2 border-slate-900 pb-3.5 print:pb-2.5 flex flex-col sm:flex-row sm:items-end justify-between gap-3">
                 <div>
                   <img
                     src="/banner.png"
@@ -473,7 +474,7 @@ export const DigitalRecordModal = ({
                   <Building2 size={14} className="text-indigo-600" />
                   <span>1. ข้อมูลเครื่องมือวัดและสถานที่ (Instrument Identification)</span>
                 </h2>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-3 print:p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs">
                   <div>
                     <span className="text-slate-400 block text-xs">รหัสเครื่องมือ:</span>
                     <span className="font-mono font-bold text-slate-900">{workOrder.asset_code || '-'}</span>
@@ -499,13 +500,13 @@ export const DigitalRecordModal = ({
               </div>
 
               {/* Section 1.1: Composite Equipment Set Breakdown (DEC-04) */}
-              {(workOrder.group_nature === 'COMPOSITE_SET' || workOrder.is_group || (workOrder.child_assets && workOrder.child_assets.length > 0) || workOrder.composite_details) && (
+              {(compositeItems.length > 0 || Boolean(cleanCompositeDetails)) && (
                 <div className="space-y-2 vcc-print-section" data-testid="vcc-composite-breakdown-section">
                   <h2 className="text-xs font-bold uppercase tracking-wider text-slate-900 flex items-center gap-1.5">
                     <Layers size={14} className="text-indigo-600" />
                     <span>รายการอุปกรณ์ในชุดเครื่องมือผสม (Composite Equipment Set Breakdown)</span>
                   </h2>
-                  <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-2 text-xs">
+                  <div className="p-3 print:p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-2 text-xs">
                     {workOrder.is_legacy_without_snapshot && (
                       <div className="p-2 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-start gap-2">
                         <Info size={14} className="text-amber-700 shrink-0 mt-0.5" />
@@ -518,7 +519,7 @@ export const DigitalRecordModal = ({
                         <p className="text-slate-800 whitespace-pre-line leading-relaxed font-sans">{cleanCompositeDetails}</p>
                       </div>
                     )}
-                    {Array.isArray(workOrder.child_assets) && workOrder.child_assets.length > 0 && (
+                    {compositeItems.length > 0 && (
                       <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
                         <table className="w-full text-left text-xs">
                           <thead className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
@@ -531,7 +532,7 @@ export const DigitalRecordModal = ({
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-100">
-                            {workOrder.child_assets.map((child) => (
+                            {compositeItems.map((child) => (
                               <tr key={child.id || child.asset_code} className="hover:bg-slate-50/60">
                                 <td className="py-1.5 px-2.5 font-mono font-bold text-indigo-700">{child.asset_code}</td>
                                 <td className="py-1.5 px-2.5 font-medium text-slate-800">{String(child.name || '').replace(/\[ข้อมูลทดสอบ\]\s*/g, '').trim() || '-'}</td>
@@ -562,7 +563,7 @@ export const DigitalRecordModal = ({
                   <FileCheck2 size={14} className="text-indigo-600" />
                   <span>2. ผลการสอบเทียบและเกณฑ์ยอมรับ (Calibration & Acceptance Result)</span>
                 </h2>
-                <div className="p-3.5 rounded-xl border border-slate-200 bg-white space-y-3">
+                <div className="p-3.5 print:p-3 rounded-xl border border-slate-200 bg-white space-y-3 print:space-y-2">
                   <div className="flex flex-wrap items-center justify-between gap-3 pb-2.5 border-b border-slate-100">
                     <div className="space-y-1">
                       <div className="text-xs text-slate-500">ผลการตัดสินความสอดคล้องตามเกณฑ์ (Conformity Decision):</div>
@@ -674,7 +675,7 @@ export const DigitalRecordModal = ({
               </div>
 
               {/* Section 3: Measurement Traceability & Environmental Conditions */}
-              <div className="space-y-2 vcc-print-section">
+              <div className="space-y-2 vcc-print-section print:hidden no-print" data-testid="vcc-traceability-section">
                 <h2 className="text-xs font-bold uppercase tracking-wider text-slate-900 flex items-center gap-1.5">
                   <Layers size={14} className="text-indigo-600" />
                   <span>3. ความสอบกลับได้ทางมาตรวิทยาและสภาวะแวดล้อม (Measurement Traceability)</span>
@@ -716,7 +717,7 @@ export const DigitalRecordModal = ({
                     <Hash size={14} className="text-indigo-600" />
                     <span>4. หลักฐานไฟล์ใบรับรองดิจิทัล (Digital Certificate Attachment)</span>
                   </h2>
-                  <div className="p-3 rounded-xl border border-indigo-200 bg-indigo-50/20 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs">
+                  <div className="p-3 print:p-3 rounded-xl border border-indigo-200 bg-indigo-50/20 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs">
                     <div className="space-y-0.5">
                       <div className="font-bold text-slate-900">{workOrder.certificate_file_name || workOrder.cert_file_name}</div>
                       <div className="text-xs text-slate-500 font-mono">
@@ -734,7 +735,7 @@ export const DigitalRecordModal = ({
                     <History size={14} className="text-amber-700" />
                     <span>5. ประวัติการแก้ไขผลการบันทึก</span>
                   </h2>
-                  <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-950 space-y-1">
+                  <div className="p-3 print:p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-950 space-y-1">
                     <div className="font-bold">
                       แก้ไขเมื่อ: <span className="font-sans" title={workOrder.amended_at || ''}>{formatVccDateTime(workOrder.amended_at)}</span> โดย {workOrder.amended_by_name || workOrder.amended_by || '-'}
                     </div>
@@ -746,10 +747,10 @@ export const DigitalRecordModal = ({
               )}
 
               {/* Section 6: Signatures & Verification Sign-off */}
-              <div className="pt-3 border-t border-slate-200 vcc-print-section">
+              <div className="pt-3 print:pt-2 border-t border-slate-200 vcc-print-section">
                 {hasSeparateVerifier ? (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs text-center">
-                    <div className="space-y-4 p-3.5 rounded-xl border border-slate-200 bg-slate-50/50">
+                    <div className="space-y-4 print:space-y-2 p-3.5 print:p-3 rounded-xl border border-slate-200 bg-slate-50/50">
                       <span className="font-bold text-slate-700 block">ผู้บันทึกผลการสอบเทียบ (Recorded By)</span>
                       <div className="border-b border-dashed border-slate-400 w-3/4 mx-auto pb-1 font-semibold text-slate-900">
                         {recordedByName}
@@ -760,7 +761,7 @@ export const DigitalRecordModal = ({
                       </div>
                     </div>
 
-                    <div className="space-y-4 p-3.5 rounded-xl border border-slate-200 bg-slate-50/50">
+                    <div className="space-y-4 print:space-y-2 p-3.5 print:p-3 rounded-xl border border-slate-200 bg-slate-50/50">
                       <span className="font-bold text-slate-700 block">ผู้ตรวจรับและปิดใบสั่งงาน (Reviewer / Approver)</span>
                       <div className="border-b border-dashed border-slate-400 w-3/4 mx-auto pb-1 font-semibold text-slate-900">
                         {verifiedByName}
@@ -773,7 +774,7 @@ export const DigitalRecordModal = ({
                 ) : (
                   <div
                     data-testid="vcc-single-signer-card"
-                    className="p-4 rounded-xl border border-slate-200 bg-slate-50/60 text-xs text-center space-y-3"
+                    className="p-4 print:p-3 rounded-xl border border-slate-200 bg-slate-50/60 text-xs text-center space-y-3 print:space-y-2"
                   >
                     <span className="font-bold text-slate-800 block text-xs sm:text-sm">
                       ผู้บันทึกผลและปิดใบสั่งงาน (Recorded & Closed By)

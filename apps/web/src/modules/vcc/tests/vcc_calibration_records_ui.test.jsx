@@ -286,13 +286,22 @@ describe('VCC Phase 3.2 — Calibration Records & Execution UI Tests', () => {
     expect(portalRoot).not.toBeNull();
     expect(portalRoot.parentElement).toBe(document.body);
 
-    // 2. Verify @media print CSS uses margin: 0mm !important and body > *:not(#vcc-digital-record-portal) without visibility: hidden
+    // 2. Verify @media print CSS uses margin: 0mm !important, padding: 9mm 12mm !important, and body > *:not(#vcc-digital-record-portal) without visibility: hidden
     const styleEl = portalRoot.querySelector('style');
     expect(styleEl).not.toBeNull();
     expect(styleEl.textContent).toContain('margin: 0mm !important;');
+    expect(styleEl.textContent).toContain('padding: 9mm 12mm !important;');
     expect(styleEl.textContent).toContain('body > *:not(#vcc-digital-record-portal)');
     expect(styleEl.textContent).toContain('#vcc-digital-record-portal .no-print');
     expect(styleEl.textContent).not.toContain('visibility: hidden');
+
+    // Verify #vcc-digital-record-print uses compact vertical spacing in print mode (print:space-y-3) and Section 3 is hidden in print mode (print:hidden)
+    const printContainer = portalRoot.querySelector('#vcc-digital-record-print');
+    expect(printContainer.className).toContain('print:space-y-3');
+    const traceabilitySection = screen.getByTestId('vcc-traceability-section');
+    expect(traceabilitySection.className).toContain('print:hidden');
+    const signerCard = screen.getByTestId('vcc-single-signer-card');
+    expect(signerCard.className).toContain('print:p-3');
 
     // 3. Verify banner image is rendered above document title
     const bannerImg = screen.getByAltText('บริษัท เศรษฐชล จำกัด');
@@ -320,6 +329,32 @@ describe('VCC Phase 3.2 — Calibration Records & Execution UI Tests', () => {
     expect(closeFooterBtn.closest('.no-print')).not.toBeNull();
 
     printSpy.mockRestore();
+  });
+
+  it('DigitalRecordModal_HidesEmptyCompositeBreakdown: ซ่อนกล่องรายการอุปกรณ์ในชุดเครื่องมือผสมเมื่อไม่มีรายการย่อย (เช่น SW001 ที่ไม่มี child_assets)', () => {
+    const emptyCompositeWo = {
+      ...sampleWorkOrder,
+      id: 'wo-sw001-empty',
+      wo_code: 'VCC-WO-26-0002',
+      asset_code: 'SW001',
+      asset_name: '[ข้อมูลทดสอบ] ตุ้มน้ำหนักมาตรฐานชุด 100 mg - 500 g (Class E2)',
+      status: 'CLOSED',
+      result_status: 'PASS',
+      group_nature: 'COMPOSITE_SET',
+      composite_details: '',
+      child_assets: []
+    };
+
+    render(
+      <DigitalRecordModal
+        workOrder={emptyCompositeWo}
+        onClose={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText('ตุ้มน้ำหนักมาตรฐานชุด 100 mg - 500 g (Class E2)')).toBeInTheDocument();
+    expect(screen.queryByTestId('vcc-composite-breakdown-section')).not.toBeInTheDocument();
+    expect(screen.queryByText(/รายการอุปกรณ์ในชุดเครื่องมือผสม/i)).not.toBeInTheDocument();
   });
 
   it('AmendmentModal_DisplaysSoDAndUploadErrors: แสดงข้อความแจ้งเตือนเมื่อเกิดข้อผิดพลาด Segregation of Duties หรือ R2 Upload Error', () => {
