@@ -14,6 +14,7 @@
     "db:preflight": "node scripts/vcc-preflight.js",
     "deploy:production": "node scripts/deploy-guard.js production && wrangler deploy --env production",
     "start:node": "node src/node/main.js",
+    "local:stack": "node scripts/local-stack.js",
     "db:seed:local": "node scripts/seed-local.js && wrangler d1 execute DB --local --file .wrangler/seed-marker.sql && wrangler d1 execute DB --local --file .wrangler/seed-local.sql",
     "test": "vitest run",
     "test:pg": "vitest run --config vitest.pg.config.js",
