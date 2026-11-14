@@ -221,6 +221,23 @@ describe('database contract', () => {
     it('reads stored timestamps in the T…Z form', async () => {
       expect(await shift('2026-11-13T18:30:00.000Z', '+7 hours')).toBe('2026-11-14');
     });
+
+    // 'now' is read once per statement: every row an UPDATE or INSERT touches gets the same instant, and a column
+    // default and an "updated at" set in the same statement agree.
+    it("gives 'now' one value for the whole statement", async () => {
+      const row = await db
+        .prepare(`WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM c WHERE x < 20000)
+                  SELECT COUNT(DISTINCT strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) AS instants FROM c`)
+        .first();
+      expect(row.instants).toBe(1);
+    });
+
+    it("moves 'now' forward from one statement to the next", async () => {
+      const read = async () => (await db.prepare("SELECT strftime('%Y-%m-%dT%H:%M:%fZ', 'now') AS t").first()).t;
+      const before = await read();
+      await new Promise((resolve) => setTimeout(resolve, 15));
+      expect((await read()) > before).toBe(true);
+    });
   });
 
   // SQLite treats NULL as the smallest value (first when ascending, last when descending) and compares text byte by byte

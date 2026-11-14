@@ -3,14 +3,14 @@
 
 CREATE EXTENSION IF NOT EXISTS citext;
 
--- 'now' or a stored text timestamp, moved by modifiers such as '+7 hours', '-365 days', '+3 months'.
+-- 'now' (one instant for the whole statement, as in SQLite) or a stored text timestamp, moved by modifiers such as '+7 hours', '-365 days', '+3 months'.
 CREATE OR REPLACE FUNCTION sqlite_time(ts text, mods text[]) RETURNS timestamp LANGUAGE plpgsql STABLE AS $$
 DECLARE
   t timestamp;
   m text;
 BEGIN
   IF ts IS NULL THEN RETURN NULL; END IF;
-  t := CASE WHEN ts = 'now' THEN clock_timestamp() AT TIME ZONE 'UTC' ELSE replace(replace(ts, 'T', ' '), 'Z', '')::timestamp END;
+  t := CASE WHEN ts = 'now' THEN statement_timestamp() AT TIME ZONE 'UTC' ELSE replace(replace(ts, 'T', ' '), 'Z', '')::timestamp END;
   FOREACH m IN ARRAY mods LOOP
     IF m IS NULL THEN RETURN NULL; END IF;
     IF m ~* '^\s*[+-]?\d+\s+(month|year)s?\s*$' THEN
