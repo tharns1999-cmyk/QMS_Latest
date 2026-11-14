@@ -172,7 +172,7 @@ export const clientIp = (c) => {
 const tooManyFailures = async (db, ip) => {
   if (!ip) return false;
   const since = new Date(Date.now() - LOGIN_WINDOW_MS).toISOString();
-  const { n } = await db.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'LOGIN_FAILED' AND at > ? AND json_extract(details, '$.ip') = ?").bind(since, ip).first();
+  const { n } = await db.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'LOGIN_FAILED' AND at > ? AND CASE WHEN json_valid(details) THEN json_extract(details, '$.ip') END = ?").bind(since, ip).first();
   return n >= MAX_FAILED_LOGINS_PER_IP;
 };
 

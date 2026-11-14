@@ -13,12 +13,14 @@
     "db:migrate:raw": "node scripts/vcc-migrate-raw.js",
     "db:preflight": "node scripts/vcc-preflight.js",
     "deploy:production": "node scripts/deploy-guard.js production && wrangler deploy --env production",
+    "start:node": "node src/node/main.js",
     "db:seed:local": "node scripts/seed-local.js && wrangler d1 execute DB --local --file .wrangler/seed-marker.sql && wrangler d1 execute DB --local --file .wrangler/seed-local.sql",
     "test": "vitest run",
     "test:pg": "vitest run --config vitest.pg.config.js",
     "test:pg:real": "vitest run --config vitest.pg.config.js"
   },
   "dependencies": {
+    "@hono/node-server": "^2.1.8",
     "hono": "^4.13.17",
     "pdf-lib": "^1.17.1",
     "pg": "^8.23.1"

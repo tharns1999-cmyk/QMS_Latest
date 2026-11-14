@@ -127,7 +127,8 @@ describe('database contract', () => {
       (await db.prepare("SELECT count(*) AS n FROM audit_log WHERE action = 'DB_CONTRACT_TEST' AND details = ?").bind(marker).first()).n;
 
     it('writes the audit row only when the guarded update took effect', async () => {
-      const marker = `[ข้อมูลทดสอบ] ${Date.now()}`;
+      // Details are JSON like every real audit row: other statements read them with json_extract and fail on plain text.
+      const marker = JSON.stringify({ test: `[ข้อมูลทดสอบ] ${Date.now()}` });
       await db.prepare("UPDATE departments SET name_en = '' WHERE code = ?").bind(DEPT).run();
 
       await guardedUpdateWithAudit('not-the-current-value', marker);
@@ -186,7 +187,7 @@ describe('database contract', () => {
     });
 
     it('lets the next statement in a batch find the row just inserted', async () => {
-      const marker = `[ข้อมูลทดสอบ] rowid ${Date.now()}`;
+      const marker = JSON.stringify({ test: `[ข้อมูลทดสอบ] rowid ${Date.now()}` });
       const [, found] = await db.batch([
         db.prepare("INSERT INTO audit_log (actor_id, action, details) VALUES (NULL, 'DB_CONTRACT_TEST', ?)").bind(marker),
         db.prepare('SELECT details FROM audit_log WHERE id = last_insert_rowid()')
