@@ -29,7 +29,7 @@ const server = await createNodeServer({
   scheduler: config.runScheduler,
   onError: (err) => log('error', 'scheduler_failed', { error: String(err?.message ?? err) })
 });
-log('info', 'api_started', { port: server.port, scheduler: config.runScheduler, web: Boolean(config.webDistDir), files: config.blob ? `blob:${config.blob.container}` : 'folder', clientIpHeader: config.clientIpHeader || null });
+log('info', 'api_started', { port: server.port, scheduler: config.runScheduler, web: Boolean(config.webDistDir), auth: config.authMode, files: config.blob ? `blob:${config.blob.container}` : 'folder', clientIpHeader: config.clientIpHeader || null });
 if (!config.clientIpHeader) log('warn', 'client_ip_header_not_set', { effect: 'the per-address limit on failed logins is not applied' });
 
 let stopping = false;

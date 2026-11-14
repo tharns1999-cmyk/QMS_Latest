@@ -132,7 +132,7 @@ const Sidebar = ({ isOpen = false, onClose = () => {} }) => {
     externalDocuments, periodicReviewSchedules,
     masterUsers, setCurrentUser, switchUser, notifications, vccNotifications,
     resetTransactionDataToCleanSlate, manualSeedData, externalRequests,
-    simulatedSystemDate, getEffectiveToday
+    simulatedSystemDate, getEffectiveToday, microsoftSignIn
   } = useStore();
   
   const switcherUsers = useMemo(() => {
@@ -616,10 +616,13 @@ const Sidebar = ({ isOpen = false, onClose = () => {} }) => {
 
           {isApiMode ? (
             <div className="space-y-1.5">
-              <button type="button" onClick={() => setChangingPassword(true)}
-                className="w-full h-8 px-2.5 text-xs font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 cursor-pointer">
-                เปลี่ยนรหัสผ่าน
-              </button>
+              {/* No password of ours to change when people sign in with their company Microsoft account. */}
+              {!microsoftSignIn && (
+                <button type="button" onClick={() => setChangingPassword(true)}
+                  className="w-full h-8 px-2.5 text-xs font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 cursor-pointer">
+                  เปลี่ยนรหัสผ่าน
+                </button>
+              )}
               <button type="button" onClick={logout}
                 className="w-full h-8 px-2.5 text-xs font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 cursor-pointer">
                 ออกจากระบบ

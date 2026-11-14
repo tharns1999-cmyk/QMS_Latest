@@ -1,6 +1,9 @@
 // Settings for running the API on a plain Node host (Azure App Service or a container). They come from environment
 // variables, which App Service calls "application settings"; nothing secret is read from a file.
+import { entraSettings } from '../entraAuth.js';
+
 const MIN_SECRET_LENGTH = 32;
+const ENTRA_SETTINGS = ['ENTRA_TENANT_ID', 'ENTRA_CLIENT_ID', 'ENTRA_CLIENT_SECRET', 'ENTRA_REDIRECT_URI', 'ENTRA_POST_LOGIN_URL', 'ENTRA_AUTHORITY_HOST'];
 
 // Files go to Azure Blob Storage when an account (managed identity) or a connection string is given, else to a folder.
 // Shared with the tool that moves the existing PDFs, so both read the same settings the same way.
@@ -42,6 +45,12 @@ export const readConfig = (source = process.env) => {
   const storage = readBlobSettings(source);
   problems.push(...storage.problems);
 
+  // Sign-in: passwords (the default) or the company Microsoft account. Microsoft mode needs all of its settings to start.
+  const authMode = text('AUTH_MODE').toLowerCase() || 'password';
+  if (!['password', 'entra'].includes(authMode)) problems.push(`AUTH_MODE "${text('AUTH_MODE')}" must be "password" or "entra"`);
+  const entra = Object.fromEntries(ENTRA_SETTINGS.map((name) => [name, text(name)]));
+  if (authMode === 'entra') problems.push(...entraSettings({ ...entra, AUTH_MODE: 'entra' }).problems);
+
   if (problems.length) throw new Error(`Cannot start the API:\n- ${problems.join('\n- ')}`);
 
   return {
@@ -54,6 +63,8 @@ export const readConfig = (source = process.env) => {
     poolMax,
     filesDir: text('FILES_DIR') || './data/files',
     blob: storage.blob,
+    authMode,
+    entra,
     webDistDir: text('WEB_DIST_DIR'),
     runScheduler: text('RUN_SCHEDULER') !== '0'
   };

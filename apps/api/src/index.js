@@ -10,6 +10,7 @@ import { checkDecisionRights, getThresholds } from './approval.js';
 import { newSecret, verifyCode, otpauthUri } from './totp.js';
 import { registerVccRoutes } from './vcc.js';
 import { runVccNotificationSweep } from './vccNotifications.js';
+import { isEntraMode, registerEntraRoutes } from './entraAuth.js';
 
 const MAX_FAILED_LOGINS = 5;
 const TOKEN_TTL_SECONDS = 8 * 60 * 60;
@@ -176,6 +177,9 @@ const tooManyFailures = async (db, ip) => {
   return n >= MAX_FAILED_LOGINS_PER_IP;
 };
 
+// Sign-in with the company Microsoft account; registered before the password routes so that, in that mode, it can switch them off.
+registerEntraRoutes(app, { audit, issueToken, logEvent, clientIp });
+
 app.post('/api/auth/login', async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const email = typeof body.email === 'string' ? body.email.trim() : '';
@@ -223,10 +227,14 @@ export const requireAuth = async (c, next) => {
   const user = payload && !payload.purpose && await c.env.DB.prepare("SELECT * FROM users WHERE id = ? AND status = 'ACTIVE'").bind(payload.sub).first();
   // A password change signs out every token issued before it.
   if (!user || !(payload.iat >= user.password_changed_at)) return c.json({ error: 'กรุณาเข้าสู่ระบบ' }, 401);
-  if (user.must_change_password && !PASSWORD_CHANGE_PATHS.includes(c.req.path)) {
+  // With the company Microsoft account there is no password or authenticator of ours to change or set up.
+  const microsoftOnly = isEntraMode(c.env);
+  if (user.must_change_password && !microsoftOnly && !PASSWORD_CHANGE_PATHS.includes(c.req.path)) {
     return c.json({ error: 'กรุณาเปลี่ยนรหัสผ่านก่อนใช้งาน', code: 'PASSWORD_CHANGE_REQUIRED' }, 403);
   }
-  const publicUser = toPublicUser(user, await loadSecurityPolicy(c.env.DB));
+  const publicUser = microsoftOnly
+    ? { ...toPublicUser({ ...user, must_change_password: 0, totp_confirmed_at: null }, { twoFactorMinLevel: 0, twoFactorForDcc: false, twoFactorTrustDays: 0 }), microsoftSignIn: true }
+    : toPublicUser(user, await loadSecurityPolicy(c.env.DB));
   if (publicUser.mustSetUpTwoFactor && !TWO_FACTOR_SETUP_PATHS.includes(c.req.path)) {
     return c.json({ error: 'กรุณาตั้งค่าการยืนยันตัวตนสองขั้นตอนก่อนใช้งาน', code: 'TWO_FACTOR_SETUP_REQUIRED' }, 403);
   }

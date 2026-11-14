@@ -1,6 +1,8 @@
 // API mode is on when VITE_API_URL is set at build time; without it the app runs on its built-in demo data.
 const API_URL = import.meta.env.VITE_API_URL;
 export const isApiMode = Boolean(API_URL);
+// The full address of an API path, for a link the browser itself follows (the Microsoft sign-in).
+export const apiUrl = (path) => `${API_URL}${path}`;
 
 const TOKEN_KEY = 'qms-api-token';
 let memoryToken = null;

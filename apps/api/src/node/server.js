@@ -17,7 +17,9 @@ export const buildEnv = (config) => {
       FILES: config.blob ? createBlobStore(config.blob) : createDiskStore(config.filesDir),
       JWT_SECRET: config.jwtSecret,
       ALLOWED_ORIGIN: config.allowedOrigin,
-      CLIENT_IP_HEADER: config.clientIpHeader
+      CLIENT_IP_HEADER: config.clientIpHeader,
+      AUTH_MODE: config.authMode,
+      ...config.entra
     },
     close: () => driver.close()
   };

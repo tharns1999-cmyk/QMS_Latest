@@ -9,8 +9,9 @@
 //   pnpm --dir apps/api run local:stack            start (builds and copies on the first run)
 //   pnpm --dir apps/api run local:stack -- --reset copy the dev data again, discarding what was done in the tryout
 //   pnpm --dir apps/api run local:stack -- --port 9000
+//   pnpm --dir apps/api run local:stack -- --microsoft   sign in through a pretend Microsoft page
 import { execSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { PGlite } from '@electric-sql/pglite';
 import { citext } from '@electric-sql/pglite/contrib/citext';
@@ -19,9 +20,12 @@ import { openSqliteSource } from '../src/db/pg/sqliteSource.js';
 import { createPgDatabase } from '../src/db/pgAdapter.js';
 import { createDiskStore } from '../src/node/diskStore.js';
 import { createNodeServer } from '../src/node/server.js';
+import { startFakeMicrosoft } from './fake-microsoft.js';
 
 const args = process.argv.slice(2);
 const reset = args.includes('--reset');
+// --microsoft: sign in through a pretend Microsoft page instead of passwords, to try the button the company will use.
+const microsoft = args.includes('--microsoft');
 const port = Number(args.includes('--port') ? args[args.indexOf('--port') + 1] : 8787);
 if (!Number.isInteger(port) || port < 1 || port > 65535) {
   console.error('--port must be a port number, e.g. --port 9000');
@@ -40,7 +44,13 @@ const open = (dir) => PGlite.create(dir, { extensions: { citext } });
 
 // 1. The web app, built to talk to this address.
 const builtFor = existsSync(WEB_MARKER) ? readFileSync(WEB_MARKER, 'utf8') : '';
-if (!existsSync(resolve(WEB_DIR, 'index.html')) || builtFor !== address) {
+// Rebuilt when the address changed or any web source file is newer than the last build, so the tryout never shows old screens.
+const newestSource = (dir) => readdirSync(dir, { withFileTypes: true }).reduce((newest, entry) => {
+  const path = resolve(dir, entry.name);
+  return Math.max(newest, entry.isDirectory() ? newestSource(path) : statSync(path).mtimeMs);
+}, 0);
+const webChanged = existsSync(WEB_MARKER) && newestSource(resolve('../web/src')) > statSync(WEB_MARKER).mtimeMs;
+if (!existsSync(resolve(WEB_DIR, 'index.html')) || builtFor !== address || webChanged) {
   console.log(`Building the web app for ${address} (takes a minute)...`);
   execSync(`pnpm --dir ../web exec vite build --outDir "${WEB_DIR}" --emptyOutDir`, { stdio: 'inherit', env: { ...process.env, VITE_API_URL: address } });
   writeFileSync(WEB_MARKER, address);
@@ -83,19 +93,37 @@ const NUMERIC_OID = 1700; // SUM()/AVG() come back as text from PGlite; SQLite g
 const run = (runner) => ({ query: (sql, params) => runner.query(sql, params, { parsers: { [NUMERIC_OID]: (v) => Number(v) } }) });
 const driver = { ...run(lite), transaction: (fn) => lite.transaction((tx) => fn(run(tx))) };
 
+const TENANT = '11111111-2222-4333-8444-555555555555';
+const CLIENT_ID = '66666666-7777-4888-8999-aaaaaaaaaaaa';
+const CLIENT_SECRET = 'local-tryout-client-secret';
+let fake = null;
+if (microsoft) {
+  const people = (await driver.query("SELECT name, email FROM users WHERE status = 'ACTIVE' ORDER BY is_dcc DESC, name LIMIT 40")).rows;
+  fake = await startFakeMicrosoft({ port: port + 1, tenant: TENANT, clientId: CLIENT_ID, clientSecret: CLIENT_SECRET, redirectUri: `${address}/api/auth/entra/callback`, people });
+}
+
 const devVars = existsSync('.dev.vars') ? readFileSync('.dev.vars', 'utf8') : '';
 const env = {
   DB: createPgDatabase(driver),
   FILES: createDiskStore(FILES_DIR),
   JWT_SECRET: /JWT_SECRET\s*=\s*"?([^"\r\n]+)"?/.exec(devVars)?.[1] || 'local-tryout-only-secret-not-for-any-real-use-0000',
   ALLOWED_ORIGIN: address,
-  CLIENT_IP_HEADER: ''
+  CLIENT_IP_HEADER: '',
+  ...(fake && {
+    AUTH_MODE: 'entra',
+    ENTRA_TENANT_ID: TENANT,
+    ENTRA_CLIENT_ID: CLIENT_ID,
+    ENTRA_CLIENT_SECRET: CLIENT_SECRET,
+    ENTRA_REDIRECT_URI: `${address}/api/auth/entra/callback`,
+    ENTRA_AUTHORITY_HOST: fake.host
+  })
 };
 const server = await createNodeServer({ env, port, hostname: '127.0.0.1', webDistDir: WEB_DIR, onError: (err) => console.error('daily job failed:', err?.message ?? err) });
 
 const login = (await driver.query("SELECT email FROM users WHERE status = 'ACTIVE' AND is_dcc = 1 ORDER BY id LIMIT 1")).rows[0];
 console.log(`\nReady: open ${address} in the browser.`);
-if (login) console.log(`Sign in with ${login.email} and the password 1234 (the seeded dev accounts).`);
+if (fake) console.log('Sign-in is through a PRETEND Microsoft page (local tryout): press "เข้าสู่ระบบด้วย Microsoft" and pick a person from the list.');
+else if (login) console.log(`Sign in with ${login.email} and the password 1234 (the seeded dev accounts).`);
 console.log('This is a local tryout copy: what you do here stays in .wrangler/local-stack and never reaches Cloudflare or Azure.');
 console.log('Press Ctrl+C to stop. Start again with the same command and your tryout data is still there.');
 
@@ -104,6 +132,7 @@ const shutdown = async () => {
   if (stopping) return;
   stopping = true;
   await server.stop();
+  await fake?.close();
   await lite.close();
   process.exit(0);
 };

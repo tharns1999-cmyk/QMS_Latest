@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { getToken, SESSION_EXPIRED_EVENT } from '../../api/client';
-import { clearSession, finishSignIn, login, restoreSession, verifyTwoFactor } from '../../api/session';
+import { apiUrl, getToken, SESSION_EXPIRED_EVENT } from '../../api/client';
+import { clearSession, finishSignIn, loadAuthMode, login, restoreSession, takeLoginError, takeMicrosoftToken, verifyTwoFactor } from '../../api/session';
 import ChangePasswordForm from './ChangePasswordForm';
 import TwoFactorSetup from './TwoFactorSetup';
 
@@ -54,7 +54,24 @@ const TwoFactorStep = ({ challenge, onUser, onBack }) => {
   );
 };
 
-const LoginPage = ({ onLogin }) => {
+// With the company Microsoft account there is nothing to type: the person goes to Microsoft and comes back signed in.
+const MicrosoftSignIn = ({ notice }) => (
+  <div className="min-h-full flex items-center justify-center bg-slate-50 p-4">
+    <div className="w-full max-w-sm bg-white border border-slate-200 rounded-2xl shadow-sm p-6 space-y-4">
+      <div>
+        <h1 className="text-lg font-bold text-slate-900">QMS Portal</h1>
+        <p className="text-xs text-slate-500 mt-0.5">เข้าสู่ระบบควบคุมเอกสาร ด้วยบัญชี Microsoft ของบริษัท</p>
+      </div>
+      {notice && <p role="alert" className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">{notice}</p>}
+      <a href={apiUrl('/api/auth/entra/login')}
+        className="flex items-center justify-center w-full h-9 text-sm font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-lg cursor-pointer">เข้าสู่ระบบด้วย Microsoft</a>
+    </div>
+  </div>
+);
+
+const LoginPage = ({ onLogin, notice = '' }) => {
+  const [mode, setMode] = useState('password');
+  useEffect(() => { loadAuthMode().then(setMode); }, []);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -79,6 +96,7 @@ const LoginPage = ({ onLogin }) => {
     }
   };
 
+  if (mode === 'entra') return <MicrosoftSignIn notice={notice} />;
   if (challenge) return <TwoFactorStep challenge={challenge} onUser={onLogin} onBack={() => setChallenge(null)} />;
 
   return (
@@ -98,7 +116,7 @@ const LoginPage = ({ onLogin }) => {
           <input type="password" required autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)}
             className="mt-1 w-full h-9 px-3 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500" />
         </label>
-        {error && <p role="alert" className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">{error}</p>}
+        {(error || notice) && <p role="alert" className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">{error || notice}</p>}
         <button type="submit" disabled={busy}
           className="w-full h-9 text-sm font-semibold text-white bg-slate-900 hover:bg-slate-800 disabled:opacity-60 rounded-lg cursor-pointer">
           {busy ? 'กำลังเข้าสู่ระบบ...' : 'เข้าสู่ระบบ'}
@@ -110,6 +128,8 @@ const LoginPage = ({ onLogin }) => {
 
 // API mode only: nothing renders until the server has confirmed who the user is.
 const ApiSessionGate = ({ children }) => {
+  // Back from the Microsoft sign-in: the token is in the address fragment and a refusal is in the query.
+  const [notice] = useState(() => { takeMicrosoftToken(); return takeLoginError(); });
   const [state, setState] = useState(() => (getToken() ? 'loading' : 'out'));
 
   useEffect(() => {
@@ -125,7 +145,7 @@ const ApiSessionGate = ({ children }) => {
   if (state === 'loading') {
     return <div className="h-full flex items-center justify-center text-sm text-slate-500">กำลังโหลด...</div>;
   }
-  if (state === 'out') return <LoginPage onLogin={(user) => setState(stateFor(user))} />;
+  if (state === 'out') return <LoginPage notice={notice} onLogin={(user) => setState(stateFor(user))} />;
   if (state === 'change') {
     return (
       <div className="min-h-full flex items-center justify-center bg-slate-50 p-4">

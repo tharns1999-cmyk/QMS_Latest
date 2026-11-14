@@ -57,7 +57,8 @@ export const loadDocuments = async () => {
 };
 
 const start = async (user) => {
-  useStore.setState({ currentUser: toStoreUser(user) });
+  // Kept apart from currentUser, which the people list replaces. The sidebar hides "change password" for Microsoft sign-in.
+  useStore.setState({ currentUser: toStoreUser(user), microsoftSignIn: Boolean(user.microsoftSignIn) });
   // Routing previews and pickers read these lists, so they must hold the real people, departments and places, not demo ones.
   await Promise.all([loadUsers(), loadMasterData(), loadApprovalMatrix(), loadDocumentTypes(), loadSla()]);
   await loadSignatures();
@@ -89,6 +90,44 @@ export const verifyTwoFactor = async (challenge, { code, recoveryCode, trustDevi
   const result = await apiPost('/api/auth/2fa/verify', { challenge, code, recovery_code: recoveryCode, trust_device: trustDevice });
   if (result.trustedDevice) keepTrustedDevice(result.trustedDevice);
   return signedIn(result);
+};
+
+// Which sign-in the server offers: 'entra' (the company Microsoft account) or 'password'. Any failure means the password form.
+export const loadAuthMode = async () => {
+  try {
+    return (await apiGet('/api/auth/mode')).mode === 'entra' ? 'entra' : 'password';
+  } catch {
+    return 'password';
+  }
+};
+
+// After Microsoft sign-in the server sends the browser back with the session token in the address fragment (never sent
+// to any server). Take it into the session and remove it from the address bar and history at once.
+export const takeMicrosoftToken = () => {
+  const match = /^#entra_token=([\w.-]+)$/.exec(window.location.hash);
+  if (!match) return false;
+  setToken(match[1]);
+  window.history.replaceState(null, '', window.location.pathname + window.location.search);
+  return true;
+};
+
+const LOGIN_ERRORS = {
+  entra_no_user: 'บัญชี Microsoft นี้ยังไม่ได้รับสิทธิ์ใช้งาน QMS Portal กรุณาติดต่อ DCC',
+  entra_inactive: 'บัญชีนี้ถูกปิดใช้งานหรือถูกล็อก กรุณาติดต่อ DCC',
+  entra_denied: 'การเข้าสู่ระบบด้วย Microsoft ถูกยกเลิก',
+  entra_not_configured: 'ระบบยังตั้งค่าการเข้าสู่ระบบด้วย Microsoft ไม่ครบ กรุณาแจ้งผู้ดูแลระบบ'
+};
+const LOGIN_ERROR_FALLBACK = 'เข้าสู่ระบบด้วย Microsoft ไม่สำเร็จ กรุณาลองใหม่ ถ้ายังไม่ได้ให้แจ้งผู้ดูแลระบบ';
+
+// The message for a refused Microsoft sign-in (?login_error=...), taken off the address so a refresh does not repeat it.
+export const takeLoginError = () => {
+  const params = new URLSearchParams(window.location.search);
+  const code = params.get('login_error');
+  if (!code) return '';
+  params.delete('login_error');
+  const rest = params.toString();
+  window.history.replaceState(null, '', window.location.pathname + (rest ? `?${rest}` : '') + window.location.hash);
+  return LOGIN_ERRORS[code] || LOGIN_ERROR_FALLBACK;
 };
 
 export const startTwoFactorSetup = () => apiPost('/api/auth/2fa/setup');

@@ -58,4 +58,14 @@ describe('settings for running the API as a service', () => {
     expect(() => readConfig({ ...good, AZURE_STORAGE_ACCOUNT: 'My_Account' })).toThrow(/AZURE_STORAGE_ACCOUNT/);
     expect(() => readConfig({ ...good, AZURE_STORAGE_ACCOUNT: 'qmsprod01', AZURE_STORAGE_CONTAINER: 'Bad_Name' })).toThrow(/AZURE_STORAGE_CONTAINER/);
   });
+
+  it('signs in with passwords unless Microsoft mode is chosen, and then needs every Microsoft setting', () => {
+    expect(readConfig(good)).toMatchObject({ authMode: 'password' });
+    const entra = { ...good, AUTH_MODE: 'entra', ENTRA_TENANT_ID: '11111111-2222-4333-8444-555555555555', ENTRA_CLIENT_ID: '66666666-7777-4888-8999-aaaaaaaaaaaa', ENTRA_CLIENT_SECRET: 's', ENTRA_REDIRECT_URI: 'https://qms.example.com/api/auth/entra/callback' };
+    expect(readConfig(entra)).toMatchObject({ authMode: 'entra', entra: { ENTRA_CLIENT_SECRET: 's' } });
+    expect(() => readConfig({ ...entra, ENTRA_CLIENT_SECRET: '' })).toThrow(/ENTRA_CLIENT_SECRET/);
+    expect(() => readConfig({ ...entra, ENTRA_TENANT_ID: 'common' })).toThrow(/ENTRA_TENANT_ID/);
+    expect(() => readConfig({ ...good, AUTH_MODE: 'entra' })).toThrow(/ENTRA_TENANT_ID[\s\S]*ENTRA_CLIENT_ID[\s\S]*ENTRA_CLIENT_SECRET[\s\S]*ENTRA_REDIRECT_URI/);
+    expect(() => readConfig({ ...good, AUTH_MODE: 'sso' })).toThrow(/AUTH_MODE/);
+  });
 });

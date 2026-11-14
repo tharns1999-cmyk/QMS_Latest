@@ -217,7 +217,8 @@ describe('VCC Multi-Department Access & Approval Workflow (RBAC & SoD)', () => {
 
     // Submit plan
     const submitRes = await call('POST', `/api/vcc/plans/${planId}/submit`, 'QC-STAFF', {});
-    expect(submitRes.status).toBe(200);
+    // The body goes into the failure message: this step has failed in a full run before, and a bare 400 says nothing.
+    expect(submitRes.status, JSON.stringify(submitRes.body)).toBe(200);
     expect(submitRes.body.plan.status).toBe('PENDING_REVIEW');
     expect(submitRes.body.plan.prepared_by).toBe('QC-STAFF');
 
