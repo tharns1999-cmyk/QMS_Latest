@@ -116,6 +116,25 @@ const NUMERIC_OID = 1700; // SUM()/AVG() come back as text from PGlite; SQLite g
 const run = (runner) => ({ query: (sql, params) => runner.query(sql, params, { parsers: { [NUMERIC_OID]: (v) => Number(v) } }) });
 const driver = { ...run(lite), transaction: (fn) => lite.transaction((tx) => fn(run(tx))) };
 
+// Tryout copy only: the dev accounts are named after their job ("QA หัวหน้า"); give each a person's name so the
+// tester sees people, as in the earlier demo. Same names every start, nothing else changes.
+const TRYOUT_NAMES = {
+  ac2: 'ปวีณา', ac4: 'ศิริพร', ac6: 'อรุณี',
+  dc2: 'ภัทรา', dc4: 'ธนาวุฒิ', dcc2: 'กนกวรรณ', dc6: 'วิชัย',
+  en2: 'ชัยวัฒน์', en4: 'รัตนพล', en6: 'สมเกียรติ',
+  hr2: 'นภัสสร', hr4: 'ลัดดา', hr6: 'พิมพ์ใจ',
+  lb2: 'วรรณภา', lb4: 'สายรุ้ง', lb6: 'ประภาพร',
+  mg2: 'จิราพร', mg4: 'สุรชัย', mg6: 'คุณเรย์', md: 'คุณนัท',
+  pd2: 'อนันต์', pd4: 'กัลยาณี', pd6: 'ธีรพงษ์',
+  pu2: 'มณีรัตน์', pu4: 'วิไล', pu6: 'สมพร',
+  qa2: 'ณัฐธิดา', qa4: 'พัชรี', qa6: 'สุเทพ',
+  qc2: 'อภิชาติ', qc4: 'บีม', qc6: 'ชุติมา',
+  rd2: 'ปิยะ', rd4: 'กัญญา', rd6: 'ทิพวรรณ',
+  sf2: 'วีระ', sf4: 'นิพนธ์', sf6: 'อุไรวรรณ',
+  wh2: 'สมหมาย', wh4: 'บุญช่วย', wh6: 'ประสิทธิ์'
+};
+for (const [id, name] of Object.entries(TRYOUT_NAMES)) await driver.query('UPDATE users SET name = $1 WHERE id = $2 AND name <> $1', [name, id]);
+
 // The people the tester can switch between (tryout builds only): written fresh at every start.
 const roster = (await driver.query("SELECT id, name, email, primary_department AS department, approval_level AS level, position FROM users WHERE status = 'ACTIVE' ORDER BY primary_department, approval_level, id")).rows;
 writeFileSync(resolve(WEB_DIR, 'tryout-users.json'), JSON.stringify(roster));
