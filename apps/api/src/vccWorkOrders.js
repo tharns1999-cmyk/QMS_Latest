@@ -1995,7 +1995,11 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
       return c.json({ error: 'ผู้บันทึกผลไม่สามารถตรวจรับและอนุมัติปิดใบสั่งงานของตนเองได้' }, 403);
     }
     if (existing.status === 'CLOSED') {
-      await db.batch([
+      // Recording a result closes the work order with nobody having verified it yet; this is the verification by a
+      // second person. It happens once: a later verifier must not add a second approval row or replace the first
+      // verifier's name, so it is refused, and the update itself only applies while no one has verified.
+      if (existing.reviewed_by) return c.json(STATE_CHANGED, 409);
+      const conflict = await runTransition(c, db, [
         db.prepare(`
           UPDATE vcc_work_orders
           SET reviewed_by = ?,
@@ -2003,8 +2007,9 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
               review_comment = COALESCE(?, review_comment),
               updated_at = ${NOW},
               updated_by = ?
-          WHERE id = ?
+          WHERE id = ? AND status = 'CLOSED' AND reviewed_by IS NULL
         `).bind(user.id, comment || null, user.id, id),
+        assertRowUpdated(db),
         audit(db, user.id, 'VCC_WO_APPROVED', {
           wo_id: id,
           wo_code: existing.wo_code,
@@ -2022,6 +2027,7 @@ export const registerVccWorkOrderRoutes = (app, { requireAuth, audit }) => {
           message: `ผลทวนสอบ/สอบเทียบของเครื่องมือ ${existing.asset_code} (${existing.asset_name}) ได้รับการตรวจรับโดย ${user.name}`
         })
       ]);
+      if (conflict) return conflict;
       return c.json({ workOrder: await fetchWorkOrder(db, id) });
     }
     if (existing.status !== 'PENDING_REVIEW') {

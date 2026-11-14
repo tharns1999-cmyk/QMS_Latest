@@ -123,6 +123,59 @@ describe('VCC work-order safety (atomic transitions, INCONCLUSIVE, cancellation,
     expect(await auditCount('VCC_WO_REJECTED', raceId)).toBe(reject.status === 200 ? 1 : 0);
   });
 
+  it('B1: a result closes the work order, one other person verifies it once, and a later verifier is refused', async () => {
+    const { woId } = await newWorkOrder('VERIFY-ONCE');
+    expect((await call('POST', `/api/vcc/work-orders/${woId}/submit-result`, 'SF-L2', result('PASS'))).status).toBe(200);
+    const closed = (await call('GET', `/api/vcc/work-orders/${woId}`, 'SF-REV4')).body.workOrder;
+    expect(closed.status).toBe('CLOSED');
+    expect(closed.reviewed_by).toBeNull();
+
+    const first = await call('POST', `/api/vcc/work-orders/${woId}/approve`, 'SF-REV4', { comment: 'ตรวจรับ' });
+    expect(first.status).toBe(200);
+    expect(first.body.workOrder.reviewed_by).toBe('SF-REV4');
+
+    const late = await call('POST', `/api/vcc/work-orders/${woId}/approve`, 'SF-REV4B', { comment: 'ตรวจรับซ้ำ' });
+    expect(late.status).toBe(409);
+    const after = (await call('GET', `/api/vcc/work-orders/${woId}`, 'SF-REV4')).body.workOrder;
+    expect(after.reviewed_by).toBe('SF-REV4');
+    expect(await auditCount('VCC_WO_APPROVED', woId)).toBe(1);
+  });
+
+  it('B1: two people verifying a closed work order at the same moment leave one verifier and one audit row', async () => {
+    const { woId } = await newWorkOrder('VERIFY-RACE');
+    expect((await call('POST', `/api/vcc/work-orders/${woId}/submit-result`, 'SF-L2', result('PASS'))).status).toBe(200);
+    const [a, b] = await Promise.all([
+      call('POST', `/api/vcc/work-orders/${woId}/approve`, 'SF-REV4', { comment: 'ตรวจรับ' }),
+      call('POST', `/api/vcc/work-orders/${woId}/approve`, 'SF-REV4B', { comment: 'ตรวจรับเช่นกัน' })
+    ]);
+    expect([a.status, b.status].sort()).toEqual([200, 409]);
+    const winner = a.status === 200 ? 'SF-REV4' : 'SF-REV4B';
+    expect((await call('GET', `/api/vcc/work-orders/${woId}`, 'SF-REV4')).body.workOrder.reviewed_by).toBe(winner);
+    expect(await auditCount('VCC_WO_APPROVED', woId)).toBe(1);
+  });
+
+  it('B1: approving a work order that is already closed is refused and changes nothing, whoever asks', async () => {
+    const { woId } = await newWorkOrder('APPROVE-AGAIN');
+    expect((await call('POST', `/api/vcc/work-orders/${woId}/submit-result`, 'SF-L2', result('PASS'))).status).toBe(200);
+    await env.DB.prepare("UPDATE vcc_work_orders SET status = 'PENDING_REVIEW' WHERE id = ?").bind(woId).run();
+    expect((await call('POST', `/api/vcc/work-orders/${woId}/approve`, 'SF-REV4', { comment: 'ตรวจรับ' })).status).toBe(200);
+
+    const before = (await call('GET', `/api/vcc/work-orders/${woId}`, 'SF-REV4')).body.workOrder;
+    expect(before.status).toBe('CLOSED');
+
+    // A second approver, and the first one again: both arrive after the work order closed.
+    for (const who of ['SF-REV4B', 'SF-REV4']) {
+      const again = await call('POST', `/api/vcc/work-orders/${woId}/approve`, who, { comment: 'ตรวจรับซ้ำ' });
+      expect(again.status).toBe(409);
+    }
+
+    const after = (await call('GET', `/api/vcc/work-orders/${woId}`, 'SF-REV4')).body.workOrder;
+    expect(after.reviewed_by).toBe(before.reviewed_by);
+    expect(after.reviewed_at).toBe(before.reviewed_at);
+    expect(after.review_comment).toBe(before.review_comment);
+    expect(await auditCount('VCC_WO_APPROVED', woId)).toBe(1);
+  });
+
   it('B1: a double-clicked result submission records one result and one audit row', async () => {
     const { woId } = await newWorkOrder('SUBMIT');
     const [a, b] = await Promise.all([
