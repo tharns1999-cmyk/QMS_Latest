@@ -31,7 +31,7 @@ export const AssetRegisterEmptyState = ({
               className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 text-white text-xs sm:text-sm font-bold hover:bg-indigo-700 transition-colors shadow-xs cursor-pointer"
             >
               <Plus size={16} />
-              <span>+ ลงทะเบียนเครื่องมือชิ้นแรก</span>
+              <span>ลงทะเบียนเครื่องมือชิ้นแรก</span>
             </button>
           </div>
         )}

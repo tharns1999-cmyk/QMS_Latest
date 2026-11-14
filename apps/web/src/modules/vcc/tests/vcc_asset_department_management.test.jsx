@@ -71,8 +71,9 @@ describe('VCC asset register: department-based management panel & Strict Departm
     expect(screen.queryByRole('combobox', { name: 'กรองตามแผนก' })).toBeNull();
     expect(screen.getByTestId('locked-department-badge')).toHaveTextContent(/แผนก:\s*LB\s*—\s*ห้องปฏิบัติการ/);
 
-    const firstRegisterBtn = screen.getByRole('button', { name: /\+ ลงทะเบียนเครื่องมือชิ้นแรก/ });
+    const firstRegisterBtn = screen.getByRole('button', { name: /ลงทะเบียนเครื่องมือชิ้นแรก/ });
     expect(firstRegisterBtn).toBeInTheDocument();
+    expect(firstRegisterBtn).toHaveTextContent(/^ลงทะเบียนเครื่องมือชิ้นแรก$/);
     fireEvent.click(firstRegisterBtn);
     const deptSelect = screen.getByText(/แผนกเจ้าของ/).closest('div').querySelector('select');
     expect(deptSelect.value).toBe('LB');
