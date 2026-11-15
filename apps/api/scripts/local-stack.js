@@ -172,6 +172,9 @@ const TRYOUT_NAMES = {
   wh2: 'สมหมาย', wh4: 'บุญช่วย', wh6: 'ประสิทธิ์'
 };
 for (const [id, name] of Object.entries(TRYOUT_NAMES)) await driver.query('UPDATE users SET name = $1 WHERE id = $2 AND name <> $1', [name, id]);
+await driver.query("DELETE FROM users WHERE name LIKE '[ข้อมูลทดสอบ]%'");
+await driver.query("UPDATE users SET departments = '[\"PD\",\"QC\"]' WHERE id = 'pd4'");
+await driver.query("UPDATE users SET is_qmr = 1 WHERE id = 'mg6'");
 
 // The people the tester can switch between (tryout builds only): written fresh at every start.
 const roster = (await driver.query("SELECT id, name, email, primary_department AS department, approval_level AS level, position FROM users WHERE status = 'ACTIVE' ORDER BY primary_department, approval_level, id")).rows;

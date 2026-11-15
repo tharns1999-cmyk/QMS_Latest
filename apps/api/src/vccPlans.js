@@ -103,9 +103,12 @@ const getPlanDecisionCheck = async (db) => {
     const assigned = plan[`assigned_${stage}_id`];
     if (assigned && assigned !== user.id) return `เฉพาะ${review ? 'ผู้ทบทวน' : 'ผู้อนุมัติ'}ที่ได้รับมอบหมายตามแบบฟอร์มเอกสารควบคุมเท่านั้น`;
     if (Number(user.approval_level) < required) return `ต้องมีระดับ L${required} ขึ้นไป`;
-    if (assigned && profile?.[`${stage}_dept`]) {
-      if (!isUserAuthorizedForPlanDept(user, profile[`${stage}_dept`])) return 'ผู้รับผิดชอบต้องสังกัดแผนกตามค่าตั้งค่างานนี้';
-    } else if (!isUserAuthorizedForPlanDept(user, plan.department)) return 'ไม่มีสิทธิ์ดำเนินการในแผนกนี้';
+    const stageDept = profile?.[`${stage}_dept`];
+    if (assigned && stageDept) {
+      if (!userBelongsToDept(user, stageDept) && !userBelongsToDept(user, plan.department)) {
+        return 'ผู้รับผิดชอบต้องสังกัดแผนกตามค่าตั้งค่างานนี้';
+      }
+    } else if (!userBelongsToDept(user, plan.department)) return 'ไม่มีสิทธิ์ดำเนินการในแผนกนี้';
     return null;
   };
 };
@@ -403,15 +406,19 @@ export const generatePlanPdfBuffer = async (plan, items = [], signatories = {}) 
 
 export { getUserDepartments };
 
-export const isUserAuthorizedForPlanDept = (user, planDepartment) => {
+export const userBelongsToDept = (user, planDepartment) => {
   if (!user) return false;
-  const isDccUser = Boolean(user.isDcc || Number(user.is_dcc) === 1);
-  const isQmrUser = Boolean(user.isQmr || Number(user.is_qmr) === 1);
+  const isDccUser = Boolean(user.isDcc || Number(user.is_dcc) === 1 || user.role === 'DCC_ADMIN');
+  const isQmrUser = Boolean(user.isQmr || Number(user.is_qmr) === 1 || user.role === 'QMR');
   const level = Number(user.approval_level ?? user.approvalLevel ?? user.level ?? 0);
   if (isDccUser || isQmrUser || level >= 6) return true;
+  const normTarget = String(planDepartment || '').toUpperCase().trim();
+  if (!normTarget) return false;
   const depts = getUserDepartments(user);
-  return depts.includes(String(planDepartment || '').toUpperCase().trim());
+  return depts.includes(normTarget);
 };
+
+export const isUserAuthorizedForPlanDept = userBelongsToDept;
 
 const PLAN_SELECT = `
   SELECT p.*,
@@ -1225,9 +1232,16 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
     const before = profiles[department] || null;
     const profile = {};
 
-    for (const field of ['document_code', 'revision', 'reviewer_dept', 'approver_dept']) {
+    profile.document_code = typeof body.document_code === 'string' && body.document_code.trim() && body.document_code.trim().length <= 100
+      ? body.document_code.trim()
+      : (before?.document_code || `VCC-AP-${department}-2026`);
+    profile.revision = typeof body.revision === 'string' && body.revision.trim() && body.revision.trim().length <= 100
+      ? body.revision.trim()
+      : (before?.revision || '01');
+
+    for (const field of ['reviewer_dept', 'approver_dept']) {
       if (typeof body[field] !== 'string' || !body[field].trim() || body[field].length > 100) {
-        return c.json({ error: 'กรุณาระบุแบบฟอร์ม ฉบับ และแผนกของผู้รับผิดชอบให้ครบถ้วน' }, 400);
+        return c.json({ error: 'กรุณาระบุแผนกของผู้รับผิดชอบให้ครบถ้วน' }, 400);
       }
       profile[field] = body[field].trim();
     }
@@ -1259,12 +1273,10 @@ export const registerVccPlanRoutes = (app, { requireAuth, audit }) => {
     }
 
     const form = await controlledVccForm(db, profile);
-    if (!form) {
-      return c.json({ code: 'CONFIGURATION_INCOMPLETE', error: 'กรุณาเลือกแบบฟอร์ม DCC ที่มีผลบังคับใช้จริง' }, 422);
-    }
-    profile.document_id = form.id;
-    profile.title_th = form.name;
-    profile.form_issue_date = form.effective_date;
+    profile.form_doc_id = body.form_doc_id !== undefined ? body.form_doc_id : (form?.id || before?.form_doc_id || null);
+    profile.document_id = form?.id || null;
+    profile.title_th = form?.name || (typeof body.title_th === 'string' && body.title_th.trim() ? body.title_th.trim() : (before?.title_th || `แผนการทวนสอบเครื่องมือประจำปี (${department})`));
+    profile.form_issue_date = form?.effective_date || (typeof body.form_issue_date === 'string' && body.form_issue_date.trim() ? body.form_issue_date.trim() : (before?.form_issue_date || null));
 
     const readiness = await vccProfileReadiness(db, profile);
     if (readiness.status !== 'READY') {

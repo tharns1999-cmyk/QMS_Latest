@@ -373,10 +373,21 @@ const MasterDataHub = () => {
     }
 
     if (isApiMode) {
+      const primaryDept = userFormData.primary_department || userFormData.department;
+      const mergedDepts = Array.from(
+        new Set(
+          [
+            primaryDept,
+            ...(userFormData.affiliated_departments || []),
+            ...(userFormData.depts || []),
+            ...(userFormData.departments || [])
+          ].filter(Boolean)
+        )
+      );
       const form = {
         ...userFormData,
-        department: userFormData.primary_department || userFormData.department,
-        depts: userFormData.depts,
+        department: primaryDept,
+        depts: mergedDepts,
         approval_level: userFormData.approval_level || userFormData.level,
         isDcc: userFormData.role === 'DCC_ADMIN',
         isQmr: userFormData.role === 'QMR'

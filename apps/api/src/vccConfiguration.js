@@ -25,16 +25,20 @@ export const controlledVccForm = (db, profile) => profile?.document_code && prof
   : null;
 
 export const vccProfileReadiness = async (db, profile) => {
-  if (!profile) return { status: 'CONFIGURATION_INCOMPLETE', issues: ['ยังไม่ได้ตั้งค่าแบบฟอร์มและผู้รับผิดชอบ'] };
+  if (!profile || !profile.reviewer_dept || !profile.approver_dept) {
+    return { status: 'CONFIGURATION_INCOMPLETE', issues: ['ยังไม่ได้ตั้งค่าแบบฟอร์มและผู้รับผิดชอบ'] };
+  }
   const issues = [];
-  if (!await controlledVccForm(db, profile)) issues.push('ไม่พบแบบฟอร์ม DCC ที่มีผลบังคับใช้ตรงกับรหัสและฉบับที่กำหนด');
   const levels = await vccProfileThresholds(db, profile);
   for (const stage of ['reviewer', 'approver']) {
-    const person = profile[`assigned_${stage}_id`] && await db.prepare("SELECT * FROM users WHERE id = ? AND status = 'ACTIVE'").bind(profile[`assigned_${stage}_id`]).first();
+    const assignedId = profile[`assigned_${stage}_id`];
+    if (!assignedId) continue;
+    const person = await db.prepare("SELECT * FROM users WHERE id = ? AND status = 'ACTIVE'").bind(assignedId).first();
     const label = stage === 'reviewer' ? 'ผู้ทบทวน' : 'ผู้อนุมัติ';
+    const isWildcard = person && (Number(person.is_qmr) === 1 || person.isQmr || person.role === 'QMR' || Number(person.is_dcc) === 1 || person.isDcc);
     if (!person) issues.push(`ไม่พบผู้ใช้งาน${label} หรือบัญชีไม่พร้อมปฏิบัติงาน`);
     else if (person.approval_level < levels[`required_${stage}_level`]) issues.push(`${label}ต้องมีระดับอนุมัติตั้งแต่ L${levels[`required_${stage}_level`]} ขึ้นไป`);
-    else if (!getUserDepartments(person).includes(profile[`${stage}_dept`])) issues.push(`${label}ต้องสังกัดแผนก ${profile[`${stage}_dept`] || '(ยังไม่ได้ตั้งค่า)'}`);
+    else if (!isWildcard && !getUserDepartments(person).includes(profile[`${stage}_dept`])) issues.push(`${label}ต้องสังกัดแผนก ${profile[`${stage}_dept`] || '(ยังไม่ได้ตั้งค่า)'}`);
   }
   if (profile.assigned_reviewer_id && profile.assigned_reviewer_id === profile.assigned_approver_id) issues.push('ผู้ทบทวนและผู้อนุมัติต้องไม่เป็นบุคคลเดียวกัน (Segregation of Duties)');
   return { status: issues.length ? 'CONFIGURATION_INCOMPLETE' : 'READY', issues };

@@ -28,6 +28,17 @@ export const getUserDepartments = (user) => {
   return [...new Set(depts.filter(Boolean).map((d) => String(d).toUpperCase().trim()).filter(Boolean))];
 };
 
+export const userBelongsToDept = (user, targetDept) => {
+  if (!user) return false;
+  const isDccUser = Boolean(user.isDcc || Number(user.is_dcc) === 1 || user.role === 'DCC_ADMIN');
+  const isQmrUser = Boolean(user.isQmr || Number(user.is_qmr) === 1 || user.role === 'QMR');
+  const level = Number(user.approval_level ?? user.approvalLevel ?? user.level ?? 0);
+  if (isDccUser || isQmrUser || level >= 6) return true;
+  const normTarget = String(targetDept || '').toUpperCase().trim();
+  if (!normTarget) return false;
+  return getUserDepartments(user).includes(normTarget);
+};
+
 // READ scope: DCC, QMR, L6+ (existing policy) and MGT see every department; everyone else only their own department(s).
 // Writes and approvals keep their own rule (isUserAuthorizedForPlanDept in vccPlans.js).
 export const canReadAllVccDepartments = (user) => {

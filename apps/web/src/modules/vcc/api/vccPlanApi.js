@@ -354,15 +354,28 @@ export const getUserDepartments = (user) => {
   return Array.from(depts);
 };
 
-export const isUserAuthorizedForPlanDept = (user, planDepartment) => {
+export const userBelongsToDept = (user, planDepartment) => {
   if (user?.vccReadOnly) return false;
   if (!user) return false;
   const userLevel = Number(user.approval_level ?? user.approvalLevel ?? user.level ?? 1);
-  if (user.isDcc || Number(user.is_dcc) === 1 || user.isQmr || Number(user.is_qmr) === 1 || userLevel >= 6) return true;
+  if (
+    user.isDcc ||
+    Number(user.is_dcc) === 1 ||
+    user.role === 'DCC_ADMIN' ||
+    user.isQmr ||
+    Number(user.is_qmr) === 1 ||
+    user.role === 'QMR' ||
+    userLevel >= 6
+  ) {
+    return true;
+  }
   const targetDept = String(planDepartment || '').toUpperCase().trim();
+  if (!targetDept) return false;
   const userDepts = getUserDepartments(user);
   return userDepts.some((d) => isSameDepartment(d, targetDept));
 };
+
+export const isUserAuthorizedForPlanDept = userBelongsToDept;
 
 export const isVccAuthorized = (user) => {
   if (!user) return false;

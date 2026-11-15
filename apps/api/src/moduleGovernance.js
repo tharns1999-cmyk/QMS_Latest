@@ -50,12 +50,12 @@ export const registerModuleGovernanceRoutes = (app, { requireAuth, audit }) => {
     const profiles = await loadVccProfiles(db);
     const { results: departments } = await db.prepare(`SELECT d.*, COALESCE(md.enabled,0) AS enabled FROM departments d
       LEFT JOIN module_departments md ON md.department=d.code AND md.module_id='vcc' ORDER BY d.code`).all();
-    const { results: users } = await db.prepare("SELECT id,name,primary_department,departments,approval_level FROM users WHERE status='ACTIVE' ORDER BY name").all();
+    const { results: users } = await db.prepare("SELECT id,name,primary_department,departments,approval_level,is_dcc,is_qmr,role FROM users WHERE status='ACTIVE' ORDER BY name").all();
     const { results: forms } = await db.prepare(`SELECT id,doc_code,revision,name,department,effective_date FROM documents
       WHERE doc_type='FM' AND status='EFFECTIVE' AND effective_date IS NOT NULL AND date(effective_date)<=date('now','+7 hours') ORDER BY doc_code,revision`).all();
     const readiness = {};
     for (const dept of departments) readiness[dept.code] = await vccProfileReadiness(db, profiles[dept.code]);
-    return c.json({ module: await loadModuleState(db), departments, profiles, readiness, users: users.map((u) => ({ ...u, departments: getUserDepartments(u) })), forms,
+    return c.json({ module: await loadModuleState(db), departments, profiles, readiness, users: users.map((u) => ({ ...u, isDcc: u.is_dcc === 1, isQmr: u.is_qmr === 1, departments: getUserDepartments(u) })), forms,
       policy: await vccProfileThresholds(db), impact: await moduleImpact(db), platformAdmin: await hasModulePermission(db, c.get('user'), 'PLATFORM_ADMIN') });
   });
 
@@ -111,8 +111,14 @@ export const registerModuleGovernanceRoutes = (app, { requireAuth, audit }) => {
     if (!await db.prepare("SELECT 1 FROM departments WHERE code=? AND status='ACTIVE'").bind(department).first()) return c.json({ error: 'ไม่พบแผนกที่เปิดใช้งานในข้อมูลกลาง' }, 404);
     const profiles = await loadVccProfiles(db), before = profiles[department] || null;
     const profile = {};
-    for (const field of ['document_code','revision','reviewer_dept','approver_dept']) {
-      if (typeof body[field] !== 'string' || !body[field].trim() || body[field].length > 100) return c.json({ error: 'กรุณาระบุแบบฟอร์ม ฉบับ และแผนกของผู้รับผิดชอบให้ครบถ้วน' }, 400);
+    profile.document_code = typeof body.document_code === 'string' && body.document_code.trim() && body.document_code.trim().length <= 100
+      ? body.document_code.trim()
+      : (before?.document_code || `VCC-AP-${department}-2026`);
+    profile.revision = typeof body.revision === 'string' && body.revision.trim() && body.revision.trim().length <= 100
+      ? body.revision.trim()
+      : (before?.revision || '01');
+    for (const field of ['reviewer_dept','approver_dept']) {
+      if (typeof body[field] !== 'string' || !body[field].trim() || body[field].length > 100) return c.json({ error: 'กรุณาระบุแผนกของผู้รับผิดชอบให้ครบถ้วน' }, 400);
       profile[field] = body[field].trim();
     }
     for (const stage of ['reviewer','approver']) {
@@ -123,13 +129,13 @@ export const registerModuleGovernanceRoutes = (app, { requireAuth, audit }) => {
       if (!Number.isInteger(body[field]) || body[field] < min || body[field] > 8) return c.json({ error: `ระดับอนุมัติต้องไม่ต่ำกว่า L${min} และไม่เกิน L8` }, 422);
       profile[field] = body[field];
     }
-    profile.assigned_reviewer_id = typeof body.assigned_reviewer_id === 'string' ? body.assigned_reviewer_id : null;
-    profile.assigned_approver_id = typeof body.assigned_approver_id === 'string' ? body.assigned_approver_id : null;
+    profile.assigned_reviewer_id = typeof body.assigned_reviewer_id === 'string' && body.assigned_reviewer_id.trim() ? body.assigned_reviewer_id.trim() : null;
+    profile.assigned_approver_id = typeof body.assigned_approver_id === 'string' && body.assigned_approver_id.trim() ? body.assigned_approver_id.trim() : null;
     const form = await controlledVccForm(db, profile);
-    if (!form) return c.json({ code: 'CONFIGURATION_INCOMPLETE', error: 'กรุณาเลือกแบบฟอร์ม DCC ที่มีผลบังคับใช้จริง' }, 422);
-    profile.document_id = form.id;
-    profile.title_th = form.name;
-    profile.form_issue_date = form.effective_date;
+    profile.form_doc_id = body.form_doc_id !== undefined ? body.form_doc_id : (form?.id || before?.form_doc_id || null);
+    profile.document_id = form?.id || null;
+    profile.title_th = form?.name || (typeof body.title_th === 'string' && body.title_th.trim() ? body.title_th.trim() : (before?.title_th || `แผนการทวนสอบเครื่องมือประจำปี (${department})`));
+    profile.form_issue_date = form?.effective_date || (typeof body.form_issue_date === 'string' && body.form_issue_date.trim() ? body.form_issue_date.trim() : (before?.form_issue_date || null));
     const readiness = await vccProfileReadiness(db, profile);
     if (readiness.status !== 'READY') return c.json({ error: readiness.issues.join(' / '), code: readiness.status }, 422);
     const conflict = await governanceBatch(c, [versionStatement(db, body.version, user.id), changed(db),

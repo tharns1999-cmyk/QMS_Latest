@@ -1084,18 +1084,28 @@ const userFields = async (db, body, current = {}) => {
   const email = body.email === undefined ? current.email : clean(body.email, 200)?.toLowerCase();
   if (!name) return { error: 'กรุณาระบุชื่อ' };
   if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return { error: 'อีเมลไม่ถูกต้อง' };
-  const level = body.approval_level === undefined ? current.approval_level : body.approval_level;
+  const rawLevel = body.approval_level ?? body.approvalLevel ?? body.level;
+  const level = rawLevel === undefined ? current.approval_level : rawLevel;
   if (!(Number.isInteger(level) && level >= 1 && level <= 8)) return { error: 'ระดับต้องเป็นจำนวนเต็ม 1-8' };
-  const primary = body.department === undefined ? current.primary_department : clean(body.department, 12);
-  const extra = body.depts === undefined ? JSON.parse(current.departments || '[]') : body.depts;
+  const rawPrimary = body.department ?? body.primary_department ?? body.primaryDepartment;
+  const primary = rawPrimary === undefined ? current.primary_department : clean(rawPrimary, 12);
+  const rawExtra = body.depts ?? body.departments ?? body.affiliated_departments ?? body.secondary_departments ?? body.secondaryDepartments;
+  let extra;
+  if (rawExtra === undefined) {
+    extra = JSON.parse(current.departments || '[]');
+  } else if (typeof rawExtra === 'string') {
+    try { extra = JSON.parse(rawExtra); } catch { extra = rawExtra.split(',').map((d) => d.trim()).filter(Boolean); }
+  } else {
+    extra = rawExtra;
+  }
   if (!primary || !Array.isArray(extra)) return { error: 'กรุณาระบุแผนก' };
-  const depts = [...new Set([primary, ...extra])];
+  const depts = [...new Set([primary, ...extra].filter(Boolean).map((d) => String(d).trim()))];
   const { results } = await db.prepare("SELECT code FROM departments WHERE status = 'ACTIVE' AND code IN (SELECT value FROM json_each(?))").bind(JSON.stringify(depts)).all();
   const missing = depts.filter((d) => !results.some((r) => r.code === d));
   if (missing.length) return { error: `ไม่พบแผนกที่ใช้งานอยู่: ${missing.join(', ')}` };
   const empId = body.empId === undefined ? current.emp_id ?? null : clean(body.empId, 50);
-  const dcc = body.isDcc === undefined ? current.is_dcc === 1 : Boolean(body.isDcc);
-  const qmr = body.isQmr === undefined ? current.is_qmr === 1 : Boolean(body.isQmr);
+  const dcc = body.isDcc !== undefined ? Boolean(body.isDcc) : body.is_dcc !== undefined ? Boolean(Number(body.is_dcc)) : body.role !== undefined ? body.role === 'DCC_ADMIN' : current.is_dcc === 1;
+  const qmr = body.isQmr !== undefined ? Boolean(body.isQmr) : body.is_qmr !== undefined ? Boolean(Number(body.is_qmr)) : body.role !== undefined ? body.role === 'QMR' : current.is_qmr === 1;
   const position = body.position === undefined ? current.position ?? '' : clean(body.position, 200) ?? '';
   return { name, email, level, primary, depts, empId, position, dcc, qmr };
 };
@@ -1130,7 +1140,7 @@ app.post('/api/users', requireAuth, async (c) => {
   return c.json({ user: toPublicUser(await db.prepare('SELECT * FROM users WHERE id = ?').bind(id).first()), temporaryPassword: password }, 201);
 });
 
-app.patch('/api/users/:id', requireAuth, async (c) => {
+const handleUpdateUser = async (c) => {
   const actor = c.get('user');
   if (!actor.isDcc) return c.json(DCC_ONLY, 403);
   const db = c.env.DB;
@@ -1165,7 +1175,10 @@ app.patch('/api/users/:id', requireAuth, async (c) => {
   }
   const row = await db.prepare('SELECT * FROM users WHERE id = ?').bind(before.id).first();
   return c.json({ user: { ...toPublicUser(row), status: row.status } });
-});
+};
+
+app.patch('/api/users/:id', requireAuth, handleUpdateUser);
+app.put('/api/users/:id', requireAuth, handleUpdateUser);
 
 // A new temporary password; the old one and every signed-in session of that person stop working.
 app.post('/api/users/:id/reset-password', requireAuth, async (c) => {

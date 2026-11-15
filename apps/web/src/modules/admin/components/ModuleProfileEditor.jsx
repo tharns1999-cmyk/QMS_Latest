@@ -9,6 +9,7 @@ export default function ModuleProfileEditor({ department, data, onReview, onClos
   const [draft, setDraft] = useState({
     document_code: current.document_code || `VCC-AP-${department}-2026`,
     revision: current.revision || '01',
+    form_doc_id: current.form_doc_id ?? null,
     reviewer_dept: current.reviewer_dept || department,
     approver_dept: current.approver_dept || 'QA',
     min_preparer_level: current.min_preparer_level || data?.policy?.min_requester_level || 4,
@@ -21,10 +22,27 @@ export default function ModuleProfileEditor({ department, data, onReview, onClos
   const activeDepartments = (data?.departments || []).filter((d) => d.status === 'ACTIVE');
   const allUsers = data?.users || [];
 
+  const userBelongsToDept = (u, targetDept) => {
+    if (!u || !targetDept) return false;
+    if (u.isQmr || Number(u.is_qmr) === 1 || u.role === 'QMR' || u.isDcc || Number(u.is_dcc) === 1) return true;
+    const normTarget = String(targetDept).toUpperCase().trim();
+    const depts = [
+      u.department,
+      u.primary_department,
+      ...(Array.isArray(u.departments) ? u.departments : []),
+      ...(Array.isArray(u.depts) ? u.depts : []),
+      ...(Array.isArray(u.secondary_departments) ? u.secondary_departments : []),
+      ...(Array.isArray(u.affiliated_departments) ? u.affiliated_departments : [])
+    ]
+      .filter(Boolean)
+      .map((d) => String(d).toUpperCase().trim());
+    return depts.includes(normTarget);
+  };
+
   // Reviewer candidates: department match, approval level >= required, and not the selected approver (SoD)
   const reviewerCandidates = allUsers.filter(
     (u) =>
-      u.departments?.includes(draft.reviewer_dept) &&
+      userBelongsToDept(u, draft.reviewer_dept) &&
       u.approval_level >= draft.required_reviewer_level &&
       u.id !== draft.assigned_approver_id
   );
@@ -32,7 +50,7 @@ export default function ModuleProfileEditor({ department, data, onReview, onClos
   // Approver candidates: department match, approval level >= required, and not the selected reviewer (SoD)
   const approverCandidates = allUsers.filter(
     (u) =>
-      u.departments?.includes(draft.approver_dept) &&
+      userBelongsToDept(u, draft.approver_dept) &&
       u.approval_level >= draft.required_approver_level &&
       u.id !== draft.assigned_reviewer_id
   );

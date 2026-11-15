@@ -2,7 +2,7 @@ import { isApiMode } from '../../../api/client';
 import React, { useState, useEffect, useMemo } from 'react';
 import toast from 'react-hot-toast';
 import { AlertTriangle, CheckCircle2, FolderTree, Trash2, X, Send, UserCheck, ShieldCheck, Calendar, FileText, Clock, Lock, ChevronDown, ChevronUp, ArrowRight } from 'lucide-react';
-import { computeDueDates, computeDueDateForMonth, fetchVccDocumentProfiles, isUserAuthorizedForPlanDept } from '../api/vccPlanApi';
+import { computeDueDates, computeDueDateForMonth, fetchVccDocumentProfiles, isUserAuthorizedForPlanDept, userBelongsToDept } from '../api/vccPlanApi';
 import { formatVccDateTime, formatVccDueDatesList } from '../utils/vccDateUtils';
 import { resolvePlanCode } from '../utils/planLabels';
 import { useVccModalAccessibility } from '../hooks/useVccModalAccessibility';
@@ -966,7 +966,7 @@ const PlanSubmitModalContent = ({
   useEffect(() => { let alive = true; fetchVccDocumentProfiles().then((res) => { if (alive) setWorkflowProfiles(res.profiles || {}); }).catch(() => {}); return () => { alive = false; }; }, []);
   const workflowProfile = isApiMode ? workflowProfiles[planDept] || {} : {};
 
-  const isUserEligibleForDept = (u, dept) => isUserAuthorizedForPlanDept(u, dept);
+  const isUserEligibleForDept = (u, dept) => userBelongsToDept(u, dept) || userBelongsToDept(u, planDept);
 
   const eligibleReviewers = useMemo(() => {
     return (masterUsers || []).filter((u) => {
@@ -1000,13 +1000,15 @@ const PlanSubmitModalContent = ({
   );
 
   useEffect(() => {
-    if (!selectedReviewerId && eligibleReviewers.length > 0) {
+    const isStillEligible = eligibleReviewers.some((u) => u.id === selectedReviewerId);
+    if ((!selectedReviewerId || !isStillEligible) && eligibleReviewers.length > 0) {
       setSelectedReviewerId(eligibleReviewers[0].id);
     }
   }, [eligibleReviewers, selectedReviewerId]);
 
   useEffect(() => {
-    if ((!selectedApproverId || selectedApproverId === selectedReviewerId) && eligibleApprovers.length > 0) {
+    const isStillEligible = eligibleApprovers.some((u) => u.id === selectedApproverId);
+    if ((!selectedApproverId || selectedApproverId === selectedReviewerId || !isStillEligible) && eligibleApprovers.length > 0) {
       setSelectedApproverId(eligibleApprovers[0].id);
     }
   }, [eligibleApprovers, selectedApproverId, selectedReviewerId]);

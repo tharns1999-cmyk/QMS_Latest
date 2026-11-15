@@ -53,18 +53,24 @@ describe('Dynamic module governance: real D1, central RBAC and existing VCC work
     expect((await call('PUT','/api/module-governance/vcc/status','dcc',{ status:'DISABLED',version:await version(),reason:'test',permissions:['MODULE_MANAGE'],isPlatformAdmin:true })).status).toBe(403);
     expect((await call('GET','/api/module-governance/vcc','en')).status).toBe(403);
   });
-  it('shows DCC unchanged and reports incomplete legacy form mappings honestly', async () => {
+  it('shows DCC unchanged and reports unconfigured departments honestly while digital profiles are ready', async () => {
     const modules = await call('GET','/api/modules','dcc');
     expect(modules.body.modules.find((m)=>m.moduleId==='dcc')).toMatchObject({status:'ACTIVE',allowed:true,canManage:false});
     const config = await call('GET','/api/module-governance/vcc');
     expect(config.status).toBe(200);
-    expect(config.body.readiness.QC.status).toBe('CONFIGURATION_INCOMPLETE');
+    expect(config.body.readiness.QC.status).toBe('READY');
+    expect(config.body.readiness.EN.status).toBe('CONFIGURATION_INCOMPLETE');
     expect(config.body.departments.find((d)=>d.code==='EN').enabled).toBe(0);
   });
-  it('cannot enable an incomplete department or invent a controlled form mapping', async () => {
+  it('cannot enable an unconfigured department, and allows saving digital approval line without a DCC form', async () => {
     expect((await call('PUT','/api/module-governance/vcc/departments/EN','manager',{ enabled:true,version:await version(),reason:'test' })).status).toBe(422);
-    const res = await call('PUT','/api/module-governance/vcc/profiles/EN','manager',{...profile,document_code:'MISSING',version:await version(),reason:'test'});
-    expect(res.status).toBe(422); expect(res.body.code).toBe('CONFIGURATION_INCOMPLETE');
+    const qaRes = await call('PUT','/api/module-governance/vcc/profiles/QA','manager',{
+      document_code:'VCC-AP-QA-2026',revision:'01',form_doc_id:null,reviewer_dept:'PD',approver_dept:'MGT',
+      min_preparer_level:4,required_reviewer_level:5,required_approver_level:6,assigned_reviewer_id:'',assigned_approver_id:'',
+      version:await version(),reason:'[ข้อมูลทดสอบ] ตั้งค่าสายอนุมัติดิจิทัล QA'
+    });
+    expect(qaRes.status, JSON.stringify(qaRes.body)).toBe(200);
+    expect(qaRes.body.profile.form_doc_id).toBeNull();
   });
   it('rejects absent, inactive and underqualified assignees, wrong departments and SoD', async () => {
     for (const extra of [{assigned_reviewer_id:'MISSING'},{assigned_reviewer_id:actor.en},{reviewer_dept:'WH'},{assigned_approver_id:actor.reviewer,approver_dept:'PD'}, {required_reviewer_level:3}]) {
