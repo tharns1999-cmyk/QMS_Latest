@@ -1,0 +1,91 @@
+name: Deploy to Azure
+
+# Manual only: Actions tab > "Deploy to Azure" > Run workflow. GitHub builds the web app and the API package on its own
+# machines (no Docker needed anywhere) and sends it to an Azure App Service (Node, Linux).
+# One-time setup, owned by IT: docs/ops/azure-app-deploy.md ("ตั้งค่า GitHub ให้ส่งงานขึ้น Azure").
+# Not yet run against a real Azure subscription.
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Which Azure environment'
+        type: choice
+        options: [uat, production]
+        default: uat
+
+permissions:
+  contents: read
+  id-token: write # lets GitHub sign in to Azure without a stored password (OIDC)
+
+concurrency:
+  group: azure-deploy-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # Variables and secrets are stored per environment (Settings > Environments), so UAT and production never mix.
+    environment: ${{ inputs.environment }}
+    env:
+      SITE_URL: ${{ vars.AZURE_SITE_URL }}
+      WEBAPP_NAME: ${{ vars.AZURE_WEBAPP_NAME }}
+    steps:
+      - name: Check the settings IT provided
+        run: |
+          fail() { echo "::error::$1"; exit 1; }
+          [ -n "$WEBAPP_NAME" ] || fail "Variable AZURE_WEBAPP_NAME is not set for environment ${{ inputs.environment }}"
+          [ -n "$SITE_URL" ] || fail "Variable AZURE_SITE_URL is not set for environment ${{ inputs.environment }}"
+          case "$SITE_URL" in https://*) ;; *) fail "AZURE_SITE_URL must start with https://" ;; esac
+          case "$SITE_URL" in */) fail "AZURE_SITE_URL must not end with /" ;; esac
+          case "$SITE_URL" in https://localhost*|https://127.*) fail "AZURE_SITE_URL must not point at this machine" ;; esac
+          [ -n "${{ secrets.AZURE_CLIENT_ID }}" ] || fail "Secret AZURE_CLIENT_ID is not set"
+          [ -n "${{ secrets.AZURE_TENANT_ID }}" ] || fail "Secret AZURE_TENANT_ID is not set"
+          [ -n "${{ secrets.AZURE_SUBSCRIPTION_ID }}" ] || fail "Secret AZURE_SUBSCRIPTION_ID is not set"
+
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      # public/_headers still names the Cloudflare UAT address (needed there until cut-over). In this package the browser
+      # must be allowed to call the Azure address instead; build:production then checks that the address is listed.
+      - name: Build the web app
+        working-directory: apps/web
+        env:
+          VITE_API_URL: ${{ vars.AZURE_SITE_URL }}
+        run: |
+          sed -i "s|https://qms-api.qms-api.workers.dev|${VITE_API_URL}|g" public/_headers
+          pnpm install --frozen-lockfile
+          pnpm run build:production
+
+      # The API serves the web app itself (WEB_DIST_DIR), so one package holds both. node_modules is installed "hoisted"
+      # (real folders, no symbolic links) because a zip with links is not safe to unpack on App Service.
+      - name: Assemble the package
+        run: |
+          mkdir -p deploy/api deploy/web
+          cp -r apps/api/src apps/api/migrations-pg apps/api/scripts deploy/api/
+          cp apps/api/package.json apps/api/pnpm-lock.yaml apps/api/pnpm-workspace.yaml deploy/api/
+          cp -r apps/web/dist/. deploy/web/
+          cd deploy/api
+          pnpm install --frozen-lockfile --prod --config.node-linker=hoisted
+          test -f node_modules/pg/package.json
+          test -f ../web/index.html
+          test -f src/node/main.js
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ vars.AZURE_WEBAPP_NAME }}
+          package: deploy
+
+      - name: Next step
+        run: |
+          echo "Deployed to ${SITE_URL}. The database is NOT changed by this workflow."
+          echo "If this release adds files in apps/api/migrations-pg, the app refuses to start until you run 'pnpm --dir apps/api run db:migrate:pg' against the database, then restart the App Service (see docs/ops/azure-app-deploy.md)."
+          echo "Then check ${SITE_URL}/healthz returns 200."

@@ -34,9 +34,13 @@ Windows notes: `curl` mangles Thai (use node/fetch); stop the tryout with PowerS
 
 Managed identity and RBAC for Blob (needs Storage Blob Data Contributor), `LC_COLLATE C` database creation, CITEXT allow-listing (`azure.extensions`), app-role grants, Linux SIGTERM shutdown, backup/restore drill, a real Entra tenant, CSP `connect-src` in `apps/web/public/_headers` (still names Cloudflare), `CLIENT_IP_HEADER` behind Azure, Azure prices.
 
+## Deploy path (decided 2026-11-15, no Docker anywhere)
+
+The owner's PC cannot run Docker. Deploy = App Service **Linux Node (code)**, built and sent by the manual workflow `.github/workflows/azure-deploy.yml` (OIDC, per-environment secrets/variables). The `Dockerfile` is only an untested alternative. The package assembly (hoisted prod `node_modules`, API + `web/` side by side, start `node api/src/node/main.js`) was simulated locally; the workflow itself and Node 24 on App Service are untested. Docs for IT: `azure-app-deploy.md`, `azure-uat-checklist.md`, ready-to-send `azure-it-request.md`.
+
 ## Still to do
 
-1. Azure UAT once IT provides the subscription (deploy, set the settings above, real sign-in, restore drill).
+1. Azure UAT once IT provides the subscription (deploy, set the settings above, real sign-in, restore drill). Follow `azure-uat-checklist.md`.
 2. Cut-over: final data + file move with checksums, retire Cloudflare, retire `vcc-migrate-safe` / `vcc-migrate-raw` (D1-only).
 3. User-side: send IT the two `docs/ops/azure-*.md` files; `gh auth login`; QMR/DCC to confirm there is no legitimate "re-verify a closed VCC work order" flow.
 
