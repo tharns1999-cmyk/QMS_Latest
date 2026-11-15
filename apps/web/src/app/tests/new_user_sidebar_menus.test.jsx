@@ -118,7 +118,8 @@ describe('Bug Fix: Newly Created Users Missing Sidebar Menus', () => {
       </MemoryRouter>
     );
 
-    expect(screen.getByRole('option', { name: /สายรุ้ง \(LB\) L4/ })).toBeInTheDocument();
-    expect(screen.getByRole('option', { name: /วรรณภา \(LB\) L5/ })).toBeInTheDocument();
+    // Option label format of the sidebar quick switcher: "<name> — <dept> (L<level>)"
+    expect(screen.getByRole('option', { name: /สายรุ้ง — LB \(L4/ })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /วรรณภา — LB \(L5/ })).toBeInTheDocument();
   });
 });

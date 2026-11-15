@@ -350,7 +350,9 @@ describe('VCC Digital Record Inspector & PDF Preview Engine', () => {
 
       // Left column shows internal verification details
       expect(screen.getByText(/🏠 ทวนสอบภายใน/i)).toBeInTheDocument();
-      expect(screen.getByText(/Gauge Block Set M-01/i)).toBeInTheDocument();
+      // The master reference is shown three times by design: the details column, the traceability section (it falls
+      // back to the master reference when no traceability_ref is set) and the Digital Verification Summary Card.
+      expect(screen.getAllByText(/Gauge Block Set M-01/i)).toHaveLength(3);
       expect(screen.getByText(/VR-2026-11-01/i)).toBeInTheDocument();
 
       // Right column shows Digital Verification Summary Card
