@@ -1,0 +1,11 @@
+**/node_modules
+**/dist
+**/.wrangler
+**/test-results
+**/playwright-report
+apps/api/data
+apps/api/audit_evidence
+QMS_Latest
+.git
+graphify-out
+.vscode
