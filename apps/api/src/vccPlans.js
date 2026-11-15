@@ -104,7 +104,7 @@ const getPlanDecisionCheck = async (db) => {
     if (assigned && assigned !== user.id) return `เฉพาะ${review ? 'ผู้ทบทวน' : 'ผู้อนุมัติ'}ที่ได้รับมอบหมายตามแบบฟอร์มเอกสารควบคุมเท่านั้น`;
     if (Number(user.approval_level) < required) return `ต้องมีระดับ L${required} ขึ้นไป`;
     if (assigned && profile?.[`${stage}_dept`]) {
-      if (!getUserDepartments(user).includes(profile[`${stage}_dept`])) return 'ผู้รับผิดชอบต้องสังกัดแผนกตามค่าตั้งค่างานนี้';
+      if (!isUserAuthorizedForPlanDept(user, profile[`${stage}_dept`])) return 'ผู้รับผิดชอบต้องสังกัดแผนกตามค่าตั้งค่างานนี้';
     } else if (!isUserAuthorizedForPlanDept(user, plan.department)) return 'ไม่มีสิทธิ์ดำเนินการในแผนกนี้';
     return null;
   };
@@ -405,12 +405,12 @@ export { getUserDepartments };
 
 export const isUserAuthorizedForPlanDept = (user, planDepartment) => {
   if (!user) return false;
-  const isDccUser = Boolean(user.isDcc || user.is_dcc);
-  const isQmrUser = Boolean(user.isQmr || user.is_qmr);
-  const level = Number(user.approval_level ?? user.approvalLevel ?? 0);
+  const isDccUser = Boolean(user.isDcc || Number(user.is_dcc) === 1);
+  const isQmrUser = Boolean(user.isQmr || Number(user.is_qmr) === 1);
+  const level = Number(user.approval_level ?? user.approvalLevel ?? user.level ?? 0);
   if (isDccUser || isQmrUser || level >= 6) return true;
   const depts = getUserDepartments(user);
-  return depts.includes(String(planDepartment || '').toUpperCase());
+  return depts.includes(String(planDepartment || '').toUpperCase().trim());
 };
 
 const PLAN_SELECT = `

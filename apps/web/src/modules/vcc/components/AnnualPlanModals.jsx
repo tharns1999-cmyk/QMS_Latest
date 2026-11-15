@@ -2,7 +2,7 @@ import { isApiMode } from '../../../api/client';
 import React, { useState, useEffect, useMemo } from 'react';
 import toast from 'react-hot-toast';
 import { AlertTriangle, CheckCircle2, FolderTree, Trash2, X, Send, UserCheck, ShieldCheck, Calendar, FileText, Clock, Lock, ChevronDown, ChevronUp, ArrowRight } from 'lucide-react';
-import { computeDueDates, computeDueDateForMonth, fetchVccDocumentProfiles } from '../api/vccPlanApi';
+import { computeDueDates, computeDueDateForMonth, fetchVccDocumentProfiles, isUserAuthorizedForPlanDept } from '../api/vccPlanApi';
 import { formatVccDateTime, formatVccDueDatesList } from '../utils/vccDateUtils';
 import { resolvePlanCode } from '../utils/planLabels';
 import { useVccModalAccessibility } from '../hooks/useVccModalAccessibility';
@@ -966,18 +966,7 @@ const PlanSubmitModalContent = ({
   useEffect(() => { let alive = true; fetchVccDocumentProfiles().then((res) => { if (alive) setWorkflowProfiles(res.profiles || {}); }).catch(() => {}); return () => { alive = false; }; }, []);
   const workflowProfile = isApiMode ? workflowProfiles[planDept] || {} : {};
 
-  const isUserEligibleForDept = (u, dept) => {
-    if (!u) return false;
-    if (u.isQmr || Number(u.approval_level || u.level || 0) >= 6) return true;
-    const depts = [
-      u.department, u.dept, u.primary_department, u.primaryDepartment,
-      ...(Array.isArray(u.secondaryDepartments) ? u.secondaryDepartments : []),
-      ...(Array.isArray(u.departments) ? u.departments : []),
-      ...(Array.isArray(u.affiliated_departments) ? u.affiliated_departments : []),
-      ...(Array.isArray(u.depts) ? u.depts : [])
-    ].filter(Boolean).map((d) => String(d).toUpperCase().trim());
-    return depts.some((d) => d === dept);
-  };
+  const isUserEligibleForDept = (u, dept) => isUserAuthorizedForPlanDept(u, dept);
 
   const eligibleReviewers = useMemo(() => {
     return (masterUsers || []).filter((u) => {
@@ -985,7 +974,7 @@ const PlanSubmitModalContent = ({
       if (u.id === currentUser?.id) return false; // SoD: ผู้จัดทำห้ามทบทวนงานตนเอง
       if (!isApiMode && plan.assigned_reviewer_id && u.id === plan.assigned_reviewer_id) return true;
       if (isApiMode && plan.assigned_reviewer_id && u.id !== plan.assigned_reviewer_id) return false;
-      const lvl = Number(u.approval_level || u.level || 0);
+      const lvl = Number(u.approval_level ?? u.approvalLevel ?? u.level ?? 0);
       return lvl >= Math.max(minReviewerLevel, workflowProfile.required_reviewer_level || 0) && (plan.assigned_reviewer_id && !workflowProfile.reviewer_dept || isUserEligibleForDept(u, workflowProfile.reviewer_dept || planDept));
     });
   }, [masterUsers, currentUser, planDept, minReviewerLevel, plan.assigned_reviewer_id, workflowProfile]);
@@ -1001,7 +990,7 @@ const PlanSubmitModalContent = ({
       if (u.id === selectedReviewerId) return false; // 4-Eyes: ผู้ทบทวนห้ามอนุมัติงานที่ตนทบทวน
       if (!isApiMode && plan.assigned_approver_id && u.id === plan.assigned_approver_id) return true;
       if (isApiMode && plan.assigned_approver_id && u.id !== plan.assigned_approver_id) return false;
-      const lvl = Number(u.approval_level || u.level || 0);
+      const lvl = Number(u.approval_level ?? u.approvalLevel ?? u.level ?? 0);
       return lvl >= Math.max(minApproverLevel, workflowProfile.required_approver_level || 0) && (plan.assigned_approver_id && !workflowProfile.approver_dept || isUserEligibleForDept(u, workflowProfile.approver_dept || planDept));
     });
   }, [masterUsers, currentUser, selectedReviewerId, planDept, minApproverLevel, plan.assigned_approver_id, workflowProfile]);

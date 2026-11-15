@@ -348,6 +348,7 @@ export const getUserDepartments = (user) => {
   parseList(user.departments);
   parseList(user.depts);
   parseList(user.secondaryDepartments);
+  parseList(user.secondary_departments);
   parseList(user.affiliated_departments);
   parseList(user.extra_departments);
   return Array.from(depts);
@@ -356,9 +357,9 @@ export const getUserDepartments = (user) => {
 export const isUserAuthorizedForPlanDept = (user, planDepartment) => {
   if (user?.vccReadOnly) return false;
   if (!user) return false;
-  const userLevel = Number(user.approval_level ?? user.approvalLevel ?? 1);
-  if (user.isDcc || user.isQmr || userLevel >= 6) return true;
-  const targetDept = String(planDepartment || '').toUpperCase();
+  const userLevel = Number(user.approval_level ?? user.approvalLevel ?? user.level ?? 1);
+  if (user.isDcc || Number(user.is_dcc) === 1 || user.isQmr || Number(user.is_qmr) === 1 || userLevel >= 6) return true;
+  const targetDept = String(planDepartment || '').toUpperCase().trim();
   const userDepts = getUserDepartments(user);
   return userDepts.some((d) => isSameDepartment(d, targetDept));
 };
@@ -1672,6 +1673,26 @@ export const submitVccPlan = async (planId, maybeAssignees = {}, maybeApproverId
     throw new Error(`กรุณาวางแผนเดือนทวนสอบหรือระบุเหตุผลที่ไม่วางแผนสำหรับเครื่องมือ (${codes}) ก่อนส่งทบทวน`);
   }
 
+  const users = useStore.getState().masterUsers || [];
+  const assignedReviewer = users.find((u) => u.id === reviewerId);
+  const assignedApprover = users.find((u) => u.id === approverId);
+
+  if (reviewerId && reviewerId === user.id) {
+    throw new Error('ผู้จัดทำไม่สามารถเป็นผู้ทบทวนแผนของตนเองได้ (Segregation of Duties)');
+  }
+  if (approverId && approverId === user.id) {
+    throw new Error('ผู้จัดทำไม่สามารถเป็นผู้อนุมัติแผนของตนเองได้ (Segregation of Duties)');
+  }
+  if (reviewerId && approverId && reviewerId === approverId) {
+    throw new Error('ผู้ทบทวนและผู้อนุมัติต้องไม่เป็นบุคคลเดียวกัน (Segregation of Duties)');
+  }
+  if (assignedReviewer && !isUserAuthorizedForPlanDept(assignedReviewer, plan.department)) {
+    throw new Error('ผู้รับผิดชอบต้องสังกัดแผนกตามค่าตั้งค่างานนี้');
+  }
+  if (assignedApprover && !isUserAuthorizedForPlanDept(assignedApprover, plan.department)) {
+    throw new Error('ผู้รับผิดชอบต้องสังกัดแผนกตามค่าตั้งค่างานนี้');
+  }
+
   // Freeze scope: persist any virtual items into local plan items
   const allPlanItems = getLocalPlanItems();
   const nextPlanItems = [...allPlanItems];
@@ -1695,10 +1716,6 @@ export const submitVccPlan = async (planId, maybeAssignees = {}, maybeApproverId
     }
   }
   setLocalPlanItems(nextPlanItems);
-
-  const users = useStore.getState().masterUsers || [];
-  const assignedReviewer = users.find((u) => u.id === reviewerId);
-  const assignedApprover = users.find((u) => u.id === approverId);
 
   const prevAudit = getLocalAudit().filter(
     (h) => String(h.action || '') === 'VCC_PLAN_SUBMITTED' && h.details?.plan_id === planId

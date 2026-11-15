@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import { render, screen, fireEvent, within, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import useStore from '../../../store/useStore';
@@ -1360,6 +1360,70 @@ describe('VCC Annual Plan Hub & Spoke Architecture and ISO Print View', () => {
       expect(planRow).toBeDefined();
       expect(planRow).toContain(0); // เกณฑ์ยอมรับ 0 ไม่หาย
       expect(planRow).toContain('ทวนสอบภายใน'); // แปลง INTERNAL เป็น ทวนสอบภายใน
+    });
+  });
+
+  describe('5. Department Authorization & Toast Deduplication on Plan Submit', () => {
+    it('isUserAuthorizedForPlanDept อนุญาตแผนกรอง (secondary_departments/departments) และ QMR/DCC/L6+ แต่ปฏิเสธแผนกอื่น', async () => {
+      const { isUserAuthorizedForPlanDept } = await import('../api/vccPlanApi');
+      expect(isUserAuthorizedForPlanDept({ id: 'u1', department: 'PD', secondary_departments: ['QC'], approval_level: 5 }, 'QC')).toBe(true);
+      expect(isUserAuthorizedForPlanDept({ id: 'u1b', department: 'PD', departments: '["PD","QC"]', approval_level: 5 }, 'qc')).toBe(true);
+      expect(isUserAuthorizedForPlanDept({ id: 'u2', department: 'MGT', is_qmr: 1, approval_level: 6 }, 'QC')).toBe(true);
+      expect(isUserAuthorizedForPlanDept({ id: 'u2b', department: 'MGT', approvalLevel: 6 }, 'QC')).toBe(true);
+      expect(isUserAuthorizedForPlanDept({ id: 'u3', department: 'DC', is_dcc: 1, approval_level: 4 }, 'QC')).toBe(true);
+      expect(isUserAuthorizedForPlanDept({ id: 'u4', department: 'EN', approval_level: 5 }, 'QC')).toBe(false);
+    });
+
+    it('ส่ง Toast Error ด้วย id คงที่ vcc-plan-submit-error เพื่อไม่ให้กล่องแจ้งเตือนเด้งซ้อนหลายกล่องเมื่อส่งแผนไม่ผ่าน', async () => {
+      const toast = (await import('react-hot-toast')).default;
+      const toastSpy = vi.spyOn(toast, 'error');
+      const vccPlanApi = await import('../api/vccPlanApi');
+      const detailSpy = vi.spyOn(vccPlanApi, 'fetchVccPlanDetail').mockResolvedValue({
+        plan: {
+          id: 'vcc-plan-2026-qc',
+          plan_year: 2026,
+          department: 'QC',
+          document_code: 'FM-QC-46',
+          revision: '01',
+          title: 'แผนทดสอบ',
+          status: 'DRAFT'
+        },
+        items: [
+          {
+            id: 'item-1',
+            asset_id: 'asset-1',
+            asset_code: 'QC-001',
+            asset_name: 'เครื่องชั่ง',
+            is_group: 0,
+            planned_months: [3],
+            remarks: ''
+          }
+        ]
+      });
+      const submitSpy = vi.spyOn(vccPlanApi, 'submitVccPlan').mockRejectedValue(new Error('ผู้รับผิดชอบต้องสังกัดแผนกตามค่าตั้งค่างานนี้'));
+
+      render(
+        <MemoryRouter initialEntries={['/vcc/annual-plans?planId=vcc-plan-2026-qc']}>
+          <AnnualPlanMatrixSection activeDepartments={[{ code: 'QC', nameTh: 'ควบคุมคุณภาพ' }]} />
+        </MemoryRouter>
+      );
+
+      const submitBtn = await screen.findByRole('button', { name: /ส่งทบทวนแผน/ });
+      fireEvent.click(submitBtn);
+
+      const confirmBtn = await screen.findByRole('button', { name: /ยืนยันส่งทบทวนแผน/ });
+      fireEvent.click(confirmBtn);
+
+      await waitFor(() => {
+        expect(toastSpy).toHaveBeenCalledWith(
+          'ผู้รับผิดชอบต้องสังกัดแผนกตามค่าตั้งค่างานนี้',
+          { id: 'vcc-plan-submit-error' }
+        );
+      });
+
+      submitSpy.mockRestore();
+      detailSpy.mockRestore();
+      toastSpy.mockRestore();
     });
   });
 });

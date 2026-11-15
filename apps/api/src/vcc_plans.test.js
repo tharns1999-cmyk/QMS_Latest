@@ -550,5 +550,92 @@ describe('VCC Phase 2: Calibration Schedule Rules, Annual Plan Matrix & Plan App
     expect((await call('GET', '/api/vcc/assets?status=ACTIVE&q=HOLD-VP-77', 'VP-DCC')).body.assets).toEqual([]);
     expect((await call('GET', '/api/vcc/assets?status=BOGUS', 'VP-DCC')).status).toBe(400);
   });
+
+  it('allows submit/review/approve with secondary_departments and cross-department QMR/L6+ while rejecting unrelated departments and SoD violations', async () => {
+    const hash = await hashPassword(PASSWORD);
+    await env.DB.batch([
+      env.DB.prepare("INSERT OR IGNORE INTO users (id, name, email, password_hash, role, approval_level, primary_department, departments, is_dcc, is_qmr) VALUES ('VP-PD-SEC', 'กัลยาณี (ทดสอบ)', 'vp-pd-sec@vccplan.local', ?, 'USER', 5, 'PD', '[\"PD\",\"VPQC\"]', 0, 0)").bind(hash),
+      env.DB.prepare("INSERT OR IGNORE INTO users (id, name, email, password_hash, role, approval_level, primary_department, departments, is_dcc, is_qmr) VALUES ('VP-MGT-QMR', 'คุณเรย์ (ทดสอบ)', 'vp-mgt-qmr@vccplan.local', ?, 'USER', 6, 'MGT', '[\"MGT\"]', 0, 1)").bind(hash),
+      env.DB.prepare("INSERT OR IGNORE INTO users (id, name, email, password_hash, role, approval_level, primary_department, departments, is_dcc, is_qmr) VALUES ('VP-EN-OUT', 'วิศวกรรม (ทดสอบ)', 'vp-en-out@vccplan.local', ?, 'USER', 5, 'EN', '[\"EN\"]', 0, 0)").bind(hash)
+    ]);
+
+    for (const id of ['VP-PD-SEC', 'VP-MGT-QMR']) {
+      const loginRes = await app.request('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: `${id}@vccplan.local`, password: PASSWORD })
+      }, env);
+      tokens[id] = (await loginRes.json()).token;
+    }
+
+    const row = await env.DB.prepare("SELECT value FROM settings WHERE key = 'vcc_document_profiles'").first();
+    const origProfiles = row.value;
+    const profiles = JSON.parse(origProfiles);
+    profiles.VPQC = {
+      ...profiles.VPQC,
+      reviewer_dept: 'VPQC',
+      approver_dept: 'VPQC',
+      required_reviewer_level: 5,
+      required_approver_level: 6,
+      assigned_reviewer_id: '',
+      assigned_approver_id: ''
+    };
+    await env.DB.prepare("UPDATE settings SET value = ? WHERE key = 'vcc_document_profiles'").bind(JSON.stringify(profiles)).run();
+
+    try {
+      const assetRes = await call('POST', '/api/vcc/assets', 'VP-DCC', {
+        asset_code: 'SEC-ASSET-01', name: '[ข้อมูลทดสอบ] เครื่องมือแผนกรอง', asset_type: 'เทอร์โมมิเตอร์', department: 'VPQC', is_group: false
+      });
+      expect(assetRes.status).toBe(201);
+
+      const planRes = await call('POST', '/api/vcc/plans', 'VP-DCC', { plan_year: 2033, department: 'VPQC' });
+      expect(planRes.status, JSON.stringify(planRes.body)).toBe(201);
+      const planId = planRes.body.plan.id;
+
+      const itemRes = await call('POST', `/api/vcc/plans/${planId}/items`, 'VP-DCC', {
+        asset_id: assetRes.body.asset.id, provider_name: 'ทวนสอบภายใน', planned_months: [4], responsible_dept: 'VPQC'
+      });
+      expect(itemRes.status).toBe(201);
+
+      const detailRes = await call('GET', `/api/vcc/plans/${planId}`, 'VP-DCC');
+      for (const it of detailRes.body.items || []) {
+        if ((!it.planned_months || it.planned_months.length === 0) && !it.remarks) {
+          await call('POST', `/api/vcc/plans/${planId}/items`, 'VP-DCC', {
+            asset_id: it.asset_id, provider_name: 'ทวนสอบภายใน', planned_months: [], responsible_dept: 'VPQC', remarks: '[ข้อมูลทดสอบ] ไม่วางแผน'
+          });
+        }
+      }
+
+      // Unrelated EN L5 user must be rejected
+      const badDept = await call('POST', `/api/vcc/plans/${planId}/submit`, 'VP-DCC', {
+        reviewer_id: 'VP-EN-OUT', approver_id: 'VP-MGT-QMR'
+      });
+      expect(badDept.status).toBe(422);
+      expect(badDept.body.error).toContain('ผู้รับผิดชอบต้องสังกัดแผนกตามค่าตั้งค่างานนี้');
+
+      // SoD: same reviewer & approver must be rejected
+      const badSod = await call('POST', `/api/vcc/plans/${planId}/submit`, 'VP-DCC', {
+        reviewer_id: 'VP-PD-SEC', approver_id: 'VP-PD-SEC'
+      });
+      expect(badSod.status).toBe(422);
+
+      // Secondary dept reviewer (PD + VPQC) + cross-dept QMR/L6 approver (MGT) must succeed
+      const submitOk = await call('POST', `/api/vcc/plans/${planId}/submit`, 'VP-DCC', {
+        reviewer_id: 'VP-PD-SEC', approver_id: 'VP-MGT-QMR'
+      });
+      expect(submitOk.status, JSON.stringify(submitOk.body)).toBe(200);
+      expect(submitOk.body.plan.status).toBe('PENDING_REVIEW');
+
+      const reviewOk = await call('POST', `/api/vcc/plans/${planId}/review`, 'VP-PD-SEC', { comment: 'ทบทวนผ่าน' });
+      expect(reviewOk.status, JSON.stringify(reviewOk.body)).toBe(200);
+      expect(reviewOk.body.plan.status).toBe('PENDING_APPROVAL');
+
+      const approveOk = await call('POST', `/api/vcc/plans/${planId}/approve`, 'VP-MGT-QMR', { comment: 'อนุมัติผ่าน' });
+      expect(approveOk.status, JSON.stringify(approveOk.body)).toBe(200);
+      expect(approveOk.body.plan.status).toBe('APPROVED');
+    } finally {
+      await env.DB.prepare("UPDATE settings SET value = ? WHERE key = 'vcc_document_profiles'").bind(origProfiles).run();
+    }
+  });
 });
 

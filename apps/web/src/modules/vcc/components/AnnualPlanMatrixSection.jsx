@@ -799,7 +799,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [], currentUser: propUser
     setPlanSubmitError('');
     const items = planDetail.items || [];
     if (items.length === 0) {
-      toast.error('กรุณาเพิ่มรายการเครื่องมือในแผนอย่างน้อย 1 รายการก่อนส่งขออนุมัติ');
+      toast.error('กรุณาเพิ่มรายการเครื่องมือในแผนอย่างน้อย 1 รายการก่อนส่งขออนุมัติ', { id: 'vcc-plan-submit-error' });
       return;
     }
 
@@ -810,7 +810,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [], currentUser: propUser
       const codes = legacyGroups.map((g) => g.asset_code).join(', ');
       const msg = `ไม่สามารถส่งทบทวนแผนได้ เนื่องจากยังมีรายการกลุ่มเดิม (${codes}) ค้างอยู่ในแผน กรุณาแปลงเป็นเครื่องมือรายตัวก่อนส่งทบทวน`;
       setWorkflowBannerError(msg);
-      toast.error(msg);
+      toast.error(msg, { id: 'vcc-plan-submit-error' });
       openGroupConversion(legacyGroups[0]);
       return;
     }
@@ -827,7 +827,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [], currentUser: propUser
     if (unplannedWithoutJustification.length > 0) {
       const msg = `มีเครื่องมือที่ยังไม่ได้วางแผนและยังไม่ได้ระบุเหตุผล ${unplannedWithoutJustification.length} รายการ กรุณาระบุเหตุผลก่อนส่งทบทวน`;
       setWorkflowBannerError(msg);
-      toast.error(msg);
+      toast.error(msg, { id: 'vcc-plan-submit-error' });
       setJustificationModalOpen(true);
       return;
     }
@@ -849,7 +849,7 @@ const AnnualPlanMatrixSection = ({ activeDepartments = [], currentUser: propUser
       const msg = err.message || 'ไม่สามารถส่งทบทวนแผนได้';
       setPlanSubmitError(msg);
       setWorkflowBannerError(msg);
-      toast.error(msg);
+      toast.error(msg, { id: 'vcc-plan-submit-error' });
       if (msg.includes('ยังไม่ได้วางแผน') || msg.includes('ระบุเหตุผล')) {
         setPlanSubmitModalOpen(false);
         setJustificationModalOpen(true);

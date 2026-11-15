@@ -5,22 +5,27 @@ export const getUserDepartments = (user) => {
   const depts = [];
   if (user.department) depts.push(user.department);
   if (user.primary_department) depts.push(user.primary_department);
+  if (user.primaryDepartment) depts.push(user.primaryDepartment);
   if (user.dept) depts.push(user.dept);
   if (user.dept_code) depts.push(user.dept_code);
-  let parsedDepts = user.departments;
-  if (typeof parsedDepts === 'string') {
-    if (parsedDepts.startsWith('[')) {
-      try { parsedDepts = JSON.parse(parsedDepts); } catch {}
-    } else {
-      parsedDepts = parsedDepts.split(',').map((d) => d.trim());
+  const pushList = (val) => {
+    let parsed = val;
+    if (typeof parsed === 'string') {
+      if (parsed.startsWith('[')) {
+        try { parsed = JSON.parse(parsed); } catch {}
+      } else {
+        parsed = parsed.split(',').map((d) => d.trim());
+      }
     }
-  }
-  if (Array.isArray(parsedDepts)) depts.push(...parsedDepts);
-  if (Array.isArray(user.secondaryDepartments)) depts.push(...user.secondaryDepartments);
-  if (Array.isArray(user.depts)) depts.push(...user.depts);
-  if (Array.isArray(user.affiliated_departments)) depts.push(...user.affiliated_departments);
-  if (Array.isArray(user.extra_departments)) depts.push(...user.extra_departments);
-  return [...new Set(depts.filter(Boolean).map((d) => String(d).toUpperCase()))];
+    if (Array.isArray(parsed)) depts.push(...parsed);
+  };
+  pushList(user.departments);
+  pushList(user.secondaryDepartments);
+  pushList(user.secondary_departments);
+  pushList(user.depts);
+  pushList(user.affiliated_departments);
+  pushList(user.extra_departments);
+  return [...new Set(depts.filter(Boolean).map((d) => String(d).toUpperCase().trim()).filter(Boolean))];
 };
 
 // READ scope: DCC, QMR, L6+ (existing policy) and MGT see every department; everyone else only their own department(s).
