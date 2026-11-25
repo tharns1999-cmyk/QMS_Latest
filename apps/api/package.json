@@ -17,11 +17,11 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "hono": "^4.13.17",
+    "hono": "^4.13.19",
     "pdf-lib": "^1.17.1"
   },
   "devDependencies": {
-    "vitest": "^5.1.0",
-    "wrangler": "^4.158.0"
+    "vitest": "^5.1.1",
+    "wrangler": "^4.166.0"
   }
 }
